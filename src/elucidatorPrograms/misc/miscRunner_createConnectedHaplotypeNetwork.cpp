@@ -45,7 +45,7 @@ int miscRunner::createConnectedHaplotypeNetwork(const njh::progutils::CmdArgs & 
 
 	if ("" != metafnp) {
 		netPars.loadMeta(metafnp);
-		bfs::copy(bfs::absolute(metafnp), njh::files::make_path(setUp.pars_.directoryName_, "metaForSeqs.tab.txt"));
+		bfs::copy_file(bfs::absolute(metafnp), njh::files::make_path(setUp.pars_.directoryName_, "metaForSeqs.tab.txt"));
 	}
 	netPars.checkForColorField(__PRETTY_FUNCTION__);
 	auto colorLookup = netPars.generateColorLookup(fieldColorFnp);

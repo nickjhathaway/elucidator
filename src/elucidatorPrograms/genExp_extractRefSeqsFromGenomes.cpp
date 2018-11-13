@@ -236,7 +236,7 @@ int genExpRunner::extractRefSeqsFromGenomes(
 								SeqIOOptions::genFastaOut(
 										njh::files::make_path(regionDir, "allRefs.fasta")));
 						bfs::path extractionCountsFnp = njh::files::make_path(refAlignsDir, "extractionCounts.tab.txt");
-						bfs::copy(extractionCountsFnp,
+						bfs::copy_file(extractionCountsFnp,
 																njh::files::make_path(bedsDir , "extractionCounts.tab.txt" ));
 						for(const auto & genome : getVectorOfMapKeys(gMapper->genomes_)) {
 							auto gRegionPath = njh::files::make_path(refAlignsDir, genome + "_regions.bed" );

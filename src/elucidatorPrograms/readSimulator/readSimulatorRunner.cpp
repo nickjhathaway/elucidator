@@ -680,7 +680,7 @@ int readSimulatorRunner::simPcrShotgunSequences(const njh::progutils::CmdArgs & 
 							+ libDir + "flash.log";
 			auto simOutPutFlash = njh::sys::run(VecStr { flashCmdTemplate });
 			runLogs << simOutPutFlash.toJson();
-			njh::files::bfs::copy(
+			bfs::copy_file(
 					njh::files::make_path(libDir,
 							"amplicon_pair_dat.extendedFrags.fastq"),
 					njh::files::make_path(allDir, libName + "_stitchedIllumina.fastq"));
@@ -701,7 +701,7 @@ int readSimulatorRunner::simPcrShotgunSequences(const njh::progutils::CmdArgs & 
 		  while(reader.readNextRead(sffRead)){
 		  	reader.write(sffRead);
 		  }
-			njh::files::bfs::copy(
+		  bfs::copy_file(
 								njh::files::make_path(libDir,
 										"454_reads.fastq"),
 								njh::files::make_path(allDir, libName + "_454.fastq"));
