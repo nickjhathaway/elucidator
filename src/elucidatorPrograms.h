@@ -44,12 +44,6 @@
 
 namespace njhseq {
 
-int testFunc(const njh::progutils::CmdArgs & inputCommands) {
-	seqSetUp setUp(inputCommands);
-	setUp.finishSetUp(std::cout);
-	std::cout << "This is a test!" << std::endl;
-	return 0;
-}
 
 
 class elucidatorRunner: public njh::progutils::OneRing {
@@ -81,8 +75,7 @@ elucidatorRunner::elucidatorRunner() :
 					addRing<seqSearchingRunner>(),
 					addRing<pairProcessingRunner>(),
 				},//
-				{ addFunc("testFunc", testFunc, false)
-				}, "elucidator", "1", "0", "0-dev") {
+				{}, "elucidator", "1", "0", "0-dev") {
 }
 
 }  // namespace njhseq
