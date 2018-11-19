@@ -21,10 +21,186 @@ seqSearchingRunner::seqSearchingRunner()
 
 					 addFunc("chopAndMap", chopAndMap, false),
 					 addFunc("chopAndMapAndRefine", chopAndMapAndRefine, false),
+					 addFunc("findMotifLocations", findMotifLocations, false),
+					 addFunc("findTandemMotifLocations", findTandemMotifLocations, false),
            },
           "seqSearching") {}
 
 
+
+int seqSearchingRunner::findTandemMotifLocations(const njh::progutils::CmdArgs & inputCommands){
+	std::string motifstr = "";
+	//bfs::path genomeFnp = "";
+
+	uint32_t allowableErrors = 0;
+	uint32_t maxAllowableErrors = 0;
+	OutOptions outOpts(bfs::path(""));
+	outOpts.outExtention_ = ".bed";
+	uint32_t repeatCutOff = 3;
+	bool noReverse = false;
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(noReverse, "--noReverse", "Don't look in reverse complement");
+
+	setUp.pars_.ioOptions_.includeWhiteSpaceInName_ = false;
+	//setUp.setOption(genomeFnp, "--genomeFnp", "The genome file to look for motifs in", true);
+	setUp.processReadInNames({"--fasta", "--fastagz"}, true);
+	setUp.setOption(motifstr, "--motif", "The motif to look for", true);
+	setUp.setOption(repeatCutOff, "--repeatCutOff", "The minimum number of times the motif repeats to report it");
+	setUp.setOption(allowableErrors, "--allowableErrors", "allowable errors in a motif element");
+	maxAllowableErrors = allowableErrors;
+	setUp.setOption(maxAllowableErrors, "--maxAllowableErrors", "max allowable errors in the whole tandem motif sequence");
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	seqInfo seq;
+	SeqInput reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	motif mot(motifstr);
+	OutputStream out(outOpts);
+	while(reader.readNextRead(seq)){
+		auto locs = mot.findPositionsFull(seq.seq_, allowableErrors);
+		njh::sort(locs);
+		if(!locs.empty()){
+			uint32_t length = 1;
+			size_t start = locs.front();
+			for(const auto pos : iter::range<uint32_t>(1, locs.size())){
+				if(locs[pos] == locs[pos - 1] + mot.size() ){
+					++length;
+				} else {
+					if(length >= repeatCutOff){
+						uint32_t numOfErrors = 0;
+						for(const auto & seqPos : iter::range(start, start + mot.size() * length, mot.size())){
+							numOfErrors += mot.size() - mot.scoreMotif(seq.seq_.begin() + seqPos, seq.seq_.begin() + seqPos + mot.size());
+						}
+						if(numOfErrors <= maxAllowableErrors){
+							out << seq.name_
+									<< "\t" << start
+									<< "\t" << start + mot.size() * length
+									<< "\t" << motifstr << "_x" << length
+									<< "\t" << length
+									<< "\t" << "+" << '\n';;
+						}
+					}
+					length = 1;
+					start = locs[pos];
+				}
+			}
+			if(length >= repeatCutOff){
+				uint32_t numOfErrors = 0;
+				for(const auto & seqPos : iter::range(start, start + mot.size() * length, mot.size())){
+					numOfErrors += mot.size() - mot.scoreMotif(seq.seq_.begin() + seqPos, seq.seq_.begin() + seqPos + mot.size());
+				}
+				if(numOfErrors <= maxAllowableErrors){
+					out << seq.name_
+							<< "\t" << start
+							<< "\t" << start + mot.size() * length
+							<< "\t" << motifstr << "_x" << length
+							<< "\t" << length
+							<< "\t" << "+" << '\n';;
+				}
+			}
+		}
+		if(!noReverse){
+			seq.reverseComplementRead(false, true);
+			auto revLocs = mot.findPositionsFull(seq.seq_, allowableErrors);
+			if(!revLocs.empty()){
+				njh::sort(revLocs);
+				uint32_t length = 1;
+				size_t start = revLocs.front();
+				for(const auto  pos : iter::range<uint32_t>(1, revLocs.size())){
+					if(revLocs[pos] == revLocs[pos - 1] + mot.size()){
+						++length;
+					}else{
+						if(length >= repeatCutOff){
+							uint32_t numOfErrors = 0;
+							for(const auto & seqPos : iter::range(start, start + mot.size() * length, mot.size())){
+								numOfErrors += mot.size() - mot.scoreMotif(seq.seq_.begin() + seqPos, seq.seq_.begin() + seqPos + mot.size());
+							}
+							if(numOfErrors <= maxAllowableErrors){
+								out << seq.name_
+										<< "\t" << len(seq) - (start + mot.size() * length )
+										<< "\t" << len(seq) - start
+										<< "\t" << motifstr << "_x" << length
+										<< "\t" << length
+										<< "\t" << "-" << '\n';;
+							}
+						}
+						length = 1;
+						start = revLocs[pos];
+					}
+				}
+				if(length >= repeatCutOff){
+					uint32_t numOfErrors = 0;
+					for(const auto & seqPos : iter::range(start, start + mot.size() * length, mot.size())){
+						numOfErrors += mot.size() - mot.scoreMotif(seq.seq_.begin() + seqPos, seq.seq_.begin() + seqPos + mot.size());
+					}
+					if(numOfErrors <= maxAllowableErrors){
+						out << seq.name_
+								<< "\t" << len(seq) - (start + mot.size() * length)
+								<< "\t" << len(seq) - start
+								<< "\t" << motifstr << "_x" << length
+								<< "\t" << length
+								<< "\t" << "-" << '\n';;
+					}
+				}
+			}
+		}
+	}
+
+	return 0;
+}
+
+int seqSearchingRunner::findMotifLocations(const njh::progutils::CmdArgs & inputCommands){
+	std::string motifstr = "";
+	seqInfo motifObj;
+	//bfs::path genomeFnp = "";
+	uint32_t allowableErrors = 0;
+	OutOptions outOpts(bfs::path(""));
+	outOpts.outExtention_ = ".bed";
+	bool noReverse = false;
+	seqSetUp setUp(inputCommands);
+	setUp.pars_.ioOptions_.includeWhiteSpaceInName_ = false;
+	//setUp.setOption(genomeFnp, "--genomeFnp", "The genome file to look for motifs in", true);
+	setUp.processReadInNames({"--fasta", "--fastagz"}, true);
+	//setUp.setOption(motifstr, "--motif", "The motif to look for", true);
+	setUp.processSeq(motifObj, "--motif", "The motif to look for", true);
+	setUp.setOption(allowableErrors, "--allowableErrors", "allowable errors in motif");
+	setUp.setOption(noReverse, "--noReverse", "Don't look in reverse complement");
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	motifstr = motifObj.seq_;
+	seqInfo seq;
+	SeqInput reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	motif mot(motifstr);
+	OutputStream out(outOpts);
+	while(reader.readNextRead(seq)){
+		auto locs = mot.findPositionsFull(seq.seq_, allowableErrors);
+		for(const auto & loc : locs){
+			out << seq.name_
+					<< "\t" << loc
+					<< "\t" << loc + mot.size()
+					<< "\t" << seq.seq_.substr(loc, mot.size())
+					<< "\t" << mot.scoreMotif(seq.seq_.begin() + loc, seq.seq_.begin() + loc + mot.size())
+					<< "\t" << "+" << '\n';;
+		}
+		if(!noReverse){
+			seq.reverseComplementRead(false, true);
+			auto revLocs = mot.findPositionsFull(seq.seq_, allowableErrors);
+			for(const auto & loc : revLocs){
+				out << seq.name_
+						<< "\t" << len(seq) - (loc + mot.size())
+						<< "\t" << len(seq) - loc
+						<< "\t" << seq.seq_.substr(loc, mot.size())
+						<< "\t" << mot.scoreMotif(seq.seq_.begin() + loc, seq.seq_.begin() + loc + mot.size())
+						<< "\t" << "-" << '\n';
+			}
+		}
+	}
+	return 0;
+}
 
 
 struct ChopAndMapPars{

@@ -15,10 +15,10 @@ seqUtilsModRunner::seqUtilsModRunner()
     : njh::progutils::ProgramRunner({
 	addFunc("removeLowQualityBases", removeLowQualityBases, false),
   addFunc("translate", translate, false),
+	addFunc("guessAProteinFromSeq", guessAProteinFromSeq, false),
   addFunc("revCompSeq", revCompSeq, false),
   addFunc("renameIDs", renameIDs, false),
   addFunc("sortReads", sortReads, false),
-  addFunc("split", split, false),
   addFunc("appendReads", appendReads, false),
   addFunc("prependReads", prependReads, false),
 	addFunc("reOrientReads", reOrientReads, false),
@@ -28,10 +28,117 @@ seqUtilsModRunner::seqUtilsModRunner()
 	addFunc("appendNames", appendNames, false),
 	addFunc("changeLetterCase", changeLetterCase, false),
 	addFunc("invertLetterCase", inverseLetterCase, false),
-	addFunc("collapseToUniqueWithInMetaField", collapseToUniqueWithInMetaField, false),
+	addFunc("collapseToUniqueWithinMetaField", collapseToUniqueWithInMetaField, false),
+	 addFunc("expandOutCollapsedToUnique", expandOutCollapsedToUnique, false),
+	 addFunc("increaseQualityScores", increaseQualityScores, false),
+
+
 },//
                     "seqUtilsMod") {}
 
+
+int seqUtilsModRunner::increaseQualityScores(const njh::progutils::CmdArgs & inputCommands){
+	uint32_t qualIncrease = 1;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.setOption(qualIncrease, "--qualIncrease", "Increase quality scores by this much");
+	setUp.processDefaultReader({"--fastq", "--fastqgz"}, true);
+	setUp.finishSetUp(std::cout);
+
+	seqInfo seq;
+	SeqIO reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	reader.openOut();
+	while(reader.readNextRead(seq)){
+		for(auto & q : seq.qual_){
+			q += qualIncrease;
+		}
+		reader.write(seq);
+	};
+	return 0;
+}
+
+
+int seqUtilsModRunner::expandOutCollapsedToUnique(const njh::progutils::CmdArgs & inputCommands){
+	bfs::path inputNames = "";
+	seqSetUp setUp(inputCommands);
+	setUp.pars_.ioOptions_.out_.outFilename_ = "";
+	setUp.processDefaultReader({ "--fasta" }, true);
+	setUp.setOption(inputNames, "--inputNames", "Input names", true);
+	setUp.finishSetUp(std::cout);
+
+	table namesTab(inputNames, "\t", true);
+	namesTab.checkForColumnsThrow(VecStr{"name","reads"}, __PRETTY_FUNCTION__)	;
+
+	std::unordered_map<std::string, VecStr> readNames;
+	auto nameColPos = namesTab.getColPos("name");
+	auto readsColPos = namesTab.getColPos("reads");
+	for(const auto & row : namesTab.content_){
+		readNames[row[nameColPos]] = tokenizeString(row[readsColPos], ",");
+	}
+
+	SeqIO reader(setUp.pars_.ioOptions_);
+
+	reader.openIn();
+	reader.openOut();
+
+	seqInfo seq;
+	while(reader.readNextRead(seq)){
+		if(!njh::in(seq.name_, readNames)){
+			reader.write(seq);
+		}else{
+			for(const auto & outName : readNames.at(seq.name_)){
+				auto outSeq = seq;
+				outSeq.name_ = outName;
+				reader.write(outSeq);
+			}
+		}
+
+	}
+	return 0;
+}
+
+int seqUtilsModRunner::guessAProteinFromSeq(const njh::progutils::CmdArgs & inputCommands){
+
+	bool mark = false;
+	seqSetUp setUp(inputCommands);
+	setUp.processDefaultReader(true);
+	if("out" == setUp.pars_.ioOptions_.out_.outFilename_ ){
+		setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(setUp.pars_.ioOptions_.firstName_, "translated_");
+	}
+	setUp.setOption(mark, "--mark", "Mark the out seq with the frame used");
+	setUp.finishSetUp(std::cout);
+
+	SeqIO reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	reader.openOut();
+
+	seqInfo seq;
+	while(reader.readNextRead(seq)){
+		bool wrote = false;
+		for(uint32_t start = 0; start < 3; ++start){
+			auto seqCopy = seq;
+			seqCopy.translate(false, false, start);
+			if(std::string::npos == seqCopy.seq_.find("*")){
+				if(mark){
+					seqCopy.name_.append(njh::pasteAsStr(" frame=",start));
+				}
+				reader.write(seqCopy);
+				wrote = true;
+				break;
+			}
+		}
+		if(!wrote){
+			auto seqCopy = seq;
+			seqCopy.translate(false, false, 0);
+			if(mark){
+				seqCopy.name_.append(njh::pasteAsStr(" frame=",0));
+			}
+			reader.write(seqCopy);
+		}
+	}
+	return 0;
+}
 
 int seqUtilsModRunner::reOrientReads(
 		const njh::progutils::CmdArgs & inputCommands) {
@@ -484,117 +591,6 @@ int seqUtilsModRunner::prependNames(
 
 
 
-
-
-int seqUtilsModRunner::split(const njh::progutils::CmdArgs & inputCommands) {
-  // needs to stricter flag setting, nick 8.27.2013
-  seqUtilsModSetUp setUp(inputCommands);
-  // splitOption
-  std::string splitOption = "";
-  // runCutoff
-  std::string runCutoffString = "";
-  uint32_t runCutoff = 0;
-  // contains
-  std::string nameContains = "", seqContains = "";
-  uint32_t occurences = 1;
-  // on read lengths
-  uint32_t minLen = 0, within = 20;
-  uint32_t maxLength = 0;
-  uint32_t qualWindowSize = 50, qualWindowStep = 5, qualWindowThres = 25;
-  bool mark = false;
-  setUp.setOption(mark, "--mark", "Mark the sequence names");
-  setUp.processVerbose();
-  setUp.setUpSplit(splitOption, minLen, within, runCutoffString, nameContains,
-                   seqContains, occurences, maxLength, qualWindowSize,
-                   qualWindowStep, qualWindowThres);
-
-  //create out options
-  auto exOpts = setUp.pars_.ioOptions_;
-  auto incOpts = setUp.pars_.ioOptions_;
-  std::string bName =  njh::files::bfs::path(setUp.pars_.ioOptions_.out_.outFilename_).replace_extension("").string(); ;
-  if(incOpts.out_.outFilename_ == "out"){
-  	bName = njh::files::bfs::path(setUp.pars_.ioOptions_.firstName_).replace_extension("").string();
-  }
-	incOpts.out_.outFilename_ = bName + "_included";
-	exOpts.out_.outFilename_ = bName + "_excluded";
-  MultiSeqOutCache<seqInfo> seqOuts;
-  seqOuts.addReader("include", incOpts);
-  seqOuts.addReader("exclude", exOpts);
-
-
-
-  stringToLower(splitOption);
-  std::unique_ptr<const ReadChecker> checker;
-  if (splitOption == "below") {
-  	checker = std::make_unique<const ReadCheckerLenAbove>( minLen, mark);
-  } else if (splitOption == "withingiven") {
-  	checker = std::make_unique<const ReadCheckerLenWithin>(within, minLen, mark);
-  } else if (splitOption == "namecontains") {
-  	checker = std::make_unique<const ReadCheckerOnNameContaining>( nameContains, mark);
-  } else if (splitOption == "seqcontains") {
-  	checker = std::make_unique<const ReadCheckerOnSeqContaining>( seqContains, occurences, mark);
-  } else if (splitOption == "above") {
-  	checker = std::make_unique<const ReadCheckerLenBelow>( maxLength, mark);
-  } else if (splitOption == "between") {
-  	checker = std::make_unique<const ReadCheckerLenBetween>( maxLength, minLen, mark);
-  } else if (splitOption == "qualitywindow") {
-  	checker = std::make_unique<const ReadCheckerOnQualityWindow>( qualWindowSize, qualWindowStep, qualWindowThres, mark);
-  } else if (splitOption == "nucleotidecomp") {
-  	SeqIO nucReader(setUp.pars_.ioOptions_);
-  	nucReader.openIn();
-		seqInfo nucSeq;
-		charCounter counter;
-		while(nucReader.readNextRead(nucSeq)){
-			counter.increaseCountByString(nucSeq.seq_, nucSeq.cnt_);
-		}
-		counter.resetAlphabet(true);
-		counter.setFractions();
-		nucReader.closeIn();
-		nucReader.openIn();
-		std::vector<double> differences;
-		while(nucReader.readNextRead(nucSeq)){
-			charCounter currentCounter(counter.alphabet_);
-			currentCounter.increaseCountByString(nucSeq.seq_, nucSeq.cnt_);
-			currentCounter.setFractions(counter.alphabet_);
-			differences.push_back(counter.getFracDifference(currentCounter, counter.alphabet_));
-		}
-		double stdCalc = vectorStandardDeviationSamp(differences);
-		double meanCalc = vectorMean(differences);
-		std::cout << stdCalc << std::endl;
-		std::cout << meanCalc << std::endl;
-
-  	checker = std::make_unique<const ReadCheckerOnNucComp>( counter, meanCalc + 2 * stdCalc , mark);
-  } else if (splitOption == "clustersize") {
-  	runCutoff = estd::stou(runCutoffString);
-  	checker = std::make_unique<const ReadCheckerOnCount>( runCutoff, mark);
-  } else {
-  	std::stringstream ss;
-    ss << "Unrecognized split option, " << splitOption << std::endl;
-    ss << "Acceptable options are: "
-              << "onReadLength, below, above, between, withinGiven, "
-                 "withinMean, nucleotideComp,qualityWindow, nameContains, "
-                 "seqContains, clusterSize" << std::endl;
-    throw std::runtime_error{ss.str()};
-  }
-  SeqIO reader(setUp.pars_.ioOptions_);
-  reader.openIn();
-  seqInfo seq;
-  while(reader.readNextRead(seq)){
-  	checker->checkRead(seq);
-    std::string condition = "";
-    if(seq.on_){
-    	condition = "include";
-    }else{
-    	condition = "exclude";
-    }
-    seqOuts.add(condition, seq);
-  }
-
-  if(setUp.pars_.verbose_){
-  	setUp.logRunTime(std::cout);
-  }
-  return 0;
-}
 
 
 int seqUtilsModRunner::sortReads(

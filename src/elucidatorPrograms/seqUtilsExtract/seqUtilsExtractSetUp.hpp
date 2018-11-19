@@ -26,10 +26,6 @@ class seqUtilsExtractSetUp : public seqSetUp {
     using seqSetUp::seqSetUp;
 
 
-//    void setUpExtractByMID(ExtractByMIDPars & pars);
-
-    void setUpGetSimilarSequences(bool& useNucComp, double& maxNucCompDiff, double& idCutOff,
-    		double& gapCutoff, double& queryCutoff);
 
     void setUpExtractSameSeqs(std::string& compareFileName);
 

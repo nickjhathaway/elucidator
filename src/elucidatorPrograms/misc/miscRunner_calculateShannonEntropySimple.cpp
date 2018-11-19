@@ -10,6 +10,7 @@
 #include "elucidator/simulation.h"
 #include "elucidator/BamToolsUtils.h"
 
+
 namespace njhseq {
 
 
@@ -90,47 +91,7 @@ int miscRunner::codeComparison(const njh::progutils::CmdArgs & inputCommands){
 }
 
 
-int miscRunner::guessAProteinFromSeq(const njh::progutils::CmdArgs & inputCommands){
 
-	bool mark = false;
-	seqSetUp setUp(inputCommands);
-	setUp.processDefaultReader(true);
-	if("out" == setUp.pars_.ioOptions_.out_.outFilename_ ){
-		setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(setUp.pars_.ioOptions_.firstName_, "translated_");
-	}
-	setUp.setOption(mark, "--mark", "Mark the out seq with the frame used");
-	setUp.finishSetUp(std::cout);
-
-	SeqIO reader(setUp.pars_.ioOptions_);
-	reader.openIn();
-	reader.openOut();
-
-	seqInfo seq;
-	while(reader.readNextRead(seq)){
-		bool wrote = false;
-		for(uint32_t start = 0; start < 3; ++start){
-			auto seqCopy = seq;
-			seqCopy.translate(false, false, start);
-			if(std::string::npos == seqCopy.seq_.find("*")){
-				if(mark){
-					seqCopy.name_.append(njh::pasteAsStr(" frame=",start));
-				}
-				reader.write(seqCopy);
-				wrote = true;
-				break;
-			}
-		}
-		if(!wrote){
-			auto seqCopy = seq;
-			seqCopy.translate(false, false, 0);
-			if(mark){
-				seqCopy.name_.append(njh::pasteAsStr(" frame=",0));
-			}
-			reader.write(seqCopy);
-		}
-	}
-	return 0;
-}
 
 int miscRunner::getAlnPosToRealPosTable(const njh::progutils::CmdArgs & inputCommands){
 

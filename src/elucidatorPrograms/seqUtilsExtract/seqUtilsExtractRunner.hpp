@@ -24,8 +24,7 @@ class seqUtilsExtractRunner : public njh::progutils::ProgramRunner {
 
   static int extractSameSeqs(const njh::progutils::CmdArgs & inputCommands);
   static int extractBySeq(const njh::progutils::CmdArgs & inputCommands);
-  static int getSimilarSequences(const njh::progutils::CmdArgs & inputCommands);
-  static int getSimilarSequencesByKDist(const njh::progutils::CmdArgs & inputCommands);
+
 
   static int binOnNucComp(const njh::progutils::CmdArgs & inputCommands);
   static int binOnNucCompFaster(const njh::progutils::CmdArgs & inputCommands);

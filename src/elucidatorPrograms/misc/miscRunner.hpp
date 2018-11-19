@@ -29,16 +29,12 @@ class miscRunner : public njh::progutils::ProgramRunner {
   static int genInputForEstimateS(const njh::progutils::CmdArgs & inputCommands);
   static int getHighestHapFrac(const njh::progutils::CmdArgs & inputCommands);
 
-  static int increaseQualityScores(const njh::progutils::CmdArgs & inputCommands);
 
-  static int findMotifLocations(const njh::progutils::CmdArgs & inputCommands);
-  static int findTandemMotifLocations(const njh::progutils::CmdArgs & inputCommands);
+
 
   static int parseBamForForwardPerfectHits(const njh::progutils::CmdArgs & inputCommands);
 
-  static int expandOutCollapsedToUnique(const njh::progutils::CmdArgs & inputCommands);
 
-  static int guessAProteinFromSeq(const njh::progutils::CmdArgs & inputCommands);
 
 
   static int expandTableBySeparatingColumn(const njh::progutils::CmdArgs & inputCommands);

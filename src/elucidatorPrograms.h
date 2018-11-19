@@ -27,11 +27,13 @@
 #include "elucidatorPrograms/seqUtilsInfo.h"
 #include "elucidatorPrograms/seqUtilsMod.h"
 #include "elucidatorPrograms/seqUtilsTrim.h"
+#include "elucidatorPrograms/seqUtilsSplit.h"
 #include "elucidatorPrograms/simulator.h"
 #include "elucidatorPrograms/parsingFileExp.hpp"
 #include "elucidatorPrograms/benchMarking.hpp"
 #include "elucidatorPrograms/metaExp.hpp"
 #include "elucidatorPrograms/pairProcessing.hpp"
+
 #include "elucidatorPrograms/seqSearching.hpp"
 
 
@@ -70,7 +72,7 @@ elucidatorRunner::elucidatorRunner() :
 					addRing<seqUtilsExtractRunner>(),addRing<seqUtilsInfoRunner>(),
 					addRing<simulatorRunner>(),      addRing<parsingFileExpRunner>(),
 					addRing<benchMarkingRunner>(),   addRing<jsonExpRunner>(),
-					addRing<ManipulateTableRunner>(),
+					addRing<ManipulateTableRunner>(),addRing<seqUtilsSplitRunner>(),
 					addRing<metaExpRunner>(),
 					addRing<seqSearchingRunner>(),
 					addRing<pairProcessingRunner>(),

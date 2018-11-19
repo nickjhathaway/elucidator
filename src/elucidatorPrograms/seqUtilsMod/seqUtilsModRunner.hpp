@@ -23,15 +23,18 @@ class seqUtilsModRunner : public njh::progutils::ProgramRunner {
 
 
   static int sortReads(const njh::progutils::CmdArgs & inputCommands);
-  static int split(const njh::progutils::CmdArgs & inputCommands);
   static int renameIDs(const njh::progutils::CmdArgs & inputCommands);
 
+  static int increaseQualityScores(const njh::progutils::CmdArgs & inputCommands);
   static int removeLowQualityBases(const njh::progutils::CmdArgs & inputCommands);
   static int translate(const njh::progutils::CmdArgs & inputCommands);
+  static int guessAProteinFromSeq(const njh::progutils::CmdArgs & inputCommands);
+
   static int revCompSeq(const njh::progutils::CmdArgs & inputCommands);
   static int reOrientReads(const njh::progutils::CmdArgs & inputCommands);
   static int collapseToUnique(const njh::progutils::CmdArgs & inputCommands);
   static int collapseToUniqueWithInMetaField(const njh::progutils::CmdArgs & inputCommands);
+  static int expandOutCollapsedToUnique(const njh::progutils::CmdArgs & inputCommands);
 
   static int dereplicate(const njh::progutils::CmdArgs & inputCommands);
 
