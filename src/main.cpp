@@ -7,13 +7,6 @@
 #include "elucidatorPrograms.h"
 
 
-namespace njhseq {
-
-
-
-
-} //namepsace njhseq
-
 
 
 int main(int argc, char* argv[]) {
