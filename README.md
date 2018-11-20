@@ -1,4 +1,7 @@
-# elucidator
+elucidator
+=======================
+version 1.0.0  
+
 Utilies for manipulating sequencing data.  
 
 To configure developmental branch
