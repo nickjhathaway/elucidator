@@ -320,6 +320,8 @@ public:
 
 		std::unordered_map<char, std::unordered_map<char, uint32_t>> baseChangeCounts;
 
+		std::unordered_map<uint32_t, std::unordered_map<char, std::unordered_map<char, uint32_t>>> baseChangeCountsPerPosition;
+
 		std::unordered_map<uint32_t, std::unordered_map<uint32_t, uint32_t>> qualCounts;
 		std::unordered_map<uint32_t, std::unordered_map<uint32_t, uint32_t>> qualErrorsCounts;
 
@@ -334,6 +336,14 @@ public:
 			for(const auto & refBase : other.baseChangeCounts){
 				for(const auto & seqBase : refBase.second){
 					baseChangeCounts[refBase.first][seqBase.first] += seqBase.second;
+				}
+			}
+
+			for(const auto & pos : other.baseChangeCountsPerPosition){
+				for(const auto & refBase : pos.second){
+					for(const auto & seqBase : refBase.second){
+						baseChangeCountsPerPosition[pos.first][refBase.first][seqBase.first] += seqBase.second;
+					}
 				}
 			}
 
@@ -369,6 +379,7 @@ public:
 						++positionErrorCounts[realPosition];
 						++qualErrorsCounts[realPosition][res.alnSeqAligned_->qual_[pos]];
 						++baseChangeCounts[res.refSeqAligned_->seq_[pos]][res.alnSeqAligned_->seq_[pos]];
+						++baseChangeCountsPerPosition[pos][res.refSeqAligned_->seq_[pos]][res.alnSeqAligned_->seq_[pos]];
 					}else{
 						//correct
 						++qualCounts[realPosition][res.alnSeqAligned_->qual_[pos]];
@@ -418,6 +429,35 @@ public:
 						 << "\t" << baseChangeCounts[refBase][seqBase] << std::endl;
 				}
 			}
+
+			//base substitution rates per position
+			OutOptions base_substitution_rates_perPositionOpts(bfs::path(prefix + "_base_substitution_rates_perPosition.tab.txt"));
+			base_substitution_ratesOpts.overWriteFile_ = overWrite;
+			OutputStream base_substitution_rates_perPositionOut(base_substitution_rates_perPositionOpts);
+			base_substitution_ratesOut << "pos\tref\tseq\tcount" << std::endl;
+			auto allPositions = getVectorOfMapKeys(baseChangeCountsPerPosition);
+			njh::sort(allPositions);
+			for(const auto & pos :  allPositions){
+				for(const auto & refBase : bases){
+					double total = 0;
+					for(const auto & seqBase : bases){
+						if(seqBase == refBase){
+							continue;
+						}
+						total += baseChangeCountsPerPosition[pos][refBase][seqBase];
+					}
+					for(const auto & seqBase : bases){
+						if(seqBase == refBase){
+							continue;
+						}
+						base_substitution_rates_perPositionOut << pos
+						   << "\t" << refBase
+							 << "\t" << seqBase
+							 << "\t" << baseChangeCountsPerPosition[pos][refBase][seqBase] << std::endl;
+					}
+				}
+			}
+
 
 			//quality distribution for errors
 			OutOptions quality_distribution_for_error_callsOpts(bfs::path(prefix + "_quality_distribution_for_error_calls.tab.txt"));
