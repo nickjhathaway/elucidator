@@ -379,7 +379,7 @@ public:
 						++positionErrorCounts[realPosition];
 						++qualErrorsCounts[realPosition][res.alnSeqAligned_->qual_[pos]];
 						++baseChangeCounts[res.refSeqAligned_->seq_[pos]][res.alnSeqAligned_->seq_[pos]];
-						++baseChangeCountsPerPosition[pos][res.refSeqAligned_->seq_[pos]][res.alnSeqAligned_->seq_[pos]];
+						++baseChangeCountsPerPosition[realPosition][res.refSeqAligned_->seq_[pos]][res.alnSeqAligned_->seq_[pos]];
 					}else{
 						//correct
 						++qualCounts[realPosition][res.alnSeqAligned_->qual_[pos]];
