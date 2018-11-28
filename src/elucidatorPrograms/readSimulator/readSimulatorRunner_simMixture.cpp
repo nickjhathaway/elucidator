@@ -434,7 +434,7 @@ public:
 			OutOptions base_substitution_rates_perPositionOpts(bfs::path(prefix + "_base_substitution_rates_perPosition.tab.txt"));
 			base_substitution_ratesOpts.overWriteFile_ = overWrite;
 			OutputStream base_substitution_rates_perPositionOut(base_substitution_rates_perPositionOpts);
-			base_substitution_ratesOut << "pos\tref\tseq\tcount" << std::endl;
+			base_substitution_rates_perPositionOut << "pos\tref\tseq\tcount" << std::endl;
 			auto allPositions = getVectorOfMapKeys(baseChangeCountsPerPosition);
 			njh::sort(allPositions);
 			for(const auto & pos :  allPositions){
