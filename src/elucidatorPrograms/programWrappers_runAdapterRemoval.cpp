@@ -142,12 +142,13 @@ njh::sys::RunOutput RunAdapterRemoval(RunAdapterRemovalPars adapRemovPars){
 			<< "--outputcollapsedtruncated " << adapRemovPars.outOpts.outFilename_.string() << "_trunc" << extention << " "
 			<< "--singleton " << adapRemovPars.outOpts.outFilename_.string() << "_mateLost" << extention << " "
 			<< "--discarded " << adapRemovPars.outOpts.outFilename_.string() << "_discarded" << extention << " "
-			<< "--settings " << adapRemovPars.outOpts.outFilename_.string() << "_AdapterRemoval.log "
-			<< ">> " << adapRemovPars.outOpts.outFilename_.string() << "_AdapterRemoval.runlog 2>&1 ";
+			<< "--settings " << adapRemovPars.outOpts.outFilename_.string() << "_AdapterRemoval.log ";
 
+	//add any extra commands
 	if("" != adapRemovPars.extraArgs){
 		adapterRemvalCmdStream << adapRemovPars.extraArgs << " ";
 	}
+	adapterRemvalCmdStream << " >> " << adapRemovPars.outOpts.outFilename_.string() << "_AdapterRemoval.runlog 2>&1 ";
 
 	bool needToRun = adapRemovPars.force;
 	if(!adapRemovPars.force){
@@ -262,12 +263,12 @@ njh::sys::RunOutput RunAdapterRemovalSE(RunAdapterRemovalPars adapRemovPars){
 	adapterRemvalCmdStream
 			<< "--output1 " << adapRemovPars.outOpts.outFilename_.string() << "" << extention << " "
 			<< "--discarded " << adapRemovPars.outOpts.outFilename_.string() << "_discarded" << extention << " "
-			<< "--settings " << adapRemovPars.outOpts.outFilename_.string() << "_AdapterRemoval.log "
-			<< ">> " << adapRemovPars.outOpts.outFilename_.string() << "_AdapterRemoval.runlog 2>&1 ";
-
+			<< "--settings " << adapRemovPars.outOpts.outFilename_.string() << "_AdapterRemoval.log ";
+	// add extra commands
 	if("" != adapRemovPars.extraArgs){
 		adapterRemvalCmdStream << adapRemovPars.extraArgs << " ";
 	}
+	adapterRemvalCmdStream  << ">> " << adapRemovPars.outOpts.outFilename_.string() << "_AdapterRemoval.runlog 2>&1 ";
 
 	bool needToRun = adapRemovPars.force;
 	if(!adapRemovPars.force){
