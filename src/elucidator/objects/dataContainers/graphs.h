@@ -26,6 +26,5 @@
 
 #include "elucidator/objects/dataContainers/graphs/debGraph.hpp"
 #include "elucidator/objects/dataContainers/graphs/nhGraph.hpp"
-#include "elucidator/objects/dataContainers/graphs/SeqOverlapGraph.hpp"
 
 //
