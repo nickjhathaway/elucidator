@@ -195,7 +195,7 @@ void RunCoverageFinder(const CoverageFinderPars & pars){
 		}
 	}
 }
-void RunRegionRefinement(const RegionRefinementPars & pars){
+std::vector<std::shared_ptr<Bed6RecordCore>> RunRegionRefinement(const RegionRefinementPars & pars){
 	concurrent::BamReaderPool bamPool(pars.bamFnp, pars.numThreads);
 	bamPool.openBamFile();
 	OutputStream out(pars.outOpts);
@@ -256,6 +256,7 @@ void RunRegionRefinement(const RegionRefinementPars & pars){
 	for(const auto & bed : beds){
 		out << bed->toDelimStrWithExtra() << std::endl;
 	}
+	return beds;
 }
 
 }  // namespace njhseq

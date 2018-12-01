@@ -371,7 +371,21 @@ int seqSearchingRunner::chopAndMapAndRefine(const njh::progutils::CmdArgs & inpu
 	refinePars.bedFnp = mergedCoverageOpts.outName();
 	refinePars.bamFnp = njh::files::make_path(chopPars.outputDirectory, "fragments.sorted.bam");
 	refinePars.outOpts = OutOptions(njh::files::make_path(chopPars.outputDirectory, "refined_merged.bed"));
-	RunRegionRefinement(refinePars);
+	auto refinedRegions = RunRegionRefinement(refinePars);
+
+	//extra fasta file of refined regions if 2bit file exists
+	auto genomeTwoBitFnp = chopPars.genomeFnp;
+	genomeTwoBitFnp.replace_extension(".2bit");
+	if(bfs::exists(genomeTwoBitFnp)){
+		auto refinedGRegions = bedPtrsToGenomicRegs(refinedRegions);
+		TwoBit::TwoBitFile tReader(genomeTwoBitFnp);
+		auto refindedSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(chopPars.outputDirectory, "refined_merged.fasta"));
+		SeqOutput refinedWriter(refindedSeqOpts);
+		refinedWriter.openOut();
+		for(const auto & reg : refinedGRegions){
+			refinedWriter.write(reg.extractSeq(tReader));
+		}
+	}
 
 	if(0 != minLength){
 		auto bedAgain = getBed3s(refinePars.outOpts.outName());

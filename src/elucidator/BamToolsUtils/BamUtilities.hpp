@@ -55,7 +55,7 @@ struct RegionRefinementPars{
 	bool reOrient = false;
 };
 
-void RunRegionRefinement(const RegionRefinementPars & pars);
+std::vector<std::shared_ptr<Bed6RecordCore>> RunRegionRefinement(const RegionRefinementPars & pars);
 
 
 }  // namespace njhseq
