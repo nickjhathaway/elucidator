@@ -62,14 +62,95 @@ bedExpRunner::bedExpRunner()
 					 addFunc("bedCoordSort", bedCoordSort, false),
 					 addFunc("extractBedRecordsWithName", extractBedRecordsWithName, false),
 					 addFunc("reorientBasedOnSingleReadsOrientationCounts", reorientBasedOnSingleReadsOrientationCounts, false),
+					 addFunc("getFirstRegionPerChrom", getFirstRegionPerChrom, false),
+					 addFunc("getLastRegionPerChrom", getLastRegionPerChrom, false),
            },//,
           "bedExp") {}
 
 /**
  * 	static int (const njh::progutils::CmdArgs & inputCommands);
 	static int (const njh::progutils::CmdArgs & inputCommands);
-
+	static int (const njh::progutils::CmdArgs & inputCommands);
+	static int (const njh::progutils::CmdArgs & inputCommands);
  */
+
+int bedExpRunner::getFirstRegionPerChrom(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path bedFile = "";
+	OutOptions outOpts;
+	outOpts.outExtention_ = ".bed";
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(bedFile, "--bed", "Bed file", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	BioDataFileIO<Bed3RecordCore> reader{IoOptions(InOptions(bedFile), outOpts)};
+	reader.openIn();
+	reader.openOut();
+	Bed3RecordCore record;
+	std::unordered_map<std::string, Bed3RecordCore> records;
+	while(reader.readNextRecord(record)){
+		if(!njh::in(record.chrom_, records)){
+			records[record.chrom_] = record;
+		}else{
+			if(record.chromStart_ < records[record.chrom_].chromStart_ ){
+				records[record.chrom_] = record;
+			}else if(record.chromStart_ == records[record.chrom_].chromStart_ && record.chromEnd_ > records[record.chrom_].chromEnd_){
+				records[record.chrom_] = record;
+			}
+		}
+	}
+
+	auto chromNames = njh::getVecOfMapKeys(records);
+	njh::sort(chromNames);
+	for(const auto & chromName : chromNames){
+		reader.write(records[chromName], [](const Bed3RecordCore & reg, std::ostream & out){
+			out << reg.toDelimStrWithExtra() << std::endl;
+		});
+	}
+
+
+	return 0;
+}
+
+int bedExpRunner::getLastRegionPerChrom(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path bedFile = "";
+	OutOptions outOpts;
+	outOpts.outExtention_ = ".bed";
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(bedFile, "--bed", "Bed file", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	BioDataFileIO<Bed3RecordCore> reader{IoOptions(InOptions(bedFile), outOpts)};
+	reader.openIn();
+	reader.openOut();
+	Bed3RecordCore record;
+	std::unordered_map<std::string, Bed3RecordCore> records;
+	while(reader.readNextRecord(record)){
+		if(!njh::in(record.chrom_, records)){
+			records[record.chrom_] = record;
+		}else{
+			if(record.chromStart_ > records[record.chrom_].chromStart_ ){
+				records[record.chrom_] = record;
+			}else if(record.chromStart_ == records[record.chrom_].chromStart_ && record.chromEnd_ > records[record.chrom_].chromEnd_){
+				records[record.chrom_] = record;
+			}
+		}
+	}
+
+	auto chromNames = njh::getVecOfMapKeys(records);
+	njh::sort(chromNames);
+	for(const auto & chromName : chromNames){
+		reader.write(records[chromName], [](const Bed3RecordCore & reg, std::ostream & out){
+			out << reg.toDelimStrWithExtra() << std::endl;
+		});
+	}
+
+
+	return 0;
+}
+
+
 
 int bedExpRunner::bedCoordSort(const njh::progutils::CmdArgs & inputCommands) {
 	bool decending = false;

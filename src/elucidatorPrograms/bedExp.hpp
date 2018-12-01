@@ -46,6 +46,8 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	static int getNonOverlappingBedRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int getBestNonOverlapingRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int bedUnqiue(const njh::progutils::CmdArgs & inputCommands);
+	static int getFirstRegionPerChrom(const njh::progutils::CmdArgs & inputCommands);
+	static int getLastRegionPerChrom(const njh::progutils::CmdArgs & inputCommands);
 
 	//combing bed files
 	static int bedCreateSpanningRegions(const njh::progutils::CmdArgs & inputCommands);
