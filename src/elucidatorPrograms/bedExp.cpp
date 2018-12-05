@@ -67,12 +67,7 @@ bedExpRunner::bedExpRunner()
            },//,
           "bedExp") {}
 
-/**
- * 	static int (const njh::progutils::CmdArgs & inputCommands);
-	static int (const njh::progutils::CmdArgs & inputCommands);
-	static int (const njh::progutils::CmdArgs & inputCommands);
-	static int (const njh::progutils::CmdArgs & inputCommands);
- */
+
 
 int bedExpRunner::getFirstRegionPerChrom(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile = "";
