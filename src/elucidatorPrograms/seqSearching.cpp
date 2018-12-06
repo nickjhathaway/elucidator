@@ -40,7 +40,8 @@ seqSearchingRunner::seqSearchingRunner()
 					 addFunc("chopAndMapAndRefine", chopAndMapAndRefine, false),
 					 addFunc("findMotifLocations", findMotifLocations, false),
 					 addFunc("findTandemMotifLocations", findTandemMotifLocations, false),
-           },
+					 addFunc("chopAndMapAndRefineInvidual", chopAndMapAndRefineInvidual, false),
+           },//
           "seqSearching") {}
 
 
@@ -287,6 +288,136 @@ int seqSearchingRunner::chopAndMap(const njh::progutils::CmdArgs & inputCommands
 	setUp.finishSetUp(std::cout);
 
 	runChopAndMap(chopPars);
+
+	return 0;
+}
+
+
+int seqSearchingRunner::chopAndMapAndRefineInvidual(const njh::progutils::CmdArgs & inputCommands) {
+	ChopAndMapPars globalChopPars;
+
+	CoverageFinderPars covPars;
+	RegionRefinementPars refinePars;
+	uint32_t expandLeft = 0;
+	uint32_t expandRight = 0;
+	uint32_t minLength = 0;
+	uint32_t inputMinLength = 0;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	globalChopPars.debug = setUp.pars_.debug_;
+
+	setUp.setOption(globalChopPars.numThreads, "--numThreads", "Number of threads to use");
+	setUp.setOption(globalChopPars.genomeFnp, "--genomeFnp", "Genome to map to", true);
+	setUp.setOption(globalChopPars.perFragmentCount, "--perFragmentCount", "perFragmentCount");
+	setUp.setOption(globalChopPars.windowLength, "--windowLength", "windowLength");
+	inputMinLength = globalChopPars.windowLength;
+	setUp.setOption(globalChopPars.windowStep, "--windowStep", "windowStep");
+	setUp.setOption(refinePars.reOrient, "--reOrient", "reOrient");
+	setUp.setOption(inputMinLength, "--inputMinLength", "inputMinLength");
+
+	setUp.setOption(expandLeft, "--expandLeft", "expandLeft");
+	setUp.setOption(expandRight, "--expandRight", "expandRight");
+
+	setUp.setOption(minLength, "--minLength", "minLength");
+
+	setUp.processReadInNames(VecStr{"--fasta", "--fastq"});
+	setUp.processDirectoryOutputName(true);
+	setUp.finishSetUp(std::cout);
+	setUp.startARunLog(setUp.pars_.directoryName_);
+
+	auto seqs = SeqInput::getSeqVec<seqInfo>(setUp.pars_.ioOptions_);
+	for(const auto & seq : seqs){
+		if(len(seq) < inputMinLength){
+			continue;
+		}
+		auto seqDirFnp = njh::files::make_path(setUp.pars_.directoryName_, seq.name_);
+		njh::files::makeDir(njh::files::MkdirPar{seqDirFnp});
+		auto seqOut = SeqIOOptions::genFastaOut(njh::files::make_path(seqDirFnp, seq.name_));
+		SeqOutput::write(std::vector<seqInfo>{seq}, seqOut);
+		auto chopParsCurrent = globalChopPars;
+
+		chopParsCurrent.inOpts = SeqIOOptions::genFastaIn(seqOut.out_.outName());
+		chopParsCurrent.outputDirectory = seqDirFnp;
+		//chop
+		runChopAndMap(chopParsCurrent);
+		//determine coverage
+		covPars.numThreads = chopParsCurrent.numThreads;
+		covPars.coverageCutOff = 5;
+		covPars.window = chopParsCurrent.windowLength;
+		covPars.step = chopParsCurrent.windowStep;
+		covPars.bams = njh::files::make_path(chopParsCurrent.outputDirectory, "fragments.sorted.bam").string();
+		covPars.outOpts = OutOptions(njh::files::make_path(chopParsCurrent.outputDirectory, "coverage.bed"));
+		RunCoverageFinder(covPars);
+		//merge regions
+		auto beds = getBed3s(covPars.outOpts.outName());
+		njh::for_each(beds,
+				[&expandLeft,&expandRight](const std::shared_ptr<Bed3RecordCore> & region) {
+					if(0 != expandLeft) {
+						BedUtility::extendLeft(*region, expandLeft);
+					}
+					if(0 != expandRight) {
+						BedUtility::extendRight(*region, expandRight);
+					}
+				});
+		njh::sort(beds,
+				[](const std::shared_ptr<Bed3RecordCore> & region1, const std::shared_ptr<Bed3RecordCore> & region2) {
+					return region1->chrom_ == region2->chrom_ ? (region1->chromStart_ == region2->chromStart_ ? region1->chromEnd_ < region2->chromEnd_ : region1->chromStart_ < region2->chromStart_): region1->chrom_ < region2->chrom_;
+				});
+
+
+		OutOptions mergedCoverageOpts(njh::files::make_path(chopParsCurrent.outputDirectory, "merged_coverage.bed"));
+		{
+			OutputStream mergedCoverageOut(mergedCoverageOpts);
+			Bed3RecordCore currentRegion = *beds.front();
+			for(const auto & regPos : iter::range<uint32_t>(1, beds.size())){
+				if(currentRegion.chrom_ == beds[regPos]->chrom_ && currentRegion.overlaps(*beds[regPos], 1)){
+					currentRegion.chromEnd_ = std::max(currentRegion.chromEnd_, beds[regPos]->chromEnd_);
+				}else{
+					Bed6RecordCore regOut(currentRegion.chrom_, currentRegion.chromStart_, currentRegion.chromEnd_, "", currentRegion.length(), '+');
+					regOut.name_ = GenomicRegion(regOut).createUidFromCoords();
+
+					mergedCoverageOut << regOut.toDelimStr() << std::endl;
+					currentRegion = *beds[regPos];
+				}
+			}
+			Bed6RecordCore regOut(currentRegion.chrom_, currentRegion.chromStart_, currentRegion.chromEnd_, "", currentRegion.length(), '+');
+			regOut.name_ = GenomicRegion(regOut).createUidFromCoords();
+			mergedCoverageOut << regOut.toDelimStr() << std::endl;
+		}
+
+		//refine regions
+		refinePars.bedFnp = mergedCoverageOpts.outName();
+		refinePars.bamFnp = njh::files::make_path(chopParsCurrent.outputDirectory, "fragments.sorted.bam");
+		refinePars.outOpts = OutOptions(njh::files::make_path(chopParsCurrent.outputDirectory, "refined_merged.bed"));
+		auto refinedRegions = RunRegionRefinement(refinePars);
+
+		//extra fasta file of refined regions if 2bit file exists
+		auto genomeTwoBitFnp = chopParsCurrent.genomeFnp;
+		genomeTwoBitFnp.replace_extension(".2bit");
+		if(bfs::exists(genomeTwoBitFnp)){
+			auto refinedGRegions = bedPtrsToGenomicRegs(refinedRegions);
+			TwoBit::TwoBitFile tReader(genomeTwoBitFnp);
+			auto refindedSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(chopParsCurrent.outputDirectory, "refined_merged.fasta"));
+			SeqOutput refinedWriter(refindedSeqOpts);
+			refinedWriter.openOut();
+			for(const auto & reg : refinedGRegions){
+				refinedWriter.write(reg.extractSeq(tReader));
+			}
+		}
+
+		if(0 != minLength){
+			auto bedAgain = getBed3s(refinePars.outOpts.outName());
+			OutOptions filteredOpts(njh::files::make_path(chopParsCurrent.outputDirectory, "filtered_refined_merged.bed"));
+			OutputStream filteredOut(filteredOpts);
+			for(const auto & b : bedAgain){
+				if(b->length() >= minLength){
+					filteredOut << b->toDelimStrWithExtra() << std::endl;
+				}
+			}
+		}
+	}
+
 
 	return 0;
 }
