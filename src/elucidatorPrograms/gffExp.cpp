@@ -1155,8 +1155,11 @@ int gffExpRunner::reorientBedToIntersectingGeneInGff(const njh::progutils::CmdAr
 	outOpts.outExtention_ = ".bed";
 	bfs::path bedFnp = "";
 	size_t overlapMin = 1;
+	VecStr features{"gene"};
 	seqSetUp setUp(inputCommands);
 	setUp.description_ = "Will set strand to first gene intersected with in the gff strand";
+	setUp.setOption(features, "--features", "features to use");
+
 	setUp.setOption(overlapMin, "--overlapMin", "overlap minimum");
 	setUp.setOption(inputFile, "--gff", "Input gff file", true);
 	setUp.setOption(bedFnp, "--bed", "Bed regions to extract", true);
@@ -1178,7 +1181,7 @@ int gffExpRunner::reorientBedToIntersectingGeneInGff(const njh::progutils::CmdAr
 
 	while (nullptr != gRecord) {
 
-		if("gene" == gRecord->type_){
+		if(njh::in(gRecord->type_, features)){
 			auto gRegion = GenomicRegion(*gRecord);
 			for(auto & inputRegion : beds){
 				if(gRegion.overlaps(*inputRegion)){

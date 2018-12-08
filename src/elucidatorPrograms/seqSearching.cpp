@@ -302,10 +302,13 @@ int seqSearchingRunner::chopAndMapAndRefineInvidual(const njh::progutils::CmdArg
 	uint32_t expandRight = 0;
 	uint32_t minLength = 0;
 	uint32_t inputMinLength = 0;
+	bfs::path gff = "";
+
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	globalChopPars.debug = setUp.pars_.debug_;
+	setUp.setOption(gff, "--genomegff", "Genome gff file");
 
 	setUp.setOption(globalChopPars.numThreads, "--numThreads", "Number of threads to use");
 	setUp.setOption(globalChopPars.genomeFnp, "--genomeFnp", "Genome to map to", true);
@@ -397,6 +400,15 @@ int seqSearchingRunner::chopAndMapAndRefineInvidual(const njh::progutils::CmdArg
 		genomeTwoBitFnp.replace_extension(".2bit");
 		if(bfs::exists(genomeTwoBitFnp)){
 			auto refinedGRegions = bedPtrsToGenomicRegs(refinedRegions);
+			if("" != gff){
+				intersectBedLocsWtihGffRecordsPars interPars(gff,VecStr{"description"}, VecStr{"pseudogene", "gene"});
+				refinePars.outOpts.overWriteFile_ = true;
+				intersectBedLocsWtihGffRecords(refinedRegions, interPars);
+				OutputStream bedOut(refinePars.outOpts);
+				for(const auto & b : refinedRegions){
+					bedOut << b->toDelimStrWithExtra() << std::endl;
+				}
+			}
 			TwoBit::TwoBitFile tReader(genomeTwoBitFnp);
 			auto refindedSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(chopParsCurrent.outputDirectory, "refined_merged.fasta"));
 			SeqOutput refinedWriter(refindedSeqOpts);
@@ -407,12 +419,25 @@ int seqSearchingRunner::chopAndMapAndRefineInvidual(const njh::progutils::CmdArg
 		}
 
 		if(0 != minLength){
-			auto bedAgain = getBed3s(refinePars.outOpts.outName());
-			OutOptions filteredOpts(njh::files::make_path(chopParsCurrent.outputDirectory, "filtered_refined_merged.bed"));
-			OutputStream filteredOut(filteredOpts);
-			for(const auto & b : bedAgain){
-				if(b->length() >= minLength){
-					filteredOut << b->toDelimStrWithExtra() << std::endl;
+			std::vector<GenomicRegion> filteredRefinedRegions;
+			{
+				auto bedAgain = getBed3s(refinePars.outOpts.outName());
+				OutOptions filteredOpts(njh::files::make_path(chopParsCurrent.outputDirectory, "filtered_refined_merged.bed"));
+				OutputStream filteredOut(filteredOpts);
+				for(const auto & b : bedAgain){
+					if(b->length() >= minLength){
+						filteredRefinedRegions.emplace_back(*b);
+						filteredOut << b->toDelimStrWithExtra() << std::endl;
+					}
+				}
+			}
+			if(bfs::exists(genomeTwoBitFnp)){
+				TwoBit::TwoBitFile tReader(genomeTwoBitFnp);
+				auto refindedSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(chopParsCurrent.outputDirectory, "filtered_refined_merged.fasta"));
+				SeqOutput refinedWriter(refindedSeqOpts);
+				refinedWriter.openOut();
+				for(const auto & reg : filteredRefinedRegions){
+					refinedWriter.write(reg.extractSeq(tReader));
 				}
 			}
 		}
@@ -429,12 +454,18 @@ int seqSearchingRunner::chopAndMapAndRefine(const njh::progutils::CmdArgs & inpu
 	uint32_t expandLeft = 0;
 	uint32_t expandRight = 0;
 	uint32_t minLength = 0;
+	covPars.coverageCutOff = 5;
+
+	bfs::path gff = "";
+
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	chopPars.debug = setUp.pars_.debug_;
 	setUp.setOption(chopPars.numThreads, "--numThreads", "Number of threads to use");
 	setUp.setOption(chopPars.genomeFnp, "--genomeFnp", "Genome to map to", true);
+	setUp.setOption(gff, "--genomegff", "Genome gff file");
+
 	setUp.setOption(chopPars.perFragmentCount, "--perFragmentCount", "perFragmentCount");
 	setUp.setOption(chopPars.windowLength, "--windowLength", "windowLength");
 	setUp.setOption(chopPars.windowStep, "--windowStep", "windowStep");
@@ -442,6 +473,9 @@ int seqSearchingRunner::chopAndMapAndRefine(const njh::progutils::CmdArgs & inpu
 
 	setUp.setOption(expandLeft, "--expandLeft", "expandLeft");
 	setUp.setOption(expandRight, "--expandRight", "expandRight");
+
+	setUp.setOption(covPars.coverageCutOff, "--coverageCutOff", "Coverage Cut Off");
+
 
 	setUp.setOption(minLength, "--minLength", "minLength");
 
@@ -455,7 +489,6 @@ int seqSearchingRunner::chopAndMapAndRefine(const njh::progutils::CmdArgs & inpu
 	runChopAndMap(chopPars);
 	//determine coverage
 	covPars.numThreads = chopPars.numThreads;
-	covPars.coverageCutOff = 5;
 	covPars.window = chopPars.windowLength;
 	covPars.step = chopPars.windowStep;
 	covPars.bams = njh::files::make_path(chopPars.outputDirectory, "fragments.sorted.bam").string();
@@ -509,6 +542,15 @@ int seqSearchingRunner::chopAndMapAndRefine(const njh::progutils::CmdArgs & inpu
 	genomeTwoBitFnp.replace_extension(".2bit");
 	if(bfs::exists(genomeTwoBitFnp)){
 		auto refinedGRegions = bedPtrsToGenomicRegs(refinedRegions);
+		if("" != gff){
+			intersectBedLocsWtihGffRecordsPars interPars(gff,VecStr{"description"}, VecStr{"pseudogene", "gene"});
+			refinePars.outOpts.overWriteFile_ = true;
+			intersectBedLocsWtihGffRecords(refinedRegions, interPars);
+			OutputStream bedOut(refinePars.outOpts);
+			for(const auto & b : refinedRegions){
+				bedOut << b->toDelimStrWithExtra() << std::endl;
+			}
+		}
 		TwoBit::TwoBitFile tReader(genomeTwoBitFnp);
 		auto refindedSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(chopPars.outputDirectory, "refined_merged.fasta"));
 		SeqOutput refinedWriter(refindedSeqOpts);
@@ -519,12 +561,25 @@ int seqSearchingRunner::chopAndMapAndRefine(const njh::progutils::CmdArgs & inpu
 	}
 
 	if(0 != minLength){
-		auto bedAgain = getBed3s(refinePars.outOpts.outName());
-		OutOptions filteredOpts(njh::files::make_path(chopPars.outputDirectory, "filtered_refined_merged.bed"));
-		OutputStream filteredOut(filteredOpts);
-		for(const auto & b : bedAgain){
-			if(b->length() >= minLength){
-				filteredOut << b->toDelimStrWithExtra() << std::endl;
+		std::vector<GenomicRegion> filteredRefinedRegions;
+		{
+			auto bedAgain = getBed3s(refinePars.outOpts.outName());
+			OutOptions filteredOpts(njh::files::make_path(chopPars.outputDirectory, "filtered_refined_merged.bed"));
+			OutputStream filteredOut(filteredOpts);
+			for(const auto & b : bedAgain){
+				if(b->length() >= minLength){
+					filteredRefinedRegions.emplace_back(*b);
+					filteredOut << b->toDelimStrWithExtra() << std::endl;
+				}
+			}
+		}
+		if(bfs::exists(genomeTwoBitFnp)){
+			TwoBit::TwoBitFile tReader(genomeTwoBitFnp);
+			auto refindedSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(chopPars.outputDirectory, "filtered_refined_merged.fasta"));
+			SeqOutput refinedWriter(refindedSeqOpts);
+			refinedWriter.openOut();
+			for(const auto & reg : filteredRefinedRegions){
+				refinedWriter.write(reg.extractSeq(tReader));
 			}
 		}
 	}
