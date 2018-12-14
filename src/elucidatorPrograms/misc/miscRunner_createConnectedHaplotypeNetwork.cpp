@@ -40,6 +40,7 @@ namespace njhseq {
 int miscRunner::createConnectedHaplotypeNetwork(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path metafnp = "";
 	bfs::path fieldColorFnp = "";
+	std::string countField = "";
 	ReadCompGraph::ConnectedHaplotypeNetworkPars netPars;
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
@@ -56,15 +57,34 @@ int miscRunner::createConnectedHaplotypeNetwork(const njh::progutils::CmdArgs & 
 	setUp.setOption(fieldColorFnp,      "--fieldColorFnp", "A table with at least two columns, the field name of the colorField and color, the hex color for the nodes");
 	setUp.setOption(netPars.colorField, "--colorField", "The field to color by");
 	setUp.setOption(netPars.labelField, "--labelField", "The field to add a label to the nodes for");
+	setUp.setOption(countField, "--countField", "The field to use to determine the size of the node");
+
 	setUp.processReadInNames();
 	setUp.processAlignerDefualts();
 	setUp.processDirectoryOutputName(true);
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
 
+	uint64_t maxlen = 0;
+	auto inReads = SeqInput::getSeqVec<seqInfo>(setUp.pars_.ioOptions_, maxlen);
+
 	if ("" != metafnp) {
 		netPars.loadMeta(metafnp);
-		bfs::copy_file(bfs::absolute(metafnp), njh::files::make_path(setUp.pars_.directoryName_, "metaForSeqs.tab.txt"));
+		bfs::copy_file(bfs::absolute(metafnp),
+				njh::files::make_path(setUp.pars_.directoryName_,
+						"metaForSeqs.tab.txt"));
+	} else {
+		if (!inReads.empty()
+				&& MetaDataInName::nameHasMetaData(inReads.front().name_)) {
+			auto metaInSeqs = seqsToMetaTable(inReads);
+			metaInSeqs.columnNames_.front() = "sample";
+			metaInSeqs.deleteColumn("seq");
+			auto metaTabOutOpts = TableIOOpts::genTabFileOut(
+					njh::files::make_path(setUp.pars_.directoryName_,
+							"metaForSeqs.tab.txt"), true);
+			metaInSeqs.outPutContents(metaTabOutOpts);
+			netPars.loadMeta(metaTabOutOpts.out_.outName());
+		}
 	}
 	netPars.checkForColorField(__PRETTY_FUNCTION__);
 	auto colorLookup = netPars.generateColorLookup(fieldColorFnp);
@@ -80,6 +100,31 @@ int miscRunner::createConnectedHaplotypeNetwork(const njh::progutils::CmdArgs & 
 	}
 	netPars.checkForLabelField(__PRETTY_FUNCTION__);
 
+	if("" != countField){
+		if(nullptr == netPars.seqMeta){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", supplied a color field but no meta data" << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		netPars.seqMeta->checkForFieldsThrow({countField});
+		std::unordered_map<std::string, uint32_t > nameToPosition;
+		uint32_t seqPos = 0;
+		for(const auto & seq : inReads){
+			nameToPosition[seq.name_] = seqPos;
+			++seqPos;
+		}
+		double total = 0;
+		for (const auto & samp : netPars.seqMeta->samples_) {
+			inReads[nameToPosition[samp]].cnt_ =
+					njh::StrToNumConverter::stoToNum<double>(
+							njh::mapAt(netPars.seqMeta->groupData_, countField)->getGroupForSample(
+									samp));
+			total += inReads[nameToPosition[samp]].cnt_;
+		}
+		for (auto & seq : inReads) {
+			seq.frac_ = seq.cnt_ / total;
+		}
+	}
 
 	OutOptions jsonOutOpts(njh::files::make_path(setUp.pars_.directoryName_, "tree"), ".json");
 	OutputStream jsonOut(jsonOutOpts);
@@ -88,8 +133,7 @@ int miscRunner::createConnectedHaplotypeNetwork(const njh::progutils::CmdArgs & 
 
 	htmlOut << ReadCompGraph::ConnectedHaplotypeNetworkPars::htmlPageForConnectHpaNet  << std::endl;
 
-	uint64_t maxlen = 0;
-	auto inReads = SeqInput::getSeqVec<seqInfo>(setUp.pars_.ioOptions_, maxlen);
+
 
 	aligner alignerObj(maxlen, setUp.pars_.gapInfo_, setUp.pars_.scoring_,setUp.pars_.colOpts_.alignOpts_.countEndGaps_);
 	concurrent::AlignerPool alnPool(alignerObj, netPars.numThreads);
