@@ -28,6 +28,9 @@
 
 #include "bedExp.hpp"
 #include "elucidator/objects/BioDataObject.h"
+#include "elucidator/BioRecordsUtils/BedUtility.hpp"
+
+
 #include <TwoBit.h>
 
 
@@ -346,6 +349,9 @@ int bedExpRunner::extendToStartOfChrom(const njh::progutils::CmdArgs & inputComm
 	return 0;
 }
 
+
+
+
 int bedExpRunner::bedAddSmartIDForPlotting(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile;
 	OutOptions outOpts;
@@ -361,19 +367,7 @@ int bedExpRunner::bedAddSmartIDForPlotting(const njh::progutils::CmdArgs & input
 	std::unordered_map<std::string, std::unordered_map<uint32_t, std::vector<uint32_t>>> alreadyTakenIds;
 	std::shared_ptr<Bed3RecordCore> b = reader.readNextRecord();
 	while(nullptr != b){
-		uint32_t id = 0;
-		std::set<uint32_t> alreadyTaken;
-		for(const auto pos : iter::range(b->chromStart_, b->chromEnd_)){
-			for(const auto & otherId : alreadyTakenIds[b->chrom_][pos]){
-				alreadyTaken.emplace(otherId);
-			}
-		}
-		while(njh::in(id, alreadyTaken)){
-			++id;
-		}
-		for(const auto pos : iter::range(b->chromStart_, b->chromEnd_)){
-			alreadyTakenIds[b->chrom_][pos].emplace_back(id);
-		}
+		auto id = BedUtility::getPlotIDForBed(b, alreadyTakenIds);
 		b->extraFields_.emplace_back(estd::to_string(id));
 		reader.write(*b, [](const Bed3RecordCore & bed, std::ostream & out){
 			out << bed.toDelimStrWithExtra() << std::endl;
