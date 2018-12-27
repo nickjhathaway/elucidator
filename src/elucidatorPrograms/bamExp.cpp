@@ -656,10 +656,8 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 	setUp.finishSetUp(std::cout);
 
 
-	OutOptions pairCountsOpts(njh::files::nameAppendBeforeExt(outOpts.outName(), "_totalPairCounts"));
-	OutOptions properPairCountsOpts(njh::files::nameAppendBeforeExt(outOpts.outName(), "_properPairCounts"));
-	pairCountsOpts.outExtention_ = ".tab.txt";
-	properPairCountsOpts.outExtention_ = ".tab.txt";
+	OutOptions pairCountsOpts(njh::files::nameAppendBeforeExt(outOpts.outName(), "_totalPairCounts"), ".tab.txt");
+	OutOptions properPairCountsOpts(njh::files::nameAppendBeforeExt(outOpts.outName(), "_properPairCounts"), ".tab.txt");
 
 	pairCountsOpts.transferOverwriteOpts(outOpts);
 	properPairCountsOpts.transferOverwriteOpts(outOpts);

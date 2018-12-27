@@ -249,6 +249,10 @@ void runChopAndMap(const ChopAndMapPars & pars){
 			} else {
 				for(auto const pos : iter::range<uint32_t>(0, len(seq) + 1 - pars.windowLength, pars.windowStep)){
 					auto fragment = seq.getSubRead(pos, pars.windowLength);
+					MetaDataInName fragMeta;
+					fragMeta.addMeta("start", pos);
+					fragMeta.addMeta("end", pos + pars.windowLength);
+					fragment.name_.append(fragMeta.createMetaName());
 					for(uint32_t fragCount = 0; fragCount <= pars.perFragmentCount; ++ fragCount){
 						fragWriter.write(fragment);
 					}
@@ -536,6 +540,8 @@ int seqSearchingRunner::chopAndMapAndRefine(const njh::progutils::CmdArgs & inpu
 	refinePars.bamFnp = njh::files::make_path(chopPars.outputDirectory, "fragments.sorted.bam");
 	refinePars.outOpts = OutOptions(njh::files::make_path(chopPars.outputDirectory, "refined_merged.bed"));
 	auto refinedRegions = RunRegionRefinement(refinePars);
+
+	/**@todo report number of reads unmapped and what fragments these are*/
 
 	//extra fasta file of refined regions if 2bit file exists
 	auto genomeTwoBitFnp = chopPars.genomeFnp;

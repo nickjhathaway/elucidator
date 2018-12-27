@@ -37,11 +37,15 @@ int miscRunner::expandTableBySeparatingColumn(const njh::progutils::CmdArgs & in
 	tabOpts.inDelim_ = "\t";
 	std::string columnName = "";
 	std::string sep =  ",";
+	std::string append = "";
+	std::string prepend = "";
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(tabOpts.in_.inFilename_, "--fnp", "File path for the table", true);
 	setUp.setOption(tabOpts.hasHeader_, "--header", "Header is Present");
 	setUp.setOption(tabOpts.inDelim_, "--delim", "File Delimiter");
 	setUp.setOption(sep, "--sep", "separator to expand column on");
+	setUp.setOption(append, "--append", "append this onto the column elements");
+	setUp.setOption(prepend, "--prepend", "prepend this onto the column elements");
 
 	setUp.setOption(columnName, "--columnName", "Column Name to separate", true);
 	if (tabOpts.inDelim_ == "tab") {
@@ -63,8 +67,17 @@ int miscRunner::expandTableBySeparatingColumn(const njh::progutils::CmdArgs & in
 	for(const auto & row : namesTab.content_){
 		auto toks =  tokenizeString(row[colPos], sep);
 		auto rowCopy = row;
+		uint32_t count = 0;
 		for(const auto & tok : toks){
-			rowCopy[colPos] = tok;
+			std::string element = tok;
+			if(0 != count && "" != prepend){
+				element = prepend + element;
+			}
+			if(toks.size() != (count + 1) && "" != append){
+				element.append(append);
+			}
+			++count;
+			rowCopy[colPos] = element;
 			out << njh::conToStr(rowCopy, tabOpts.outDelim_) << "\n";
 		}
 	}

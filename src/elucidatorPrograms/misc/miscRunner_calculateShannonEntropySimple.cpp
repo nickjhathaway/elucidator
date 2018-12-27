@@ -33,7 +33,7 @@ namespace njhseq {
 
 
 int miscRunner::codeComparison(const njh::progutils::CmdArgs & inputCommands){
-	OutOptions outOpts(bfs::path(".tab.txt"));
+	OutOptions outOpts(bfs::path(""), ".tab.txt");
 	seqSetUp setUp(inputCommands);
 	setUp.processReadInNames(true);
 	setUp.processWritingOptions(outOpts);
