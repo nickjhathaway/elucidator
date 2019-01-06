@@ -81,6 +81,7 @@ int genExpRunner::lastzExtractAndCompare(const njh::progutils::CmdArgs & inputCo
 
 	std::unordered_map<std::string, uint32_t> readLengths;
 	std::unordered_map<std::string, std::string> nameKey;
+	std::unordered_map<std::string, uint32_t> nameToPositionKey;
 	auto tempSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "temp_" + bfs::basename(setUp.pars_.ioOptions_.firstName_) ));
 
 	{
@@ -92,6 +93,7 @@ int genExpRunner::lastzExtractAndCompare(const njh::progutils::CmdArgs & inputCo
 		uint32_t count = 0;
 
 		while(reader.readNextRead(seq)){
+			nameToPositionKey[seq.name_] = count;
 			readLengths[seq.name_] = len(seq);
 			nameKey[estd::to_string(count)] = seq.name_;
 			seq.name_ = estd::to_string(count);
@@ -142,7 +144,7 @@ int genExpRunner::lastzExtractAndCompare(const njh::progutils::CmdArgs & inputCo
 
 		//extract locations and mapping stats
 		BamTools::BamAlignment bAln;
-		std::map<std::string, std::vector<BamTools::BamAlignment>> bamAligns;
+		std::unordered_map<std::string, std::vector<BamTools::BamAlignment>> bamAligns;
 		std::unordered_set<std::string> mappedReads;
 		BamTools::BamReader bReader;
 		bReader.Open(seqOpts.out_.outFilename_.string());
@@ -182,10 +184,15 @@ int genExpRunner::lastzExtractAndCompare(const njh::progutils::CmdArgs & inputCo
 		uint32_t readNumber = 0;
 		std::vector<std::shared_ptr<seqInfo>> refSeqs;
 		std::unordered_map<std::string, VecStr> readNamesToRefSeqs;
-		for (const auto & alnForRead : bamAligns) {
-			++mapCounts[alnForRead.second.size()];
+		auto bamAlignKeys = getVectorOfMapKeys(bamAligns);
+		njh::sort(bamAlignKeys, [&nameToPositionKey](const std::string & name1, const std::string & name2){
+			return nameToPositionKey[name1] < nameToPositionKey[name2];
+		});
+		for (const auto & bamAlignKey : bamAlignKeys) {
+			const auto & alnForRead = bamAligns[bamAlignKey];
+			++mapCounts[alnForRead.size()];
 			uint32_t extractionCount = 0;
-			for (const auto & aln : alnForRead.second) {
+			for (const auto & aln : alnForRead) {
 
 				auto results = std::make_shared<AlignmentResults>(aln, refData);
 				results->setRefSeq(twobitReader);
@@ -301,11 +308,17 @@ int genExpRunner::lastzExtractAndCompare(const njh::progutils::CmdArgs & inputCo
 	uint32_t readNumber = 0;
 	std::unordered_map<std::string, std::vector<Bed6RecordCore>> bestRegionsByGenome;
 
-	for(const auto & alnResults : allAlnResults){
+	auto allAlnResultsKeys = getVectorOfMapKeys(allAlnResults);
+	njh::sort(allAlnResultsKeys, [&nameToPositionKey](const std::string & name1, const std::string & name2){
+		return nameToPositionKey[name1] < nameToPositionKey[name2];
+	});
+
+	for(const auto & allAlnResultsKey : allAlnResultsKeys){
+		const auto & alnResults = allAlnResults[allAlnResultsKey];
 		double bestScore = std::numeric_limits<double>::lowest();
 		std::vector<std::shared_ptr<AlignmentResults>> bestResults;
 		std::unordered_map<std::string, std::string> regionNameToGenome;
-		for(const auto & genomeRes : alnResults.second){
+		for(const auto & genomeRes : alnResults){
 			for(const auto & res : genomeRes.second){
 				if(res->comp_.alnScore_ > bestScore){
 					bestScore = res->comp_.alnScore_;
