@@ -886,7 +886,16 @@ int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const n
 	bamtoolsMergeAndIndexCmd << "bamtools merge " << " -in " << pairedSortedBam;
 	bool inputSingleEmpty = false;
 	if(bfs::exists(inputSingles)){
-		inputSingleEmpty = njh::files::isFileEmpty(inputSingles);
+		uint32_t count  = 0;
+		InputStream singlesInput(inputSingles);
+		std::string line = "";
+		while(njh::files::crossPlatGetline(singlesInput, line)){
+			++count;
+			break;
+		}
+		if(0 == count){
+			inputSingleEmpty = true;
+		}
 	}
 	if(bfs::exists(inputSingles) && !inputSingleEmpty){
 		bamtoolsMergeAndIndexCmd << " -in " <<  singlesSortedBam;
