@@ -813,8 +813,12 @@ int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const n
 	bfs::path inputSingles = njh::files::make_path(trimStub.string() + "_singles.fastq");
 	bfs::path inputPairedFirstMates = njh::files::make_path(trimStub.string() + "_1.fastq");
 	bfs::path inputPairedSecondMates = njh::files::make_path(trimStub.string() + "_2.fastq");
-	njh::files::checkExistenceThrow(genomePrefix.string() + ".fasta",__PRETTY_FUNCTION__);
-	bioRunner.RunBowtie2Index(genomePrefix.string() + ".fasta");
+	bfs::path genomeFnp = genomePrefix.string() + ".fasta";
+	njh::files::checkExistenceThrow(genomeFnp,__PRETTY_FUNCTION__);
+	if(setUp.pars_.debug_){
+		std::cout << "genomeFnp: " << genomeFnp << std::endl;
+	}
+	bioRunner.RunBowtie2Index(genomeFnp);
 
 	if (!bfs::exists(inputSingles)
 			&& !bfs::exists(inputPairedFirstMates)
