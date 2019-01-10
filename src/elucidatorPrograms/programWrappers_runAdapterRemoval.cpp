@@ -921,6 +921,9 @@ int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const n
 		std::ofstream logFile;
 		logOpts.openFile(logFile);
 		std::unordered_map<std::string, njh::sys::RunOutput> runOutputs;
+		if(setUp.pars_.debug_){
+			std::cout << "bfs::exists(inputSingles) && !inputSingleEmpty: " << njh::colorBool(bfs::exists(inputSingles) && !inputSingleEmpty) << std::endl;
+		}
 		if(bfs::exists(inputSingles) && !inputSingleEmpty){
 			auto singlesRunOutput = njh::sys::run({singlesCmd.str()});
 			BioCmdsUtils::checkRunOutThrow(singlesRunOutput, __PRETTY_FUNCTION__);
