@@ -890,6 +890,9 @@ int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const n
 		InputStream singlesInput(inputSingles);
 		std::string line = "";
 		while(njh::files::crossPlatGetline(singlesInput, line)){
+			if(setUp.pars_.debug_){
+				std::cout << "Line: " << line << std::endl;
+			}
 			if("" != line){
 				++count;
 			}
@@ -898,6 +901,12 @@ int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const n
 		if(0 == count){
 			inputSingleEmpty = true;
 		}
+		if(setUp.pars_.debug_){
+			std::cout << "count: " << count << std::endl;
+		}
+	}
+	if(setUp.pars_.debug_){
+		std::cout << "inputSingleEmpty: " << njh::colorBool(inputSingleEmpty) << std::endl;
 	}
 	if(bfs::exists(inputSingles) && !inputSingleEmpty){
 		bamtoolsMergeAndIndexCmd << " -in " <<  singlesSortedBam;
