@@ -884,7 +884,11 @@ int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const n
 
 	std::stringstream bamtoolsMergeAndIndexCmd;
 	bamtoolsMergeAndIndexCmd << "bamtools merge " << " -in " << pairedSortedBam;
+	bool inputSingleEmpty = false;
 	if(bfs::exists(inputSingles)){
+		inputSingleEmpty = njh::files::isFileEmpty(inputSingles);
+	}
+	if(bfs::exists(inputSingles) && !inputSingleEmpty){
 		bamtoolsMergeAndIndexCmd << " -in " <<  singlesSortedBam;
 	}
 	bamtoolsMergeAndIndexCmd << " -out " << outputFnp
@@ -897,7 +901,7 @@ int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const n
 		std::ofstream logFile;
 		logOpts.openFile(logFile);
 		std::unordered_map<std::string, njh::sys::RunOutput> runOutputs;
-		if(bfs::exists(inputSingles)){
+		if(bfs::exists(inputSingles) && !inputSingleEmpty){
 			auto singlesRunOutput = njh::sys::run({singlesCmd.str()});
 			BioCmdsUtils::checkRunOutThrow(singlesRunOutput, __PRETTY_FUNCTION__);
 			runOutputs["bowtie2-singles"] = singlesRunOutput;
