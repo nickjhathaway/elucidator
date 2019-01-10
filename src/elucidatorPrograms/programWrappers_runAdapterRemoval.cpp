@@ -890,7 +890,9 @@ int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const n
 		InputStream singlesInput(inputSingles);
 		std::string line = "";
 		while(njh::files::crossPlatGetline(singlesInput, line)){
-			++count;
+			if("" != line){
+				++count;
+			}
 			break;
 		}
 		if(0 == count){
