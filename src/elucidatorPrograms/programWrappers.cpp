@@ -58,6 +58,7 @@ programWrapperRunner::programWrapperRunner()
 					 addFunc("runBwa", runBwa, false),
 					 addFunc("generatingPrime3TemplatesBasedOnMALN", generatingPrime3TemplatesBasedOnMALN, false),
 					 addFunc("testHasProgram", testHasProgram, false),
+					 addFunc("runBowtieOnAdapterReomvalOutputSinglesCombined", runBowtieOnAdapterReomvalOutputSinglesCombined, false),
            },//
           "programWrapper") {}
 int programWrapperRunner::generatingPrime3TemplatesBasedOnMALN(const njh::progutils::CmdArgs & inputCommands) {

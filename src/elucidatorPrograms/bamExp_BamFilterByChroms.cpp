@@ -48,6 +48,8 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	auto chroms = getInputValues(chromFnp, ",");
 
 
+
+
 	BamTools::BamReader bReader;
 	bReader.Open(setUp.pars_.ioOptions_.firstName_.string());
 	checkBamOpenThrow(bReader, setUp.pars_.ioOptions_.firstName_.string());
@@ -73,6 +75,26 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	BamAlnsCache filterAlnCache;
 
 	auto refData = bReader.GetReferenceData();
+
+	//check to make sure chroms contains chromosome from the input bam file
+	VecStr missing;
+	for(const auto & chrom : chroms){
+		bool found = false;
+		for(const auto & ref : refData){
+			if(ref.RefName == chrom){
+				found = true;
+				break;
+			}
+		}
+		if(!found){
+			missing.emplace_back(chrom);
+		}
+	}
+	if(missing.empty()){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << "the following chromosomes were not found in the input bam file " << njh::conToStr(missing)<< "\n";
+		throw std::runtime_error{ss.str()};
+	}
 	while (bReader.GetNextAlignment(bAln)) {
 		//skip secondary alignments
 		if (!bAln.IsPrimaryAlignment()) {
