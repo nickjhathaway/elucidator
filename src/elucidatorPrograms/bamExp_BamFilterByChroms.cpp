@@ -90,7 +90,7 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 			missing.emplace_back(chrom);
 		}
 	}
-	if(missing.empty()){
+	if(!missing.empty()){
 		std::stringstream ss;
 		ss << __PRETTY_FUNCTION__ << ", error " << "the following chromosomes were not found in the input bam file " << njh::conToStr(missing)<< "\n";
 		throw std::runtime_error{ss.str()};
