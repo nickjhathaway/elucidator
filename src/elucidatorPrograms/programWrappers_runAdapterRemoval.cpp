@@ -860,7 +860,7 @@ int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const n
 	std::string bNameStub = trimStub.filename().string();
 	std::stringstream singlesCmd;
 	singlesCmd << "bowtie2 "
-			<< " -threads " << numThreads
+			<< " --threads " << numThreads
 			<< " --rg-id " << bNameStub << "_singles "
 			<< " --rg \"SM:" << sampName << "\""
 			<< " "   << extraBowtie2Args
@@ -871,7 +871,7 @@ int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const n
 
 	std::stringstream pairedCmd;
 	pairedCmd << "bowtie2 "
-			<< " -threads " << numThreads
+			<< " --threads " << numThreads
 			<< " --rg-id " << bNameStub
 			<< " --rg \"SM:" << sampName << "\""
 			<< " "   << extraBowtie2Args
