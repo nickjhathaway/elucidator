@@ -88,6 +88,8 @@ int pairProcessingRunner::StitchPairedReads(
 			setUp.pars_.gapInfo_.gapExtend_,
 			0,0,
 			0,0);
+	//std::cout << alnGapPars.toJson() << std::endl;
+
 	aligner alignerObj(maxsize, alnGapPars, setUp.pars_.scoring_, false);
 	alignerObj.qScorePars_.qualThresWindow_ = 0;
 
