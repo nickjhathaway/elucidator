@@ -45,7 +45,9 @@ int miscRunner::createConnectedHaplotypeNetwork(const njh::progutils::CmdArgs & 
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
 	setUp.processVerbose();
-	setUp.setOption(netPars.noLabel, "--noLabel", "noLabel");
+	setUp.setOption(netPars.noNodeLabel, "--noNodeLabel", "Put No Node Labels");
+	setUp.setOption(netPars.noLinkLabel, "--noLinkLabel", "Put No Link Labels");
+
 	setUp.setOption(netPars.matchPars.kmerLen_, "--compKmerLength", "Length of the k-mer to be used to skip comparisons");
 	setUp.setOption(netPars.matchPars.kmerCutOff_, "--kmerCutOff", "k-mer similarity cut off to be used to skip comparisons");
 	setUp.setOption(netPars.numThreads, "--numThreads", "Number of threads to use");
