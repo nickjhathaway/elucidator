@@ -165,6 +165,7 @@ int programWrapperRunner::testHasProgram(const njh::progutils::CmdArgs & inputCo
 
 int programWrapperRunner::runSamtoolsFlagStat(
 		const njh::progutils::CmdArgs & inputCommands) {
+	bool keepIndividualFiles = false;
 	OutOptions jsonOutOpts(bfs::path("samtoolsFlagStats"), ".json");
 	std::vector<bfs::path> bams;
 	uint32_t numThreads = 1;
@@ -175,19 +176,21 @@ int programWrapperRunner::runSamtoolsFlagStat(
 	setUp.processWritingOptions(jsonOutOpts);
 	setUp.setOption(bams, "--bams", "Bam files to run on", true);
 	setUp.setOption(numThreads, "--numThreads", "Number of threads for samtools to use");
+	setUp.setOption(keepIndividualFiles, "--keepIndividualFiles", "Keep Individual Files");
 	setUp.finishSetUp(std::cout);
 
 	njh::sys::requireExternalProgramThrow("samtools");
 	jsonOutOpts.throwIfOutExistsNoOverWrite(__PRETTY_FUNCTION__);
 	OutputStream jsonOut(jsonOutOpts);
 	Json::Value allValues;
-
+	std::vector<bfs::path> samtoolsFlagFiles;
 	for(const auto & bam : bams){
 		njh::files::checkExistenceThrow(bam, __PRETTY_FUNCTION__);
 		OutOptions samtoolsOutputOpts(bfs::path("samtools_flagstat_out_for_" + bam.filename().string() ));
 		samtoolsOutputOpts.transferOverwriteOpts(jsonOutOpts);
 		std::stringstream samtoolsCmd;
 		samtoolsCmd << "samtools flagstat -@ " << numThreads << " " << bam << " > " << samtoolsOutputOpts.outName();
+		samtoolsFlagFiles.emplace_back(samtoolsOutputOpts.outName());
 
 		auto runOutput = njh::sys::run({samtoolsCmd.str()});
 		BioCmdsUtils::checkRunOutThrow(runOutput, __PRETTY_FUNCTION__	);
@@ -258,6 +261,11 @@ int programWrapperRunner::runSamtoolsFlagStat(
 	}
 
 	jsonOut << allValues << std::endl;
+	if(!keepIndividualFiles){
+		for(const auto & fnp : samtoolsFlagFiles){
+			bfs::remove(fnp);
+		}
+	}
 	return 0;
 }
 
