@@ -123,8 +123,11 @@ public:
 	std::multimap<double, char, std::less<double>> createLikelihoodMaps(
 			bool setFractionFirst);
 
+	uint32_t getCountForBases(const std::vector<char> & bases) const;
+	//GC
+	uint32_t getGcCount() const;
 	double calcGcContent() const;
-	int getGcDifference() const;
+	int32_t getGcDifference() const;
 	// compute entropy
 	double computeEntrophy() const;
 

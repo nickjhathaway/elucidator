@@ -165,96 +165,99 @@ int programWrapperRunner::testHasProgram(const njh::progutils::CmdArgs & inputCo
 
 int programWrapperRunner::runSamtoolsFlagStat(
 		const njh::progutils::CmdArgs & inputCommands) {
-	bfs::path bamFnp = "";
+	OutOptions jsonOutOpts(bfs::path("samtoolsFlagStats"), ".json");
+	std::vector<bfs::path> bams;
 	uint32_t numThreads = 1;
-	OutOptions outOpts(bfs::path("samtools_flagstat_out.txt"));
 	seqSetUp setUp(inputCommands);
 	setUp.pars_.directoryName_ = "";
 	setUp.processVerbose();
 	setUp.processDebug();
-	setUp.processWritingOptions(outOpts);
-	setUp.processReadInNames( { "--bam" }, true);
+	setUp.processWritingOptions(jsonOutOpts);
+	setUp.setOption(bams, "--bams", "Bam files to run on", true);
 	setUp.setOption(numThreads, "--numThreads", "Number of threads for samtools to use");
 	setUp.finishSetUp(std::cout);
 
 	njh::sys::requireExternalProgramThrow("samtools");
-	njh::files::checkExistenceThrow(setUp.pars_.ioOptions_.firstName_, __PRETTY_FUNCTION__);
-
-	outOpts.throwIfOutExistsNoOverWrite(__PRETTY_FUNCTION__);
-	OutOptions jsonOutOpts(outOpts.outName().replace_extension(".json"));
-	jsonOutOpts.transferOverwriteOpts(outOpts);
 	jsonOutOpts.throwIfOutExistsNoOverWrite(__PRETTY_FUNCTION__);
-	std::stringstream samtoolsCmd;
-	samtoolsCmd << "samtools flagstat -@ " << numThreads << " " << setUp.pars_.ioOptions_.firstName_ << " > " << outOpts.outName();
-
-	auto runOutput = njh::sys::run({samtoolsCmd.str()});
-	BioCmdsUtils::checkRunOutThrow(runOutput, __PRETTY_FUNCTION__	);
-
-	InputStream in(InOptions(outOpts.outName()));
-	std::string line = "";
-	Json::Value outVal;
-	outVal["bam"] = njh::json::toJson(setUp.pars_.ioOptions_.firstName_);
-	std::regex linePat(R"(([0-9]+) \+ ([0-9]+) (.*))");
 	OutputStream jsonOut(jsonOutOpts);
-	std::regex percPat(R"(\((.+) : (.+)\))");
-	while(njh::files::crossPlatGetline(in, line)){
-		std::smatch match;
-		if(std::regex_match(line, match, linePat)){
-			if(4 != match.size()){
+	Json::Value allValues;
+
+	for(const auto & bam : bams){
+		njh::files::checkExistenceThrow(bam, __PRETTY_FUNCTION__);
+		OutOptions samtoolsOutputOpts(bfs::path("samtools_flagstat_out_for_" + bfs::basename(bam)));
+		samtoolsOutputOpts.transferOverwriteOpts(jsonOutOpts);
+		std::stringstream samtoolsCmd;
+		samtoolsCmd << "samtools flagstat -@ " << numThreads << " " << bam << " > " << samtoolsOutputOpts.outName();
+
+		auto runOutput = njh::sys::run({samtoolsCmd.str()});
+		BioCmdsUtils::checkRunOutThrow(runOutput, __PRETTY_FUNCTION__	);
+
+		InputStream in(InOptions(samtoolsOutputOpts.outName()));
+		std::string line = "";
+		Json::Value outVal;
+		outVal["bamFnp"] = njh::json::toJson(njh::files::normalize(bam));
+		std::regex linePat(R"(([0-9]+) \+ ([0-9]+) (.*))");
+		std::regex percPat(R"(\((.+) : (.+)\))");
+		while(njh::files::crossPlatGetline(in, line)){
+			std::smatch match;
+			if(std::regex_match(line, match, linePat)){
+				if(4 != match.size()){
+					std::stringstream ss;
+					ss << __PRETTY_FUNCTION__ << ", error in processing line : " << "\n";
+					ss << line << "\n";
+					ss << "Pattern should have matched 4 elements, not " << match.size() << "\n";
+					throw std::runtime_error{ss.str()};
+				}
+				uint32_t qcPass = njh::StrToNumConverter::stoToNum<uint32_t>(match[1]);
+				uint32_t qcFail = njh::StrToNumConverter::stoToNum<uint32_t>(match[2]);
+				Json::Value val;
+				std::string valTitle = match[3].str();
+				val["QC-passed reads"] = njh::json::toJson(qcPass);
+				val["QC-failed reads"] = njh::json::toJson(qcFail);;
+				if(std::string::npos != valTitle.find(":")){
+					std::string rest = valTitle.substr(valTitle.find(" (") + 1);
+					std::smatch percMatch;
+					if(std::regex_match(rest, percMatch, percPat)){
+						if(3 != percMatch.size()){
+							std::stringstream ss;
+							ss << __PRETTY_FUNCTION__ << ", error in processing substr : " << "\n";
+							ss << rest << "\n";
+							ss << "Pattern should have matched 3 elements, not " << percMatch.size() << "\n";
+							throw std::runtime_error{ss.str()};
+						}
+						if(std::string::npos != percMatch[1].str().find("%")){
+							val["QC-passed reads percentage"] = njh::json::toJson(njh::StrToNumConverter::stoToNum<double>(percMatch[1].str().substr(0, percMatch[1].str().find("%"))));
+						}else{
+							val["QC-passed reads percentage"] = njh::json::toJson(percMatch[1].str());
+						}
+						if(std::string::npos != percMatch[2].str().find("%")){
+							val["QC-failed reads percentage"] = njh::json::toJson(njh::StrToNumConverter::stoToNum<double>(percMatch[2].str().substr(0, percMatch[2].str().find("%"))));
+						}else{
+							val["QC-failed reads percentage"] = njh::json::toJson(percMatch[2].str());
+						}
+					}else{
+						std::stringstream ss;
+						ss << __PRETTY_FUNCTION__ << ", error in processing sustr : " << "\n";
+						ss << rest << "\n";
+						throw std::runtime_error{ss.str()};
+					}
+					valTitle = valTitle.substr(0, valTitle.find(" ("));
+
+				}else if(std::string::npos != valTitle.find("QC-passed reads")){
+					valTitle = valTitle.substr(0, valTitle.find(" ("));
+				}
+				outVal[valTitle] = val;
+			} else {
 				std::stringstream ss;
 				ss << __PRETTY_FUNCTION__ << ", error in processing line : " << "\n";
 				ss << line << "\n";
-				ss << "Pattern should have matched 4 elements, not " << match.size() << "\n";
 				throw std::runtime_error{ss.str()};
 			}
-			uint32_t qcPass = njh::StrToNumConverter::stoToNum<uint32_t>(match[1]);
-			uint32_t qcFail = njh::StrToNumConverter::stoToNum<uint32_t>(match[2]);
-			Json::Value val;
-			std::string valTitle = match[3].str();
-			val["QC-passed reads"] = njh::json::toJson(qcPass);
-			val["QC-failed reads"] = njh::json::toJson(qcFail);;
-			if(std::string::npos != valTitle.find(":")){
-				std::string rest = valTitle.substr(valTitle.find(" (") + 1);
-				std::smatch percMatch;
-				if(std::regex_match(rest, percMatch, percPat)){
-					if(3 != percMatch.size()){
-						std::stringstream ss;
-						ss << __PRETTY_FUNCTION__ << ", error in processing substr : " << "\n";
-						ss << rest << "\n";
-						ss << "Pattern should have matched 3 elements, not " << percMatch.size() << "\n";
-						throw std::runtime_error{ss.str()};
-					}
-					if(std::string::npos != percMatch[1].str().find("%")){
-						val["QC-passed reads percentage"] = njh::json::toJson(njh::StrToNumConverter::stoToNum<double>(percMatch[1].str().substr(0, percMatch[1].str().find("%"))));
-					}else{
-						val["QC-passed reads percentage"] = njh::json::toJson(percMatch[1].str());
-					}
-					if(std::string::npos != percMatch[2].str().find("%")){
-						val["QC-failed reads percentage"] = njh::json::toJson(njh::StrToNumConverter::stoToNum<double>(percMatch[2].str().substr(0, percMatch[2].str().find("%"))));
-					}else{
-						val["QC-failed reads percentage"] = njh::json::toJson(percMatch[2].str());
-					}
-				}else{
-					std::stringstream ss;
-					ss << __PRETTY_FUNCTION__ << ", error in processing sustr : " << "\n";
-					ss << rest << "\n";
-					throw std::runtime_error{ss.str()};
-				}
-				valTitle = valTitle.substr(0, valTitle.find(" ("));
-
-			}else if(std::string::npos != valTitle.find("QC-passed reads")){
-				valTitle = valTitle.substr(0, valTitle.find(" ("));
-			}
-			outVal[valTitle] = val;
-		} else {
-			std::stringstream ss;
-			ss << __PRETTY_FUNCTION__ << ", error in processing line : " << "\n";
-			ss << line << "\n";
-			throw std::runtime_error{ss.str()};
 		}
+		allValues[bfs::basename(bam)] = outVal;
 	}
-	jsonOut << outVal << std::endl;
 
+	jsonOut << allValues << std::endl;
 	return 0;
 }
 

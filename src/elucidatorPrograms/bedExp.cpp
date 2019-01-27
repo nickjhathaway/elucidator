@@ -29,6 +29,7 @@
 #include "bedExp.hpp"
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/BioRecordsUtils/BedUtility.hpp"
+#include "elucidator/objects/counters/DNABaseCounter.hpp"
 
 
 #include <TwoBit.h>
@@ -67,6 +68,7 @@ bedExpRunner::bedExpRunner()
 					 addFunc("reorientBasedOnSingleReadsOrientationCounts", reorientBasedOnSingleReadsOrientationCounts, false),
 					 addFunc("getFirstRegionPerChrom", getFirstRegionPerChrom, false),
 					 addFunc("getLastRegionPerChrom", getLastRegionPerChrom, false),
+					 addFunc("getGCContentOrRegion", getGCContentOrRegion, false),
            },//,
           "bedExp") {}
 
@@ -1106,6 +1108,47 @@ int bedExpRunner::bedUnqiue(const njh::progutils::CmdArgs & inputCommands) {
 }
 
 
+
+int bedExpRunner::getGCContentOrRegion(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path filename = "";
+	OutOptions outOpts(bfs::path(""), ".bed");
+	bfs::path twoBitFilename = "";
+
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(twoBitFilename, "--twoBit", "File path of the 2bit file", true);
+	setUp.setOption(filename, "--bed", "BED6 file", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+	OutputStream out(outOpts);
+	TwoBit::TwoBitFile twoBitFile(twoBitFilename);
+	auto seqNames = twoBitFile.sequenceNames();
+	BioDataFileIO<Bed6RecordCore> bedReader{IoOptions(InOptions(filename))};
+	bedReader.openIn();
+	Bed6RecordCore record;
+	out << "#chrom\tstart\tend\tname\tscore\tstrand\tgcBases\tgcContent" << std::endl;
+	while (bedReader.readNextRecord(record)) {
+		if (!njh::in(record.chrom_, seqNames)) {
+			std::cerr << "chromosome name not found in seq names, skipping"
+					<< std::endl;
+			std::cerr << "chr: " << record.chrom_ << std::endl;
+			std::cerr << "possibleNames: " << vectorToString(seqNames, ",")
+					<< std::endl;
+		} else {
+			std::string seq = "";
+			twoBitFile[record.chrom_]->getSequence(seq, record.chromStart_,
+					record.chromEnd_);
+			if (record.reverseStrand()) {
+				seq = seqUtil::reverseComplement(seq, "DNA");
+			}
+			DNABaseCounter counter;
+			counter.increase(seq);
+			out << record.toDelimStrWithExtra()
+					<< "\t" << counter.getGcCount()
+					<< "\t" << counter.getGcCount()/static_cast<double>(seq.size()) << std::endl;
+		}
+	}
+	return 0;
+}
 
 int bedExpRunner::getFastaWithBed(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path filename = "";
