@@ -52,6 +52,7 @@ class gffExpRunner : public njh::progutils::ProgramRunner {
 	static int extractGffRecordWithChildren(const njh::progutils::CmdArgs & inputCommands);
 	static int gffToBedByAttributeIncludeExonInfo(const njh::progutils::CmdArgs & inputCommands);
 
+	static int bedGetRegionsCompletelyInGenesInGff(const njh::progutils::CmdArgs & inputCommands);
 	static int bedGetIntersectingGenesInGff(const njh::progutils::CmdArgs & inputCommands);
 	static int bedGetIntersectingRecordsInGff(const njh::progutils::CmdArgs & inputCommands);
 
