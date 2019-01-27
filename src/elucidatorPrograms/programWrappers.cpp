@@ -184,7 +184,7 @@ int programWrapperRunner::runSamtoolsFlagStat(
 
 	for(const auto & bam : bams){
 		njh::files::checkExistenceThrow(bam, __PRETTY_FUNCTION__);
-		OutOptions samtoolsOutputOpts(bfs::path("samtools_flagstat_out_for_" + bfs::basename(bam)));
+		OutOptions samtoolsOutputOpts(bfs::path("samtools_flagstat_out_for_" + bam.filename().string() ));
 		samtoolsOutputOpts.transferOverwriteOpts(jsonOutOpts);
 		std::stringstream samtoolsCmd;
 		samtoolsCmd << "samtools flagstat -@ " << numThreads << " " << bam << " > " << samtoolsOutputOpts.outName();
@@ -254,7 +254,7 @@ int programWrapperRunner::runSamtoolsFlagStat(
 				throw std::runtime_error{ss.str()};
 			}
 		}
-		allValues[bfs::basename(bam)] = outVal;
+		allValues[bam.filename().string()] = outVal;
 	}
 
 	jsonOut << allValues << std::endl;
