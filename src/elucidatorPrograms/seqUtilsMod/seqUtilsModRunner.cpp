@@ -166,10 +166,15 @@ int seqUtilsModRunner::guessAProteinFromSeq(
 			uint32_t seqStop = longest->end_ * 3 + frameWithLongest;
 			uint32_t aaStop = longest->end_;
 			if(!removeTrailingStop && longest->end_ != lengthOfLongestFrame){
+
 				//if the end doesn't equal the length of the protein that must mean that it broke on a stop codon
 				longest->seqBase_.append("*");
 				++aaStop;
 				seqStop += 3;
+//				std::cout << "longest->end_: " << longest->end_ << "  lengthOfLongestFrame: " << lengthOfLongestFrame<< std::endl;
+//				auto protDebug = seq.translateRet(false, false, frameWithLongest);
+//				std::cout << '\t' << protDebug.seq_.size() << " " << protDebug.seq_ << std::endl;
+//				std::cout << "\t" << seq.seq_.substr(seqStart, seqStop - seqStart) << std::endl;
 			}
 			if(mark){
 				MetaDataInName meta;
