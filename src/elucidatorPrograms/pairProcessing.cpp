@@ -55,6 +55,7 @@ int pairProcessingRunner::StitchPairedReads(
 	setUp.processVerbose();
 	params.verbose_ = setUp.pars_.verbose_;
 	setUp.processDebug();
+	params.debug_ = setUp.pars_.debug_;
 	setUp.pars_.gap_ = "10,1";
 	setUp.pars_.gapInfo_.gapOpen_ = 10;
 	setUp.pars_.gapInfo_.gapExtend_ = 1;
@@ -64,6 +65,9 @@ int pairProcessingRunner::StitchPairedReads(
 	setUp.processScoringPars();
 	setUp.setOption(params.testNumber_, "--testNumber", "Test Number");
 	setUp.setOption(params.hardMismatchCutOff_, "--hardMismatchCutOff", "Hard Mismatch Cut Off, also don't allow this many mismatches");
+	setUp.setOption(params.lqMismatchCutOff,    "--lqMismatchCutOff",   "Low qaulity Mismatch Cut Off, also don't allow this many mismatches");
+	setUp.setOption(params.hqMismatchCutOff,    "--hqMismatchCutOff",   "High quality Mismatch Cut Off, also don't allow this many mismatches");
+
 	setUp.setOption(params.minOverlap_, "--minOverlap", "Minimum overlap");
 	setUp.setOption(params.writeOverHangs_, "--writeOverHangs", "Write Over Hangs");
 
