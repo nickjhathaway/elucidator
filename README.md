@@ -1,6 +1,6 @@
 elucidator
 =======================
-version 1.0.1-dev   
+version 1.1.0  
 
 Utilies for manipulating sequencing data.  
 
