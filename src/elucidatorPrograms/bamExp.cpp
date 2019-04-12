@@ -656,16 +656,20 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 	setUp.finishSetUp(std::cout);
 
 
-	OutOptions pairCountsOpts(njh::files::nameAppendBeforeExt(outOpts.outName(), "_totalPairCounts"));
-	OutOptions properPairCountsOpts(njh::files::nameAppendBeforeExt(outOpts.outName(), "_properPairCounts"));
-	pairCountsOpts.outExtention_ = ".tab.txt";
-	properPairCountsOpts.outExtention_ = ".tab.txt";
+	OutOptions pairCountsOpts(njh::files::nameAppendBeforeExt(outOpts.outName(), "_totalPairCounts"), ".tab.txt");
+	OutOptions properPairCountsOpts(njh::files::nameAppendBeforeExt(outOpts.outName(), "_properPairCounts"), ".tab.txt");
+	OutOptions mateUnMappedPairCountsOpts(njh::files::nameAppendBeforeExt(outOpts.outName(), "_mateUnmappedPairCounts"), ".tab.txt");
+	OutOptions discordantCountsOpts(njh::files::nameAppendBeforeExt(outOpts.outName(), "_discordantPairCounts"), ".tab.txt");
 
 	pairCountsOpts.transferOverwriteOpts(outOpts);
 	properPairCountsOpts.transferOverwriteOpts(outOpts);
+	mateUnMappedPairCountsOpts.transferOverwriteOpts(outOpts);
+	discordantCountsOpts.transferOverwriteOpts(outOpts);
 
 	OutputStream pairCountsOut(pairCountsOpts);
 	OutputStream properPairCountsOut(properPairCountsOpts);
+	OutputStream mateUnMappedPairCountsOut(mateUnMappedPairCountsOpts);
+	OutputStream discordantCountsOut(discordantCountsOpts);
 
 
 	auto bamFnps = njh::files::gatherFilesByPatOrNames(std::regex{pat}, bams);
@@ -720,6 +724,8 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 		GenomicRegion region_;
 		uint32_t totalPairCnt_ = 0;
 		uint32_t properPairCnt_ = 0;
+		uint32_t mateUnmappedCnt_ = 0;
+		uint32_t discordantCnt_ = 0;
 
 		std::string regUid_;
 		std::string bamFname_;
@@ -747,6 +753,10 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 					++(val->totalPairCnt_);
 					if(bAln.IsMateMapped() && bAln.MateRefID == bAln.RefID && std::abs(bAln.InsertSize) <= insertSizeCutOff){
 						++(val->properPairCnt_);
+					}else if(!bAln.IsMateMapped()){
+						++(val->mateUnmappedCnt_);
+					}else if(bAln.IsMateMapped() && (bAln.MateRefID != bAln.RefID || std::abs(bAln.InsertSize) > insertSizeCutOff)){
+						++(val->discordantCnt_);
 					}
 				}
 			}
@@ -800,12 +810,38 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 		++regRowCount;
 	}
 
+	table outputMateUnmappedPairs(header);
+	outputMateUnmappedPairs.content_ = std::vector<std::vector<std::string>>{regions.size(), std::vector<std::string>{header.size()}};
+	regRowCount = 0;
+	for(const auto & reg : regions){
+		auto regAsBed = reg.genBedRecordCore();
+		auto toks = tokenizeString(regAsBed.toDelimStr(), "\t");
+		for(const auto & col : iter::range(toks.size())){
+			outputMateUnmappedPairs.content_[regRowCount][col] = toks[col];
+		}
+		++regRowCount;
+	}
+
+	table outputDiscordantPairs(header);
+	outputDiscordantPairs.content_ = std::vector<std::vector<std::string>>{regions.size(), std::vector<std::string>{header.size()}};
+	regRowCount = 0;
+	for(const auto & reg : regions){
+		auto regAsBed = reg.genBedRecordCore();
+		auto toks = tokenizeString(regAsBed.toDelimStr(), "\t");
+		for(const auto & col : iter::range(toks.size())){
+			outputDiscordantPairs.content_[regRowCount][col] = toks[col];
+		}
+		++regRowCount;
+	}
+
 	pairsList.reset();
-	auto fillTables = [&outputTotalPairs,&outputProperPairs, &pairsList, &regUidToRowPos, &bamFnpToCol](){
+	auto fillTables = [&outputTotalPairs,&outputProperPairs,&outputMateUnmappedPairs,&outputDiscordantPairs, &pairsList, &regUidToRowPos, &bamFnpToCol](){
 		std::shared_ptr<BamFnpRegionPair> val;
 		while(pairsList.getVal(val)){
 			outputTotalPairs.content_[regUidToRowPos[val->regUid_]][bamFnpToCol[val->bamFname_]] = estd::to_string(val->totalPairCnt_);
 			outputProperPairs.content_[regUidToRowPos[val->regUid_]][bamFnpToCol[val->bamFname_]] = estd::to_string(val->properPairCnt_);
+			outputMateUnmappedPairs.content_[regUidToRowPos[val->regUid_]][bamFnpToCol[val->bamFname_]] = estd::to_string(val->mateUnmappedCnt_);
+			outputDiscordantPairs.content_[regUidToRowPos[val->regUid_]][bamFnpToCol[val->bamFname_]] = estd::to_string(val->discordantCnt_);
 		}
 	};
 
@@ -826,6 +862,16 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 		outputProperPairs.hasHeader_ = false;
 	}
 	outputProperPairs.outPutContents(properPairCountsOut, "\t");
+
+	if(noHeader){
+		outputMateUnmappedPairs.hasHeader_ = false;
+	}
+	outputMateUnmappedPairs.outPutContents(mateUnMappedPairCountsOut, "\t");
+
+	if(noHeader){
+		outputDiscordantPairs.hasHeader_ = false;
+	}
+	outputDiscordantPairs.outPutContents(discordantCountsOut, "\t");
 
 	return 0;
 }

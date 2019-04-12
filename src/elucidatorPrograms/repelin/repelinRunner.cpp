@@ -40,7 +40,8 @@ repelinRunner::repelinRunner()
 					 addFunc("extractElementSequences", extractElementSequences, false),
 					 addFunc("parseRMForElementWithoutIntervening", parseRMForElementWithoutIntervening, false),
 					 addFunc("parseTandemRepeatFinderOutputUnitTest", parseTandemRepeatFinderOutputUnitTest, false),
-					 addFunc("TandemRepeatFinderOutputToBed", TandemRepeatFinderOutputToBed, false)
+					 addFunc("TandemRepeatFinderOutputToBed", TandemRepeatFinderOutputToBed, false),
+					 addFunc("runTRF", runTRF, false)
            },//
           "repelin") {}
 
@@ -646,6 +647,99 @@ int repelinRunner::TandemRepeatFinderOutputToBed(const njh::progutils::CmdArgs &
 		std::shared_ptr<TandemRepeatFinderRecord> record = std::make_shared<TandemRepeatFinderRecord>(line);
 		record->setSeqName(currentSeqName);
 		out << GenomicRegion(*record).genBedRecordCore().toDelimStr() << std::endl;
+	}
+  return 0;
+}
+
+
+int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
+
+	uint32_t match{2};
+	uint32_t mismatch{7};
+	uint32_t delta{7};
+	uint32_t PM{80};
+	uint32_t PI{10};
+	uint32_t Minscore{24};
+	uint32_t MaxPeriod{1000};
+
+  seqSetUp setUp(inputCommands);
+
+  setUp.processVerbose();
+  setUp.processDefaultReader({"--fasta", "--fastq"});
+  setUp.processDirectoryOutputName(true);
+  setUp.finishSetUp();
+
+  setUp.startARunLog(setUp.pars_.directoryName_);
+  njh::sys::requireExternalProgramThrow("trf");
+	{
+		SeqInput reader(setUp.pars_.ioOptions_);
+		auto fastaInputOut = SeqIOOptions::genFastaOut(
+				njh::files::make_path(setUp.pars_.directoryName_, "input.fasta"));
+		SeqOutput writer(fastaInputOut);
+		seqInfo seq;
+		reader.openIn();
+		writer.openOut();
+
+		while (reader.readNextRead(seq)) {
+			writer.write(seq);
+		}
+		writer.closeOut();
+
+		std::stringstream cmdStream;
+		cmdStream << "cd " << setUp.pars_.directoryName_ << " && " << "trf " << "input.fasta "
+				<< " " << match
+				<< " " << mismatch
+				<< " " << delta
+				<< " " << PM
+				<< " " << PI
+				<< " " << Minscore
+				<< " " << MaxPeriod
+				<< " -f -d -m -h > trf.log 2>&1";
+		auto cmdOut = njh::sys::run(VecStr{cmdStream.str()});
+	  OutOptions trfOutRunLogOpts{njh::files::make_path(setUp.pars_.directoryName_, "trfOutRunLog.json")};
+	  OutputStream trfOutRunLogOut(trfOutRunLogOpts);
+
+	  trfOutRunLogOut << cmdOut.toJson() << std::endl;
+	}
+
+	std::stringstream repeatFnpStream;
+	repeatFnpStream << "input.fasta"
+			<< "." << match
+			<< "." << mismatch
+			<< "." << delta
+			<< "." << PM
+			<< "." << PI
+			<< "." << Minscore
+			<< "." << MaxPeriod << ".dat";
+
+  bfs::path repeatFilename = njh::files::make_path(setUp.pars_.directoryName_, repeatFnpStream.str());
+
+  OutOptions outOpts{njh::files::make_path(setUp.pars_.directoryName_, "repeats.bed")};
+
+  OutputStream outFile(outOpts);
+	BioDataFileIO<TandemRepeatFinderRecord> reader{IoOptions(InOptions(repeatFilename))};
+	reader.openIn();
+	std::string currentSeqName = "";
+	std::string line = "";
+	while (njh::files::crossPlatGetline(*reader.inFile_, line)) {
+		if (njh::beginsWith(line, "Sequence")) {
+			auto toks = njh::tokenizeString(line, "whitespace");
+			if (toks.size() < 2) {
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error in processing line " << line
+						<< ", was expecting at least two values separated by white sapce but found "
+						<< toks.size() << " instead " << "\n";
+				throw std::runtime_error { ss.str() };
+			}
+			currentSeqName = toks[1];
+		}
+		//skip lines that don't start with a digit or is a blank line, it seems to be the only indicator that the file is on a data line, this format is stupid
+		if("" == line || allWhiteSpaceStr(line) || !::isdigit(line.front())){
+			continue;
+		}
+		std::shared_ptr<TandemRepeatFinderRecord> record = std::make_shared<TandemRepeatFinderRecord>(line);
+		record->setSeqName(currentSeqName);
+		outFile << GenomicRegion(*record).genBedRecordCore().toDelimStr() << std::endl;
 	}
   return 0;
 }

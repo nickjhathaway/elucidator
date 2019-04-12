@@ -60,6 +60,7 @@ gffExpRunner::gffExpRunner()
 					 addFunc("setBedPositionsToIntersectingGeneInGff", setBedPositionsToIntersectingGeneInGff, false),
 					 addFunc("gffGetNumOfTranscriptsForGenes", gffGetNumOfTranscriptsForGenes, false),
 					 addFunc("aaPositionsToBed", aaPositionsToBed, false),
+					 addFunc("bedGetRegionsCompletelyInGenesInGff", bedGetRegionsCompletelyInGenesInGff, false),
            },//
           "gffExp") {}
 class AmionoAcidPositionInfo {
@@ -1155,8 +1156,11 @@ int gffExpRunner::reorientBedToIntersectingGeneInGff(const njh::progutils::CmdAr
 	outOpts.outExtention_ = ".bed";
 	bfs::path bedFnp = "";
 	size_t overlapMin = 1;
+	VecStr features{"gene"};
 	seqSetUp setUp(inputCommands);
 	setUp.description_ = "Will set strand to first gene intersected with in the gff strand";
+	setUp.setOption(features, "--features", "features to use");
+
 	setUp.setOption(overlapMin, "--overlapMin", "overlap minimum");
 	setUp.setOption(inputFile, "--gff", "Input gff file", true);
 	setUp.setOption(bedFnp, "--bed", "Bed regions to extract", true);
@@ -1178,7 +1182,7 @@ int gffExpRunner::reorientBedToIntersectingGeneInGff(const njh::progutils::CmdAr
 
 	while (nullptr != gRecord) {
 
-		if("gene" == gRecord->type_){
+		if(njh::in(gRecord->type_, features)){
 			auto gRegion = GenomicRegion(*gRecord);
 			for(auto & inputRegion : beds){
 				if(gRegion.overlaps(*inputRegion)){
@@ -1207,23 +1211,86 @@ int gffExpRunner::reorientBedToIntersectingGeneInGff(const njh::progutils::CmdAr
 	return 0;
 }
 
+template <typename BEDREC>
+std::vector<BEDREC> getBedsCompletelyInGenesInGFf(
+		const std::vector<BEDREC> & beds,
+		const intersectBedLocsWtihGffRecordsPars & pars){
+	std::vector<BEDREC>  ret;
+	std::unordered_map<std::string, std::vector<uint32_t>> bedsByChrome;
+
+	BioDataFileIO<GFFCore> reader { IoOptions(InOptions(pars.gffFnp_)) };
+	reader.openIn();
+	uint32_t count = 0;
+	std::string line = "";
+	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
+	for (const auto & bPos : iter::range(beds.size())) {
+		bedsByChrome[getRef(beds[bPos]).chrom_].emplace_back(bPos);
+	}
+	while (nullptr != gRecord) {
+		if (pars.selectFeatures_.empty() || njh::in(gRecord->type_, pars.selectFeatures_)) {
+			auto gRegion = GenomicRegion(*gRecord);
+			for (auto & inputRegionPos : bedsByChrome[gRegion.chrom_]) {
+				if (gRegion.getOverlapLen(getRef(beds[inputRegionPos])) == getRef(beds[inputRegionPos]).length()) {
+					ret.push_back(beds[inputRegionPos]);
+				}
+			}
+		}
+		bool end = false;
+		while ('#' == reader.inFile_->peek()) {
+			if (njh::files::nextLineBeginsWith(*reader.inFile_, "##FASTA")) {
+				end = true;
+				break;
+			}
+			njh::files::crossPlatGetline(*reader.inFile_, line);
+		}
+		if (end) {
+			break;
+		}
+		gRecord = reader.readNextRecord();
+		++count;
+	}
+	return ret;
+}
 
 
-int gffExpRunner::bedGetIntersectingGenesInGff(const njh::progutils::CmdArgs & inputCommands){
+
+
+int gffExpRunner::bedGetRegionsCompletelyInGenesInGff(const njh::progutils::CmdArgs & inputCommands){
 	intersectBedLocsWtihGffRecordsPars pars;
 	OutOptions outOpts("out", ".bed");
 	bfs::path bedFnp = "";
-	std::string extraAttributesStr = "";
+	pars.selectFeatures_ = VecStr{"gene"};
+
 	seqSetUp setUp(inputCommands);
-	setUp.setOption(extraAttributesStr, "--extraAttributes", "Extra Attributes to output");
+	setUp.setOption(pars.selectFeatures_, "--selectFeatures", "Gff Features to consider");
+
 	setUp.setOption(pars.gffFnp_, "--gff", "Input gff file", true);
 	setUp.setOption(bedFnp, "--bed", "Bed regions to extract", true);
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 	auto beds = getBed3s(bedFnp);
-	auto extraAttributes = tokenizeString(extraAttributesStr, ",");
-	pars.extraAttributes_ = extraAttributes;
+	njh::files::checkExistenceThrow(pars.gffFnp_, __PRETTY_FUNCTION__);
+	OutputStream out(outOpts);
+	auto intersectedBeds = getBedsCompletelyInGenesInGFf(beds, pars);
+	for(const auto & bed : intersectedBeds){
+		out << bed->toDelimStrWithExtra() << std::endl;
+	}
+	return 0;
+}
+
+int gffExpRunner::bedGetIntersectingGenesInGff(const njh::progutils::CmdArgs & inputCommands){
+	intersectBedLocsWtihGffRecordsPars pars;
+	OutOptions outOpts("out", ".bed");
+	bfs::path bedFnp = "";
 	pars.selectFeatures_ = VecStr{"gene"};
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(pars.extraAttributes_, "--extraAttributes", "Extra Attributes to output");
+	setUp.setOption(pars.selectFeatures_, "--selectFeatures", "Gff Features to consider");
+	setUp.setOption(pars.gffFnp_, "--gff", "Input gff file", true);
+	setUp.setOption(bedFnp, "--bed", "Bed regions to extract", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+	auto beds = getBed3s(bedFnp);
 	njh::files::checkExistenceThrow(pars.gffFnp_, __PRETTY_FUNCTION__);
 
 	OutputStream out(outOpts);

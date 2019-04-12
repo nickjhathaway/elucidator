@@ -142,12 +142,13 @@ njh::sys::RunOutput RunAdapterRemoval(RunAdapterRemovalPars adapRemovPars){
 			<< "--outputcollapsedtruncated " << adapRemovPars.outOpts.outFilename_.string() << "_trunc" << extention << " "
 			<< "--singleton " << adapRemovPars.outOpts.outFilename_.string() << "_mateLost" << extention << " "
 			<< "--discarded " << adapRemovPars.outOpts.outFilename_.string() << "_discarded" << extention << " "
-			<< "--settings " << adapRemovPars.outOpts.outFilename_.string() << "_AdapterRemoval.log "
-			<< ">> " << adapRemovPars.outOpts.outFilename_.string() << "_AdapterRemoval.runlog 2>&1 ";
+			<< "--settings " << adapRemovPars.outOpts.outFilename_.string() << "_AdapterRemoval.log ";
 
+	//add any extra commands
 	if("" != adapRemovPars.extraArgs){
 		adapterRemvalCmdStream << adapRemovPars.extraArgs << " ";
 	}
+	adapterRemvalCmdStream << " >> " << adapRemovPars.outOpts.outFilename_.string() << "_AdapterRemoval.runlog 2>&1 ";
 
 	bool needToRun = adapRemovPars.force;
 	if(!adapRemovPars.force){
@@ -262,12 +263,12 @@ njh::sys::RunOutput RunAdapterRemovalSE(RunAdapterRemovalPars adapRemovPars){
 	adapterRemvalCmdStream
 			<< "--output1 " << adapRemovPars.outOpts.outFilename_.string() << "" << extention << " "
 			<< "--discarded " << adapRemovPars.outOpts.outFilename_.string() << "_discarded" << extention << " "
-			<< "--settings " << adapRemovPars.outOpts.outFilename_.string() << "_AdapterRemoval.log "
-			<< ">> " << adapRemovPars.outOpts.outFilename_.string() << "_AdapterRemoval.runlog 2>&1 ";
-
+			<< "--settings " << adapRemovPars.outOpts.outFilename_.string() << "_AdapterRemoval.log ";
+	// add extra commands
 	if("" != adapRemovPars.extraArgs){
 		adapterRemvalCmdStream << adapRemovPars.extraArgs << " ";
 	}
+	adapterRemvalCmdStream  << ">> " << adapRemovPars.outOpts.outFilename_.string() << "_AdapterRemoval.runlog 2>&1 ";
 
 	bool needToRun = adapRemovPars.force;
 	if(!adapRemovPars.force){
@@ -782,6 +783,177 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSinglesCombined(const njh:
 	}
 	return 0;
 }
-//No overhangs
+
+
+int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const njh::progutils::CmdArgs & inputCommands){
+	bfs::path outputDir = "";
+	bfs::path trimStub = "";
+	bool force = false;
+	uint32_t numThreads = 1;
+	std::string sampName = "";
+	bool removeIntermediateFiles = false;
+	bfs::path genomePrefix = "";
+	std::string extraBowtie2Args = "";
+	bfs::path outputFnp = "";
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(genomePrefix, "--genomePrefix", "genome prefix for bowtie2", true);
+	setUp.setOption(trimStub, "--trimStub", "AdapterRemoval output stub", true);
+	setUp.setOption(sampName, "--sampName", "Sample Name to give to final bam", true);
+	setUp.setOption(force, "--force", "force run even if file already exists");
+	setUp.setOption(outputFnp, "--outputFnp", "output name, will default to sampName.sorted.bam");
+	setUp.setOption(extraBowtie2Args, "--extraBowtie2Args", "extra bowtie2 arguments");
+	setUp.setOption(numThreads, "--numThreads", "Number of threads");
+	setUp.setOption(outputDir, "--outputDir", "output directory");
+	setUp.setOption(removeIntermediateFiles, "--removeIntermediateFiles", "remove the intermediate bam files and just keep the ");
+	setUp.finishSetUp(std::cout);
+	BioCmdsUtils bioRunner(setUp.pars_.verbose_);
+	njh::sys::requireExternalProgramsThrow(VecStr{"bowtie2", "bamtools", "samtools"});
+	bfs::path inputSingles = njh::files::make_path(trimStub.string() + "_singles.fastq");
+	bfs::path inputPairedFirstMates = njh::files::make_path(trimStub.string() + "_1.fastq");
+	bfs::path inputPairedSecondMates = njh::files::make_path(trimStub.string() + "_2.fastq");
+	bfs::path genomeFnp = genomePrefix.string() + ".fasta";
+	njh::files::checkExistenceThrow(genomeFnp,__PRETTY_FUNCTION__);
+	if(setUp.pars_.debug_){
+		std::cout << "genomeFnp: " << genomeFnp << std::endl;
+	}
+	bioRunner.RunBowtie2Index(genomeFnp);
+
+	if (!bfs::exists(inputSingles)
+			&& !bfs::exists(inputPairedFirstMates)
+			&& !bfs::exists(inputPairedSecondMates)) {
+		inputPairedFirstMates = njh::files::make_path(trimStub.string() + "_1.fastq.gz");
+		inputPairedSecondMates = njh::files::make_path(trimStub.string() + "_2.fastq.gz");
+		inputSingles = njh::files::make_path(trimStub.string() + "_singles.fastq.gz");
+		if(!bfs::exists(inputPairedFirstMates) &&
+				!bfs::exists(inputPairedSecondMates)){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error, one of the following pairs  " << "\n"
+					<< " " << njh::files::make_path(trimStub.string() + "_1.fastq") << " "
+					       << njh::files::make_path(trimStub.string() + "_2.fastq") << "\n"
+					<< " or " << "\n"
+					<< " " << njh::files::make_path(trimStub.string() + "_1.fastq.gz")
+					<< " " << njh::files::make_path(trimStub.string() + "_2.fastq.gz")
+					<< "\n" << "have to exist" << "\n";
+			throw std::runtime_error { ss.str() };
+		}
+	}
+	if("" == outputFnp){
+		outputFnp = njh::files::make_path(outputDir, sampName + ".sorted.bam");
+	}
+	bfs::path outputFnpBai = outputFnp.string() + ".bai";
+	bool needToRun = true;
+	if(bfs::exists(outputFnp) &&
+			bfs::exists(outputFnpBai) &&
+			njh::files::firstFileIsOlder(inputPairedFirstMates, outputFnp) &&
+			njh::files::firstFileIsOlder(inputPairedSecondMates, outputFnp)){
+		needToRun = false;
+	}
+	if(force){
+		needToRun = true;
+	}
+	bfs::path singlesSortedBam = njh::files::make_path(outputDir, trimStub.filename().string() + "_singles.sorted.bam");
+	bfs::path pairedSortedBam = njh::files::make_path(outputDir,trimStub.filename().string() + ".sorted.bam");
+
+
+	std::string bNameStub = trimStub.filename().string();
+	std::stringstream singlesCmd;
+	singlesCmd << "bowtie2 "
+			<< " --threads " << numThreads
+			<< " --rg-id " << bNameStub << "_singles "
+			<< " --rg \"SM:" << sampName << "\""
+			<< " "   << extraBowtie2Args
+			<< " -x "   << genomePrefix
+			<< " -U "   << inputSingles
+			<< " 2> " << bfs::path(singlesSortedBam.string() + ".bowtie2.log")
+			<< " | samtools sort -@ " << numThreads << " -o " << singlesSortedBam;
+
+	std::stringstream pairedCmd;
+	pairedCmd << "bowtie2 "
+			<< " --threads " << numThreads
+			<< " --rg-id " << bNameStub
+			<< " --rg \"SM:" << sampName << "\""
+			<< " "   << extraBowtie2Args
+			<< " -x "   << genomePrefix
+			<< " -1 "   << inputPairedFirstMates
+			<< " -2 "   << inputPairedSecondMates
+			<< " 2> " << bfs::path(pairedSortedBam.string() + ".bowtie2.log")
+			<< " | samtools sort -@ " << numThreads << " -o " << pairedSortedBam;
+
+
+	std::stringstream bamtoolsMergeAndIndexCmd;
+	bamtoolsMergeAndIndexCmd << "bamtools merge " << " -in " << pairedSortedBam;
+	bool inputSingleEmpty = false;
+	if(bfs::exists(inputSingles)){
+		uint32_t count  = 0;
+		InputStream singlesInput(inputSingles);
+		std::string line = "";
+		while(njh::files::crossPlatGetline(singlesInput, line)){
+			if(setUp.pars_.debug_){
+				std::cout << "Line: " << line << std::endl;
+			}
+			if("" != line){
+				++count;
+			}
+			break;
+		}
+		if(0 == count){
+			inputSingleEmpty = true;
+		}
+		if(setUp.pars_.debug_){
+			std::cout << "count: " << count << std::endl;
+		}
+	}
+	if(setUp.pars_.debug_){
+		std::cout << "inputSingleEmpty: " << njh::colorBool(inputSingleEmpty) << std::endl;
+	}
+	if(bfs::exists(inputSingles) && !inputSingleEmpty){
+		bamtoolsMergeAndIndexCmd << " -in " <<  singlesSortedBam;
+	}
+	bamtoolsMergeAndIndexCmd << " -out " << outputFnp
+			<< " && samtools index " << outputFnp;
+
+	if(needToRun){
+		bfs::path logFnp = njh::files::make_path(outputDir, "alignTrimoOutputs_" + sampName + "_" + njh::getCurrentDate() + "_log.json");
+		logFnp = njh::files::findNonexitantFile(logFnp);
+		OutOptions logOpts(logFnp);
+		std::ofstream logFile;
+		logOpts.openFile(logFile);
+		std::unordered_map<std::string, njh::sys::RunOutput> runOutputs;
+		if(setUp.pars_.debug_){
+			std::cout << "bfs::exists(inputSingles) && !inputSingleEmpty: " << njh::colorBool(bfs::exists(inputSingles) && !inputSingleEmpty) << std::endl;
+		}
+		if(bfs::exists(inputSingles) && !inputSingleEmpty){
+			auto singlesRunOutput = njh::sys::run({singlesCmd.str()});
+			BioCmdsUtils::checkRunOutThrow(singlesRunOutput, __PRETTY_FUNCTION__);
+			runOutputs["bowtie2-singles"] = singlesRunOutput;
+		}
+
+		auto pairedRunOutput = njh::sys::run({pairedCmd.str()});
+		BioCmdsUtils::checkRunOutThrow(pairedRunOutput, __PRETTY_FUNCTION__);
+		runOutputs["bowtie2-paired"] = pairedRunOutput;
+		if(bfs::exists(singlesSortedBam) ){
+			auto bamtoolsMergeAndIndexRunOutput = njh::sys::run({bamtoolsMergeAndIndexCmd.str()});
+			BioCmdsUtils::checkRunOutThrow(bamtoolsMergeAndIndexRunOutput, __PRETTY_FUNCTION__);
+			runOutputs["bamtools-merge-index"] = bamtoolsMergeAndIndexRunOutput;
+		}else{
+			std::stringstream ss;
+			ss << "samtools index " << outputFnp;
+			bfs::rename(pairedSortedBam, outputFnp);
+			auto indexRunOutput = njh::sys::run({ss.str()});
+			BioCmdsUtils::checkRunOutThrow(indexRunOutput, __PRETTY_FUNCTION__);
+			runOutputs["index"] = indexRunOutput;
+		}
+		logFile << njh::json::toJson(runOutputs) << std::endl;
+		if(removeIntermediateFiles){
+			if(bfs::exists(singlesSortedBam)){
+				bfs::remove(pairedSortedBam);
+				bfs::remove(singlesSortedBam);
+			}
+		}
+	}
+	return 0;
+}
 
 } // namespace njhseq

@@ -34,9 +34,10 @@ int seqUtilsTrimRunner::breakupAtRegexPat(const njh::progutils::CmdArgs & inputC
 	bool mark = false;
 	seqUtilsTrimSetUp setUp(inputCommands);
 	setUp.processDefaultReader();
-	if("" == setUp.pars_.ioOptions_.out_.outFilename_){
-		setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(setUp.pars_.ioOptions_.firstName_, "breakup_");
-	}else if("STDIN" == setUp.pars_.ioOptions_.firstName_){
+	if ("" == setUp.pars_.ioOptions_.out_.outFilename_) {
+		setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(
+				setUp.pars_.ioOptions_.firstName_, "breakup_");
+	} else if ("STDIN" == setUp.pars_.ioOptions_.firstName_) {
 		setUp.pars_.ioOptions_.out_.outFilename_ = "STDOUT";
 	}
 	setUp.setOption(patStr, "--pattern", "Pattern to break up seq on");
@@ -46,72 +47,22 @@ int seqUtilsTrimRunner::breakupAtRegexPat(const njh::progutils::CmdArgs & inputC
 	setUp.processDebug();
 	setUp.finishSetUp(std::cout);
 
-	std::regex pat{patStr};
 	SeqIO reader(setUp.pars_.ioOptions_);
 	reader.openIn();
 	reader.openOut();
 
 	seqInfo seq;
 
-	struct PatPosSize{
-		PatPosSize(const std::string & pat, size_t pos): pat_(pat), pos_(pos){
-
-		}
-		std::string pat_;
-		size_t pos_;
-
-		size_t end(){
-			return pos_ + pat_.size();
-		}
-	};
-
+	njh::PatPosFinder pFinder(patStr);
 	while(reader.readNextRead(seq)){
-
-    std::sregex_iterator iter(seq.seq_.begin(), seq.seq_.end(), pat);
-    std::sregex_iterator end;
-  	std::vector<PatPosSize> pats;
-		while (iter != end) {
-			pats.emplace_back((*iter)[0], iter->position());
-			++iter;
-		}
-
-		if(!pats.empty()){
-			if(0 != pats.front().pos_ ){
-				size_t start = 0;
-				size_t end = pats.front().pos_;
-				auto subSeq = seq.getSubRead(start, end - start);
-				if(mark){
-					subSeq.name_.append(njh::pasteAsStr("-s", start, "-e", end));
-				}
-				reader.write(subSeq);
+		auto breaks = readVecTrimmer::breakUpSeqOnPat(seq, pFinder);
+		for(auto & seqBreak : breaks){
+			if(mark && "" != seqBreak.pat_ ){
+				seqBreak.seqBase_.name_.append(njh::pasteAsStr("-s", seqBreak.start_, "-e", seqBreak.end_));
 			}
-			if(pats.size() > 1){
-				for(const auto & patPos : iter::range(pats.size() - 1)){
-					const auto & p = pats[patPos];
-					size_t start = p.pos_ + p.pat_.size();
-					size_t end = pats[patPos + 1].pos_;
-					auto subSeq = seq.getSubRead(start, end - start);
-					if(mark){
-						subSeq.name_.append(njh::pasteAsStr("-s", start, "-e", end));
-					}
-					reader.write(subSeq);
-				}
-			}
-			if(seq.seq_.size() != pats.back().end()){
-				size_t start = pats.back().end();
-				size_t end = seq.seq_.size();
-				auto subSeq = seq.getSubRead(start, end - start);
-				if(mark){
-					subSeq.name_.append(njh::pasteAsStr("-s", start, "-e", end));
-				}
-				reader.write(subSeq);
-			}
-		}else{
-			reader.write(seq);
+			reader.write(seqBreak.seqBase_);
 		}
 	}
-
-
 	return 0;
 }
 

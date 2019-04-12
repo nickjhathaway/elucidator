@@ -39,6 +39,10 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	//extracting sequencing using bed file
 	static int getFastaWithBed(const njh::progutils::CmdArgs & inputCommands);
 
+	//extracting sequence information per bed region
+	static int getGCContentOrRegion(const njh::progutils::CmdArgs & inputCommands);
+
+
 	//filtering of bed files
 	static int getCloseBedRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int filterBedRecordsByLength(const njh::progutils::CmdArgs & inputCommands);
@@ -46,6 +50,8 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	static int getNonOverlappingBedRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int getBestNonOverlapingRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int bedUnqiue(const njh::progutils::CmdArgs & inputCommands);
+	static int getFirstRegionPerChrom(const njh::progutils::CmdArgs & inputCommands);
+	static int getLastRegionPerChrom(const njh::progutils::CmdArgs & inputCommands);
 
 	//combing bed files
 	static int bedCreateSpanningRegions(const njh::progutils::CmdArgs & inputCommands);

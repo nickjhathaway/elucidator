@@ -64,6 +64,28 @@ public:
 		}
 	}
 
+	template<typename BED>
+	static uint32_t getPlotIDForBed(const BED & record,
+			std::unordered_map<std::string,
+					std::unordered_map<uint32_t, std::vector<uint32_t>>> & alreadyTakenIds) {
+		uint32_t id = 0;
+		std::set<uint32_t> alreadyTaken;
+		for (const auto pos : iter::range(getRef(record).chromStart_, getRef(record).chromEnd_)) {
+			for (const auto & otherId : alreadyTakenIds[getRef(record).chrom_][pos]) {
+				alreadyTaken.emplace(otherId);
+			}
+		}
+		while (njh::in(id, alreadyTaken)) {
+			++id;
+		}
+		for (const auto pos : iter::range(getRef(record).chromStart_, getRef(record).chromEnd_)) {
+			alreadyTakenIds[getRef(record).chrom_][pos].emplace_back(id);
+		}
+		return id;
+	}
+
+
+
 
 
 };

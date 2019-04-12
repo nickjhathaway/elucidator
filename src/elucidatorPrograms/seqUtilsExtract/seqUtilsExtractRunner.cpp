@@ -147,17 +147,31 @@ int seqUtilsExtractRunner::extractSeqsBeginsWithEndsWith(const njh::progutils::C
 	if(writeOtherSeqs){
 		otherWriter.openOut();
 	}
-	seqInfo seq;
 
-	while(readerWriter.readNextRead(seq)){
-		if(len(seq) >= beginsWithMotif.size() &&
-				beginsWithMotif.scoreMotif(seq.seq_.begin(), seq.seq_.begin() + beginsWithMotif.size()) + allowableErrors >= beginsWithMotif.size()&&
-				endsWithMotif.scoreMotif(seq.seq_.end() - endsWithMotif.size(), seq.seq_.end()) + allowableErrors >= endsWithMotif.size()){
-			readerWriter.write(seq);
-		}else if(writeOtherSeqs){
-			otherWriter.write(seq);
+	if(setUp.pars_.ioOptions_.isPairedIn()){
+		PairedRead seq;
+		while(readerWriter.readNextRead(seq)){
+			if(len(seq) >= beginsWithMotif.size() &&
+					beginsWithMotif.scoreMotif(seq.seqBase_.seq_.begin(), seq.seqBase_.seq_.begin() + beginsWithMotif.size() ) + allowableErrors >= beginsWithMotif.size()&&
+					endsWithMotif.scoreMotif(seq.mateSeqBase_.seq_.begin(), seq.mateSeqBase_.seq_.begin() + beginsWithMotif.size() ) + allowableErrors >= endsWithMotif.size()){
+				readerWriter.write(seq);
+			}else if(writeOtherSeqs){
+				otherWriter.write(seq);
+			}
+		}
+	}else{
+		seqInfo seq;
+		while(readerWriter.readNextRead(seq)){
+			if(len(seq) >= beginsWithMotif.size() &&
+					beginsWithMotif.scoreMotif(seq.seq_.begin(), seq.seq_.begin() + beginsWithMotif.size()) + allowableErrors >= beginsWithMotif.size()&&
+					endsWithMotif.scoreMotif(seq.seq_.end() - endsWithMotif.size(), seq.seq_.end()) + allowableErrors >= endsWithMotif.size()){
+				readerWriter.write(seq);
+			}else if(writeOtherSeqs){
+				otherWriter.write(seq);
+			}
 		}
 	}
+
 	return 0;
 }
 

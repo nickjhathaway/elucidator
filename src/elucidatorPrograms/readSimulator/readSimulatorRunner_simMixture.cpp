@@ -309,16 +309,38 @@ public:
 		ret["pars"] = njh::json::toJson(pars_);
 		return ret;
 	}
+
+	table createAbundanceTable() const{
+		table ret(VecStr{"library", "sample", "mix", "hap", "abundanceRaw", "totalRawAbundance", "Percentage"});
+		for(const auto & sample : samples_){
+			for(const auto & mix : sample.second->mixtures_){
+				double totalRawAbundance = 0.0;
+				for(const auto & hap : mix.second->abundances_){
+					totalRawAbundance += hap.second;
+				}
+				for(const auto & hap : mix.second->abundances_){
+					ret.addRow(name_, sample.second->name_, mix.second->name_, hap.first, hap.second, totalRawAbundance, 100 * (hap.second/totalRawAbundance));
+				}
+			}
+		}
+		return ret;
+	}
+
 };
 
 
 class IlluminaRoughProfiler{
+	/**@todo add counts for overlapping errors, this could help estimate PCR error
+	 *
+	 */
 public:
 	struct Counts{
 		std::unordered_map<uint32_t, uint32_t> positionErrorCounts;
 		std::unordered_map<uint32_t, uint32_t> positionTotalCounts;
 
 		std::unordered_map<char, std::unordered_map<char, uint32_t>> baseChangeCounts;
+
+		std::unordered_map<uint32_t, std::unordered_map<char, std::unordered_map<char, uint32_t>>> baseChangeCountsPerPosition;
 
 		std::unordered_map<uint32_t, std::unordered_map<uint32_t, uint32_t>> qualCounts;
 		std::unordered_map<uint32_t, std::unordered_map<uint32_t, uint32_t>> qualErrorsCounts;
@@ -334,6 +356,14 @@ public:
 			for(const auto & refBase : other.baseChangeCounts){
 				for(const auto & seqBase : refBase.second){
 					baseChangeCounts[refBase.first][seqBase.first] += seqBase.second;
+				}
+			}
+
+			for(const auto & pos : other.baseChangeCountsPerPosition){
+				for(const auto & refBase : pos.second){
+					for(const auto & seqBase : refBase.second){
+						baseChangeCountsPerPosition[pos.first][refBase.first][seqBase.first] += seqBase.second;
+					}
 				}
 			}
 
@@ -369,6 +399,7 @@ public:
 						++positionErrorCounts[realPosition];
 						++qualErrorsCounts[realPosition][res.alnSeqAligned_->qual_[pos]];
 						++baseChangeCounts[res.refSeqAligned_->seq_[pos]][res.alnSeqAligned_->seq_[pos]];
+						++baseChangeCountsPerPosition[realPosition][res.refSeqAligned_->seq_[pos]][res.alnSeqAligned_->seq_[pos]];
 					}else{
 						//correct
 						++qualCounts[realPosition][res.alnSeqAligned_->qual_[pos]];
@@ -418,6 +449,35 @@ public:
 						 << "\t" << baseChangeCounts[refBase][seqBase] << std::endl;
 				}
 			}
+
+			//base substitution rates per position
+			OutOptions base_substitution_rates_perPositionOpts(bfs::path(prefix + "_base_substitution_rates_perPosition.tab.txt"));
+			base_substitution_ratesOpts.overWriteFile_ = overWrite;
+			OutputStream base_substitution_rates_perPositionOut(base_substitution_rates_perPositionOpts);
+			base_substitution_rates_perPositionOut << "pos\tref\tseq\tcount" << std::endl;
+			auto allPositions = getVectorOfMapKeys(baseChangeCountsPerPosition);
+			njh::sort(allPositions);
+			for(const auto & pos :  allPositions){
+				for(const auto & refBase : bases){
+					double total = 0;
+					for(const auto & seqBase : bases){
+						if(seqBase == refBase){
+							continue;
+						}
+						total += baseChangeCountsPerPosition[pos][refBase][seqBase];
+					}
+					for(const auto & seqBase : bases){
+						if(seqBase == refBase){
+							continue;
+						}
+						base_substitution_rates_perPositionOut << pos
+						   << "\t" << refBase
+							 << "\t" << seqBase
+							 << "\t" << baseChangeCountsPerPosition[pos][refBase][seqBase] << std::endl;
+					}
+				}
+			}
+
 
 			//quality distribution for errors
 			OutOptions quality_distribution_for_error_callsOpts(bfs::path(prefix + "_quality_distribution_for_error_calls.tab.txt"));
@@ -596,7 +656,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	readSimulatorSetUp setUp(inputCommands);
 	setUp.setOption(simPars.sampleReadAmount_, "--perMixtureReadAmount", "Final Read Amount to create per mixture");
 	setUp.setOption(simReplicates, "--replicates", "Replicates");
-	setUp.setOption(timePoints, "--timePoints", "Time Points, will automatically have time point 00", true);
+	setUp.setOption(timePoints, "--timePoints", "Additional time points, will automatically have time point 00");
 	setUp.setOption(patientSetupFile, "--patientSetupFile", "Patient Setup File", true);
 	setUp.setOption(rawPatientSetupFile, "--rawPatientSetupFile", "Patient Setup File designates individual samples");
 	setUp.setOption(coiTableFnp, "--coiTable", "COI Table", true);
@@ -613,7 +673,10 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_ );
 	njh::sort(timePoints);
-	uint32_t maxTime = *std::max_element(timePoints.begin(), timePoints.end());
+	uint32_t maxTime = 0;
+	if(!timePoints.empty()){
+		maxTime = *std::max_element(timePoints.begin(), timePoints.end());
+	}
 
 	LibrarySetup lSetup(libraryName, simPars);
 
@@ -964,7 +1027,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 			TimePoint initialTimePoint;
 			initialTimePoint.time_ = 0;
 			for(const auto & hap : haplotypes){
-				double hapFrac = 100 * rGen.unifRand() * hapFracForLevels[currentLevel][hap];
+				double hapFrac = 100 * rGen.unifRand(0.5,1.5) * hapFracForLevels[currentLevel][hap];
 				initialTimePoint.hapFracs_[hap] = hapFrac;
 			}
 			currentPatient.timePoints_.emplace_back(initialTimePoint);
@@ -1005,18 +1068,48 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 
 	OutOptions sampleNamesOutOpts(
 			njh::files::make_path(setUp.pars_.directoryName_, "sampleNames.tab.txt"));
-	OutputStream sampleNamesOut(sampleNamesOutOpts);
+	VecStr sampleNamesTabHeader{};
+	if (!ids.containsMids()) {
+		sampleNamesTabHeader = {"#target", "sample", "run1"};
+	}else{
+		sampleNamesTabHeader = {"#file", "sample", "run1"};
+	}
+	bool anyReps = false;
+	for (const auto & patient : patientSetUpPars) {
+		if(patient.replicate_){
+			anyReps = true;
+			break;
+		}
+	}
+	if(anyReps){
+		sampleNamesTabHeader.emplace_back("run2");
+	}
+
+	table sampleNamesTables(sampleNamesTabHeader);
 	if (!ids.containsMids()) {
 		for (const auto & patient : patientSetUpPars) {
 			for (const auto & tp : patient.timePoints_) {
-				auto sampleSet = std::make_shared<SampleSetup>(njh::pasteAsStr(patient.name_, "-TP", njh::leftPadNumStr(tp.time_, maxTime)));
+				std::string sampleName; if(!timePoints.empty()){
+					sampleName = njh::pasteAsStr(patient.name_, "-TP", njh::leftPadNumStr(tp.time_, maxTime));
+				}else{
+					sampleName = njh::pasteAsStr(patient.name_);
+				}
+				auto sampleSet = std::make_shared<SampleSetup>(sampleName);
 				std::unordered_map<std::string, std::shared_ptr<MixtureSetUp> > mixtures;
 				for (const auto & primerPair : primerPairNames) {
 					if(patient.replicate_){
-						sampleNamesOut << primerPair << "\t" << sampleSet->name_ << "\t" << sampleSet->name_ << "-rep1"
-																																		 << "\t" << sampleSet->name_ << "-rep2" << std::endl;
+						sampleNamesTables.addRow(primerPair,
+								sampleSet->name_,
+								sampleSet->name_ + "-rep1",
+								sampleSet->name_ + "-rep2");
 					}else{
-						sampleNamesOut << primerPair << "\t" << sampleSet->name_ << "\t" << sampleSet->name_ << std::endl;
+						VecStr addingRow {primerPair,
+							sampleSet->name_,
+							sampleSet->name_};
+						if(anyReps){
+							addingRow.emplace_back("");
+						}
+						sampleNamesTables.addRow(addingRow);
 					}
 					mixtures[primerPair] = std::make_shared<MixtureSetUp>(primerPair);
 					mixtures[primerPair]->setPrimers(primerPair,
@@ -1049,6 +1142,14 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 				}
 			}
 		}
+		njh::sort(sampleNamesTables.content_, [](const VecStr & row1, const VecStr & row2){
+			if(row1[0] == row2[0]){
+				return row1[1] < row2[1];
+			}else{
+				return row1[0] < row2[0];
+			}
+		});
+		//sampleNamesTables.sortTable("#target", true);
 	} else {
 		uint32_t finalSubSetAmount = 0;
 		{
@@ -1073,6 +1174,12 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 		njh::sort(midNames);
 		for (const auto & patient : patientSetUpPars) {
 			for (const auto & tp : patient.timePoints_) {
+				std::string outputSampName = "";
+				if(!timePoints.empty()){
+					outputSampName = njh::pasteAsStr(patient.name_, "-TP", njh::leftPadNumStr(tp.time_, maxTime));
+				}else{
+					outputSampName = njh::pasteAsStr(patient.name_);
+				}
 				if(patient.replicate_){
 					std::string midName =  midNames[midCount];
 					std::string indexName = sampleSet->name_;
@@ -1155,18 +1262,21 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 							sampleSet = std::make_shared<SampleSetup>(njh::pasteAsStr("Subset-", njh::leftPadNumStr(indexCount, finalSubSetAmount) ) );
 						}
 					}
+
 					if(repIndexName == indexName){
-						sampleNamesOut << indexName << "\t" << njh::pasteAsStr(patient.name_, "-TP", njh::leftPadNumStr(tp.time_, maxTime))
-						<< "\t" << midName
-						<< "\t" << repMidName << std::endl;
+						sampleNamesTables.addRow(indexName,outputSampName, midName, repMidName);
 					}else{
-						sampleNamesOut << indexName << "\t" << njh::pasteAsStr(patient.name_, "-TP", njh::leftPadNumStr(tp.time_, maxTime)) << "\t" << midName << std::endl;
-						sampleNamesOut << repIndexName << "\t" << njh::pasteAsStr(patient.name_, "-TP", njh::leftPadNumStr(tp.time_, maxTime)) << "\t" << repMidName << std::endl;
+						sampleNamesTables.addRow(indexName,outputSampName, midName, "");
+						sampleNamesTables.addRow(repIndexName,repMidName, midName, "");
 					}
 				}else{
 					std::string midName =  midNames[midCount];
 					std::unordered_map<std::string, std::shared_ptr<MixtureSetUp> > mixtures;
-					sampleNamesOut << sampleSet->name_ << "\t" << njh::pasteAsStr(patient.name_, "-TP", njh::leftPadNumStr(tp.time_, maxTime)) << "\t" << midName << std::endl;
+					VecStr addingRow{sampleSet->name_, outputSampName, midName};
+					if(anyReps){
+						addingRow.emplace_back("");
+					}
+					sampleNamesTables.addRow(addingRow);
 					for (const auto & primerPair : primerPairNames) {
 						mixtures[primerPair] = std::make_shared<MixtureSetUp>(njh::pasteAsStr(primerPair, "-", midName));
 						mixtures[primerPair]->setPrimers(primerPair,
@@ -1210,18 +1320,34 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 		}
 	}
 
+	OutputStream sampleNamesOut(sampleNamesOutOpts);
+	sampleNamesTables.outPutContents(sampleNamesOut, "\t");
 
 
-	VecStr metaHeader{"sample", "Patient", "TimePoint"};
+	VecStr metaHeader{"sample", "Patient"};
+	if(!timePoints.empty()){
+		metaHeader.emplace_back("TimePoint");
+	}
 	addOtherVec(metaHeader, metaLevels);
 	table metaTable(metaHeader);
 	for(const auto & patient : patientSetUpPars){
 		for(const auto & tp : patient.timePoints_){
 			MetaDataInName sampMeta = patient.meta_;
-			std::string sampleTpName = njh::pasteAsStr(patient.name_, "-TP", njh::leftPadNumStr(tp.time_, maxTime));
+			std::string sampleTpName;
+			if(!timePoints.empty()){
+				sampleTpName = njh::pasteAsStr(patient.name_, "-TP", njh::leftPadNumStr(tp.time_, maxTime));
+			}else{
+				sampleTpName = njh::pasteAsStr(patient.name_);
+			}
 			sampMeta.addMeta("Patient", patient.name_);
-			sampMeta.addMeta("TimePoint", tp.time_);
-			VecStr row = toVecStr(sampleTpName, patient.name_, tp.time_);
+			VecStr row;
+			if(!timePoints.empty()){
+				sampMeta.addMeta("TimePoint", tp.time_);
+				row = toVecStr(sampleTpName, patient.name_, tp.time_);
+			}else{
+				row = toVecStr(sampleTpName, patient.name_);
+			}
+
 			for(const auto & head : metaLevels){
 				row.emplace_back(sampMeta.getMeta(head));
 			}
@@ -1232,6 +1358,9 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	OutputStream libSetUpOut(libSetUpOpts);
 	libSetUpOut << njh::json::toJson(lSetup) << std::endl;
 
+
+
+
 	OutOptions metaOutOpts(njh::files::make_path(setUp.pars_.directoryName_, "metaData.tab.txt"));
 	OutputStream metaOut(metaOutOpts);
 	metaTable.sortTable("sample", false);
@@ -1239,11 +1368,31 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 
 
 
+
+	auto abundTab = lSetup.createAbundanceTable();
+	OutOptions abundTabOutOpts(njh::files::make_path(setUp.pars_.directoryName_, "abundanceTable.tab.txt"));
+	OutputStream abundTabOut(abundTabOutOpts);
+	njh::sort(abundTab.content_, [](const VecStr & row1, const VecStr & row2){
+		if(row1[1] == row2[1]){
+			if(row1[2] == row2[2]){
+				return row1[3] < row2[3];
+			}else{
+				return row1[2] < row2[2];
+			}
+		}else{
+			return row1[1] < row2[1];
+		}
+	});
+	abundTab.outPutContents(abundTabOut, "\t");
+
 	return 0;
 }
 
 
-int readSimulatorRunner::createLibrarySimMultipleMixture(
+
+
+
+int createLibrarySimMultipleMixtureExampleTesting(
 		const njh::progutils::CmdArgs & inputCommands) {
 	LibrarySetup::SimLibrarySetupPars simPars;
 
@@ -1688,16 +1837,14 @@ int readSimulatorRunner::createLibrarySimMultipleMixture(
 	return 0;
 }
 
-/**@todo simulate illumina/PCR sequence error, write function to simply take a sequence and modify it like it went through PCR/illumina
- *
- * */
+
 
 
 
 class RoughIlluminaSimulator {
 public:
 
-	RoughIlluminaSimulator(const bfs::path & profileDir) :
+	RoughIlluminaSimulator(const bfs::path & profileDir, double errorRateCorrection = 0) :
 			profileDir_(profileDir) {
 		//check for files
 
@@ -1727,7 +1874,7 @@ public:
 		r1Fnps.positional_error_rate_fnp = njh::files::make_path(profileDir_, "r1_positional_error_rate.tab.txt");
 		r1Fnps.quality_distribution_for_correct_calls_fnp = njh::files::make_path(profileDir_, "r1_quality_distribution_for_correct_calls.tab.txt");
 		r1Fnps.quality_distribution_for_error_calls_fnp = njh::files::make_path(profileDir_, "r1_quality_distribution_for_error_calls.tab.txt");
-		r1Profile_ = ReadProfile(r1Fnps);
+		r1Profile_ = ReadProfile(r1Fnps, errorRateCorrection);
 
 		ReadProfile::ReadProfileFnps r2Fnps;
 		r2Fnps.base_substitution_rates_fnp = njh::files::make_path(profileDir_, "r2_base_substitution_rates.tab.txt");
@@ -1735,7 +1882,7 @@ public:
 		r2Fnps.positional_error_rate_fnp = njh::files::make_path(profileDir_, "r2_positional_error_rate.tab.txt");
 		r2Fnps.quality_distribution_for_correct_calls_fnp = njh::files::make_path(profileDir_, "r2_quality_distribution_for_correct_calls.tab.txt");
 		r2Fnps.quality_distribution_for_error_calls_fnp = njh::files::make_path(profileDir_, "r2_quality_distribution_for_error_calls.tab.txt");
-		r2Profile_ = ReadProfile(r2Fnps);
+		r2Profile_ = ReadProfile(r2Fnps, errorRateCorrection);
 
 	}
 
@@ -1756,7 +1903,7 @@ public:
 		};
 		ReadProfile(){};
 
-		ReadProfile(const ReadProfileFnps & fnps){
+		ReadProfile(const ReadProfileFnps & fnps, double errorRateCorrection = 0){
 			//base sub r
 			{
 				table rBases(fnps.base_substitution_rates_fnp, "\t", true);
@@ -1796,6 +1943,9 @@ public:
 					}
 					//should make sure this is between 0 and 1...
 					errorRates_.emplace_back(njh::StrToNumConverter::stoToNum<double>(row[rPositionError.getColPos("rate")]));
+					for(auto & errorRate : errorRates_){
+						errorRate = std::max(errorRate - errorRateCorrection, 0.0);
+					}
 					lastPosition = position;
 				}
 			}
@@ -1922,6 +2072,7 @@ public:
 		std::vector<njh::randObjectGen<char, uint32_t>> overHangBaseGen_;
 		std::vector<std::unordered_map<char, njh::randObjectGen<uint32_t, uint32_t>>> overHangQualForBaseGen_;
 		njh::randomGenerator rGen_;
+
 		seqInfo simRead(seqInfo input, uint32_t length){ //const
 			if(length > errorRates_.size()){
 				std::stringstream ss;

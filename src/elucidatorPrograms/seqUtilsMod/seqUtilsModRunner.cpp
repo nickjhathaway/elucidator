@@ -113,15 +113,24 @@ int seqUtilsModRunner::expandOutCollapsedToUnique(const njh::progutils::CmdArgs 
 	return 0;
 }
 
-int seqUtilsModRunner::guessAProteinFromSeq(const njh::progutils::CmdArgs & inputCommands){
-
+int seqUtilsModRunner::guessAProteinFromSeq(
+		const njh::progutils::CmdArgs & inputCommands) {
+	bool getLongest = false;
+	bool removeTrailingStop = false;
 	bool mark = false;
+	bool overWriteMeta = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processDefaultReader(true);
-	if("out" == setUp.pars_.ioOptions_.out_.outFilename_ ){
-		setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(setUp.pars_.ioOptions_.firstName_, "translated_");
+	if ("out" == setUp.pars_.ioOptions_.out_.outFilename_) {
+		setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(
+				setUp.pars_.ioOptions_.firstName_, "translated_");
 	}
+	setUp.setOption(getLongest, "--getLongest", "Get the longest possible protein");
 	setUp.setOption(mark, "--mark", "Mark the out seq with the frame used");
+	setUp.setOption(overWriteMeta, "--overWriteMeta", "If marking whether or not to reset the meta already in the sequence name");
+
+	setUp.setOption(removeTrailingStop, "--removeTrailingStop", "Remove Trailing Stop Codon");
+
 	setUp.finishSetUp(std::cout);
 
 	SeqIO reader(setUp.pars_.ioOptions_);
@@ -129,25 +138,106 @@ int seqUtilsModRunner::guessAProteinFromSeq(const njh::progutils::CmdArgs & inpu
 	reader.openOut();
 
 	seqInfo seq;
-	while(reader.readNextRead(seq)){
-		bool wrote = false;
-		for(uint32_t start = 0; start < 3; ++start){
-			auto seqCopy = seq;
-			seqCopy.translate(false, false, start);
-			if(std::string::npos == seqCopy.seq_.find("*")){
-				if(mark){
-					seqCopy.name_.append(njh::pasteAsStr(" frame=",start));
+	njh::PatPosFinder pFinder(R"(\*+)");
+
+	while (reader.readNextRead(seq)) {
+
+		if (getLongest) {
+			std::shared_ptr<readVecTrimmer::BreakUpRes> longest;
+			uint32_t frameWithLongest = std::numeric_limits<uint32_t>::max();
+			uint32_t lengthOfLongestFrame = std::numeric_limits<uint32_t>::max();
+			for (const auto & start : iter::range(3)) {
+				auto prot = seq.translateRet(false, false, start);
+				auto possibleSubSeqs = readVecTrimmer::breakUpSeqOnPat(prot, pFinder);
+				for (const auto & possible : possibleSubSeqs) {
+					if (nullptr == longest) {
+						longest = std::make_shared<readVecTrimmer::BreakUpRes>(possible);
+						frameWithLongest = start;
+						lengthOfLongestFrame = len(prot);
+					} else if (len(possible.seqBase_) > len(longest->seqBase_)) {
+						longest = std::make_shared<readVecTrimmer::BreakUpRes>(possible);
+						frameWithLongest = start;
+						lengthOfLongestFrame = len(prot);
+					}
 				}
-				reader.write(seqCopy);
-				wrote = true;
-				break;
 			}
-		}
-		if(!wrote){
-			auto seqCopy = seq;
-			seqCopy.translate(false, false, 0);
+
+			uint32_t seqStart = longest->start_ * 3 + frameWithLongest;
+			uint32_t seqStop = longest->end_ * 3 + frameWithLongest;
+			uint32_t aaStop = longest->end_;
+			if(!removeTrailingStop && longest->end_ != lengthOfLongestFrame){
+
+				//if the end doesn't equal the length of the protein that must mean that it broke on a stop codon
+				longest->seqBase_.append("*");
+				++aaStop;
+				seqStop += 3;
+//				std::cout << "longest->end_: " << longest->end_ << "  lengthOfLongestFrame: " << lengthOfLongestFrame<< std::endl;
+//				auto protDebug = seq.translateRet(false, false, frameWithLongest);
+//				std::cout << '\t' << protDebug.seq_.size() << " " << protDebug.seq_ << std::endl;
+//				std::cout << "\t" << seq.seq_.substr(seqStart, seqStop - seqStart) << std::endl;
+			}
 			if(mark){
-				seqCopy.name_.append(njh::pasteAsStr(" frame=",0));
+				MetaDataInName meta;
+				bool nameHasMeta = false;
+				if(MetaDataInName::nameHasMetaData(seq.name_)){
+					meta = MetaDataInName(seq.name_);
+					nameHasMeta = true;
+				}
+				meta.addMeta("frame", frameWithLongest, overWriteMeta);
+				meta.addMeta("seqStart", seqStart, overWriteMeta);
+				meta.addMeta("seqStop", seqStop, overWriteMeta);
+				meta.addMeta("seqLen", len(seq), overWriteMeta);
+				meta.addMeta("aaStart", longest->start_, overWriteMeta);
+				meta.addMeta("aaStop", aaStop, overWriteMeta);
+				meta.addMeta("aaLen", lengthOfLongestFrame, overWriteMeta);
+				if(nameHasMeta){
+					meta.resetMetaInName(longest->seqBase_.name_);
+				}else{
+					longest->seqBase_.name_.append(" " + meta.createMetaName());
+				}
+			}
+
+			reader.write(longest);
+
+		} else {
+			uint32_t start = 0;
+			auto seqCopy = seq.translateRet(false, false, start);
+			if (mark) {
+				MetaDataInName meta;
+				bool nameHasMeta = false;
+				if (MetaDataInName::nameHasMetaData(seqCopy.name_)) {
+					meta = MetaDataInName(seqCopy.name_);
+					nameHasMeta = true;
+				}
+				meta.addMeta("frame", start);
+				if (nameHasMeta) {
+					meta.resetMetaInName(seqCopy.name_);
+				} else {
+					seqCopy.name_.append(" " + meta.createMetaName());
+				}
+			}
+			while (start < 3
+					&& !(std::string::npos == seqCopy.seq_.find("*")
+							|| seqCopy.seq_.find("*") + 1 == len(seqCopy))) {
+				auto seqCopy = seq.translateRet(false, false, start);
+				if (mark) {
+					MetaDataInName meta;
+					bool nameHasMeta = false;
+					if (MetaDataInName::nameHasMetaData(seqCopy.name_)) {
+						meta = MetaDataInName(seqCopy.name_);
+						nameHasMeta = true;
+					}
+					meta.addMeta("frame", start);
+					if (nameHasMeta) {
+						meta.resetMetaInName(seqCopy.name_);
+					} else {
+						seqCopy.name_.append(" " + meta.createMetaName());
+					}
+				}
+				++start;
+			}
+			if(removeTrailingStop ){
+				readVecTrimmer::trimAtRstripBase(seqCopy, '*');
 			}
 			reader.write(seqCopy);
 		}

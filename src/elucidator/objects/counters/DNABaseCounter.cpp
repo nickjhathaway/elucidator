@@ -149,6 +149,19 @@ std::multimap<double, char, std::less<double>> DNABaseCounter::createLikelihoodM
 	return likelihoods;
 }
 
+uint32_t DNABaseCounter::getCountForBases(const std::vector<char> & bases) const{
+	uint32_t total = 0;
+	for(const auto base : bases){
+		total += bases_[base];
+	}
+	return total;
+}
+
+//GC
+uint32_t DNABaseCounter::getGcCount() const{
+	return getCountForBases(std::vector<char>{'G', 'C', 'g' ,'c'});
+}
+
 double DNABaseCounter::calcGcContent()const{
 	return (bases_['G'] + bases_['C'] + bases_['g'] + bases_['c'])/static_cast<double>(getTotalCount());
 }

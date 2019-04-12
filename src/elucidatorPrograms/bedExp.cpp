@@ -28,6 +28,10 @@
 
 #include "bedExp.hpp"
 #include "elucidator/objects/BioDataObject.h"
+#include "elucidator/BioRecordsUtils/BedUtility.hpp"
+#include "elucidator/objects/counters/DNABaseCounter.hpp"
+
+
 #include <TwoBit.h>
 
 
@@ -62,14 +66,91 @@ bedExpRunner::bedExpRunner()
 					 addFunc("bedCoordSort", bedCoordSort, false),
 					 addFunc("extractBedRecordsWithName", extractBedRecordsWithName, false),
 					 addFunc("reorientBasedOnSingleReadsOrientationCounts", reorientBasedOnSingleReadsOrientationCounts, false),
+					 addFunc("getFirstRegionPerChrom", getFirstRegionPerChrom, false),
+					 addFunc("getLastRegionPerChrom", getLastRegionPerChrom, false),
+					 addFunc("getGCContentOrRegion", getGCContentOrRegion, false),
            },//,
           "bedExp") {}
 
-/**
- * 	static int (const njh::progutils::CmdArgs & inputCommands);
-	static int (const njh::progutils::CmdArgs & inputCommands);
 
- */
+
+int bedExpRunner::getFirstRegionPerChrom(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path bedFile = "";
+	OutOptions outOpts;
+	outOpts.outExtention_ = ".bed";
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(bedFile, "--bed", "Bed file", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	BioDataFileIO<Bed3RecordCore> reader{IoOptions(InOptions(bedFile), outOpts)};
+	reader.openIn();
+	reader.openOut();
+	Bed3RecordCore record;
+	std::unordered_map<std::string, Bed3RecordCore> records;
+	while(reader.readNextRecord(record)){
+		if(!njh::in(record.chrom_, records)){
+			records[record.chrom_] = record;
+		}else{
+			if(record.chromStart_ < records[record.chrom_].chromStart_ ){
+				records[record.chrom_] = record;
+			}else if(record.chromStart_ == records[record.chrom_].chromStart_ && record.chromEnd_ > records[record.chrom_].chromEnd_){
+				records[record.chrom_] = record;
+			}
+		}
+	}
+
+	auto chromNames = njh::getVecOfMapKeys(records);
+	njh::sort(chromNames);
+	for(const auto & chromName : chromNames){
+		reader.write(records[chromName], [](const Bed3RecordCore & reg, std::ostream & out){
+			out << reg.toDelimStrWithExtra() << std::endl;
+		});
+	}
+
+
+	return 0;
+}
+
+int bedExpRunner::getLastRegionPerChrom(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path bedFile = "";
+	OutOptions outOpts;
+	outOpts.outExtention_ = ".bed";
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(bedFile, "--bed", "Bed file", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	BioDataFileIO<Bed3RecordCore> reader{IoOptions(InOptions(bedFile), outOpts)};
+	reader.openIn();
+	reader.openOut();
+	Bed3RecordCore record;
+	std::unordered_map<std::string, Bed3RecordCore> records;
+	while(reader.readNextRecord(record)){
+		if(!njh::in(record.chrom_, records)){
+			records[record.chrom_] = record;
+		}else{
+			if(record.chromStart_ > records[record.chrom_].chromStart_ ){
+				records[record.chrom_] = record;
+			}else if(record.chromStart_ == records[record.chrom_].chromStart_ && record.chromEnd_ > records[record.chrom_].chromEnd_){
+				records[record.chrom_] = record;
+			}
+		}
+	}
+
+	auto chromNames = njh::getVecOfMapKeys(records);
+	njh::sort(chromNames);
+	for(const auto & chromName : chromNames){
+		reader.write(records[chromName], [](const Bed3RecordCore & reg, std::ostream & out){
+			out << reg.toDelimStrWithExtra() << std::endl;
+		});
+	}
+
+
+	return 0;
+}
+
+
 
 int bedExpRunner::bedCoordSort(const njh::progutils::CmdArgs & inputCommands) {
 	bool decending = false;
@@ -270,6 +351,9 @@ int bedExpRunner::extendToStartOfChrom(const njh::progutils::CmdArgs & inputComm
 	return 0;
 }
 
+
+
+
 int bedExpRunner::bedAddSmartIDForPlotting(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile;
 	OutOptions outOpts;
@@ -285,19 +369,7 @@ int bedExpRunner::bedAddSmartIDForPlotting(const njh::progutils::CmdArgs & input
 	std::unordered_map<std::string, std::unordered_map<uint32_t, std::vector<uint32_t>>> alreadyTakenIds;
 	std::shared_ptr<Bed3RecordCore> b = reader.readNextRecord();
 	while(nullptr != b){
-		uint32_t id = 0;
-		std::set<uint32_t> alreadyTaken;
-		for(const auto pos : iter::range(b->chromStart_, b->chromEnd_)){
-			for(const auto & otherId : alreadyTakenIds[b->chrom_][pos]){
-				alreadyTaken.emplace(otherId);
-			}
-		}
-		while(njh::in(id, alreadyTaken)){
-			++id;
-		}
-		for(const auto pos : iter::range(b->chromStart_, b->chromEnd_)){
-			alreadyTakenIds[b->chrom_][pos].emplace_back(id);
-		}
+		auto id = BedUtility::getPlotIDForBed(b, alreadyTakenIds);
 		b->extraFields_.emplace_back(estd::to_string(id));
 		reader.write(*b, [](const Bed3RecordCore & bed, std::ostream & out){
 			out << bed.toDelimStrWithExtra() << std::endl;
@@ -1036,6 +1108,47 @@ int bedExpRunner::bedUnqiue(const njh::progutils::CmdArgs & inputCommands) {
 }
 
 
+
+int bedExpRunner::getGCContentOrRegion(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path filename = "";
+	OutOptions outOpts(bfs::path(""), ".bed");
+	bfs::path twoBitFilename = "";
+
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(twoBitFilename, "--twoBit", "File path of the 2bit file", true);
+	setUp.setOption(filename, "--bed", "BED6 file", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+	OutputStream out(outOpts);
+	TwoBit::TwoBitFile twoBitFile(twoBitFilename);
+	auto seqNames = twoBitFile.sequenceNames();
+	BioDataFileIO<Bed6RecordCore> bedReader{IoOptions(InOptions(filename))};
+	bedReader.openIn();
+	Bed6RecordCore record;
+	out << "#chrom\tstart\tend\tname\tscore\tstrand\tgcBases\tgcContent" << std::endl;
+	while (bedReader.readNextRecord(record)) {
+		if (!njh::in(record.chrom_, seqNames)) {
+			std::cerr << "chromosome name not found in seq names, skipping"
+					<< std::endl;
+			std::cerr << "chr: " << record.chrom_ << std::endl;
+			std::cerr << "possibleNames: " << vectorToString(seqNames, ",")
+					<< std::endl;
+		} else {
+			std::string seq = "";
+			twoBitFile[record.chrom_]->getSequence(seq, record.chromStart_,
+					record.chromEnd_);
+			if (record.reverseStrand()) {
+				seq = seqUtil::reverseComplement(seq, "DNA");
+			}
+			DNABaseCounter counter;
+			counter.increase(seq);
+			out << record.toDelimStrWithExtra()
+					<< "\t" << counter.getGcCount()
+					<< "\t" << counter.getGcCount()/static_cast<double>(seq.size()) << std::endl;
+		}
+	}
+	return 0;
+}
 
 int bedExpRunner::getFastaWithBed(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path filename = "";

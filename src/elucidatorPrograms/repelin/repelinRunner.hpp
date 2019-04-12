@@ -46,6 +46,8 @@ public:
 
 	static int TandemRepeatFinderOutputToBed(const njh::progutils::CmdArgs & inputCommands);
 
+	static int runTRF(const njh::progutils::CmdArgs & inputCommands);
+
 };
 
 } /* namespace njhseq */

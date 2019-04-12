@@ -748,10 +748,6 @@ int seqUtilsInfoRunner::countSeqPortion(const njh::progutils::CmdArgs & inputCom
 	setUp.setOption(back, "--back", "Count portion from the back of the sequence");
 	setUp.setOption(position, "--position", "Position from which to count");
 	setUp.finishSetUp(std::cout);
-	SeqIO reader(setUp.pars_.ioOptions_);
-	reader.openIn();
-	seqInfo read;
-	strCounter counter;
 	std::function<std::string(const seqInfo &, size_t, uint32_t)> getSubStr;
 	if (back) {
 		if (position != 0 && size > position) {
@@ -781,19 +777,48 @@ int seqUtilsInfoRunner::countSeqPortion(const njh::progutils::CmdArgs & inputCom
 			return ret;
 		};
 	}
-	while(reader.readNextRead(read)){
-		counter.increaseCountByString(getSubStr(read, position, size));
-	}
-	counter.setFractions();
-	table outTable(VecStr { "str", "count", "fraction" });
-	for (const auto & str : counter.counts_) {
-		if (str.second > occurenceCutOff && str.first != "") {
-			outTable.content_.emplace_back(
-					toVecStr(str.first, str.second, counter.fractions_[str.first]));
+
+	if(setUp.pars_.ioOptions_.isPairedIn()){
+		SeqIO reader(setUp.pars_.ioOptions_);
+		reader.openIn();
+		PairedRead seq;
+		std::unordered_map<std::string, std::unordered_map<std::string, uint32_t>> counts;
+		double total = 0;
+		while(reader.readNextRead(seq)){
+			counts[getSubStr(seq.seqBase_, position, size)][getSubStr(seq.mateSeqBase_, position, size)] += seq.seqBase_.cnt_;
+			total+= seq.seqBase_.cnt_;
 		}
+
+		table outTable(VecStr { "r1_str", "r2_str", "count", "fraction" });
+		for (const auto & r1Str : counts) {
+			for(const auto & r2Str : r1Str.second){
+				if(r2Str.second > occurenceCutOff){
+					outTable.addRow(r1Str.first, r2Str.first, r2Str.second, r2Str.second/total);
+				}
+			}
+		}
+		outTable.sortTable("count", true);
+		outTable.outPutContentOrganized(std::cout);
+	}else{
+		SeqIO reader(setUp.pars_.ioOptions_);
+		reader.openIn();
+		seqInfo seq;
+		strCounter counter;
+		while(reader.readNextRead(seq)){
+			counter.increaseCountByString(getSubStr(seq, position, size));
+		}
+		counter.setFractions();
+		table outTable(VecStr { "str", "count", "fraction" });
+		for (const auto & str : counter.counts_) {
+			if (str.second > occurenceCutOff && str.first != "") {
+				outTable.content_.emplace_back(
+						toVecStr(str.first, str.second, counter.fractions_[str.first]));
+			}
+		}
+		outTable.sortTable("count", true);
+		outTable.outPutContentOrganized(std::cout);
 	}
-	outTable.sortTable("count", true);
-	outTable.outPutContentOrganized(std::cout);
+
 	return 0;
 }
 int seqUtilsInfoRunner::fastaIdenticalInfo(const njh::progutils::CmdArgs & inputCommands) {

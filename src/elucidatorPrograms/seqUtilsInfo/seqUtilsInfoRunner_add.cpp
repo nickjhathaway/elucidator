@@ -358,11 +358,14 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 	setUp.setOption(bedFnp,    "--bed",    "A bed file of the location for the extraction", true);
 	setUp.setOption(genomefnp, "--genome", "A reference genome to compare against", true);
 	setUp.setOption(gffFnp, "--gff", "A gff3 file for genome file");
-
-	gPars.genomeDir_ = genomefnp.parent_path();
+	if(!bfs::is_regular_file(genomefnp)){
+		setUp.failed_ = true;
+		setUp.addWarning(njh::pasteAsStr(genomefnp, " should be a file, not a directory"));
+	}
+	gPars.genomeDir_ = njh::files::normalize(genomefnp.parent_path());
 	gPars.primaryGenome_ = bfs::basename(genomefnp);
 	gPars.primaryGenome_ = gPars.primaryGenome_.substr(0, gPars.primaryGenome_.rfind("."));
-
+	gPars.selectedGenomes_ = {gPars.primaryGenome_};
 	setUp.setOption(identifier, "--identifier", "Give a identifier name for info");
 	setUp.setOption(fstMeta,    "--fstMeta",    "Meta field to calculate fsts by");
 	setUp.setOption(proteinMutantTypingFnp, "--proteinMutantTypingFnp", "Protein Mutant Typing Fnp, columns should be ID=gene id in gff, AAPosition=amino acid position", "" != gffFnp);
@@ -477,6 +480,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 		nameLookUp[cIter.seqBase_.seq_] = cIter.seqBase_.name_;
 		++seqId;
 	}
+
 	if(calculatingFst){
 		std::unordered_map<std::string, uint32_t> seqIdForField;
 		for(auto & field : uniqueSeqsByMeta){
@@ -496,9 +500,11 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 	}
 
 	//get region and ref seq for mapping of variants
+
 	BedUtility::extendLeftRight(*gPos, outwardsExpand, outwardsExpand,
 			gMapper.genomes_.at(gPars.primaryGenome_)->chromosomeLengths_.at(
 					gPos->chrom_));
+
 	OutputStream bedOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "inputRegion.bed")));
 	bedOut << gPos->toDelimStrWithExtra() << std::endl;
 	GenomicRegion refRegion(*gPos);
@@ -524,6 +530,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 	std::unordered_map<uint32_t, std::unordered_map<std::string,uint32_t>> insertionsFinal;
 	std::unordered_map<uint32_t, std::unordered_map<std::string,uint32_t>> deletionsFinal;
 	//
+
 	for(const auto & seq : clusters){
 		alignerObj.alignCacheGlobal(refSeq, seq);
 		alignerObj.profileAlignment(refSeq, seq, false, false, false);
@@ -1060,6 +1067,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 				<< "\t" << (lengthPoly ? "true" : "false")
 				<< "\t" << numSNPs << std::endl;
 	}
+
 	auto variantCallsDir = njh::files::make_path(setUp.pars_.directoryName_, "variantCalls");
 	njh::files::makeDir(njh::files::MkdirPar{variantCallsDir});
 
@@ -1357,6 +1365,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 				<< "\t" << diffMeasures.jostDChaoEst_
 				<< std::endl;
 	}
+
 	alignerObj.processAlnInfoOutput(setUp.pars_.outAlnInfoDirName_, setUp.pars_.verbose_);
 	if(!snpsFinal.empty() || ! deletionsFinal.empty() || !insertionsFinal.empty()){
 		OutputStream snpTabOut(njh::files::make_path(variantCallsDir, "allSNPs.tab.txt"));

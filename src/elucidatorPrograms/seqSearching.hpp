@@ -38,6 +38,8 @@ class seqSearchingRunner : public njh::progutils::ProgramRunner {
 
 	static int chopAndMap(const njh::progutils::CmdArgs & inputCommands);
 	static int chopAndMapAndRefine(const njh::progutils::CmdArgs & inputCommands);
+	static int chopAndMapAndRefineInvidual(const njh::progutils::CmdArgs & inputCommands);
+
   static int findMotifLocations(const njh::progutils::CmdArgs & inputCommands);
   static int findTandemMotifLocations(const njh::progutils::CmdArgs & inputCommands);
 
