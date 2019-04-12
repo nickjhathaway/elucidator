@@ -94,7 +94,7 @@ elucidatorRunner::elucidatorRunner() :
 					addRing<seqSearchingRunner>(),
 					addRing<pairProcessingRunner>(),
 				},//
-				{}, "elucidator", "1", "1", "0") {
+				{}, "elucidator", "1", "1", "1-dev") {
 }
 
 }  // namespace njhseq
