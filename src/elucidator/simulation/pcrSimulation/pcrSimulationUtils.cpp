@@ -575,18 +575,28 @@ std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> sampleReadsWithou
 							roundsStillLeft,mtGenFinal(),mtGenFinal.max(),
 							finalSeq);
 					std::stringstream nameStream;
+					MetaDataInName nameMeta;
+					nameMeta.addMeta("hap", namesSeqs.first);
+
 					if (finalSeq != seqs.at(namesSeqs.first)) {
+						nameMeta.addMeta("mutated", true);
+						nameMeta.addMeta("idNum", leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].second, finalReadAmount));
 						++mutInfo[namesSeqs.first].second;
-						nameStream << ">" << namesSeqs.first << "_mut."
-						<< leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].second, finalReadAmount)
-						<< "_" << threadNumber;
+//						nameStream << ">" << namesSeqs.first << "_mut."
+//						<< leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].second, finalReadAmount)
+//						<< "_" << threadNumber;
 					} else {
 						++mutInfo[namesSeqs.first].first;
-						nameStream << ">" << namesSeqs.first << "_seq."
-						<< leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].first, finalReadAmount)
-						<< "_" << threadNumber;
+						nameMeta.addMeta("mutated", false);
+						nameMeta.addMeta("idNum", leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].first, finalReadAmount));
+
+//						nameStream << ">" << namesSeqs.first << "_seq."
+//						<< leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].first, finalReadAmount)
+//						<< "_" << threadNumber;
 					}
-					outputs.emplace_back(std::make_pair(nameStream.str(), finalSeq));
+//					outputs.emplace_back(std::make_pair(nameStream.str(), finalSeq));
+					outputs.emplace_back(std::make_pair(">" + nameMeta.createMetaName(), finalSeq));
+
 				}
 				{
 					std::lock_guard<std::mutex> fileLock(seqFileLock);
@@ -874,6 +884,8 @@ void simLibFast(std::vector<std::shared_ptr<seqInfo> > & reads,
 		const std::string & libName, uint64_t intErrorRate,
 		uint64_t startingTemplate, uint64_t finalReadAmount, uint32_t pcrRounds,
 		uint32_t initialPcrRounds, uint32_t numThreads, bool verbose) {
+
+
 	if(initialPcrRounds >= pcrRounds){
 		std::stringstream ss;
 		ss << "Error in " << __PRETTY_FUNCTION__ << std::endl;
@@ -967,6 +979,7 @@ void simLibFast(std::vector<std::shared_ptr<seqInfo> > & reads,
 	auto sampleNumber = sampleReadsWithoutReplacementFinishPCR(barcodedSeqs,
 			allSeqCounts, finalReadAmount, libOutFile, seqFileLock,
 			pcrRounds - initialPcrRounds, intErrorRate, numThreads, verbose);
+
 	if(verbose){
 		{
 			std::cout << "PCR amounts: " << std::endl;

@@ -55,6 +55,7 @@ public:
 		bool randomOneLength_{false}; //random number of bases preceding is just one length
 
 
+
 		Json::Value toJson() const {
 			Json::Value ret;
 			ret["name"] = njh::json::toJson(name_);
@@ -104,6 +105,10 @@ public:
 
 	std::unordered_map<std::string, double> abundances_;
 
+	uint32_t startingTemplateAmount_{3000};
+	uint32_t finalReadAmount_{std::numeric_limits<uint32_t>::max()};
+
+
 	Json::Value toJson() const {
 		Json::Value ret;
 		ret["class"] = njh::json::toJson(njh::getTypeName(*this));
@@ -118,6 +123,11 @@ public:
 		}
 		ret["name"] = njh::json::toJson(name_);
 		ret["abundances"] = njh::json::toJson(abundances_);
+		ret["startingTemplateAmount_"] = njh::json::toJson(startingTemplateAmount_);
+		if(std::numeric_limits<uint32_t>::max() != finalReadAmount_){
+			ret["finalReadAmount_"] = njh::json::toJson(finalReadAmount_);
+		}
+
 		return ret;
 	}
 
@@ -277,11 +287,171 @@ public:
 			name_(name), pars_(pars) {
 
 	}
+
+	LibrarySetup(const std::string & name,
+			const SimLibrarySetupPars & pars,
+			const Json::Value & librarySetUp,
+			const std::unordered_map<std::string, seqInfo> & refSeqs
+			) :
+			name_(name), pars_(pars) {
+
+		ids_ = std::make_unique<PrimersAndMids>(std::unordered_map<std::string, PrimersAndMids::Target>{});
+		for(const auto & sample : librarySetUp["samples"]){
+			njh::json::MemberChecker sampleChecker(sample);
+			sampleChecker.failMemberCheckThrow({"name", "mixtures"}, __PRETTY_FUNCTION__);
+			auto sampleSet = std::make_shared<SampleSetup>(sample["name"].asString());
+			for(const auto & mixture : sample["mixtures"]){
+				njh::json::MemberChecker mixtureChecker(mixture);
+				mixtureChecker.failMemberCheckThrow({"name", "abundances"}, __PRETTY_FUNCTION__);
+				auto mixtureSet = std::make_shared<MixtureSetUp>(mixture["name"].asString());
+				auto memebers = mixture["abundances"].getMemberNames();
+				for(const auto & member : memebers){
+					if(!njh::in(member, refSeqs)){
+						std::stringstream ss;
+						ss << __PRETTY_FUNCTION__ << ", error, " << " no reference seq named: " << member << "\n";
+						ss << "options are: " << njh::conToStr(getVectorOfMapKeys(refSeqs)) << "\n";
+						throw std::runtime_error{ss.str()};
+					}
+					mixtureSet->addAbundance(member, mixture["abundances"][member].asDouble());
+				}
+				if(mixture.isMember("primers")){
+					if(ids_->hasTarget(mixture["primers"]["name"].asString())){
+						if (ids_->targets_.at(mixture["primers"]["name"].asString()).info_.forwardPrimer_
+								!= mixture["primers"]["forward"].asString()) {
+							std::stringstream ss;
+							ss << __PRETTY_FUNCTION__ << ", error, target "
+									<< mixture["primers"]["name"].asString()
+									<< " already added with a different forward primer " << "\n";
+							ss << "New Forward: " << mixture["primers"]["forward"].asString()
+									<< " , Current Forward: "
+									<< ids_->targets_.at(mixture["primers"]["name"].asString()).info_.forwardPrimer_
+									<< "\n";
+							throw std::runtime_error { ss.str() };
+						}
+						if (ids_->targets_.at(mixture["primers"]["name"].asString()).info_.reversePrimer_
+								!= mixture["primers"]["reverse"].asString()) {
+							std::stringstream ss;
+							ss << __PRETTY_FUNCTION__ << ", error, target "
+									<< mixture["primers"]["name"].asString()
+									<< " already added with a different forward primer " << "\n";
+							ss << "New Reverse: " << mixture["primers"]["reverse"].asString()
+									<< " , Current Reverse: "
+									<< ids_->targets_.at(mixture["primers"]["name"].asString()).info_.reversePrimer_
+									<< "\n";
+							throw std::runtime_error { ss.str() };
+						}
+					}else{
+						ids_->addTarget(
+							mixture["primers"]["name"].asString(),
+							mixture["primers"]["forward"].asString(),
+							mixture["primers"]["reverse"].asString());
+					}
+					mixtureSet->setPrimers(
+							mixture["primers"]["name"].asString(),
+							mixture["primers"]["forward"].asString(),
+							mixture["primers"]["reverse"].asString()
+							);
+
+					if(mixture["primers"].isMember("forward_randomPrecedingBases")){
+						mixtureSet->primers_->forward_randomPrecedingBases_ = mixture["primers"]["forward_randomPrecedingBases"].asUInt();
+					}
+					if(mixture["primers"].isMember("reverse_randomPrecedingBases")){
+						mixtureSet->primers_->reverse_randomPrecedingBases_ = mixture["primers"]["reverse_randomPrecedingBases"].asUInt();
+					}
+
+
+
+				}
+				if(mixture.isMember("startingTemplateAmount_")){
+					mixtureSet->startingTemplateAmount_ = mixture["startingTemplateAmount_"].asUInt();
+				}
+				if(mixture.isMember("finalReadAmount_")){
+					mixtureSet->finalReadAmount_ = mixture["finalReadAmount_"].asUInt();
+				}else{
+					mixtureSet->finalReadAmount_ = pars_.sampleReadAmount_;
+				}
+				std::string barcodeName = "";
+				std::string forBar = "";
+				std::string revBar = "";
+				if(mixture.isMember("forwardBarcode")){
+					mixtureSet->setForwardBarcode(
+							mixture["forwardBarcode"]["name"].asString(),
+							mixture["forwardBarcode"]["barcode"].asString()
+							);
+					barcodeName = mixture["forwardBarcode"]["name"].asString();
+					forBar = mixture["forwardBarcode"]["barcode"].asString();
+					if(mixture["forwardBarcode"].isMember("randomPrecedingBases")){
+						mixtureSet->forwardBarcode_->randomPrecedingBases_ = mixture["forwardBarcode"]["randomPrecedingBases"].asUInt();
+					}
+				}
+				if(mixture.isMember("reverseBarcode")){
+					mixtureSet->setReverseBarcode(
+							mixture["reverseBarcode"]["name"].asString(),
+							mixture["reverseBarcode"]["barcode"].asString()
+							);
+					revBar = mixture["reverseBarcode"]["barcode"].asString();
+					if(mixture["reverseBarcode"].isMember("randomPrecedingBases")){
+						mixtureSet->reverseBarcode_->randomPrecedingBases_ = mixture["reverseBarcode"]["randomPrecedingBases"].asUInt();
+					}
+				}
+				if("" != barcodeName){
+					if(njh::in(barcodeName, ids_->mids_)){
+						if(ids_->mids_.at(barcodeName).forwardBar_->bar_->motifOriginal_ != forBar){
+							std::stringstream ss;
+							ss << __PRETTY_FUNCTION__ << ", error, MID "
+									<< barcodeName
+									<< " already added with a different forward barcode " << "\n";
+							ss << "New Barcode: " << forBar
+									<< " , Current Reverse: "
+									<< ids_->mids_.at(barcodeName).forwardBar_->bar_->motifOriginal_
+									<< "\n";
+							throw std::runtime_error { ss.str() };
+						}
+						if("" != revBar && nullptr == ids_->mids_.at(barcodeName).reverseBar_ ){
+							std::stringstream ss;
+							ss << __PRETTY_FUNCTION__ << ", error, MID " << barcodeName
+									<< " already added without a reverwe barcode but new barcode has one, "
+									<< revBar << "\n";
+							throw std::runtime_error { ss.str() };
+						}else if ("" == revBar && nullptr != ids_->mids_.at(barcodeName).reverseBar_ ){
+							std::stringstream ss;
+							ss << __PRETTY_FUNCTION__ << ", error, MID " << barcodeName
+									<< " already added has a reverwe barcode but new barcode has doesnt have one, have "
+									<< ids_->mids_.at(barcodeName).reverseBar_->bar_->motifOriginal_ << "\n";
+							throw std::runtime_error { ss.str() };
+						}else if("" != revBar && nullptr != ids_->mids_.at(barcodeName).reverseBar_ ){
+							if(ids_->mids_.at(barcodeName).reverseBar_->bar_->motifOriginal_ != revBar){
+								std::stringstream ss;
+								ss << __PRETTY_FUNCTION__ << ", error, MID "
+										<< barcodeName
+										<< " already added with a different forward barcode " << "\n";
+								ss << "New Barcode: " << revBar
+										<< " , Current Reverse: "
+										<< ids_->mids_.at(barcodeName).reverseBar_->bar_->motifOriginal_
+										<< "\n";
+								throw std::runtime_error { ss.str() };
+							}
+						}
+					}else{
+						if("" != revBar){
+							ids_->addMid(barcodeName, forBar, revBar);
+						}else{
+							ids_->addMid(barcodeName, forBar);
+						}
+					}
+				}
+				sampleSet->addMixture(mixtureSet);
+			}
+			addSample(sampleSet);
+		}
+
+	}
 	std::string name_;
 	std::unordered_map<std::string, std::shared_ptr<SampleSetup>> samples_;
 
 	SimLibrarySetupPars pars_;
 
+	std::unique_ptr<PrimersAndMids> ids_;
 
 	void addSample(const std::shared_ptr<SampleSetup> & sample){
 		if(hasSample(sample->name_)){
@@ -652,8 +822,10 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	std::string libraryName = "";
 	bool simReplicates = false;
 	bool rawPatientSetupFile = false;
+	uint32_t startingTemplateAmount = 3000;
 	std::vector<uint32_t> timePoints;
 	readSimulatorSetUp setUp(inputCommands);
+	setUp.setOption(startingTemplateAmount, "--startingTemplateAmount", "Starting PCR Template Amount");
 	setUp.setOption(simPars.sampleReadAmount_, "--perMixtureReadAmount", "Final Read Amount to create per mixture");
 	setUp.setOption(simReplicates, "--replicates", "Replicates");
 	setUp.setOption(timePoints, "--timePoints", "Additional time points, will automatically have time point 00");
@@ -684,11 +856,11 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	table haplotypeInfoTable(haplotypeInfo, "\t", true);
 
 	table patientSetupTable(patientSetupFile, "\t", true);
+	lSetup.ids_ = std::make_unique<PrimersAndMids>(primerMidFnp);
 
-	PrimersAndMids ids(primerMidFnp);
-	ids.initPrimerDeterminator();
-	if(ids.containsMids()){
-		ids.initMidDeterminator(MidDeterminator::MidDeterminePars{});
+	lSetup.ids_->initPrimerDeterminator();
+	if(lSetup.ids_->containsMids()){
+		lSetup.ids_->initMidDeterminator(MidDeterminator::MidDeterminePars{});
 	}
 	if(rawPatientSetupFile){
 
@@ -805,7 +977,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	}
 	VecStr missingPrimerPairs;
 	for(const auto & primerPair : primerPairNames){
-		if(!njh::in(primerPair, ids.pDeterminator_->primers_)){
+		if(!njh::in(primerPair, lSetup.ids_->pDeterminator_->primers_)){
 			missingPrimerPairs.emplace_back(primerPair);
 		}
 	}
@@ -1069,7 +1241,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	OutOptions sampleNamesOutOpts(
 			njh::files::make_path(setUp.pars_.directoryName_, "sampleNames.tab.txt"));
 	VecStr sampleNamesTabHeader{};
-	if (!ids.containsMids()) {
+	if (!lSetup.ids_->containsMids()) {
 		sampleNamesTabHeader = {"#target", "sample", "run1"};
 	}else{
 		sampleNamesTabHeader = {"#file", "sample", "run1"};
@@ -1086,7 +1258,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	}
 
 	table sampleNamesTables(sampleNamesTabHeader);
-	if (!ids.containsMids()) {
+	if (!lSetup.ids_->containsMids()) {
 		for (const auto & patient : patientSetUpPars) {
 			for (const auto & tp : patient.timePoints_) {
 				std::string sampleName; if(!timePoints.empty()){
@@ -1112,9 +1284,10 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 						sampleNamesTables.addRow(addingRow);
 					}
 					mixtures[primerPair] = std::make_shared<MixtureSetUp>(primerPair);
+					mixtures[primerPair]->startingTemplateAmount_ = startingTemplateAmount;
 					mixtures[primerPair]->setPrimers(primerPair,
-							njh::mapAt(ids.targets_, primerPair).info_.forwardPrimer_,
-							njh::mapAt(ids.targets_, primerPair).info_.reversePrimer_);
+							njh::mapAt(lSetup.ids_->targets_, primerPair).info_.forwardPrimer_,
+							njh::mapAt(lSetup.ids_->targets_, primerPair).info_.reversePrimer_);
 					mixtures[primerPair]->primers_->reverse_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
 					mixtures[primerPair]->primers_->forward_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
 				}
@@ -1157,7 +1330,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 			for (const auto & patient : patientSetUpPars) {
 				for (uint32_t tpPos = 0; tpPos < patient.timePoints_.size(); ++tpPos) {
 					++midCount;
-					if(midCount >= ids.mids_.size()){
+					if(midCount >= lSetup.ids_->mids_.size()){
 						midCount = 0;
 						++finalSubSetAmount;
 						if(patient.replicate_){
@@ -1170,7 +1343,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 		uint32_t indexCount = 0;
 		uint32_t midCount = 0;
 		auto sampleSet = std::make_shared<SampleSetup>(njh::pasteAsStr("Subset-", njh::leftPadNumStr(indexCount, finalSubSetAmount) ) );
-		auto midNames = getVectorOfMapKeys(ids.mids_);
+		auto midNames = getVectorOfMapKeys(lSetup.ids_->mids_);
 		njh::sort(midNames);
 		for (const auto & patient : patientSetUpPars) {
 			for (const auto & tp : patient.timePoints_) {
@@ -1187,9 +1360,10 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 						std::unordered_map<std::string, std::shared_ptr<MixtureSetUp> > mixtures;
 						for (const auto & primerPair : primerPairNames) {
 							mixtures[primerPair] = std::make_shared<MixtureSetUp>(njh::pasteAsStr(primerPair, "-", midName));
+							mixtures[primerPair]->startingTemplateAmount_ = startingTemplateAmount;
 							mixtures[primerPair]->setPrimers(primerPair,
-									njh::mapAt(ids.targets_, primerPair).info_.forwardPrimer_,
-									njh::mapAt(ids.targets_, primerPair).info_.reversePrimer_);
+									njh::mapAt(lSetup.ids_->targets_, primerPair).info_.forwardPrimer_,
+									njh::mapAt(lSetup.ids_->targets_, primerPair).info_.reversePrimer_);
 							mixtures[primerPair]->primers_->reverse_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
 							mixtures[primerPair]->primers_->forward_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
 						}
@@ -1203,18 +1377,18 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 							}
 						}
 						for (auto & mix : mixtures) {
-							if(nullptr != ids.mids_.at(midName).forwardBar_){
-								mix.second->setForwardBarcode(midName, ids.mids_.at(midName).forwardBar_->bar_->motifOriginal_);
+							if(nullptr != lSetup.ids_->mids_.at(midName).forwardBar_){
+								mix.second->setForwardBarcode(midName, lSetup.ids_->mids_.at(midName).forwardBar_->bar_->motifOriginal_);
 								mix.second->forwardBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
 							}
-							if(nullptr != ids.mids_.at(midName).reverseBar_){
-								mix.second->setReverseBarcode(midName, ids.mids_.at(midName).reverseBar_->bar_->motifOriginal_);
+							if(nullptr != lSetup.ids_->mids_.at(midName).reverseBar_){
+								mix.second->setReverseBarcode(midName, lSetup.ids_->mids_.at(midName).reverseBar_->bar_->motifOriginal_);
 								mix.second->reverseBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
 							}
 							sampleSet->addMixture(mix.second);
 						}
 						++midCount;
-						if(midCount >= ids.mids_.size()){
+						if(midCount >= lSetup.ids_->mids_.size()){
 							lSetup.addSample(sampleSet);
 							midCount = 0;
 							++indexCount;
@@ -1228,9 +1402,11 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 						std::unordered_map<std::string, std::shared_ptr<MixtureSetUp> > mixtures;
 						for (const auto & primerPair : primerPairNames) {
 							mixtures[primerPair] = std::make_shared<MixtureSetUp>(njh::pasteAsStr(primerPair, "-", repMidName));
+							mixtures[primerPair]->startingTemplateAmount_ = startingTemplateAmount;
+
 							mixtures[primerPair]->setPrimers(primerPair,
-									njh::mapAt(ids.targets_, primerPair).info_.forwardPrimer_,
-									njh::mapAt(ids.targets_, primerPair).info_.reversePrimer_);
+									njh::mapAt(lSetup.ids_->targets_, primerPair).info_.forwardPrimer_,
+									njh::mapAt(lSetup.ids_->targets_, primerPair).info_.reversePrimer_);
 							mixtures[primerPair]->primers_->reverse_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
 							mixtures[primerPair]->primers_->forward_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
 						}
@@ -1244,18 +1420,18 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 							}
 						}
 						for (auto & mix : mixtures) {
-							if(nullptr != ids.mids_.at(repMidName).forwardBar_){
-								mix.second->setForwardBarcode(repMidName, ids.mids_.at(repMidName).forwardBar_->bar_->motifOriginal_);
+							if(nullptr != lSetup.ids_->mids_.at(repMidName).forwardBar_){
+								mix.second->setForwardBarcode(repMidName, lSetup.ids_->mids_.at(repMidName).forwardBar_->bar_->motifOriginal_);
 								mix.second->forwardBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
 							}
-							if(nullptr != ids.mids_.at(repMidName).reverseBar_){
-								mix.second->setReverseBarcode(repMidName, ids.mids_.at(repMidName).reverseBar_->bar_->motifOriginal_);
+							if(nullptr != lSetup.ids_->mids_.at(repMidName).reverseBar_){
+								mix.second->setReverseBarcode(repMidName, lSetup.ids_->mids_.at(repMidName).reverseBar_->bar_->motifOriginal_);
 								mix.second->reverseBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
 							}
 							sampleSet->addMixture(mix.second);
 						}
 						++midCount;
-						if(midCount >= ids.mids_.size()){
+						if(midCount >= lSetup.ids_->mids_.size()){
 							lSetup.addSample(sampleSet);
 							midCount = 0;
 							++indexCount;
@@ -1279,9 +1455,11 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 					sampleNamesTables.addRow(addingRow);
 					for (const auto & primerPair : primerPairNames) {
 						mixtures[primerPair] = std::make_shared<MixtureSetUp>(njh::pasteAsStr(primerPair, "-", midName));
+						mixtures[primerPair]->startingTemplateAmount_ = startingTemplateAmount;
+
 						mixtures[primerPair]->setPrimers(primerPair,
-								njh::mapAt(ids.targets_, primerPair).info_.forwardPrimer_,
-								njh::mapAt(ids.targets_, primerPair).info_.reversePrimer_);
+								njh::mapAt(lSetup.ids_->targets_, primerPair).info_.forwardPrimer_,
+								njh::mapAt(lSetup.ids_->targets_, primerPair).info_.reversePrimer_);
 						mixtures[primerPair]->primers_->reverse_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
 						mixtures[primerPair]->primers_->forward_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
 					}
@@ -1295,18 +1473,18 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 						}
 					}
 					for (auto & mix : mixtures) {
-						if(nullptr != ids.mids_.at(midName).forwardBar_){
-							mix.second->setForwardBarcode(midName, ids.mids_.at(midName).forwardBar_->bar_->motifOriginal_);
+						if(nullptr != lSetup.ids_->mids_.at(midName).forwardBar_){
+							mix.second->setForwardBarcode(midName, lSetup.ids_->mids_.at(midName).forwardBar_->bar_->motifOriginal_);
 							mix.second->forwardBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
 						}
-						if(nullptr != ids.mids_.at(midName).reverseBar_){
-							mix.second->setReverseBarcode(midName, ids.mids_.at(midName).reverseBar_->bar_->motifOriginal_);
+						if(nullptr != lSetup.ids_->mids_.at(midName).reverseBar_){
+							mix.second->setReverseBarcode(midName, lSetup.ids_->mids_.at(midName).reverseBar_->bar_->motifOriginal_);
 							mix.second->reverseBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
 						}
 						sampleSet->addMixture(mix.second);
 					}
 					++midCount;
-					if(midCount >= ids.mids_.size()){
+					if(midCount >= lSetup.ids_->mids_.size()){
 						lSetup.addSample(sampleSet);
 						midCount = 0;
 						++indexCount;
@@ -1324,9 +1502,10 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	sampleNamesTables.outPutContents(sampleNamesOut, "\t");
 
 
-	VecStr metaHeader{"sample", "Patient"};
+	VecStr metaHeader{"sample"};
 	if(!timePoints.empty()){
 		metaHeader.emplace_back("TimePoint");
+		metaHeader.emplace_back("Patient");
 	}
 	addOtherVec(metaHeader, metaLevels);
 	table metaTable(metaHeader);
@@ -1339,13 +1518,14 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 			}else{
 				sampleTpName = njh::pasteAsStr(patient.name_);
 			}
-			sampMeta.addMeta("Patient", patient.name_);
+
 			VecStr row;
 			if(!timePoints.empty()){
+				sampMeta.addMeta("Patient", patient.name_);
 				sampMeta.addMeta("TimePoint", tp.time_);
 				row = toVecStr(sampleTpName, patient.name_, tp.time_);
 			}else{
-				row = toVecStr(sampleTpName, patient.name_);
+				row = toVecStr(sampleTpName);
 			}
 
 			for(const auto & head : metaLevels){
@@ -2127,8 +2307,7 @@ public:
 
 
 int readSimulatorRunner::simMultipleMixture(const njh::progutils::CmdArgs & inputCommands) {
-	/**@todo 1) simulate shorten barcodes
-	 *  */
+
   readSimulatorSetUp setUp(inputCommands);
 
 	uint32_t numThreads = 2;
@@ -2141,7 +2320,6 @@ int readSimulatorRunner::simMultipleMixture(const njh::progutils::CmdArgs & inpu
 	bfs::path illuminaProfileDir = "";
 	setUp.processVerbose();
 	setUp.processDebug();
-//	setUp.setOption(idFile, "--idFile", "ID File with target primers", true);
 	setUp.setOption(librarySetUpFile, "--librarySetUpFile", "Library Set Up File", true);
 	setUp.processReadInNames(VecStr{"--fasta", "--fastagz"},true);
 	setUp.setOption(numThreads, "--numThreads", "Number of Threads to Use");
@@ -2169,152 +2347,12 @@ int readSimulatorRunner::simMultipleMixture(const njh::progutils::CmdArgs & inpu
 	njh::json::MemberChecker libraryChecker(librarySetUp);
 	libraryChecker.failMemberCheckThrow(LibrarySetup::jsonMembers(), __PRETTY_FUNCTION__);
 	LibrarySetup::SimLibrarySetupPars simPars(librarySetUp["pars"]);
-	LibrarySetup lSetup(librarySetUp["name"].asString(), simPars);
+	LibrarySetup lSetup(librarySetUp["name"].asString(), simPars, librarySetUp, refSeqs);
 
 
 	OutOptions idOutOpts(njh::files::make_path(setUp.pars_.directoryName_, "ids.tab.txt"));
 
-	PrimersAndMids ids{ std::unordered_map<std::string, PrimersAndMids::Target> {} };
-
-
-	for(const auto & sample : librarySetUp["samples"]){
-		njh::json::MemberChecker sampleChecker(sample);
-		sampleChecker.failMemberCheckThrow({"name", "mixtures"}, __PRETTY_FUNCTION__);
-		auto sampleSet = std::make_shared<SampleSetup>(sample["name"].asString());
-		for(const auto & mixture : sample["mixtures"]){
-			njh::json::MemberChecker mixtureChecker(mixture);
-			mixtureChecker.failMemberCheckThrow({"name", "abundances"}, __PRETTY_FUNCTION__);
-			auto mixtureSet = std::make_shared<MixtureSetUp>(mixture["name"].asString());
-			auto memebers = mixture["abundances"].getMemberNames();
-			for(const auto & member : memebers){
-				if(!njh::in(member, refSeqs)){
-					std::stringstream ss;
-					ss << __PRETTY_FUNCTION__ << ", error, " << " no reference seq named: " << member << "\n";
-					ss << "options are: " << njh::conToStr(getVectorOfMapKeys(refSeqs)) << "\n";
-					throw std::runtime_error{ss.str()};
-				}
-				mixtureSet->addAbundance(member, mixture["abundances"][member].asDouble());
-			}
-			if(mixture.isMember("primers")){
-				if(ids.hasTarget(mixture["primers"]["name"].asString())){
-					if (ids.targets_.at(mixture["primers"]["name"].asString()).info_.forwardPrimer_
-							!= mixture["primers"]["forward"].asString()) {
-						std::stringstream ss;
-						ss << __PRETTY_FUNCTION__ << ", error, target "
-								<< mixture["primers"]["name"].asString()
-								<< " already added with a different forward primer " << "\n";
-						ss << "New Forward: " << mixture["primers"]["forward"].asString()
-								<< " , Current Forward: "
-								<< ids.targets_.at(mixture["primers"]["name"].asString()).info_.forwardPrimer_
-								<< "\n";
-						throw std::runtime_error { ss.str() };
-					}
-					if (ids.targets_.at(mixture["primers"]["name"].asString()).info_.reversePrimer_
-							!= mixture["primers"]["reverse"].asString()) {
-						std::stringstream ss;
-						ss << __PRETTY_FUNCTION__ << ", error, target "
-								<< mixture["primers"]["name"].asString()
-								<< " already added with a different forward primer " << "\n";
-						ss << "New Reverse: " << mixture["primers"]["reverse"].asString()
-								<< " , Current Reverse: "
-								<< ids.targets_.at(mixture["primers"]["name"].asString()).info_.reversePrimer_
-								<< "\n";
-						throw std::runtime_error { ss.str() };
-					}
-				}else{
-					ids.addTarget(
-						mixture["primers"]["name"].asString(),
-						mixture["primers"]["forward"].asString(),
-						mixture["primers"]["reverse"].asString());
-				}
-				mixtureSet->setPrimers(
-						mixture["primers"]["name"].asString(),
-						mixture["primers"]["forward"].asString(),
-						mixture["primers"]["reverse"].asString()
-						);
-
-				if(mixture["primers"].isMember("forward_randomPrecedingBases")){
-					mixtureSet->primers_->forward_randomPrecedingBases_ = mixture["primers"]["forward_randomPrecedingBases"].asUInt();
-				}
-				if(mixture["primers"].isMember("reverse_randomPrecedingBases")){
-					mixtureSet->primers_->reverse_randomPrecedingBases_ = mixture["primers"]["reverse_randomPrecedingBases"].asUInt();
-				}
-			}
-			std::string barcodeName = "";
-			std::string forBar = "";
-			std::string revBar = "";
-			if(mixture.isMember("forwardBarcode")){
-				mixtureSet->setForwardBarcode(
-						mixture["forwardBarcode"]["name"].asString(),
-						mixture["forwardBarcode"]["barcode"].asString()
-						);
-				barcodeName = mixture["forwardBarcode"]["name"].asString();
-				forBar = mixture["forwardBarcode"]["barcode"].asString();
-				if(mixture["forwardBarcode"].isMember("randomPrecedingBases")){
-					mixtureSet->forwardBarcode_->randomPrecedingBases_ = mixture["forwardBarcode"]["randomPrecedingBases"].asUInt();
-				}
-			}
-			if(mixture.isMember("reverseBarcode")){
-				mixtureSet->setReverseBarcode(
-						mixture["reverseBarcode"]["name"].asString(),
-						mixture["reverseBarcode"]["barcode"].asString()
-						);
-				revBar = mixture["reverseBarcode"]["barcode"].asString();
-				if(mixture["reverseBarcode"].isMember("randomPrecedingBases")){
-					mixtureSet->reverseBarcode_->randomPrecedingBases_ = mixture["reverseBarcode"]["randomPrecedingBases"].asUInt();
-				}
-			}
-			if("" != barcodeName){
-				if(njh::in(barcodeName, ids.mids_)){
-					if(ids.mids_.at(barcodeName).forwardBar_->bar_->motifOriginal_ != forBar){
-						std::stringstream ss;
-						ss << __PRETTY_FUNCTION__ << ", error, MID "
-								<< barcodeName
-								<< " already added with a different forward barcode " << "\n";
-						ss << "New Barcode: " << forBar
-								<< " , Current Reverse: "
-								<< ids.mids_.at(barcodeName).forwardBar_->bar_->motifOriginal_
-								<< "\n";
-						throw std::runtime_error { ss.str() };
-					}
-					if("" != revBar && nullptr == ids.mids_.at(barcodeName).reverseBar_ ){
-						std::stringstream ss;
-						ss << __PRETTY_FUNCTION__ << ", error, MID " << barcodeName
-								<< " already added without a reverwe barcode but new barcode has one, "
-								<< revBar << "\n";
-						throw std::runtime_error { ss.str() };
-					}else if ("" == revBar && nullptr != ids.mids_.at(barcodeName).reverseBar_ ){
-						std::stringstream ss;
-						ss << __PRETTY_FUNCTION__ << ", error, MID " << barcodeName
-								<< " already added has a reverwe barcode but new barcode has doesnt have one, have "
-								<< ids.mids_.at(barcodeName).reverseBar_->bar_->motifOriginal_ << "\n";
-						throw std::runtime_error { ss.str() };
-					}else if("" != revBar && nullptr != ids.mids_.at(barcodeName).reverseBar_ ){
-						if(ids.mids_.at(barcodeName).reverseBar_->bar_->motifOriginal_ != revBar){
-							std::stringstream ss;
-							ss << __PRETTY_FUNCTION__ << ", error, MID "
-									<< barcodeName
-									<< " already added with a different forward barcode " << "\n";
-							ss << "New Barcode: " << revBar
-									<< " , Current Reverse: "
-									<< ids.mids_.at(barcodeName).reverseBar_->bar_->motifOriginal_
-									<< "\n";
-							throw std::runtime_error { ss.str() };
-						}
-					}
-				}else{
-					if("" != revBar){
-						ids.addMid(barcodeName, forBar, revBar);
-					}else{
-						ids.addMid(barcodeName, forBar);
-					}
-				}
-			}
-			sampleSet->addMixture(mixtureSet);
-		}
-		lSetup.addSample(sampleSet);
-	}
-	ids.writeIdFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "ids.tab.txt")));
+	lSetup.ids_->writeIdFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "ids.tab.txt")));
 
 	OutOptions outOptsSetup(njh::files::make_path(setUp.pars_.directoryName_, "setup.json"));
 	OutputStream outOptsSetupOut(outOptsSetup);
@@ -2374,7 +2412,8 @@ int readSimulatorRunner::simMultipleMixture(const njh::progutils::CmdArgs & inpu
 					amounts.emplace_back(abun.second);
 				}
 				njh::randObjectGen<std::string,double> refNameGen(refNames, amounts);
-				for(uint32_t readNumber = 0; readNumber < lSetup.pars_.sampleReadAmount_; ++readNumber){
+				for(uint32_t readNumber = 0; readNumber < mixture.second->finalReadAmount_; ++readNumber){
+				//for(uint32_t readNumber = 0; readNumber < lSetup.pars_.sampleReadAmount_; ++readNumber){
 					MetaDataInName nameMeta;
 					auto refName = refNameGen.genObj();
 
@@ -2541,6 +2580,293 @@ int readSimulatorRunner::simMultipleMixture(const njh::progutils::CmdArgs & inpu
 }
 
 
+int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs & inputCommands) {
+
+  readSimulatorSetUp setUp(inputCommands);
+
+	uint32_t numThreads = 2;
+	uint32_t pcrNumThreads = 2;
+	bool singleEnd = false;
+	bool nonGz = false;
+	bfs::path idFile = "";
+	bfs::path referenceFile = "";
+	bfs::path librarySetUpFile = "";
+
+	bfs::path illuminaProfileDir = "";
+	uint32_t pcrRounds = 30;
+	uint32_t initialPcrRounds = 10;
+	long double errorRate = 3.5e-06;
+
+	bool keepPCRSeqs = false;
+
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(keepPCRSeqs, "--keepPCRSeqs", "Keep PCR Seqs");
+	setUp.setOption(errorRate, "--errorRate", "Polymerase Error Rate");
+	setUp.setOption(pcrRounds, "--pcrRounds", "Number of PCR rounds");
+	setUp.setOption(initialPcrRounds, "--initialPcrRounds", "Number of Initial rounds of PCR before sampling");
+	setUp.setOption(librarySetUpFile, "--librarySetUpFile", "Library Set Up File", true);
+	setUp.processReadInNames(VecStr{"--fasta", "--fastagz"},true);
+	setUp.setOption(numThreads, "--numThreads", "Number of Threads to Use");
+	setUp.setOption(pcrNumThreads, "--pcrNumThreads", "Number of Threads to Use for PCR sim");
+	setUp.setOption(singleEnd, "--singleEnd", "Single End");
+	setUp.setOption(nonGz, "--nonGz", "do not compress the output fastqs");
+	setUp.setOption(illuminaProfileDir, "--illuminaProfileDir", "Illumina Profile Dir", true);
+	setUp.processDirectoryOutputName("simMultipleMixture_TODAY", true);
+	setUp.finishSetUp(std::cout);
+	setUp.startARunLog(setUp.pars_.directoryName_);
+
+	uint64_t intErrorRate = errorRate * std::numeric_limits<uint64_t>::max();
+
+
+	setUp.writeParametersFile(setUp.pars_.directoryName_ + "parameters.tab.txt", false, true);
+
+	std::unordered_map<std::string, seqInfo> refSeqs;
+
+
+	{
+		SeqInput reader(setUp.pars_.ioOptions_);
+		reader.openIn();
+		seqInfo seq;
+		while(reader.readNextRead(seq)){
+			refSeqs[seq.name_] = seq;
+		}
+	}
+	Json::Value librarySetUp = njh::json::parseFile(librarySetUpFile.string());
+
+	njh::json::MemberChecker libraryChecker(librarySetUp);
+	libraryChecker.failMemberCheckThrow(LibrarySetup::jsonMembers(), __PRETTY_FUNCTION__);
+	LibrarySetup::SimLibrarySetupPars simPars(librarySetUp["pars"]);
+	LibrarySetup lSetup(librarySetUp["name"].asString(), simPars, librarySetUp, refSeqs);
+
+
+	OutOptions idOutOpts(njh::files::make_path(setUp.pars_.directoryName_, "ids.tab.txt"));
+
+
+
+	lSetup.ids_->writeIdFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "ids.tab.txt")));
+
+	OutOptions outOptsSetup(njh::files::make_path(setUp.pars_.directoryName_, "setup.json"));
+	OutputStream outOptsSetupOut(outOptsSetup);
+	outOptsSetupOut << lSetup.toJson() << std::endl;
+
+	bfs::path fastqDirectory =njh::files::make_path(setUp.pars_.directoryName_, "fastq");
+	njh::files::makeDir(njh::files::MkdirPar{fastqDirectory});
+	auto sampleKeys = njh::getVecOfMapKeys(lSetup.samples_);
+	njh::sort(sampleKeys);
+
+	std::atomic_uint sampleCountAtom{0};
+
+	njh::concurrent::LockableQueue<std::string> samplesQueue(sampleKeys);
+	std::string extension = nonGz ? ".fastq" : ".fastq.gz";
+	bool verbose = setUp.pars_.verbose_;
+
+	auto simSample = [&samplesQueue,&extension,&sampleCountAtom,&fastqDirectory,
+										&lSetup,&illuminaProfileDir,&singleEnd,&refSeqs,
+										&intErrorRate, &pcrRounds, &initialPcrRounds,&verbose,
+										&keepPCRSeqs, &pcrNumThreads](){
+		std::string sampleKey = "";
+		njh::randObjectGen<char,uint32_t> baseRGen({'A', 'C', 'G', 'T'}, {1,1,1,1});
+		RoughIlluminaSimulator simulator(illuminaProfileDir);
+		njh::randomGenerator rGen;
+
+		while(samplesQueue.getVal(sampleKey)){
+			uint32_t sampleCount = sampleCountAtom++;
+			OutOptions targetOutOpts(njh::files::make_path(fastqDirectory, njh::pasteAsStr(sampleKey, "_S", sampleCount + 1, extension)));
+			OutOptions r1OutOpts(njh::files::make_path(fastqDirectory, njh::pasteAsStr(sampleKey, "_S", sampleCount + 1, "_R1_001" + extension)));
+			OutOptions r2OutOpts(njh::files::make_path(fastqDirectory, njh::pasteAsStr(sampleKey, "_S", sampleCount + 1, "_R2_001" + extension)));
+			std::shared_ptr<OutputStream> targetOut;
+
+			std::shared_ptr<OutputStream> r1Out;
+			std::shared_ptr<OutputStream> r2Out;
+			if(singleEnd) {
+				targetOut = std::make_shared<OutputStream>(targetOutOpts);
+			} else {
+				r1Out = std::make_shared<OutputStream>(r1OutOpts);
+				r2Out = std::make_shared<OutputStream>(r2OutOpts);
+			}
+
+
+			/**@todo add back in the ability to have different Illumina barcodes in overhangs */
+	//		std::string sampleAdapter1 = defaultAdapter1;
+	//		std::string sampleAdapter2 = defaultAdapter2;
+	//		for(const auto pos : iter::range(sampleAdapter1.size())){
+	//			if('N' == sampleAdapter1[pos]){
+	//				sampleAdapter1[pos] = baseRGen.genObj();
+	//			}
+	//		}
+	//		for(const auto pos : iter::range(sampleAdapter2.size())){
+	//			if('N' == sampleAdapter2[pos]){
+	//				sampleAdapter2[pos] = baseRGen.genObj();
+	//			}
+	//		}
+			for(const auto & mixture : lSetup.samples_.at(sampleKey)->mixtures_ ){
+				VecStr refNames;
+				std::vector<double> amounts;
+				double totalAbundance = 0;
+				std::vector<std::shared_ptr<seqInfo>> currentSeqs;
+				for(const auto & abun : mixture.second->abundances_){
+					totalAbundance+=abun.second;
+				}
+				for(const auto & abun : mixture.second->abundances_){
+					std::string seqName = abun.first;
+					std::string seq = refSeqs.at(abun.first).seq_;
+
+
+					if(nullptr != mixture.second->primers_){
+						if(!lSetup.pars_.noAddPrimers_){
+							/**@todo add allowing for ambigious bases in primers*/
+							seq = mixture.second->primers_->forward_ + seq;
+							seq.append(mixture.second->primers_->reverse_3_5_);
+						}
+						if(mixture.second->primers_->forward_randomPrecedingBases_ > 0){
+							auto minBaseAmount = mixture.second->primers_->randomOneLength_ ? mixture.second->primers_->forward_randomPrecedingBases_: 0;
+							uint32_t numFBase = rGen.unifRand<uint32_t>(minBaseAmount, mixture.second->primers_->forward_randomPrecedingBases_ + 1);
+							if(numFBase > 0){
+								seq = njh::pasteAsStr(baseRGen.genObjs(numFBase)) + seq;
+							}
+						}
+						if(mixture.second->primers_->reverse_randomPrecedingBases_ > 0){
+							auto minBaseAmount = mixture.second->primers_->randomOneLength_ ? mixture.second->primers_->reverse_randomPrecedingBases_: 0;
+							uint32_t numRBase = rGen.unifRand<uint32_t>(minBaseAmount, mixture.second->primers_->reverse_randomPrecedingBases_ + 1);
+							if(numRBase > 0){
+								seq.append(njh::pasteAsStr(baseRGen.genObjs(numRBase)));
+							}
+						}
+					}
+					if(nullptr != mixture.second->forwardBarcode_ || nullptr != mixture.second->reverseBarcode_){
+						std::string midName = nullptr != mixture.second->forwardBarcode_ ? mixture.second->forwardBarcode_->name_ : mixture.second->reverseBarcode_->name_;
+					}
+					if(nullptr != mixture.second->forwardBarcode_){
+						seq =mixture.second->forwardBarcode_->barcode_ + seq;
+						if(mixture.second->forwardBarcode_->randomPrecedingBases_ > 0){
+							auto minBaseAmount = mixture.second->forwardBarcode_->randomOneLength_ ? mixture.second->forwardBarcode_->randomPrecedingBases_: 0;
+							uint32_t numFBase = rGen.unifRand<uint32_t>(minBaseAmount, mixture.second->forwardBarcode_->randomPrecedingBases_ + 1);
+							if(numFBase > 0){
+								seq = njh::pasteAsStr(baseRGen.genObjs(numFBase)) + seq;
+							}
+						}
+					}
+					if(nullptr != mixture.second->reverseBarcode_){
+						seq.append(mixture.second->reverseBarcode_->barcode_3_5_);
+						if(mixture.second->reverseBarcode_->randomPrecedingBases_ > 0){
+							auto minBaseAmount = mixture.second->reverseBarcode_->randomOneLength_ ? mixture.second->reverseBarcode_->randomPrecedingBases_: 0;
+							uint32_t numFBase = rGen.unifRand<uint32_t>(minBaseAmount, mixture.second->reverseBarcode_->randomPrecedingBases_ + 1);
+							if(numFBase > 0){
+								seq.append(njh::pasteAsStr(baseRGen.genObjs(numFBase)));
+							}
+						}
+					}
+					currentSeqs.emplace_back(std::make_shared<seqInfo>(seqName, seq));
+					currentSeqs.back()->frac_ = abun.second/totalAbundance;
+					currentSeqs.back()->cnt_ = abun.second/totalAbundance;
+				}
+
+				std::cout << sampleKey + mixture.second->name_ << std::endl;
+				std::cout << "\tmixture.second->startingTemplateAmount_: " << mixture.second->startingTemplateAmount_ << std::endl;
+
+				sim::simLibFast(currentSeqs, "", njh::files::make_path(fastqDirectory).string(),
+						sampleKey + mixture.second->name_,intErrorRate, mixture.second->startingTemplateAmount_,
+						mixture.second->finalReadAmount_, pcrRounds, initialPcrRounds, pcrNumThreads, verbose);
+
+//				void simLibFast(std::vector<std::shared_ptr<seqInfo> > & reads,
+//						const std::string & barcode, const std::string & workingDir,
+//						const std::string & libName, uint64_t intErrorRate,
+//						uint64_t startingTemplate, uint64_t finalReadAmount, uint32_t pcrRounds,
+//						uint32_t initialPcrRounds, uint32_t numThreads, bool verbose)
+
+
+				auto pcrSeqsInOpts = SeqIOOptions::genFastaIn(njh::files::make_path(fastqDirectory, sampleKey + mixture.second->name_, "reads.fasta"));
+				SeqInput pcrReader(pcrSeqsInOpts);
+				pcrReader.openIn();
+				seqInfo targetSeq;
+				while(pcrReader.readNextRead(targetSeq)){
+//					MetaDataInName nameMeta;
+//
+//					nameMeta.addMeta("Mixture", mixture.second->name_);
+//					nameMeta.addMeta("Sample", sampleKey);
+//					nameMeta.addMeta("readNumber", readNumber);
+//					nameMeta.addMeta("refName", refName);
+//					seqInfo targetSeq("", refSeqs.at(refName).seq_);
+
+					//blunt ending
+					if(lSetup.pars_.addBluntEndingArtifact_){
+						if('A' == targetSeq.seq_[0] && rGen() < lSetup.pars_.bluntEndingArtifactChance_){
+							readVecTrimmer::trimOffForwardBases(targetSeq, 1);
+//							forwardPrimerPosition = forwardPrimerPosition == 0 ? forwardPrimerPosition: forwardPrimerPosition - 1;
+//							forwardBarcodePosition = forwardBarcodePosition == 0 ? forwardBarcodePosition: forwardBarcodePosition - 1;
+//							reverseBarcodePosition -= 1;
+//							reversePrimerPosition -= 1;
+//							nameMeta.addMeta("frontEndBluntEndArtifact", true);
+						}else{
+//							nameMeta.addMeta("frontEndBluntEndArtifact", false);
+						}
+						if ('T' == targetSeq.seq_.back()
+								&& rGen() < lSetup.pars_.bluntEndingArtifactChance_) {
+							readVecTrimmer::trimOffEndBases(targetSeq, 1);
+//							nameMeta.addMeta("backEndBluntEndArtifact", true);
+						} else {
+//							nameMeta.addMeta("backEndBluntEndArtifact", false);
+						}
+					}
+					//positions
+//					if(nullptr != mixture.second->primers_){
+//						nameMeta.addMeta("forwardPrimerPosition", forwardPrimerPosition);
+//						nameMeta.addMeta("reversePrimerPosition", reversePrimerPosition);
+//					}
+//					if(nullptr != mixture.second->forwardBarcode_){
+//						nameMeta.addMeta("forwardBarcodePosition", forwardBarcodePosition);
+//					}
+//					if(nullptr != mixture.second->reverseBarcode_){
+//						nameMeta.addMeta("reverseBarcodePosition", reverseBarcodePosition);
+//					}
+					//complement
+					if(lSetup.pars_.addReverseComplement_){
+						bool complement = rGen.unifRand(0,2) == 0;
+//						nameMeta.addMeta("complement", complement);
+						if(complement){
+							targetSeq.reverseComplementRead(false, true);
+						}
+					}
+					//length
+//					nameMeta.addMeta("targetSeqLength", len(targetSeq));
+
+//					targetSeq.name_ = nameMeta.createMetaName();
+
+					if(singleEnd){
+						//target
+						targetSeq.outPutSeq(*targetOut);
+					}else{
+						{
+							//r1
+							auto subSeq = len(targetSeq) > lSetup.pars_.pairedEndLength_? targetSeq.getSubRead(0, lSetup.pars_.pairedEndLength_) : targetSeq;
+							simulator.simR1(subSeq, lSetup.pars_.pairedEndLength_).outPutFastq(*r1Out);
+						}
+						{
+							//r2
+							targetSeq.reverseComplementRead(false, true);
+							auto subSeq = len(targetSeq) > lSetup.pars_.pairedEndLength_? targetSeq.getSubRead(0, lSetup.pars_.pairedEndLength_) : targetSeq;
+							simulator.simR2(subSeq, lSetup.pars_.pairedEndLength_).outPutFastq(*r2Out);
+						}
+					}
+				}
+
+				pcrReader.closeIn();
+				if(!keepPCRSeqs){
+					njh::files::rmDirForce(njh::files::make_path(fastqDirectory, sampleKey + mixture.second->name_));
+				}
+			}
+		}
+	};
+
+	std::vector<std::thread> threads;
+	for(uint32_t t = 0; t < numThreads; ++t){
+		threads.emplace_back(std::thread(simSample));
+	}
+	njh::concurrent::joinAllJoinableThreads(threads);
+
+	return 0;
+}
 
 
 } // namespace njhseq

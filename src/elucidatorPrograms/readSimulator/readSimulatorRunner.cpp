@@ -43,6 +43,7 @@ readSimulatorRunner::readSimulatorRunner()
 	//addFunc("createLibrarySimMultipleMixture", createLibrarySimMultipleMixture, false),
 	addFunc("createIlluminaErrorProfile", createIlluminaErrorProfile, false),
 	addFunc("createLibrarySimMultipleMixtureDrugResistant", createLibrarySimMultipleMixtureDrugResistant, false),
+	addFunc("simMultipleMixtureSimPCR", simMultipleMixtureSimPCR, false),
 },
                     "readSimulator") {}
 //
@@ -340,6 +341,7 @@ int readSimulatorRunner::simMultipleMixturePCR(const njh::progutils::CmdArgs & i
 		sim::simLibFast(libReads, barcodes[lib.first - 1].seqBase_.seq_,
 				setUp.pars_.directoryName_, libName, intErrorRate, startingTemplate,
 				finalReadAmount, pcrRounds,initialPcrRounds, numThreads, setUp.pars_.verbose_);
+
 		libNames.emplace_back(libName);
 		libDirNames.emplace_back(setUp.pars_.directoryName_ + libName);
 	}
@@ -425,12 +427,14 @@ int readSimulatorRunner::effectsOfPcrErrorRatePerRounds(const njh::progutils::Cm
 	setUp.finishSetUp(std::cout);
 	long double finalAmount = seqNum;
 	long double correctRate = std::pow(1 - errorRate, seqLen);
-	table roundAmounts(VecStr { "round", "Amount Correct", "percentCorrect" });
+	table roundAmounts(VecStr { "round", "Amount Correct", "finalAmount", "percentCorrect" });
 	for (uint32_t round = 1; round <= rounds; ++round) {
 		finalAmount += finalAmount * correctRate;
-		roundAmounts.content_.emplace_back(
-				toVecStr(round, finalAmount,
-						finalAmount / (seqNum * std::pow(2, round))));
+		roundAmounts.addRow(
+				round,
+				finalAmount,
+				(seqNum * std::pow(2, round)),
+				finalAmount / (seqNum * std::pow(2, round)));
 	}
 	roundAmounts.outPutContentOrganized(std::cout);
 	std::cout << "Approximate percent of a jackpot event in first round" << std::endl;
