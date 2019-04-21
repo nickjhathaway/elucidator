@@ -856,7 +856,7 @@ int gffExpRunner::gffToBedByDescription(const njh::progutils::CmdArgs & inputCom
 	Json::Value outJson;
 	while (nullptr != gRecord) {
 		if(njh::in(gRecord->getAttr("description"), description)){
-			outJson[gRecord->getAttr("Name")] = gRecord->toJson();
+			outJson[gRecord->getAttr("ID")] = gRecord->toJson();
 			outFile << GenomicRegion(*gRecord).genBedRecordCore().toDelimStr() << std::endl;
 		}
 		bool end = false;
@@ -909,7 +909,7 @@ int gffExpRunner::gffToBedByAttribute(const njh::progutils::CmdArgs & inputComma
 	Json::Value outJson;
 	while (nullptr != gRecord) {
 		if(gRecord->hasAttr(attribute) && gRecord->getAttr(attribute) == attributeLevel){
-			outJson[gRecord->getAttr("Name")] = gRecord->toJson();
+			outJson[gRecord->getAttr("ID")] = gRecord->toJson();
 			outFile << GenomicRegion(*gRecord).genBedRecordCore().toDelimStr() << std::endl;
 		}
 		bool end = false;
@@ -960,7 +960,7 @@ int gffExpRunner::gffToBedByChrom(const njh::progutils::CmdArgs & inputCommands)
 	Json::Value outJson;
 	while (nullptr != gRecord) {
 		if(gRecord->seqid_ == chrom){
-			outJson[gRecord->getAttr("Name")] = gRecord->toJson();
+			outJson[gRecord->getAttr("ID")] = gRecord->toJson();
 			outFile << GenomicRegion(*gRecord).genBedRecordCore().toDelimStr() << std::endl;
 		}
 		bool end = false;

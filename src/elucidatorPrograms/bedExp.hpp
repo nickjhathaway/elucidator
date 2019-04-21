@@ -40,7 +40,8 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	static int getFastaWithBed(const njh::progutils::CmdArgs & inputCommands);
 
 	//extracting sequence information per bed region
-	static int getGCContentOrRegion(const njh::progutils::CmdArgs & inputCommands);
+	static int getGCContentOfRegion(const njh::progutils::CmdArgs & inputCommands);
+	static int getLongestHomopolymerLengthInRegion(const njh::progutils::CmdArgs & inputCommands);
 
 
 	//filtering of bed files

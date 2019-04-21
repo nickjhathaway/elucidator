@@ -68,7 +68,8 @@ bedExpRunner::bedExpRunner()
 					 addFunc("reorientBasedOnSingleReadsOrientationCounts", reorientBasedOnSingleReadsOrientationCounts, false),
 					 addFunc("getFirstRegionPerChrom", getFirstRegionPerChrom, false),
 					 addFunc("getLastRegionPerChrom", getLastRegionPerChrom, false),
-					 addFunc("getGCContentOrRegion", getGCContentOrRegion, false),
+					 addFunc("getGCContentOrRegion", getGCContentOfRegion, false),
+					 addFunc("getLongestHomopolymerLengthInRegion", getLongestHomopolymerLengthInRegion, false),
            },//,
           "bedExp") {}
 
@@ -1109,7 +1110,61 @@ int bedExpRunner::bedUnqiue(const njh::progutils::CmdArgs & inputCommands) {
 
 
 
-int bedExpRunner::getGCContentOrRegion(const njh::progutils::CmdArgs & inputCommands) {
+int bedExpRunner::getLongestHomopolymerLengthInRegion(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path filename = "";
+	OutOptions outOpts(bfs::path(""), ".bed");
+	bfs::path twoBitFilename = "";
+
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(twoBitFilename, "--twoBit", "File path of the 2bit file", true);
+	setUp.setOption(filename, "--bed", "BED6 file", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+	OutputStream out(outOpts);
+	TwoBit::TwoBitFile twoBitFile(twoBitFilename);
+	auto seqNames = twoBitFile.sequenceNames();
+	BioDataFileIO<Bed6RecordCore> bedReader{IoOptions(InOptions(filename))};
+	bedReader.openIn();
+	Bed6RecordCore record;
+	out << "#chrom\tstart\tend\tname\tscore\tstrand\tHPbase\tHPposition\tHPlength" << std::endl;
+	while (bedReader.readNextRecord(record)) {
+		if (!njh::in(record.chrom_, seqNames)) {
+			std::cerr << "chromosome name not found in seq names, skipping"
+					<< std::endl;
+			std::cerr << "chr: " << record.chrom_ << std::endl;
+			std::cerr << "possibleNames: " << vectorToString(seqNames, ",")
+					<< std::endl;
+		} else {
+			std::string seq = "";
+			twoBitFile[record.chrom_]->getSequence(seq, record.chromStart_,
+					record.chromEnd_);
+			if (record.reverseStrand()) {
+				seq = seqUtil::reverseComplement(seq, "DNA");
+			}
+			readObject seqObj{seqInfo{record.name_, seq}};
+			seqObj.createCondensedSeq();
+			uint32_t longestHomopolymerLen = 0;
+			uint32_t longestHomopolymerPos = 0;
+			char longestHomopolymerBase = ' ';
+			uint32_t seqPos = 0;
+			for(const auto & homPos : iter::range(seqObj.condensedSeqCount.size())){
+				if(seqObj.condensedSeqCount[homPos] > longestHomopolymerLen){
+					longestHomopolymerLen = seqObj.condensedSeqCount[homPos];
+					longestHomopolymerBase = seqObj.condensedSeq[homPos];
+					longestHomopolymerPos = seqPos;
+				}
+				seqPos += seqObj.condensedSeqCount[homPos];
+			}
+			out << record.toDelimStr()
+					<< "\t" << longestHomopolymerBase
+					<< "\t" << GenomicRegion(record).getRelativePositionFromStartStrandAware(longestHomopolymerPos)
+					<< "\t" << longestHomopolymerLen << std::endl;
+		}
+	}
+	return 0;
+}
+
+int bedExpRunner::getGCContentOfRegion(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path filename = "";
 	OutOptions outOpts(bfs::path(""), ".bed");
 	bfs::path twoBitFilename = "";
@@ -1142,7 +1197,7 @@ int bedExpRunner::getGCContentOrRegion(const njh::progutils::CmdArgs & inputComm
 			}
 			DNABaseCounter counter;
 			counter.increase(seq);
-			out << record.toDelimStrWithExtra()
+			out << record.toDelimStr()
 					<< "\t" << counter.getGcCount()
 					<< "\t" << counter.getGcCount()/static_cast<double>(seq.size()) << std::endl;
 		}
