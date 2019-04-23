@@ -923,7 +923,6 @@ int bedExpRunner::getNonOverlappingBedRegions(const njh::progutils::CmdArgs & in
 			});
 		}
 	}
-	return 0;
 
 	return 0;
 }
