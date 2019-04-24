@@ -665,7 +665,7 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
   seqSetUp setUp(inputCommands);
 
   setUp.processVerbose();
-  setUp.processDefaultReader({"--fasta", "--fastq"});
+  setUp.processReadInNames({"--fasta", "--fastq", "--fastagz", "--fastqgz"});
   setUp.processDirectoryOutputName(true);
   setUp.finishSetUp();
 
