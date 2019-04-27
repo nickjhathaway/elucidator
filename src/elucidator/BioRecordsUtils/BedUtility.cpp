@@ -46,6 +46,7 @@ Bed3RecordCore & BedUtility::extendRight(Bed3RecordCore & b, uint32_t extendRigh
 
 Bed3RecordCore & BedUtility::extendLeftRight(Bed3RecordCore & b, uint32_t extendLeftLen, uint32_t extendRightLen, uint32_t chromLength){
 	extendRight(extendLeft(b, extendLeftLen), extendRightLen, chromLength);
+
 	return b;
 }
 Bed3RecordCore & BedUtility::extendLeftRight(Bed3RecordCore & b, uint32_t extendLeftLen, uint32_t extendRightLen){

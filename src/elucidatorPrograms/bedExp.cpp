@@ -1254,15 +1254,15 @@ int bedExpRunner::separateOutRecordsInBedFile(const njh::progutils::CmdArgs & in
 	outputDir = bedFile.parent_path();
 	setUp.setOption(outputDir, "--outputDir", "Output directory");
 	setUp.finishSetUp(std::cout);
-
-	auto regions = bedPtrsToGenomicRegs(getBeds(bedFile.string()));
-
-	for(const auto & reg : regions){
+	auto beds = getBeds(bedFile.string());
+	auto regions = bedPtrsToGenomicRegs(beds);
+	std::unique_ptr<OutputStream> keyOut;
+	for(const auto & regPos : iter::range(regions.size())){
+		const auto & reg = regions[regPos];
 		auto bRec = reg.genBedRecordCore();
 		OutOptions currentOpts(njh::files::make_path(outputDir,bRec.name_ + ".bed"));
-		currentOpts.overWriteFile_ = outOpts.overWriteFile_;
-		std::ofstream out;
-		currentOpts.openFile(out);
+		currentOpts.transferOverwriteOpts(outOpts);
+		OutputStream out(currentOpts);
 		out << bRec.toDelimStr() << "\n";
 	}
 	return 0;
