@@ -26,4 +26,4 @@
 //
 
 #include "elucidator/simulation/pcrSimulation/pcrSimulationUtils.hpp"
-
+#include "elucidator/simulation/pcrSimulation/PCRSimulator.hpp"

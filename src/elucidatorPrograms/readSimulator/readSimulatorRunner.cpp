@@ -44,6 +44,7 @@ readSimulatorRunner::readSimulatorRunner()
 	addFunc("createIlluminaErrorProfile", createIlluminaErrorProfile, false),
 	addFunc("createLibrarySimMultipleMixtureDrugResistant", createLibrarySimMultipleMixtureDrugResistant, false),
 	addFunc("simMultipleMixtureSimPCR", simMultipleMixtureSimPCR, false),
+	addFunc("testPCRSim", testPCRSim, false),
 },
                     "readSimulator") {}
 //

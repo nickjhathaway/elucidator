@@ -35,10 +35,10 @@ int ampliconAnalysisRunner::gatherInfoOnTargetedAmpliconSeqFile(
 	setUp.setOption(dontCollapsePossibleMIDs, "--dontCollapsePossibleMIDs",
 			"Don't Collapse Possible MIDs", false);
 	setUp.setOption(unrecogBaseSampling, "--unrecogBaseSampling",
-			"Unrecognized Base Sampling", false);
+			"Number of bases to sample from file for unrecognized sequences", false);
 
 	setUp.setOption(precdingBaseFreqCutOff, "--precdingBaseFreqCutOff",
-			"Precding Base Freq Cut Off", false);
+			"Preceding Base Freq Cut Off", false);
 
 	pars.corePars_.pDetPars.primerWithin_ = 30;
 	setUp.setOption(pars.corePars_.pDetPars.primerWithin_, "--primerWithin",
@@ -77,7 +77,7 @@ int ampliconAnalysisRunner::gatherInfoOnTargetedAmpliconSeqFile(
 	setUp.processReadInNames(VecStr{"--fastq1", "--fastq", "--fasta", "--fastq1gz", "--fastqgz", "--fastagz"});
 	setUp.processDirectoryOutputName(true);
 	setUp.finishSetUp(std::cout);
-
+	setUp.startARunLog(setUp.pars_.directoryName_);
 	PrimersAndMids ids(idFnp);
 	ids.initPrimerDeterminator();
 

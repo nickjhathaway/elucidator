@@ -50,6 +50,9 @@ class readSimulatorRunner : public njh::progutils::ProgramRunner {
 
 
   static int effectsOfPcrErrorRatePerRounds(const njh::progutils::CmdArgs & inputCommands);
+
+
+  static int testPCRSim(const njh::progutils::CmdArgs & inputCommands);
 };
 }  // namespace njhseq
 

@@ -126,7 +126,8 @@ VecStr genFragments(const std::string & seq,
 }
 
 std::unordered_map<uint32_t, uint32_t> genMutCounts(std::mt19937_64 & gen,
-		const uint64_t seqNumber, const uint64_t seqSize,
+		const uint64_t seqNumber,
+		const uint64_t seqSize,
 		const uint64_t intErrorRate) {
 	std::unordered_map<uint32_t, uint32_t> currentMuts;
 	for (uint32_t read = 0; read < seqNumber; ++read) {
@@ -199,10 +200,11 @@ uint64_t runPcr(uint64_t intErrorRate, uint32_t numThreads, uint32_t pcrRounds,
 		std::unordered_map<uint32_t, uint32_t> muts;
 		std::mutex mutsLock;
 		uint32_t numberMutated = 0;
+
 		if(duplicatingAmount > numThreads){
 			std::vector<uint64_t> tempAmounts = spreadReadNumAcrossThreads(duplicatingAmount, numThreads);
 			auto mutate = [&mutsLock,&muts,&intErrorRate,&tempAmounts,&seq,&gens,&numberMutated](uint32_t threadNum) {
-				auto currentMuts = genMutCounts(gens[threadNum], tempAmounts[threadNum],seq.size(),intErrorRate);
+				auto currentMuts = genMutCounts(gens[threadNum], tempAmounts[threadNum], seq.size(), intErrorRate);
 				{
 					std::lock_guard<std::mutex> lock(mutsLock);
 					for(const auto & mut : currentMuts){
@@ -231,12 +233,13 @@ uint64_t runPcr(uint64_t intErrorRate, uint32_t numThreads, uint32_t pcrRounds,
 				std::cout << "\t" << mutCount.first << "\t\t" <<mutCount.second << std::endl;
 			}
 		}
+
 		//add on the number of reads that weren't mutated;
 		startingTemplate += duplicatingAmount - numberMutated;
 		std::vector<std::pair<std::string, std::string>> mutants;
 		for(const auto & mut : muts){
 			for(uint32_t num = 0; num < mut.second; ++num){
-				auto mutSeq = mutateSeq(name,seq, mut.first, readPositions, gen,charGen);
+				auto mutSeq = mutateSeq(name,seq, mut.first, readPositions, gen, charGen);
 				mutants.emplace_back(mutSeq);
 			}
 		}
@@ -470,11 +473,15 @@ std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> sampleReadsWithou
 	return ret;
 }
 
-std::string runPcrSingleTemplate(uint64_t intErrorRate,uint32_t roundsOfPcr,
-		uint64_t randomNumberSelector,uint64_t randomNumberSelectorMax, std::string seq ){
+std::string runPcrSingleTemplate(
+		uint64_t intErrorRate,
+		uint32_t roundsOfPcr,
+		uint64_t randomNumberSelector,
+		uint64_t randomNumberSelectorMax,
+		std::string seq ){
 	std::unordered_map<std::string, uint64_t> finalProducts;
 	std::mutex finalProductsMutex;
-	runPcr(intErrorRate, 4,
+	runPcr(intErrorRate, 1,
 			roundsOfPcr, seq, 1, "singleTemplate",
 			finalProducts, finalProductsMutex, false);
 	uint64_t finalRandSel = (static_cast<double>(randomNumberSelector)/randomNumberSelectorMax) * (std::pow(2,roundsOfPcr));
@@ -495,6 +502,7 @@ std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> sampleReadsWithou
 		uint64_t finalReadAmount, std::ostream & sequenceOutFile,
 		std::mutex & seqFileLock, uint32_t numberOfPCRRoundsLeft,
 		uint64_t intErrorRate, uint32_t numThreads, bool verbose) {
+
 	std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> ret;
 	auto seqNames = getVectorOfMapKeys(seqs);
 	auto multipleSeqCountsNames = getVectorOfMapKeys(multipleSeqCounts);
@@ -971,10 +979,21 @@ void simLibFast(std::vector<std::shared_ptr<seqInfo> > & reads,
 		auto finalAmount = runPcr(intErrorRate, numThreads, initialPcrRounds, barcodedSeq,
 				templateAmountCounts[read->name_], read->name_, seqCounts, seqMapLock,
 				verbose);
+
 		uint64_t finalPerfectAmount = templateAmountCounts[read->name_] * std::pow(2, initialPcrRounds);
-		templateNonMutated[read->name_] = {finalAmount, finalPerfectAmount};
-		barcodedSeqs[read->name_] = barcodedSeq;
-		allSeqCounts[read->name_] = seqCounts;
+
+		//minus off the starting template amount as this is just genomic DNA and won't be able to be sequenced
+
+		if(seqCounts[barcodedSeq] <= templateAmountCounts[read->name_]){
+			seqCounts.erase(barcodedSeq);
+		}else{
+			seqCounts[barcodedSeq] -= templateAmountCounts[read->name_];
+		}
+		if(!seqCounts.empty()){
+			allSeqCounts[read->name_] = seqCounts;
+			templateNonMutated[read->name_] = {finalAmount, finalPerfectAmount};
+			barcodedSeqs[read->name_] = barcodedSeq;
+		}
 	}
 	auto sampleNumber = sampleReadsWithoutReplacementFinishPCR(barcodedSeqs,
 			allSeqCounts, finalReadAmount, libOutFile, seqFileLock,

@@ -358,7 +358,9 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 		}
 		OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "basicInfo.tab.txt"));
 		out << "id\ttotalHaplotypes\tuniqueHaplotypes\tsingletons\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism\tnSNPsAbove"
-				<< lowVariantCutOff * 100 << "%" << "\tvariableRegionID\t" << "avgGCContent" << std::endl;
+				<< lowVariantCutOff * 100 << "%" << "\tvariableRegionID\t" << "avgGCContent";
+		//out << "\tAvgPairwiseDistWeighted";
+		out << std::endl;
 		std::map<uint32_t, uint32_t> readLens;
 		//writing out unique sequences
 		auto uniqueSeqsOpts = SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs.fasta"));
@@ -370,6 +372,23 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 			uniqueWriter.write(clusters);
 			uniqueWriter.closeOut();
 		}
+
+//		PairwisePairFactory pFac(clusters.size());
+//		PairwisePairFactory::PairwisePair pPair;
+//		double sumOfPairwiseDist = 0;
+//		double sumOfPairwiseDistWeighted = 0;
+//
+//		while (pFac.setNextPair(pPair)) {
+//			alignerObj.alignCacheGlobal(clusters[pPair.col_], clusters[pPair.row_]);
+//			alignerObj.profileAlignment(clusters[pPair.col_], clusters[pPair.row_],
+//					false, false, false);
+//			sumOfPairwiseDist += alignerObj.comp_.distances_.eventBasedIdentity_;
+//			sumOfPairwiseDistWeighted +=
+//					alignerObj.comp_.distances_.eventBasedIdentity_
+//							* (clusters[pPair.col_].seqBase_.cnt_
+//									* clusters[pPair.row_].seqBase_.cnt_);
+//		}
+
 
 		std::unordered_map<std::string, std::unordered_map<std::string, GenomicAminoAcidPositionTyper::GeneAminoTyperInfo>> popHapsTyped;
 
@@ -795,7 +814,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 		}
 		readVec::allSetFractionByTotalCount(clusters);
 		DiversityMeasures divMeasures  = getGeneralMeasuresOfDiversity(clusters);
-
+		//PairwisePairFactory pFacIfTotal(totalInput);
 		out << identifier
 				<< "\t" << totalInput
 				<< "\t" << clusters.size()
@@ -808,7 +827,10 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 				<< "\t" << (lengthPoly ? "true" : "false")
 				<< "\t" << numSNPs
 				<< "\t" << variableRegionID
-				<< "\t" << avgGCContent << std::endl;
+				<< "\t" << avgGCContent
+				//<< "\t" << sumOfPairwiseDist/pFac.totalCompares_
+				<< std::endl;
+				//<< "\t" << sumOfPairwiseDistWeighted/pFacIfTotal.totalCompares_<< std::endl;
 	}
 
 	auto variantCallsDir = njh::files::make_path(setUp.pars_.directoryName_, "variantCalls");

@@ -33,3 +33,5 @@
 #include "elucidator/simulation/randomStrGen.hpp"
 #include "elucidator/simulation/randStrGen.hpp"
 #include "elucidator/simulation/sequenceSimulation.h"
+#include "elucidator/simulation/SeqTechSimulation.h"
+#include "elucidator/simulation/SimSamples.h"
