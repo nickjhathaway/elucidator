@@ -1,5 +1,5 @@
 /*
- * IlluminaRoughProfiler.cpp
+ * RoughIlluminaProfiler.cpp
  *
  *  Created on: May 2, 2019
  *      Author: nicholashathaway
@@ -7,11 +7,11 @@
 
 
 
-#include "IlluminaRoughProfiler.hpp"
+#include "RoughIlluminaProfiler.hpp"
 
 namespace njhseq {
 
-void IlluminaRoughProfiler::Counts::addOtherCounts(const Counts & other){
+void RoughIlluminaProfiler::Counts::addOtherCounts(const Counts & other){
 	for(const auto & pos : other.positionErrorCounts){
 		positionErrorCounts[pos.first] += pos.second;
 	}
@@ -46,7 +46,7 @@ void IlluminaRoughProfiler::Counts::addOtherCounts(const Counts & other){
 	}
 }
 
-void IlluminaRoughProfiler::Counts::increaseCounts(const AlignmentResults & res){
+void RoughIlluminaProfiler::Counts::increaseCounts(const AlignmentResults & res){
 	if(nullptr == res.alnSeqAligned_ || nullptr == res.refSeqAligned_){
 		std::stringstream ss;
 		ss << __PRETTY_FUNCTION__ << ", error alignment sequences don't appear to be set" << "\n";
@@ -74,7 +74,7 @@ void IlluminaRoughProfiler::Counts::increaseCounts(const AlignmentResults & res)
 	}
 }
 
-void IlluminaRoughProfiler::Counts::writeProfiles(const std::string & prefix, bool overWrite){
+void RoughIlluminaProfiler::Counts::writeProfiles(const std::string & prefix, bool overWrite){
 	//positional error rate
 	OutOptions positional_error_rateOpts(bfs::path(prefix + "_positional_error_rate.tab.txt"));
 	positional_error_rateOpts.overWriteFile_ = overWrite;
@@ -187,12 +187,12 @@ void IlluminaRoughProfiler::Counts::writeProfiles(const std::string & prefix, bo
 
 
 
-void IlluminaRoughProfiler::addOther(const IlluminaRoughProfiler & other){
+void RoughIlluminaProfiler::addOther(const RoughIlluminaProfiler & other){
 	r1_counts.addOtherCounts(other.r1_counts);
 	r2_counts.addOtherCounts(other.r2_counts);
 }
 
-void IlluminaRoughProfiler::increaseCounts(
+void RoughIlluminaProfiler::increaseCounts(
 		const BamTools::BamAlignment & bAln,
 		const BamTools::RefVector & refData,
 		TwoBit::TwoBitFile & tReader) {

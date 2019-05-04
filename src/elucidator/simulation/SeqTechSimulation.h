@@ -11,5 +11,5 @@
 
 
 
-#include "elucidator/simulation/SeqTechSimulation/IlluminaRoughProfiler.hpp"
 
+#include "elucidator/simulation/SeqTechSimulation/Illumina.h"

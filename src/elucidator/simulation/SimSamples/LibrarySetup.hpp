@@ -9,6 +9,7 @@
 
 #include <SeekDeep/objects/PrimersAndMids.hpp>
 
+#include "elucidator/common.h"
 
 namespace njhseq {
 

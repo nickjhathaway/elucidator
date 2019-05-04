@@ -1,7 +1,7 @@
 #pragma once
 
 /*
- * IlluminaRoughProfiler.hpp
+ * RoughIlluminaProfiler.hpp
  *
  *  Created on: May 2, 2019
  *      Author: nicholashathaway
@@ -11,7 +11,7 @@
 
 namespace njhseq {
 
-class IlluminaRoughProfiler{
+class RoughIlluminaProfiler{
 	/**@todo add counts for overlapping errors, this could help estimate PCR error
 	 *
 	 */
@@ -37,7 +37,7 @@ public:
 	Counts r1_counts;
 	Counts r2_counts;
 
-	void addOther(const IlluminaRoughProfiler & other);
+	void addOther(const RoughIlluminaProfiler & other);
 
 	void increaseCounts(
 			const BamTools::BamAlignment & bAln,
