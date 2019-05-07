@@ -85,11 +85,14 @@ public:
 	std::shared_ptr<MidSetup> forwardBarcode_;
 	std::shared_ptr<MidSetup> reverseBarcode_;
 
-	std::unordered_map<std::string, double> abundances_;
+	std::unordered_map<std::string, double> expectedAbundances_;
+
+	std::unordered_map<std::string, uint64_t> genomeCounts_;
 
 	uint32_t startingTemplateAmount_{3000};
 	uint32_t finalReadAmount_{1000};
 
+	std::unique_ptr<MetaDataInName> meta_;
 
 	Json::Value toJson() const {
 		Json::Value ret;
@@ -104,15 +107,19 @@ public:
 			ret["reverseBarcode"] = njh::json::toJson(*reverseBarcode_);
 		}
 		ret["name"] = njh::json::toJson(name_);
-		ret["abundances"] = njh::json::toJson(abundances_);
+		ret["expectedAbundances_"] = njh::json::toJson(expectedAbundances_);
+		ret["genomeCounts_"] = njh::json::toJson(genomeCounts_);
+
 		ret["startingTemplateAmount_"] = njh::json::toJson(startingTemplateAmount_);
 		ret["finalReadAmount_"] = njh::json::toJson(finalReadAmount_);
-
+		if(nullptr != meta_){
+			ret["meta_"] = njh::json::toJson(*meta_);
+		}
 		return ret;
 	}
 
 	void addAbundance(const std::string & seqName, double abundnace){
-		if(njh::in(seqName, abundances_)){
+		if(njh::in(seqName, expectedAbundances_)){
 			std::stringstream ss;
 			ss << __PRETTY_FUNCTION__ << ", already have abundance for " << seqName << " in mixutre: " << name_ << "\n";
 			throw std::runtime_error{ss.str()};
@@ -122,8 +129,23 @@ public:
 			ss << __PRETTY_FUNCTION__ << ", error in adding abundance for  " << seqName << " in mixutre: " << name_ << " abundance must be greater than 0, not " << abundnace << "\n";
 			throw std::runtime_error{ss.str()};
 		}
-		abundances_[seqName] = abundnace;
+		expectedAbundances_[seqName] = abundnace;
 	}
+
+	void addGenomeCount(const std::string & seqName, uint32_t genomeCount){
+		if(njh::in(seqName, genomeCounts_)){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", already have abundance for " << seqName << " in mixutre: " << name_ << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		if(!njh::in(seqName, expectedAbundances_)){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", should have an expected abundance for " << seqName << " in mixutre: " << name_ << " when adding a genome count" << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		genomeCounts_[seqName] = genomeCount;
+	}
+
 
 	void setPrimers(const std::string & primerName, const std::string & forward, const std::string & reverse){
 		if(nullptr != primers_){
@@ -218,7 +240,6 @@ public:
 		explicit SimLibrarySetupPars(const Json::Value & val){
 			njh::json::MemberChecker checker(val);
 			checker.failMemberCheckThrow(VecStr{
-				"sampleReadAmount",
 				"pairedEndLength",
 				"addReverseComplement",
 				"addBluntEndingArtifact",
@@ -226,7 +247,6 @@ public:
 				"barcodeRandomPrecedingBases",
 				"primerRandomPrecedingBases",
 			  "noAddPrimers"}, __PRETTY_FUNCTION__);
-			sampleReadAmount_ = val["sampleReadAmount"].asUInt();
 			pairedEndLength_ = val["pairedEndLength"].asUInt();
 			addReverseComplement_ = val["addReverseComplement"].asBool();
 			addBluntEndingArtifact_ = val["addBluntEndingArtifact"].asBool();
@@ -236,7 +256,7 @@ public:
 
 			noAddPrimers_ = val["noAddPrimers"].asBool();
 		}
-		uint32_t sampleReadAmount_ = 5000;
+
 		uint32_t pairedEndLength_ = 250;
 		bool addReverseComplement_ = false;
 		bool addBluntEndingArtifact_ = false;
@@ -248,7 +268,6 @@ public:
 		Json::Value toJson() const{
 			Json::Value ret;
 			ret["class"] = njh::json::toJson(njh::getTypeName(*this));
-			ret["sampleReadAmount"] = njh::json::toJson(sampleReadAmount_);
 			ret["pairedEndLength"] = njh::json::toJson(pairedEndLength_);
 			ret["addReverseComplement"] = njh::json::toJson(addReverseComplement_);
 			ret["addBluntEndingArtifact"] = njh::json::toJson(addBluntEndingArtifact_);
@@ -268,11 +287,9 @@ public:
 
 	}
 
-	LibrarySetup(const std::string & name,
-			const SimLibrarySetupPars & pars,
+	LibrarySetup(const std::string & name, const SimLibrarySetupPars & pars,
 			const Json::Value & librarySetUp,
-			const std::unordered_map<std::string, seqInfo> & refSeqs
-			) :
+			const std::unordered_map<std::string, seqInfo> & refSeqs) :
 			name_(name), pars_(pars) {
 
 		ids_ = std::make_unique<PrimersAndMids>(std::unordered_map<std::string, PrimersAndMids::Target>{});
@@ -282,17 +299,42 @@ public:
 			auto sampleSet = std::make_shared<SampleSetup>(sample["name"].asString());
 			for(const auto & mixture : sample["mixtures"]){
 				njh::json::MemberChecker mixtureChecker(mixture);
-				mixtureChecker.failMemberCheckThrow({"name", "abundances"}, __PRETTY_FUNCTION__);
+				mixtureChecker.failMemberCheckThrow({"name", "expectedAbundances_"}, __PRETTY_FUNCTION__);
+				mixtureChecker.failMemberCheckThrow({"name", "genomeCounts_"}, __PRETTY_FUNCTION__);
+
 				auto mixtureSet = std::make_shared<MixtureSetUp>(mixture["name"].asString());
-				auto memebers = mixture["abundances"].getMemberNames();
-				for(const auto & member : memebers){
-					if(!njh::in(member, refSeqs)){
-						std::stringstream ss;
-						ss << __PRETTY_FUNCTION__ << ", error, " << " no reference seq named: " << member << "\n";
-						ss << "options are: " << njh::conToStr(getVectorOfMapKeys(refSeqs)) << "\n";
-						throw std::runtime_error{ss.str()};
+				{
+					auto memebers = mixture["expectedAbundances_"].getMemberNames();
+					for(const auto & member : memebers){
+						if(!njh::in(member, refSeqs)){
+							std::stringstream ss;
+							ss << __PRETTY_FUNCTION__ << ", error, " << " no reference seq named: " << member << "\n";
+							ss << "options are: " << njh::conToStr(getVectorOfMapKeys(refSeqs)) << "\n";
+							throw std::runtime_error{ss.str()};
+						}
+						mixtureSet->addAbundance(member, mixture["expectedAbundances_"][member].asDouble());
 					}
-					mixtureSet->addAbundance(member, mixture["abundances"][member].asDouble());
+				}
+				{
+					auto memebers = mixture["genomeCounts_"].getMemberNames();
+					for(const auto & member : memebers){
+						if(!njh::in(member, refSeqs)){
+							std::stringstream ss;
+							ss << __PRETTY_FUNCTION__ << ", error, " << " no reference seq named: " << member << "\n";
+							ss << "options are: " << njh::conToStr(getVectorOfMapKeys(refSeqs)) << "\n";
+							throw std::runtime_error{ss.str()};
+						}
+						mixtureSet->addGenomeCount(member, mixture["genomeCounts_"][member].asUInt64());
+					}
+				}
+				if(mixture.isMember("meta_")){
+					std::unordered_map<std::string, std::string> mixMeta;
+					auto keys = mixture["meta_"]["meta_"].getMemberNames();
+					for(const auto & k : keys){
+						mixMeta[k] = mixture["meta_"]["meta_"][k].asString();
+					}
+					mixtureSet->meta_ = std::make_unique<MetaDataInName>();
+					mixtureSet->meta_->meta_ = mixMeta;
 				}
 				if(mixture.isMember("primers")){
 					if(ids_->hasTarget(mixture["primers"]["name"].asString())){
@@ -338,18 +380,10 @@ public:
 					if(mixture["primers"].isMember("reverse_randomPrecedingBases")){
 						mixtureSet->primers_->reverse_randomPrecedingBases_ = mixture["primers"]["reverse_randomPrecedingBases"].asUInt();
 					}
-
-
-
 				}
-				if(mixture.isMember("startingTemplateAmount_")){
-					mixtureSet->startingTemplateAmount_ = mixture["startingTemplateAmount_"].asUInt();
-				}
-				if(mixture.isMember("finalReadAmount_")){
-					mixtureSet->finalReadAmount_ = mixture["finalReadAmount_"].asUInt();
-				}else{
-					mixtureSet->finalReadAmount_ = pars_.sampleReadAmount_;
-				}
+				mixtureSet->startingTemplateAmount_ = mixture["startingTemplateAmount_"].asUInt();
+				mixtureSet->finalReadAmount_ = mixture["finalReadAmount_"].asUInt();
+
 				std::string barcodeName = "";
 				std::string forBar = "";
 				std::string revBar = "";
@@ -465,10 +499,10 @@ public:
 		for(const auto & sample : samples_){
 			for(const auto & mix : sample.second->mixtures_){
 				double totalRawAbundance = 0.0;
-				for(const auto & hap : mix.second->abundances_){
+				for(const auto & hap : mix.second->expectedAbundances_){
 					totalRawAbundance += hap.second;
 				}
-				for(const auto & hap : mix.second->abundances_){
+				for(const auto & hap : mix.second->expectedAbundances_){
 					ret.addRow(name_, sample.second->name_, mix.second->name_, hap.first, hap.second, totalRawAbundance, 100 * (hap.second/totalRawAbundance));
 				}
 			}

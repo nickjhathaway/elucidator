@@ -129,7 +129,25 @@ int readSimulatorRunner::createIlluminaErrorProfile(
 	return 0;
 }
 
+struct PCRAmountPars {
+	PCRAmountPars() {
 
+	}
+	PCRAmountPars(const std::vector<uint32_t> & startingTemplateAmounts,
+			const std::vector<uint32_t> & finalReadAmount) :
+			startingTemplateAmounts_(startingTemplateAmounts),
+			finalReadAmount_(finalReadAmount) {
+
+	}
+	PCRAmountPars(const uint32_t & startingTemplateAmount,
+			const uint32_t & finalReadAmount) :
+			startingTemplateAmounts_({startingTemplateAmount}),
+			finalReadAmount_({finalReadAmount}) {
+
+	}
+	std::vector<uint32_t> startingTemplateAmounts_ { std::vector<uint32_t>{ 2048 } };
+	std::vector<uint32_t> finalReadAmount_ { std::vector<uint32_t>{ 5000 } };
+};
 
 int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 		const njh::progutils::CmdArgs & inputCommands) {
@@ -141,11 +159,13 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	std::string libraryName = "";
 	bool simReplicates = false;
 	bool rawPatientSetupFile = false;
-	uint32_t startingTemplateAmount = 3000;
+
+	PCRAmountPars pcrNumbers;
+
 	std::vector<uint32_t> timePoints;
 	readSimulatorSetUp setUp(inputCommands);
-	setUp.setOption(startingTemplateAmount, "--startingTemplateAmount", "Starting PCR Template Amount");
-	setUp.setOption(simPars.sampleReadAmount_, "--perMixtureReadAmount", "Final Read Amount to create per mixture");
+	setUp.setOption(pcrNumbers.startingTemplateAmounts_, "--startingTemplateAmount", "Starting PCR Template Amount");
+	setUp.setOption(pcrNumbers.finalReadAmount_, "--perMixtureReadAmount", "Final Read Amount to create per mixture");
 	setUp.setOption(simReplicates, "--replicates", "Replicates");
 	setUp.setOption(timePoints, "--timePoints", "Additional time points, will automatically have time point 00");
 	setUp.setOption(patientSetupFile, "--patientSetupFile", "Patient Setup File", true);
@@ -188,7 +208,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 		patientSetupTable.checkForColumnsThrow(VecStr{"number"}, __PRETTY_FUNCTION__);
 		if(patientSetupTable.nCol() < 2){
 			std::stringstream ss;
-			ss << __PRETTY_FUNCTION__ <<  " error, there should be more than 1 columns" << "\n";
+			ss << __PRETTY_FUNCTION__ <<  " error, there should be more than 1 column" << "\n";
 			throw std::runtime_error{ss.str()};
 		}
 	}
@@ -576,61 +596,146 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 		sampleNamesTabHeader.emplace_back("run2");
 	}
 
+
+
+
+	auto maxStartingTemplateAmounts = vectorMaximum(pcrNumbers.startingTemplateAmounts_);
+	auto maxFinalReadAmount = vectorMaximum(pcrNumbers.finalReadAmount_);
+
 	table sampleNamesTables(sampleNamesTabHeader);
 	if (!lSetup.ids_->containsMids()) {
 		for (const auto & patient : patientSetUpPars) {
 			for (const auto & tp : patient.timePoints_) {
-				std::string sampleName; if(!timePoints.empty()){
-					sampleName = njh::pasteAsStr(patient.name_, "-TP", njh::leftPadNumStr(tp.time_, maxTime));
-				}else{
-					sampleName = njh::pasteAsStr(patient.name_);
-				}
-				auto sampleSet = std::make_shared<SampleSetup>(sampleName);
-				std::unordered_map<std::string, std::shared_ptr<MixtureSetUp> > mixtures;
-				for (const auto & primerPair : primerPairNames) {
-					if(patient.replicate_){
-						sampleNamesTables.addRow(primerPair,
-								sampleSet->name_,
-								sampleSet->name_ + "-rep1",
-								sampleSet->name_ + "-rep2");
-					}else{
-						VecStr addingRow {primerPair,
-							sampleSet->name_,
-							sampleSet->name_};
-						if(anyReps){
-							addingRow.emplace_back("");
+				for (const auto & startingTemplateAmount : pcrNumbers.startingTemplateAmounts_){
+					for (const auto & finalReadAmount : pcrNumbers.finalReadAmount_){
+						std::string sampleName;
+
+						if(!timePoints.empty()){
+							sampleName = njh::pasteAsStr(patient.name_, "-TP", njh::leftPadNumStr(tp.time_, maxTime));
+						}else{
+							sampleName = njh::pasteAsStr(patient.name_);
 						}
-						sampleNamesTables.addRow(addingRow);
-					}
-					mixtures[primerPair] = std::make_shared<MixtureSetUp>(primerPair);
-					mixtures[primerPair]->startingTemplateAmount_ = startingTemplateAmount;
-					mixtures[primerPair]->setPrimers(primerPair,
-							njh::mapAt(lSetup.ids_->targets_, primerPair).info_.forwardPrimer_,
-							njh::mapAt(lSetup.ids_->targets_, primerPair).info_.reversePrimer_);
-					mixtures[primerPair]->primers_->reverse_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
-					mixtures[primerPair]->primers_->forward_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
-				}
-				for (const auto & hap : tp.hapFracs_) {
-					for (const auto & subHap : haplotypeKey[hap.first]) {
-						if (njh::in(subHap.second, mixtures[subHap.first]->abundances_)) {
-							mixtures[subHap.first]->abundances_[subHap.second] += hap.second;
+						if(pcrNumbers.startingTemplateAmounts_.size() > 1){
+							sampleName += njh::pasteAsStr("-ST", njh::leftPadNumStr(startingTemplateAmount, maxStartingTemplateAmounts));
+						}
+						if(pcrNumbers.finalReadAmount_.size() > 1){
+							sampleName += njh::pasteAsStr("-RD", njh::leftPadNumStr(finalReadAmount, maxFinalReadAmount));
+						}
+
+						for (const auto & primerPair : primerPairNames) {
+							if(patient.replicate_){
+								sampleNamesTables.addRow(primerPair,
+										sampleName,
+										sampleName + "-rep1",
+										sampleName + "-rep2");
+							}else{
+								VecStr addingRow {primerPair,
+									sampleName,
+									sampleName};
+								if(anyReps){
+									addingRow.emplace_back("");
+								}
+								sampleNamesTables.addRow(addingRow);
+							}
+						}
+						std::vector<seqInfo> mixSeqs;
+						for(const auto & hap : tp.hapFracs_){
+							mixSeqs.emplace_back(hap.first);
+							mixSeqs.back().frac_ = hap.second;
+							mixSeqs.back().cnt_ = hap.second;
+						}
+
+						auto sampleSet1 = std::make_shared<SampleSetup>(sampleName);
+						std::unordered_map<std::string, std::shared_ptr<MixtureSetUp> > mixtures1;
+
+						for (const auto & primerPair : primerPairNames) {
+							mixtures1[primerPair] = std::make_shared<MixtureSetUp>(primerPair);
+							mixtures1[primerPair]->meta_ = std::make_unique<MetaDataInName>();
+							mixtures1[primerPair]->meta_->addMeta("PrimerPair", primerPair);
+							mixtures1[primerPair]->meta_->addMeta("PatientSample", sampleName);
+							if(patient.replicate_){
+								mixtures1[primerPair]->meta_->addMeta("Rep", 1);
+							}
+							mixtures1[primerPair]->startingTemplateAmount_ = startingTemplateAmount;
+							mixtures1[primerPair]->finalReadAmount_ = finalReadAmount;
+
+							mixtures1[primerPair]->setPrimers(primerPair,
+									njh::mapAt(lSetup.ids_->targets_, primerPair).info_.forwardPrimer_,
+									njh::mapAt(lSetup.ids_->targets_, primerPair).info_.reversePrimer_);
+							mixtures1[primerPair]->primers_->reverse_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
+							mixtures1[primerPair]->primers_->forward_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
+						}
+
+						auto genomesSampled1 = PCRSimulator::randomlySampleGenomes(mixSeqs, startingTemplateAmount);
+						std::unordered_map<std::string, uint64_t> genomesCounts1;
+						for(const auto & genome : genomesSampled1){
+							genomesCounts1[genome.seqBase_.name_] = genome.genomeCnt_;
+						}
+						for (const auto & hap : tp.hapFracs_) {
+							uint64_t genomeCnt = genomesCounts1[hap.first];
+							for (const auto & subHap : haplotypeKey[hap.first]) {
+								if (njh::in(subHap.second, mixtures1[subHap.first]->expectedAbundances_)) {
+									mixtures1[subHap.first]->expectedAbundances_[subHap.second] += hap.second;
+									mixtures1[subHap.first]->genomeCounts_[subHap.second] += genomeCnt;
+								} else {
+									mixtures1[subHap.first]->addAbundance(subHap.second, hap.second);
+									mixtures1[subHap.first]->addGenomeCount(subHap.second, genomeCnt);
+								}
+							}
+						}
+						for (const auto & mix : mixtures1) {
+							sampleSet1->addMixture(mix.second);
+						}
+
+						if(patient.replicate_){
+							sampleSet1->name_ += "-rep1";
+							lSetup.addSample(sampleSet1);
+
+							auto sampleSet2 = std::make_shared<SampleSetup>(sampleName);
+							std::unordered_map<std::string, std::shared_ptr<MixtureSetUp> > mixtures2;
+							for (const auto & primerPair : primerPairNames) {
+								mixtures2[primerPair] = std::make_shared<MixtureSetUp>(primerPair);
+								mixtures2[primerPair]->meta_ = std::make_unique<MetaDataInName>();
+								mixtures2[primerPair]->meta_->addMeta("PrimerPair", primerPair);
+								mixtures2[primerPair]->meta_->addMeta("PatientSample", sampleName);
+								if(patient.replicate_){
+									mixtures2[primerPair]->meta_->addMeta("Rep", 2);
+								}
+								mixtures2[primerPair]->startingTemplateAmount_ = startingTemplateAmount;
+								mixtures2[primerPair]->finalReadAmount_ = finalReadAmount;
+
+								mixtures2[primerPair]->setPrimers(primerPair,
+										njh::mapAt(lSetup.ids_->targets_, primerPair).info_.forwardPrimer_,
+										njh::mapAt(lSetup.ids_->targets_, primerPair).info_.reversePrimer_);
+								mixtures2[primerPair]->primers_->reverse_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
+								mixtures2[primerPair]->primers_->forward_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
+							}
+							auto genomesSampled2 = PCRSimulator::randomlySampleGenomes(mixSeqs, startingTemplateAmount);
+							std::unordered_map<std::string, uint64_t> genomesCounts2;
+							for(const auto & genome : genomesSampled2){
+								genomesCounts2[genome.seqBase_.name_] = genome.genomeCnt_;
+							}
+							for (const auto & hap : tp.hapFracs_) {
+								uint64_t genomeCnt = genomesCounts1[hap.first];
+								for (const auto & subHap : haplotypeKey[hap.first]) {
+									if (njh::in(subHap.second, mixtures2[subHap.first]->expectedAbundances_)) {
+										mixtures2[subHap.first]->expectedAbundances_[subHap.second] += hap.second;
+										mixtures2[subHap.first]->genomeCounts_[subHap.second] += genomeCnt;
+									} else {
+										mixtures2[subHap.first]->addAbundance(subHap.second, hap.second);
+										mixtures2[subHap.first]->addGenomeCount(subHap.second, genomeCnt);
+									}
+								}
+							}
+							for (const auto & mix : mixtures2) {
+								sampleSet2->addMixture(mix.second);
+							}
+							sampleSet2->name_ += "-rep2";
+							lSetup.addSample(sampleSet2);
 						} else {
-							mixtures[subHap.first]->addAbundance(subHap.second, hap.second);
+							lSetup.addSample(sampleSet1);
 						}
 					}
-				}
-				for (const auto & mix : mixtures) {
-					sampleSet->addMixture(mix.second);
-				}
-				if(patient.replicate_){
-					auto sampleSet1 = std::make_shared<SampleSetup>(*sampleSet);
-					auto sampleSet2 = std::make_shared<SampleSetup>(*sampleSet);
-					sampleSet1->name_ += "-rep1";
-					sampleSet2->name_ += "-rep2";
-					lSetup.addSample(sampleSet1);
-					lSetup.addSample(sampleSet2);
-				}else{
-					lSetup.addSample(sampleSet);
 				}
 			}
 		}
@@ -648,12 +753,16 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 			uint32_t midCount = 0;
 			for (const auto & patient : patientSetUpPars) {
 				for (uint32_t tpPos = 0; tpPos < patient.timePoints_.size(); ++tpPos) {
-					++midCount;
-					if(midCount >= lSetup.ids_->mids_.size()){
-						midCount = 0;
-						++finalSubSetAmount;
-						if(patient.replicate_){
-							++finalSubSetAmount;
+					for (uint32_t stPos = 0; stPos < pcrNumbers.startingTemplateAmounts_.size(); ++stPos){
+						for (uint32_t rdPos = 0; rdPos < pcrNumbers.finalReadAmount_.size(); ++rdPos){
+							++midCount;
+							if(midCount >= lSetup.ids_->mids_.size()){
+								midCount = 0;
+								++finalSubSetAmount;
+								if(patient.replicate_){
+									++finalSubSetAmount;
+								}
+							}
 						}
 					}
 				}
@@ -661,153 +770,219 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 		}
 		uint32_t indexCount = 0;
 		uint32_t midCount = 0;
+
 		auto sampleSet = std::make_shared<SampleSetup>(njh::pasteAsStr("Subset-", njh::leftPadNumStr(indexCount, finalSubSetAmount) ) );
 		auto midNames = getVectorOfMapKeys(lSetup.ids_->mids_);
 		njh::sort(midNames);
 		for (const auto & patient : patientSetUpPars) {
 			for (const auto & tp : patient.timePoints_) {
-				std::string outputSampName = "";
-				if(!timePoints.empty()){
-					outputSampName = njh::pasteAsStr(patient.name_, "-TP", njh::leftPadNumStr(tp.time_, maxTime));
-				}else{
-					outputSampName = njh::pasteAsStr(patient.name_);
-				}
-				if(patient.replicate_){
-					std::string midName =  midNames[midCount];
-					std::string indexName = sampleSet->name_;
-					{
-						std::unordered_map<std::string, std::shared_ptr<MixtureSetUp> > mixtures;
-						for (const auto & primerPair : primerPairNames) {
-							mixtures[primerPair] = std::make_shared<MixtureSetUp>(njh::pasteAsStr(primerPair, "-", midName));
-							mixtures[primerPair]->startingTemplateAmount_ = startingTemplateAmount;
-							mixtures[primerPair]->setPrimers(primerPair,
-									njh::mapAt(lSetup.ids_->targets_, primerPair).info_.forwardPrimer_,
-									njh::mapAt(lSetup.ids_->targets_, primerPair).info_.reversePrimer_);
-							mixtures[primerPair]->primers_->reverse_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
-							mixtures[primerPair]->primers_->forward_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
+				for (const auto & startingTemplateAmount : pcrNumbers.startingTemplateAmounts_){
+					for (const auto & finalReadAmount : pcrNumbers.finalReadAmount_){
+						std::string outputSampName = "";
+						if(!timePoints.empty()){
+							outputSampName = njh::pasteAsStr(patient.name_, "-TP", njh::leftPadNumStr(tp.time_, maxTime));
+						}else{
+							outputSampName = njh::pasteAsStr(patient.name_);
 						}
-						for (const auto & hap : tp.hapFracs_) {
-							for (const auto & subHap : haplotypeKey[hap.first]) {
-								if (njh::in(subHap.second, mixtures[subHap.first]->abundances_)) {
-									mixtures[subHap.first]->abundances_[subHap.second] += hap.second;
-								} else {
-									mixtures[subHap.first]->addAbundance(subHap.second, hap.second);
+						if(pcrNumbers.startingTemplateAmounts_.size() > 1){
+							outputSampName += njh::pasteAsStr("-ST", njh::leftPadNumStr(startingTemplateAmount, maxStartingTemplateAmounts));
+						}
+						if(pcrNumbers.finalReadAmount_.size() > 1){
+							outputSampName += njh::pasteAsStr("-RD", njh::leftPadNumStr(finalReadAmount, maxFinalReadAmount));
+						}
+						if(patient.replicate_){
+							std::string midName =  midNames[midCount];
+							std::string indexName = sampleSet->name_;
+							{
+								std::unordered_map<std::string, std::shared_ptr<MixtureSetUp> > mixtures;
+								for (const auto & primerPair : primerPairNames) {
+									mixtures[primerPair] = std::make_shared<MixtureSetUp>(njh::pasteAsStr(primerPair, "-", midName));
+									mixtures[primerPair]->meta_ = std::make_unique<MetaDataInName>();
+									mixtures[primerPair]->meta_->addMeta("PrimerPair", primerPair);
+									mixtures[primerPair]->meta_->addMeta("PatientSample", outputSampName);
+									mixtures[primerPair]->meta_->addMeta("Rep", 1);
+									mixtures[primerPair]->startingTemplateAmount_ = startingTemplateAmount;
+									mixtures[primerPair]->finalReadAmount_ = finalReadAmount;
+									mixtures[primerPair]->setPrimers(primerPair,
+											njh::mapAt(lSetup.ids_->targets_, primerPair).info_.forwardPrimer_,
+											njh::mapAt(lSetup.ids_->targets_, primerPair).info_.reversePrimer_);
+									mixtures[primerPair]->primers_->reverse_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
+									mixtures[primerPair]->primers_->forward_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
+								}
+								std::vector<seqInfo> mixSeqs;
+								for(const auto & hap : tp.hapFracs_){
+									mixSeqs.emplace_back(hap.first);
+									mixSeqs.back().frac_ = hap.second;
+									mixSeqs.back().cnt_ = hap.second;
+								}
+								auto genomesSampled = PCRSimulator::randomlySampleGenomes(mixSeqs, startingTemplateAmount);
+								std::unordered_map<std::string, uint64_t> genomesCounts;
+								for(const auto & genome : genomesSampled){
+									genomesCounts[genome.seqBase_.name_] = genome.genomeCnt_;
+								}
+								for (const auto & hap : tp.hapFracs_) {
+									uint64_t genomeCnt = genomesCounts[hap.first];
+									for (const auto & subHap : haplotypeKey[hap.first]) {
+										if (njh::in(subHap.second, mixtures[subHap.first]->expectedAbundances_)) {
+											mixtures[subHap.first]->expectedAbundances_[subHap.second] += hap.second;
+											mixtures[subHap.first]->genomeCounts_[subHap.second] += genomeCnt;
+										} else {
+											mixtures[subHap.first]->addAbundance(subHap.second, hap.second);
+											mixtures[subHap.first]->addGenomeCount(subHap.second, genomeCnt);
+										}
+									}
+								}
+								for (auto & mix : mixtures) {
+									if(nullptr != lSetup.ids_->mids_.at(midName).forwardBar_){
+										mix.second->setForwardBarcode(midName, lSetup.ids_->mids_.at(midName).forwardBar_->bar_->motifOriginal_);
+										mix.second->forwardBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
+									}
+									if(nullptr != lSetup.ids_->mids_.at(midName).reverseBar_){
+										mix.second->setReverseBarcode(midName, lSetup.ids_->mids_.at(midName).reverseBar_->bar_->motifOriginal_);
+										mix.second->reverseBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
+									}
+									sampleSet->addMixture(mix.second);
+								}
+								++midCount;
+								if(midCount >= lSetup.ids_->mids_.size()){
+									lSetup.addSample(sampleSet);
+									midCount = 0;
+									++indexCount;
+									sampleSet = std::make_shared<SampleSetup>(njh::pasteAsStr("Subset-", njh::leftPadNumStr(indexCount, finalSubSetAmount) ) );
 								}
 							}
-						}
-						for (auto & mix : mixtures) {
-							if(nullptr != lSetup.ids_->mids_.at(midName).forwardBar_){
-								mix.second->setForwardBarcode(midName, lSetup.ids_->mids_.at(midName).forwardBar_->bar_->motifOriginal_);
-								mix.second->forwardBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
-							}
-							if(nullptr != lSetup.ids_->mids_.at(midName).reverseBar_){
-								mix.second->setReverseBarcode(midName, lSetup.ids_->mids_.at(midName).reverseBar_->bar_->motifOriginal_);
-								mix.second->reverseBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
-							}
-							sampleSet->addMixture(mix.second);
-						}
-						++midCount;
-						if(midCount >= lSetup.ids_->mids_.size()){
-							lSetup.addSample(sampleSet);
-							midCount = 0;
-							++indexCount;
-							sampleSet = std::make_shared<SampleSetup>(njh::pasteAsStr("Subset-", njh::leftPadNumStr(indexCount, finalSubSetAmount) ) );
-						}
-					}
-					std::string repMidName =  midNames[midCount];
-					std::string repIndexName = sampleSet->name_;
-					{
+							std::string repMidName =  midNames[midCount];
+							std::string repIndexName = sampleSet->name_;
+							{
 
-						std::unordered_map<std::string, std::shared_ptr<MixtureSetUp> > mixtures;
-						for (const auto & primerPair : primerPairNames) {
-							mixtures[primerPair] = std::make_shared<MixtureSetUp>(njh::pasteAsStr(primerPair, "-", repMidName));
-							mixtures[primerPair]->startingTemplateAmount_ = startingTemplateAmount;
-
-							mixtures[primerPair]->setPrimers(primerPair,
-									njh::mapAt(lSetup.ids_->targets_, primerPair).info_.forwardPrimer_,
-									njh::mapAt(lSetup.ids_->targets_, primerPair).info_.reversePrimer_);
-							mixtures[primerPair]->primers_->reverse_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
-							mixtures[primerPair]->primers_->forward_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
-						}
-						for (const auto & hap : tp.hapFracs_) {
-							for (const auto & subHap : haplotypeKey[hap.first]) {
-								if (njh::in(subHap.second, mixtures[subHap.first]->abundances_)) {
-									mixtures[subHap.first]->abundances_[subHap.second] += hap.second;
-								} else {
-									mixtures[subHap.first]->addAbundance(subHap.second, hap.second);
+								std::unordered_map<std::string, std::shared_ptr<MixtureSetUp> > mixtures;
+								for (const auto & primerPair : primerPairNames) {
+									mixtures[primerPair] = std::make_shared<MixtureSetUp>(njh::pasteAsStr(primerPair, "-", repMidName));
+									mixtures[primerPair]->meta_ = std::make_unique<MetaDataInName>();
+									mixtures[primerPair]->meta_->addMeta("PrimerPair", primerPair);
+									mixtures[primerPair]->meta_->addMeta("PatientSample", outputSampName);
+									mixtures[primerPair]->meta_->addMeta("Rep", 2);
+									mixtures[primerPair]->startingTemplateAmount_ = startingTemplateAmount;
+									mixtures[primerPair]->finalReadAmount_ = finalReadAmount;
+									mixtures[primerPair]->setPrimers(primerPair,
+											njh::mapAt(lSetup.ids_->targets_, primerPair).info_.forwardPrimer_,
+											njh::mapAt(lSetup.ids_->targets_, primerPair).info_.reversePrimer_);
+									mixtures[primerPair]->primers_->reverse_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
+									mixtures[primerPair]->primers_->forward_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
+								}
+								std::vector<seqInfo> mixSeqs;
+								for(const auto & hap : tp.hapFracs_){
+									mixSeqs.emplace_back(hap.first);
+									mixSeqs.back().frac_ = hap.second;
+									mixSeqs.back().cnt_ = hap.second;
+								}
+								auto genomesSampled = PCRSimulator::randomlySampleGenomes(mixSeqs, startingTemplateAmount);
+								std::unordered_map<std::string, uint64_t> genomesCounts;
+								for(const auto & genome : genomesSampled){
+									genomesCounts[genome.seqBase_.name_] = genome.genomeCnt_;
+								}
+								for (const auto & hap : tp.hapFracs_) {
+									uint64_t genomeCnt = genomesCounts[hap.first];
+									for (const auto & subHap : haplotypeKey[hap.first]) {
+										if (njh::in(subHap.second, mixtures[subHap.first]->expectedAbundances_)) {
+											mixtures[subHap.first]->expectedAbundances_[subHap.second] += hap.second;
+											mixtures[subHap.first]->genomeCounts_[subHap.second] += genomeCnt;
+										} else {
+											mixtures[subHap.first]->addAbundance(subHap.second, hap.second);
+											mixtures[subHap.first]->addGenomeCount(subHap.second, genomeCnt);
+										}
+									}
+								}
+								for (auto & mix : mixtures) {
+									if(nullptr != lSetup.ids_->mids_.at(repMidName).forwardBar_){
+										mix.second->setForwardBarcode(repMidName, lSetup.ids_->mids_.at(repMidName).forwardBar_->bar_->motifOriginal_);
+										mix.second->forwardBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
+									}
+									if(nullptr != lSetup.ids_->mids_.at(repMidName).reverseBar_){
+										mix.second->setReverseBarcode(repMidName, lSetup.ids_->mids_.at(repMidName).reverseBar_->bar_->motifOriginal_);
+										mix.second->reverseBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
+									}
+									sampleSet->addMixture(mix.second);
+								}
+								++midCount;
+								if(midCount >= lSetup.ids_->mids_.size()){
+									lSetup.addSample(sampleSet);
+									midCount = 0;
+									++indexCount;
+									sampleSet = std::make_shared<SampleSetup>(njh::pasteAsStr("Subset-", njh::leftPadNumStr(indexCount, finalSubSetAmount) ) );
 								}
 							}
-						}
-						for (auto & mix : mixtures) {
-							if(nullptr != lSetup.ids_->mids_.at(repMidName).forwardBar_){
-								mix.second->setForwardBarcode(repMidName, lSetup.ids_->mids_.at(repMidName).forwardBar_->bar_->motifOriginal_);
-								mix.second->forwardBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
-							}
-							if(nullptr != lSetup.ids_->mids_.at(repMidName).reverseBar_){
-								mix.second->setReverseBarcode(repMidName, lSetup.ids_->mids_.at(repMidName).reverseBar_->bar_->motifOriginal_);
-								mix.second->reverseBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
-							}
-							sampleSet->addMixture(mix.second);
-						}
-						++midCount;
-						if(midCount >= lSetup.ids_->mids_.size()){
-							lSetup.addSample(sampleSet);
-							midCount = 0;
-							++indexCount;
-							sampleSet = std::make_shared<SampleSetup>(njh::pasteAsStr("Subset-", njh::leftPadNumStr(indexCount, finalSubSetAmount) ) );
-						}
-					}
 
-					if(repIndexName == indexName){
-						sampleNamesTables.addRow(indexName,outputSampName, midName, repMidName);
-					}else{
-						sampleNamesTables.addRow(indexName,outputSampName, midName, "");
-						sampleNamesTables.addRow(repIndexName,repMidName, midName, "");
-					}
-				}else{
-					std::string midName =  midNames[midCount];
-					std::unordered_map<std::string, std::shared_ptr<MixtureSetUp> > mixtures;
-					VecStr addingRow{sampleSet->name_, outputSampName, midName};
-					if(anyReps){
-						addingRow.emplace_back("");
-					}
-					sampleNamesTables.addRow(addingRow);
-					for (const auto & primerPair : primerPairNames) {
-						mixtures[primerPair] = std::make_shared<MixtureSetUp>(njh::pasteAsStr(primerPair, "-", midName));
-						mixtures[primerPair]->startingTemplateAmount_ = startingTemplateAmount;
+							if(repIndexName == indexName){
+								sampleNamesTables.addRow(indexName,outputSampName, midName, repMidName);
+							}else{
+								sampleNamesTables.addRow(indexName,outputSampName, midName, "");
+								sampleNamesTables.addRow(repIndexName,repMidName, midName, "");
+							}
+						}else{
+							std::string midName =  midNames[midCount];
+							std::unordered_map<std::string, std::shared_ptr<MixtureSetUp> > mixtures;
+							VecStr addingRow{sampleSet->name_, outputSampName, midName};
+							if(anyReps){
+								addingRow.emplace_back("");
+							}
+							sampleNamesTables.addRow(addingRow);
+							for (const auto & primerPair : primerPairNames) {
+								mixtures[primerPair] = std::make_shared<MixtureSetUp>(njh::pasteAsStr(primerPair, "-", midName));
+								mixtures[primerPair]->meta_ = std::make_unique<MetaDataInName>();
+								mixtures[primerPair]->meta_->addMeta("PrimerPair", primerPair);
+								mixtures[primerPair]->meta_->addMeta("PatientSample", outputSampName);
+								mixtures[primerPair]->startingTemplateAmount_ = startingTemplateAmount;
+								mixtures[primerPair]->finalReadAmount_ = finalReadAmount;
 
-						mixtures[primerPair]->setPrimers(primerPair,
-								njh::mapAt(lSetup.ids_->targets_, primerPair).info_.forwardPrimer_,
-								njh::mapAt(lSetup.ids_->targets_, primerPair).info_.reversePrimer_);
-						mixtures[primerPair]->primers_->reverse_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
-						mixtures[primerPair]->primers_->forward_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
-					}
-					for (const auto & hap : tp.hapFracs_) {
-						for (const auto & subHap : haplotypeKey[hap.first]) {
-							if (njh::in(subHap.second, mixtures[subHap.first]->abundances_)) {
-								mixtures[subHap.first]->abundances_[subHap.second] += hap.second;
-							} else {
-								mixtures[subHap.first]->addAbundance(subHap.second, hap.second);
+								mixtures[primerPair]->setPrimers(primerPair,
+										njh::mapAt(lSetup.ids_->targets_, primerPair).info_.forwardPrimer_,
+										njh::mapAt(lSetup.ids_->targets_, primerPair).info_.reversePrimer_);
+								mixtures[primerPair]->primers_->reverse_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
+								mixtures[primerPair]->primers_->forward_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
+							}
+							std::vector<seqInfo> mixSeqs;
+							for(const auto & hap : tp.hapFracs_){
+								mixSeqs.emplace_back(hap.first);
+								mixSeqs.back().frac_ = hap.second;
+								mixSeqs.back().cnt_ = hap.second;
+							}
+							auto genomesSampled = PCRSimulator::randomlySampleGenomes(mixSeqs, startingTemplateAmount);
+							std::unordered_map<std::string, uint64_t> genomesCounts;
+							for(const auto & genome : genomesSampled){
+								genomesCounts[genome.seqBase_.name_] = genome.genomeCnt_;
+							}
+							for (const auto & hap : tp.hapFracs_) {
+								uint64_t genomeCnt = genomesCounts[hap.first];
+								for (const auto & subHap : haplotypeKey[hap.first]) {
+									if (njh::in(subHap.second, mixtures[subHap.first]->expectedAbundances_)) {
+										mixtures[subHap.first]->expectedAbundances_[subHap.second] += hap.second;
+										mixtures[subHap.first]->genomeCounts_[subHap.second] += genomeCnt;
+									} else {
+										mixtures[subHap.first]->addAbundance(subHap.second, hap.second);
+										mixtures[subHap.first]->addGenomeCount(subHap.second, genomeCnt);
+									}
+								}
+							}
+							for (auto & mix : mixtures) {
+								if(nullptr != lSetup.ids_->mids_.at(midName).forwardBar_){
+									mix.second->setForwardBarcode(midName, lSetup.ids_->mids_.at(midName).forwardBar_->bar_->motifOriginal_);
+									mix.second->forwardBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
+								}
+								if(nullptr != lSetup.ids_->mids_.at(midName).reverseBar_){
+									mix.second->setReverseBarcode(midName, lSetup.ids_->mids_.at(midName).reverseBar_->bar_->motifOriginal_);
+									mix.second->reverseBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
+								}
+								sampleSet->addMixture(mix.second);
+							}
+							++midCount;
+							if(midCount >= lSetup.ids_->mids_.size()){
+								lSetup.addSample(sampleSet);
+								midCount = 0;
+								++indexCount;
+								sampleSet = std::make_shared<SampleSetup>(njh::pasteAsStr("Subset-", njh::leftPadNumStr(indexCount, finalSubSetAmount) ) );
 							}
 						}
-					}
-					for (auto & mix : mixtures) {
-						if(nullptr != lSetup.ids_->mids_.at(midName).forwardBar_){
-							mix.second->setForwardBarcode(midName, lSetup.ids_->mids_.at(midName).forwardBar_->bar_->motifOriginal_);
-							mix.second->forwardBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
-						}
-						if(nullptr != lSetup.ids_->mids_.at(midName).reverseBar_){
-							mix.second->setReverseBarcode(midName, lSetup.ids_->mids_.at(midName).reverseBar_->bar_->motifOriginal_);
-							mix.second->reverseBarcode_->randomPrecedingBases_ = simPars.barcodeRandomPrecedingBases_;
-						}
-						sampleSet->addMixture(mix.second);
-					}
-					++midCount;
-					if(midCount >= lSetup.ids_->mids_.size()){
-						lSetup.addSample(sampleSet);
-						midCount = 0;
-						++indexCount;
-						sampleSet = std::make_shared<SampleSetup>(njh::pasteAsStr("Subset-", njh::leftPadNumStr(indexCount, finalSubSetAmount) ) );
 					}
 				}
 			}
@@ -822,35 +997,56 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 
 
 	VecStr metaHeader{"sample"};
-	if(!timePoints.empty()){
-		metaHeader.emplace_back("TimePoint");
+	if(!timePoints.empty() || pcrNumbers.finalReadAmount_.size() > 1 || pcrNumbers.startingTemplateAmounts_.size() > 1){
 		metaHeader.emplace_back("Patient");
 	}
+	if(!timePoints.empty()){
+		metaHeader.emplace_back("TimePoint");
+	}
+	metaHeader.emplace_back("PCRStartingTemplate");
+	metaHeader.emplace_back("FinalSamplingReadAmount");
+
 	addOtherVec(metaHeader, metaLevels);
 	table metaTable(metaHeader);
 	for(const auto & patient : patientSetUpPars){
 		for(const auto & tp : patient.timePoints_){
-			MetaDataInName sampMeta = patient.meta_;
-			std::string sampleTpName;
-			if(!timePoints.empty()){
-				sampleTpName = njh::pasteAsStr(patient.name_, "-TP", njh::leftPadNumStr(tp.time_, maxTime));
-			}else{
-				sampleTpName = njh::pasteAsStr(patient.name_);
-			}
+			for (const auto & startingTemplateAmount : pcrNumbers.startingTemplateAmounts_){
+				for (const auto & finalReadAmount : pcrNumbers.finalReadAmount_){
+					MetaDataInName sampMeta = patient.meta_;
 
-			VecStr row;
-			if(!timePoints.empty()){
-				sampMeta.addMeta("Patient", patient.name_);
-				sampMeta.addMeta("TimePoint", tp.time_);
-				row = toVecStr(sampleTpName, patient.name_, tp.time_);
-			}else{
-				row = toVecStr(sampleTpName);
-			}
+					std::string outputSampName = "";
+					if(!timePoints.empty()){
+						outputSampName = njh::pasteAsStr(patient.name_, "-TP", njh::leftPadNumStr(tp.time_, maxTime));
+					}else{
+						outputSampName = njh::pasteAsStr(patient.name_);
+					}
+					if(pcrNumbers.startingTemplateAmounts_.size() > 1){
+						outputSampName += njh::pasteAsStr("-ST", njh::leftPadNumStr(startingTemplateAmount, maxStartingTemplateAmounts));
+					}
+					if(pcrNumbers.finalReadAmount_.size() > 1){
+						outputSampName += njh::pasteAsStr("-RD", njh::leftPadNumStr(finalReadAmount, maxFinalReadAmount));
+					}
 
-			for(const auto & head : metaLevels){
-				row.emplace_back(sampMeta.getMeta(head));
+					VecStr row;
+					row.emplace_back(outputSampName);
+					if(!timePoints.empty() || pcrNumbers.finalReadAmount_.size() > 1 || pcrNumbers.startingTemplateAmounts_.size() > 1){
+						sampMeta.addMeta("Patient", patient.name_);
+						row.emplace_back(estd::to_string(patient.name_));
+					}
+					if(!timePoints.empty()){
+						sampMeta.addMeta("TimePoint", tp.time_);
+						row.emplace_back(estd::to_string(tp.time_));
+					}
+					sampMeta.addMeta("PCRStartingTemplate", startingTemplateAmount);
+					sampMeta.addMeta("FinalSamplingReadAmount", finalReadAmount);
+					row.emplace_back(estd::to_string(startingTemplateAmount));
+					row.emplace_back(estd::to_string(finalReadAmount));
+					for(const auto & head : metaLevels){
+						row.emplace_back(sampMeta.getMeta(head));
+					}
+					metaTable.addRow(row);
+				}
 			}
-			metaTable.addRow(row);
 		}
 	}
 	OutOptions libSetUpOpts(njh::files::make_path(setUp.pars_.directoryName_, "librarySetup.json"));
@@ -1440,7 +1636,7 @@ int readSimulatorRunner::simMultipleMixture(const njh::progutils::CmdArgs & inpu
 			for(const auto & mixture : lSetup.samples_.at(sampleKey)->mixtures_ ){
 				VecStr refNames;
 				std::vector<double> amounts;
-				for(const auto & abun : mixture.second->abundances_){
+				for(const auto & abun : mixture.second->expectedAbundances_){
 					refNames.emplace_back(abun.first);
 					amounts.emplace_back(abun.second);
 				}
@@ -1697,10 +1893,12 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 	std::string extension = nonGz ? ".fastq" : ".fastq.gz";
 	bool verbose = setUp.pars_.verbose_;
 
+	auto simAmountsDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{"simulation_sampling_info"});
+
 	auto simSample = [&samplesQueue,&extension,&sampleCountAtom,&fastqDirectory,
 										&lSetup,&illuminaProfileDir,&singleEnd,&refSeqs,
 										&intErrorRate, &pcrRounds, &initialPcrRounds,&verbose,
-										&keepPCRSeqs, &pcrNumThreads,&pcrEfficiency](){
+										&keepPCRSeqs, &pcrNumThreads,&pcrEfficiency,&simAmountsDir](){
 		std::string sampleKey = "";
 		njh::randObjectGen<char,uint32_t> baseRGen({'A', 'C', 'G', 'T'}, {1,1,1,1});
 		RoughIlluminaSimulator simulator(illuminaProfileDir);
@@ -1741,13 +1939,14 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 				std::vector<double> amounts;
 				double totalAbundance = 0;
 				std::vector<seqInfo> currentSeqs;
-				for(const auto & abun : mixture.second->abundances_){
+				for(const auto & abun : mixture.second->expectedAbundances_){
 					totalAbundance+=abun.second;
 				}
-				for(const auto & abun : mixture.second->abundances_){
+				for(const auto & abun : mixture.second->expectedAbundances_){
 					std::string seqName = abun.first;
 					std::string seq = refSeqs.at(abun.first).seq_;
 
+					/**@todo add back in randomizing this per seq*/
 
 					if(nullptr != mixture.second->primers_){
 						if(!lSetup.pars_.noAddPrimers_){
@@ -1755,6 +1954,7 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 							seq = mixture.second->primers_->forward_ + seq;
 							seq.append(mixture.second->primers_->reverse_3_5_);
 						}
+
 						if(mixture.second->primers_->forward_randomPrecedingBases_ > 0){
 							auto minBaseAmount = mixture.second->primers_->randomOneLength_ ? mixture.second->primers_->forward_randomPrecedingBases_: 0;
 							uint32_t numFBase = rGen.unifRand<uint32_t>(minBaseAmount, mixture.second->primers_->forward_randomPrecedingBases_ + 1);
@@ -1806,7 +2006,47 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 				auto libDirName = njh::files::makeDir(njh::files::make_path(fastqDirectory).string(), njh::files::MkdirPar(sampleKey + mixture.second->name_));
 				auto pcrReadsFnp = njh::files::make_path(fastqDirectory, sampleKey + mixture.second->name_, "reads.fasta");
 				OutOptions pcrReadsOpts(pcrReadsFnp);
-				pcrSim.simLibFast(currentSeqs, pcrReadsOpts,mixture.second->startingTemplateAmount_,mixture.second->finalReadAmount_, pcrRounds, initialPcrRounds, pcrNumThreads);
+
+				std::vector<PCRSimulator::SeqGenomeCnt> seqGCounts;
+				for(const auto & currentSeq : currentSeqs){
+					if(!njh::in(currentSeq.name_, mixture.second->genomeCounts_)){
+						std::stringstream ss;
+						ss << __PRETTY_FUNCTION__ << ", error " << " need to supply genome counts " << " none fond for " << currentSeq.name_ << "\n";
+						ss << "Found: " << njh::conToStrEndSpecial(njh::getVecOfMapKeys(mixture.second->genomeCounts_), ", ", " and ") << "\n";
+						throw std::runtime_error{ss.str()};
+					}
+					if(mixture.second->genomeCounts_.at(currentSeq.name_) > 0){
+						seqGCounts.emplace_back(currentSeq, mixture.second->genomeCounts_.at(currentSeq.name_));
+					}
+				}
+
+				auto pcrSimAmounts = pcrSim.simLibFast(seqGCounts, pcrReadsOpts,mixture.second->finalReadAmount_, pcrRounds, initialPcrRounds, pcrNumThreads);
+				OutputStream simAmountsOut(njh::files::make_path(simAmountsDir, sampleKey + mixture.second->name_ + ".tab.txt"));
+				simAmountsOut << "Sample\tMixture\tHapName\tExpectedAbund\tGenomesSampled\tFinalSampledMutated\tFinalSampledTotal";
+				VecStr metalevels;
+				if(nullptr != mixture.second->meta_){
+					metalevels = getVectorOfMapKeys(mixture.second->meta_->meta_);
+					njh::sort(metalevels);
+					for(const auto & m : metalevels){
+						simAmountsOut << "\t" << m;
+					}
+				}
+				simAmountsOut << std::endl;
+				for(const auto & seq : currentSeqs){
+					simAmountsOut << sampleKey
+							<< "\t" << mixture.second->name_
+							<< "\t" << seq.name_
+							<< "\t" << seq.frac_
+							<< "\t" << pcrSimAmounts.genomesSampled_[seq.name_]
+							<< "\t" << pcrSimAmounts.sampledForSequencing_[seq.name_].mutated_
+							<< "\t" << pcrSimAmounts.sampledForSequencing_[seq.name_].nonMutated_ + pcrSimAmounts.sampledForSequencing_[seq.name_].mutated_;
+					if(nullptr != mixture.second->meta_){
+						for(const auto & m : metalevels){
+							simAmountsOut << "\t" << mixture.second->meta_->getMeta(m);
+						}
+					}
+					simAmountsOut << std::endl;
+				}
 //				sim::simLibFast(currentSeqs, "", njh::files::make_path(fastqDirectory).string(),
 //						sampleKey + mixture.second->name_,intErrorRate, mixture.second->startingTemplateAmount_,
 //						mixture.second->finalReadAmount_, pcrRounds, initialPcrRounds, pcrNumThreads, verbose);
@@ -1901,6 +2141,41 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 		threads.emplace_back(std::thread(simSample));
 	}
 	njh::concurrent::joinAllJoinableThreads(threads);
+
+	//bind together the sampling information
+	auto allFiles = njh::files::gatherFiles(simAmountsDir, ".tab.txt", false);
+	OutputStream samplingAmountTabOut(njh::files::make_path(setUp.pars_.directoryName_, "simulation_sampling_info.tab.txt"));
+	{
+		table mainTable;
+		uint32_t count = 0;
+		for (const auto &file : allFiles) {
+			if (verbose) {
+				std::cout << file.string() << std::endl;
+			}
+			if (njh::files::bfs::is_directory(file)) {
+				if (verbose) {
+					std::cout << "Skipping directory: " << file.string() << std::endl;
+				}
+				continue;
+			}
+			table inTab(file.string(), "\t", true);
+			if (count == 0) {
+				mainTable = inTab;
+			} else {
+				try {
+					mainTable.rbind(inTab, false);
+				}catch (std::exception & e) {
+					std::stringstream ss;
+					ss << __PRETTY_FUNCTION__ << ", failed to add table from " << file << "\n";
+					ss << e.what();
+					throw std::runtime_error{ss.str()};
+				}
+			}
+			++count;
+		}
+		mainTable.outPutContents(samplingAmountTabOut, "\t");
+	}
+	njh::files::rmDirForce(simAmountsDir);
 
 	return 0;
 }

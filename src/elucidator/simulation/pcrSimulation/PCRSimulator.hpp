@@ -86,7 +86,25 @@ public:
 			std::unordered_map<std::string, uint64_t> & currentSeqMap,
 			std::mutex & currentSeqMapLock) const ;
 
-	void simLibFast(const std::vector<seqInfo> & reads,
+	struct SimHapCounts{
+		struct MutInfo{
+			uint64_t mutated_{0};
+			uint64_t nonMutated_{0};
+		};
+		std::unordered_map<std::string, uint64_t> genomesSampled_;
+		std::unordered_map<std::string, MutInfo> sampledForSequencing_;
+	};
+
+	struct SeqGenomeCnt {
+		SeqGenomeCnt(const seqInfo & seqBase, const uint64_t genomeCnt);
+
+		seqInfo seqBase_;
+		uint64_t genomeCnt_;
+	};
+
+	static std::vector<SeqGenomeCnt> randomlySampleGenomes(const std::vector<seqInfo> & reads, uint64_t totalGenomes);
+
+	SimHapCounts simLibFast(const std::vector<seqInfo> & reads,
 			const OutOptions & outputFile,
 			uint64_t startingTemplate,
 			uint64_t finalReadAmount,
@@ -94,7 +112,14 @@ public:
 			uint32_t initialPcrRounds,
 			uint32_t numThreads);
 
-	std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> sampleReadsWithoutReplacementFinishPCR(
+	SimHapCounts simLibFast(const std::vector<SeqGenomeCnt> & seqs,
+			const OutOptions & outputFile,
+			uint64_t finalReadAmount,
+			uint32_t pcrRounds,
+			uint32_t initialPcrRounds,
+			uint32_t numThreads);
+
+	std::unordered_map<std::string, PCRSimulator::SimHapCounts::MutInfo> sampleReadsWithoutReplacementFinishPCR(
 			const std::unordered_map<std::string, std::string> & seqs,
 			std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> & multipleSeqCounts,
 			uint64_t finalReadAmount, std::ostream & sequenceOutFile,

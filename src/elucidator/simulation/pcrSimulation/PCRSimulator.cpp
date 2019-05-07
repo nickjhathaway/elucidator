@@ -197,15 +197,48 @@ void PCRSimulator::runPcr(uint32_t numThreads,
 	}
 }
 
+PCRSimulator::SeqGenomeCnt::SeqGenomeCnt(const seqInfo & seqBase,
+		const uint64_t genomeCnt) :
+		seqBase_(seqBase), genomeCnt_(genomeCnt) {
+}
 
-void PCRSimulator::simLibFast(const std::vector<seqInfo> & seqs,
+
+std::vector<PCRSimulator::SeqGenomeCnt> PCRSimulator::randomlySampleGenomes(
+		const std::vector<seqInfo> & seqs, uint64_t totalGenomes) {
+	std::vector<PCRSimulator::SeqGenomeCnt> ret;
+
+	std::vector<uint32_t> seqPositions;
+	std::vector<double> seqFracs;
+	std::unordered_map<uint32_t, uint64_t> genomeCounts;
+	for(const auto & seqPos : iter::range(seqs.size())){
+		seqPositions.emplace_back(seqPos);
+		seqFracs.emplace_back(seqs[seqPos].frac_);
+		//to make sure if none is sampled the haplotype name still appears
+		genomeCounts[seqPos] = 0;
+	}
+	njh::randObjectGen<uint32_t, double> templateSampler(seqPositions, seqFracs);
+
+
+	for(uint32_t tempSampleCnt = 0; tempSampleCnt < totalGenomes; ++tempSampleCnt){
+		auto hapSampled = templateSampler.genObj();
+		++genomeCounts[hapSampled];
+	}
+
+	for(const auto & genomeCount : genomeCounts){
+		ret.emplace_back(PCRSimulator::SeqGenomeCnt(seqs[genomeCount.first], genomeCount.second));
+	}
+
+	return ret;
+}
+
+
+PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeCnt> & seqs,
 		const OutOptions & outputFileOpts,
-		uint64_t startingTemplate,
 		uint64_t finalReadAmount,
 		uint32_t pcrRounds,
 		uint32_t initialPcrRounds,
 		uint32_t numThreads){
-
+	SimHapCounts ret;
 	if(initialPcrRounds >= pcrRounds){
 		std::stringstream ss;
 		ss << "Error in " << __PRETTY_FUNCTION__ << std::endl;
@@ -218,56 +251,17 @@ void PCRSimulator::simLibFast(const std::vector<seqInfo> & seqs,
 	OutputStream libOutFile(outputFileOpts);
 	std::mutex seqFileLock;
 
-	//check there is enough template and final read amount to make seqs for the desired fractions
-	std::unordered_map<std::string, uint64_t> templateAmountCounts;
-	std::unordered_map<std::string, uint64_t> finalReadAmountCounts;
-	uint64_t maxTemplateReads = 0;
-	uint64_t readTemplateSum = 0;
-	std::string maxTemplateRead = "";
-	uint64_t maxFinalReads = 0;
-	uint64_t readFinalSum = 0;
-	std::string maxFinalRead = "";
+	//account for double stranded
+	std::unordered_map<std::string, uint64_t> totalTemplateStrandCounts;
+	std::unordered_map<std::string, uint64_t> genomeCounts;
 
+	uint64_t totalTemplateStrandCount = 0;
 	for(const auto & seq : seqs){
-		uint64_t currentTemplateAmt = std::round(seq.frac_ * startingTemplate);
-		uint64_t currentFinalAmt = std::round(seq.frac_ * finalReadAmount);
-		if(currentTemplateAmt == 0){
-			std::stringstream ss;
-			ss << "Error in: " << __PRETTY_FUNCTION__
-					<< ", not enough starting template seqs, " << startingTemplate
-					<< ", requested in order to simulate the desired read fraction:"
-					<< seq.frac_ << std::endl;
-			throw std::runtime_error{njh::bashCT::boldRed(ss.str())};
-		}
-		if (currentFinalAmt == 0) {
-			std::stringstream ss;
-			ss << "Error in: " << __PRETTY_FUNCTION__
-					<< ", not enough final seqs, " << finalReadAmount
-					<< ", requested in order to simulate the desired read fraction:"
-					<< seq.frac_ << std::endl;
-			throw std::runtime_error{njh::bashCT::boldRed(ss.str())};
-		}
-		templateAmountCounts[seq.name_] = currentTemplateAmt;
-		finalReadAmountCounts[seq.name_] = currentFinalAmt;
-		readTemplateSum += currentTemplateAmt;
-		readFinalSum += currentFinalAmt;
-		if(currentTemplateAmt > maxTemplateReads){
-			maxTemplateReads = currentTemplateAmt;
-			maxTemplateRead = seq.name_;
-		}
-		if(currentFinalAmt > maxFinalReads){
-			maxFinalReads = currentFinalAmt;
-			maxFinalRead = seq.name_;
-		}
+		genomeCounts[seq.seqBase_.name_] = seq.genomeCnt_;
+		//account for double stranded
+		totalTemplateStrandCounts[seq.seqBase_.name_] = seq.genomeCnt_ * 2;
+		totalTemplateStrandCount += seq.genomeCnt_ * 2;
 	}
-	if(readTemplateSum < startingTemplate){
-		templateAmountCounts[maxTemplateRead] += startingTemplate - readTemplateSum;
-	}
-
-	if(readFinalSum < finalReadAmount){
-		finalReadAmountCounts[maxFinalRead] += finalReadAmount - readFinalSum;
-	}
-
 
 	std::unordered_map<std::string,std::unordered_map<std::string, uint64_t>> allSeqCounts;
 	std::unordered_map<std::string,std::string> barcodedSeqs;
@@ -276,22 +270,22 @@ void PCRSimulator::simLibFast(const std::vector<seqInfo> & seqs,
 		std::unordered_map<std::string, uint64_t> seqCounts;
 		std::mutex seqMapLock;
 
-		runPcr(numThreads, initialPcrRounds, seq.seq_,
-				templateAmountCounts[seq.name_], seqCounts, seqMapLock);
+		runPcr(numThreads, initialPcrRounds, seq.seqBase_.seq_,
+				totalTemplateStrandCounts[seq.seqBase_.name_], seqCounts, seqMapLock);
 
 //		uint64_t finalPerfectAmount = templateAmountCounts[seq.name_] * std::pow(2, initialPcrRounds);
 
 		//minus off the starting template amount as this is just genomic DNA and won't be able to be sequenced
 
-		if(seqCounts[seq.seq_] <= templateAmountCounts[seq.name_]){
-			seqCounts.erase(seq.seq_);
+		if(seqCounts[seq.seqBase_.seq_] <= totalTemplateStrandCounts[seq.seqBase_.name_]){
+			seqCounts.erase(seq.seqBase_.seq_);
 		}else{
-			seqCounts[seq.seq_] -= templateAmountCounts[seq.name_];
+			seqCounts[seq.seqBase_.seq_] -= totalTemplateStrandCounts[seq.seqBase_.name_];
 		}
 		if(!seqCounts.empty()){
-			allSeqCounts[seq.name_] = seqCounts;
+			allSeqCounts[seq.seqBase_.name_] = seqCounts;
 //			templateNonMutated[seq.name_] = {seqCounts[seq.seq_], finalPerfectAmount};
-			barcodedSeqs[seq.name_] = seq.seq_;
+			barcodedSeqs[seq.seqBase_.name_] = seq.seqBase_.seq_;
 		}
 	}
 	if(verbose_){
@@ -302,13 +296,16 @@ void PCRSimulator::simLibFast(const std::vector<seqInfo> & seqs,
 			}
 		}
 		std::cout << "templateAmountAfterInitialPCR: " << templateAmountAfterInitialPCR << std::endl;
-		std::cout << "ideal templateAmountAfterInitialPCR: " << startingTemplate * std::pow(2, initialPcrRounds) - startingTemplate << std::endl;
+		std::cout << "ideal templateAmountAfterInitialPCR: " << totalTemplateStrandCount * std::pow(2, initialPcrRounds) - totalTemplateStrandCount << std::endl;
 	}
 
 	//now sample the rest of PCR
 	auto sampleNumber = sampleReadsWithoutReplacementFinishPCR(barcodedSeqs,
 			allSeqCounts, finalReadAmount, libOutFile, seqFileLock,
 			pcrRounds - initialPcrRounds, numThreads);
+	ret.genomesSampled_ = genomeCounts;
+	ret.sampledForSequencing_ = sampleNumber;
+	return ret;
 
 //	if(verbose){
 //		{
@@ -350,15 +347,28 @@ void PCRSimulator::simLibFast(const std::vector<seqInfo> & seqs,
 }
 
 
+PCRSimulator::SimHapCounts PCRSimulator::simLibFast(
+		const std::vector<seqInfo> & seqs,
+		const OutOptions & outputFileOpts,
+		uint64_t startingTemplate,
+		uint64_t finalReadAmount,
+		uint32_t pcrRounds,
+		uint32_t initialPcrRounds,
+		uint32_t numThreads){
+	auto seqsWithGenomes = randomlySampleGenomes(seqs, startingTemplate);
+	return simLibFast(seqsWithGenomes, outputFileOpts, finalReadAmount, pcrRounds, initialPcrRounds, numThreads);
+}
 
-std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> PCRSimulator::sampleReadsWithoutReplacementFinishPCR(
+
+
+std::unordered_map<std::string, PCRSimulator::SimHapCounts::MutInfo> PCRSimulator::sampleReadsWithoutReplacementFinishPCR(
 		const std::unordered_map<std::string, std::string> & seqs,
 		std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> & multipleSeqCounts,
 		uint64_t finalReadAmount, std::ostream & sequenceOutFile,
 		std::mutex & seqFileLock, uint32_t numberOfPCRRoundsLeft,
 		uint32_t numThreads) {
 
-	std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> ret;
+	std::unordered_map<std::string, PCRSimulator::SimHapCounts::MutInfo> ret;
 	auto seqNames = getVectorOfMapKeys(seqs);
 	auto multipleSeqCountsNames = getVectorOfMapKeys(multipleSeqCounts);
 	njh::sort(seqNames);
@@ -421,7 +431,7 @@ std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> PCRSimulator::sam
 			[this,&allSampledSeqs,&numberOfPCRRoundsLeft,&seqs,&seqFileLock,&sequenceOutFile,&ret,&finalReadAmount](uint32_t threadNumber ) {
 				njh::stopWatch watch;
 				std::vector<std::pair<std::string, std::string>> outputs;
-				std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> mutInfo;
+				std::unordered_map<std::string, PCRSimulator::SimHapCounts::MutInfo> mutInfo;
 				std::random_device rd;
 				std::mt19937_64 mtGenFinal(rd());
 				const uint32_t significantRounds = 10;
@@ -442,12 +452,12 @@ std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> PCRSimulator::sam
 
 					if (finalSeq != seqs.at(namesSeqs.first)) {
 						nameMeta.addMeta("mutated", true);
-						nameMeta.addMeta("idNum", leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].second, finalReadAmount));
-						++mutInfo[namesSeqs.first].second;
+						nameMeta.addMeta("idNum", leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].mutated_, finalReadAmount));
+						++mutInfo[namesSeqs.first].mutated_;
 					} else {
-						++mutInfo[namesSeqs.first].first;
 						nameMeta.addMeta("mutated", false);
-						nameMeta.addMeta("idNum", leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].first, finalReadAmount));
+						nameMeta.addMeta("idNum", leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].nonMutated_, finalReadAmount));
+						++mutInfo[namesSeqs.first].nonMutated_;
 					}
 					outputs.emplace_back(std::make_pair(">" + nameMeta.createMetaName(), finalSeq));
 				}
@@ -464,8 +474,8 @@ std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> PCRSimulator::sam
 						sequenceOutFile << out.second << std::endl;
 					}
 					for(const auto & info : mutInfo){
-						ret[info.first].first += info.second.first;
-						ret[info.first].second += info.second.second;
+						ret[info.first].mutated_ += info.second.mutated_;
+						ret[info.first].nonMutated_ += info.second.nonMutated_;
 					}
 				}
 			};
