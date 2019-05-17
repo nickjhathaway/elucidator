@@ -62,6 +62,7 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("getBestKmerDist", getBestKmerDist, false),
 					 addFunc("writeKmerSimDistanceMatrix", writeKmerSimDistanceMatrix, false),
 					 addFunc("findUniqKmersBetweenSeqs", findUniqKmersBetweenSeqs, false),
+					 addFunc("kmerPositionQualCounts", kmerPositionQualCounts, false),
 					 //
            },
           "kmerExp") {}
@@ -1308,10 +1309,22 @@ int kmerExpRunner::getNewScanKmerDist(const njh::progutils::CmdArgs & inputComma
 
 
 int kmerExpRunner::getKmerDist(const njh::progutils::CmdArgs & inputCommands){
+  bool dontSkipSameName = false;
+  uint32_t kLenStart = 2;
+  uint32_t kLenStop = std::numeric_limits<uint32_t>::max();
+  uint32_t kLenStep = 1;
+	OutOptions outOpts(bfs::path(""), ".tab.txt");
   seqSetUp setUp(inputCommands);
-  setUp.processDefaultReader(true);
+	setUp.setOption(kLenStop, "--kLenStop", "kmer Length Stop", true);
+	setUp.setOption(kLenStart, "--kLenStart", "kmer Length Start");
+	setUp.setOption(kLenStep, "--kLenStep", "kmer Length Step");
+
+	setUp.setOption(dontSkipSameName, "--dontSkipSameName", "Don't skip comparison if they have the same name");
+	setUp.processVerbose();
+  setUp.processReadInNames(true);
   setUp.processRefFilename(true);
   setUp.processKmerLenOptions();
+  setUp.processWritingOptions(outOpts);
   setUp.finishSetUp(std::cout);
   SeqInput reader(setUp.pars_.ioOptions_);
 	auto inReads = reader.readAllReads<readObject>();
@@ -1330,19 +1343,22 @@ int kmerExpRunner::getKmerDist(const njh::progutils::CmdArgs & inputCommands){
   for(const auto & read : refSeqs){
   	refReads.emplace_back(std::make_unique<seqWithKmerInfo>(read.seqBase_));
   }
-
-  std::ofstream outFile;
-  openTextFile(outFile, setUp.pars_.ioOptions_.out_.outFilename_, ".tab.txt", setUp.pars_.ioOptions_.out_);
+  OutputStream outFile(outOpts);
   outFile << "seq\tref\tkLen\tkDist\tkShared\n";
-  for(const auto & k : iter::range<uint32_t>(2, setUp.pars_.colOpts_.kmerOpts_.kLength_ + 1)){
-  	std::cout << "Currently on Kmer Length " << k << '\r';
-  	std::cout.flush();
-  	allSetKmers(refReads, k,false);
-  	allSetKmers(reads, k,false);
-  	for(const auto & read : reads){
+  for(const auto & k : iter::range<uint32_t>(kLenStart, kLenStop + 1, kLenStep)){
+  	if(setUp.pars_.verbose_){
+  		std::cerr << "Currently on Kmer Length " << k << '\r';
+  		std::cerr.flush();
+  	}
+		allSetKmers(refReads, k, false);
+		allSetKmers(reads, k, false);
+  	for(const auto & seq : reads){
   		for(const auto & ref : refReads){
-  			auto dist = ref->compareKmers(*read);
-  			outFile << read->seqBase_.name_
+  			if(seq->seqBase_.name_ == ref->seqBase_.name_ && !dontSkipSameName){
+  				continue;
+  			}
+  			auto dist = ref->compareKmers(*seq);
+  			outFile << seq->seqBase_.name_
   					<< "\t" << ref->seqBase_.name_
 						<< "\t" << k
 						<< "\t" << dist.second
@@ -1350,7 +1366,9 @@ int kmerExpRunner::getKmerDist(const njh::progutils::CmdArgs & inputCommands){
   		}
   	}
   }
-  std::cout << std::endl;
+  if(setUp.pars_.verbose_){
+  	std::cerr << std::endl;
+  }
 	return 0;
 }
 

@@ -84,6 +84,8 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int getBestKmerDist(const njh::progutils::CmdArgs & inputCommands);
 
 
+	static int kmerPositionQualCounts(const njh::progutils::CmdArgs & inputCommands);
+
 
 
 };
