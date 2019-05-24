@@ -40,6 +40,7 @@ class seqUtilsSplitRunner : public njh::progutils::ProgramRunner {
   static int SeqSplitOnLenBetween(const njh::progutils::CmdArgs & inputCommands);
   static int SeqSplitOnQualityWindow(const njh::progutils::CmdArgs & inputCommands);
   static int SeqSplitOnNucelotideComp(const njh::progutils::CmdArgs & inputCommands);
+  static int SeqSplitOnCount(const njh::progutils::CmdArgs & inputCommands);
 
 
   static int getSimilarSequences(const njh::progutils::CmdArgs & inputCommands);

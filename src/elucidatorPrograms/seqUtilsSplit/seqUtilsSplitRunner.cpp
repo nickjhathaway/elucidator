@@ -42,6 +42,7 @@ seqUtilsSplitRunner::seqUtilsSplitRunner()
   		addFunc("SeqSplitOnNucelotideComp", SeqSplitOnNucelotideComp, false),
 			addFunc("getSimilarSequences", getSimilarSequences, false),
 			addFunc("getSimilarSequencesByKDist", getSimilarSequencesByKDist, false),
+			addFunc("SeqSplitOnCount", SeqSplitOnCount, false),
 
 
 },
@@ -397,6 +398,44 @@ int seqUtilsSplitRunner::SeqSplitOnLenBelow(const njh::progutils::CmdArgs & inpu
   seqInfo seq;
   while(reader.readNextRead(seq)){
   	checker->checkRead(seq);
+    std::string condition = "";
+    if(seq.on_){
+    	condition = "include";
+    }else{
+    	condition = "exclude";
+    }
+    seqOuts.add(condition, seq);
+  }
+
+  if(setUp.pars_.verbose_){
+  	setUp.logRunTime(std::cout);
+  }
+  return 0;
+}
+
+int seqUtilsSplitRunner::SeqSplitOnCount(const njh::progutils::CmdArgs & inputCommands) {
+	defaultSplitPars dSplitPars;
+	uint32_t count = 0;
+  seqSetUp setUp(inputCommands);
+  defaultSplitSetUpOptions(setUp, dSplitPars);
+
+	setUp.setOption(count, "--count", "Exclude seqs with counts equal to and below this number", true);
+
+
+  setUp.finishSetUp(std::cout);
+
+  MultiSeqOutCache<seqInfo> seqOuts;
+  seqOuts.addReader("include", dSplitPars.incOpts_);
+  seqOuts.addReader("exclude", dSplitPars.excOpts_);
+
+
+  SeqIO reader(setUp.pars_.ioOptions_);
+  reader.openIn();
+  seqInfo seq;
+  while(reader.readNextRead(seq)){
+  	if(seq.cnt_ <= count){
+  		seq.on_ = false;
+  	}
     std::string condition = "";
     if(seq.on_){
     	condition = "include";

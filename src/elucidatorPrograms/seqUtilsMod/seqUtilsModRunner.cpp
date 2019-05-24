@@ -141,7 +141,6 @@ int seqUtilsModRunner::guessAProteinFromSeq(
 	njh::PatPosFinder pFinder(R"(\*+)");
 
 	while (reader.readNextRead(seq)) {
-
 		if (getLongest) {
 			std::shared_ptr<readVecTrimmer::BreakUpRes> longest;
 			uint32_t frameWithLongest = std::numeric_limits<uint32_t>::max();
@@ -219,7 +218,9 @@ int seqUtilsModRunner::guessAProteinFromSeq(
 			while (start < 3
 					&& !(std::string::npos == seqCopy.seq_.find("*")
 							|| seqCopy.seq_.find("*") + 1 == len(seqCopy))) {
-				auto seqCopy = seq.translateRet(false, false, start);
+				//std::cout << "start: " << start << std::endl;
+				seqCopy = seq.translateRet(false, false, start);
+				//std::cout << seqCopy.seq_ << std::endl;
 				if (mark) {
 					MetaDataInName meta;
 					bool nameHasMeta = false;
