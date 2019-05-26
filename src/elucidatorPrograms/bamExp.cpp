@@ -1440,69 +1440,6 @@ int bamExpRunner::BamExtractReadsFromRegion(
 }
 
 
-
-
-
-
-
-class GenomeRegionsGenerator {
-public:
-	struct Params {
-		uint32_t step_{100};
-		uint32_t window_{100};
-	};
-
-	GenomeRegionsGenerator(const std::vector<GenomicRegion> & regions,
-			const Params & pars) :
-			regions_(regions), pars_(pars) {
-
-	}
-
-	std::vector<GenomicRegion> regions_;
-	Params pars_;
-
-	uint32_t currentRegPos_{0};
-	uint32_t currentPositionInReg_{0};
-	std::mutex mut_;
-
-	bool genRegionLockFree(GenomicRegion & reg){
-		if(currentRegPos_ < regions_.size()){
-			reg = GenomicRegion("",
-					regions_[currentRegPos_].chrom_,
-					regions_[currentRegPos_].start_ + currentPositionInReg_,
-					std::min(regions_[currentRegPos_].start_ + currentPositionInReg_ + pars_.step_, regions_[currentRegPos_].end_),
-					regions_[currentRegPos_].reverseSrand_);
-			currentPositionInReg_ += pars_.step_;
-			if(currentPositionInReg_ >= regions_[currentRegPos_].end_){
-				++currentRegPos_;
-				currentPositionInReg_ = 0;
-			}
-			return true;
-		}
-		return false;
-	}
-
-	bool genRegion(GenomicRegion & reg){
-		std::lock_guard<std::mutex> lock(mut_);
-		return genRegionLockFree(reg);
-	}
-
-	std::vector<GenomicRegion> genRegions(uint32_t numberOfRegions){
-		std::vector<GenomicRegion> ret;
-		std::lock_guard<std::mutex> lock(mut_);
-		GenomicRegion reg;
-		while(genRegionLockFree(reg)){
-			ret.emplace_back(reg);
-		}
-		return ret;
-	}
-
-};
-
-
-
-
-
 int bamExpRunner::getInsertSizesStats(const njh::progutils::CmdArgs & inputCommands) {
 	uint32_t testNum = std::numeric_limits<uint32_t>::max();
 	uint32_t numThreads = 1;
@@ -1519,8 +1456,8 @@ int bamExpRunner::getInsertSizesStats(const njh::progutils::CmdArgs & inputComma
 	setUp.processWritingOptions(outOpts);
 	setUp.setOption(bedFnp, "--bed", "Check just for these regions");
 	setUp.setOption(mapQualityCutOff, "--mapQualityCutOff", "Mapping Quality Cut Off");
-	setUp.setOption(genPars.step_, "--windowStep", "Window Step");
-	setUp.setOption(genPars.window_, "--windowSize", "Window Size");
+	setUp.setOption(genPars.step_, "--windowStep", "Window Step", njh::progutils::ProgramSetUp::CheckCase::NONZERO);
+	setUp.setOption(genPars.window_, "--windowSize", "Window Size", njh::progutils::ProgramSetUp::CheckCase::NONZERO);
 
 	setUp.finishSetUp(std::cout);
 
@@ -1564,11 +1501,11 @@ int bamExpRunner::getInsertSizesStats(const njh::progutils::CmdArgs & inputComma
 						aln.BuildCharData();
 						aln.GetTag("RG", readGroupName);
 						currentInsertSizes[readGroupName].emplace_back(std::abs(aln.InsertSize));
-						if(totalCount.load() > testNum){
-							break;
-						}
 					}
 				}
+			}
+			if(totalCount.load() > testNum){
+				break;
 			}
 		}
 		{
@@ -1604,7 +1541,7 @@ int bamExpRunner::getInsertSizesStats(const njh::progutils::CmdArgs & inputComma
 		auto mean = sum/rg.second.size();
 		double median = rg.second[1 + (rg.second.size()/2)];
 		if(0 == rg.second.size() % 2){
-			median = rg.second[rg.second.size()/2];
+			median += rg.second[rg.second.size()/2];
 			median /=2;
 		}
 
