@@ -71,6 +71,7 @@ bamExpRunner::bamExpRunner()
 					 addFunc("printHeaderRefIndexes", printHeaderRefIndexes, false),
 					 addFunc("BamFilterByChroms", BamFilterByChroms, false),
 					 addFunc("refineBedRegionFromBam", refineBedRegionFromBam, false),
+					 addFunc("bamMulticovBasesRough", bamMulticovBasesRough, false),
           }, //
 				"bamExp") {
 }
@@ -878,7 +879,7 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 
 
 
-int bamExpRunner::bamMulticovBases(const njh::progutils::CmdArgs & inputCommands){
+int bamExpRunner::bamMulticovBasesRough(const njh::progutils::CmdArgs & inputCommands){
 	OutOptions outOpts(bfs::path(""));
 	uint32_t numThreads = 1;
 	bfs::path bedFnp = "";
@@ -899,9 +900,7 @@ int bamExpRunner::bamMulticovBases(const njh::progutils::CmdArgs & inputCommands
 	setUp.finishSetUp(std::cout);
 
 
-	std::ofstream outFile;
-	std::ostream out(determineOutBuf(outFile, outOpts));
-
+	OutputStream outFile(outOpts);
 
 	auto bamFnps = njh::files::gatherFilesByPatOrNames(std::regex{pat}, bams);
 	checkBamFilesForIndexesAndAbilityToOpen(bamFnps);
@@ -972,6 +971,7 @@ int bamExpRunner::bamMulticovBases(const njh::progutils::CmdArgs & inputCommands
 			BamTools::BamAlignment bAln;
 			while(bReader.GetNextAlignmentCore(bAln)){
 				if(bAln.IsMapped()){
+
 					/**@todo this doesn't take into account gaps, so base coverage isn't precise right here, more of an approximation, should improve */
 					GenomicRegion alnRegion(bAln, refData);
 					val->coverage_ += val->region_.getOverlapLen(alnRegion);
@@ -1039,7 +1039,173 @@ int bamExpRunner::bamMulticovBases(const njh::progutils::CmdArgs & inputCommands
 	if(noHeader){
 		output.hasHeader_ = false;
 	}
-	output.outPutContents(out, "\t");
+	output.outPutContents(outFile, "\t");
+
+	return 0;
+}
+
+
+int bamExpRunner::bamMulticovBases(const njh::progutils::CmdArgs & inputCommands){
+	OutOptions outOpts(bfs::path(""));
+	uint32_t numThreads = 1;
+	bfs::path bedFnp = "";
+	std::string bams = "";
+	std::string pat = ".*.bam$";
+	bool noHeader = false;
+	outOpts.outExtention_ = ".tab.txt";
+	seqSetUp setUp(inputCommands);
+	setUp.description_ = "Get the coverage in base count for bam files for certain regions";
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(numThreads, "--numThreads", "Number of threads to use");
+	setUp.processWritingOptions(outOpts);
+	setUp.setOption(bedFnp, "--bedFnp", "Bed file of regions to get coverage for", true, "Input");
+	setUp.setOption(pat, "--pat", "Pattern in current directory to get coverage for", false, "Input");
+	setUp.setOption(bams, "--bams", "Either a file with the name of a bam file on each line or a comma separated value of bam file paths", false, "Input");
+	setUp.setOption(noHeader, "--noHeader", "Don't output a header so output can be treated like a bed file", false, "Writing Output");
+	setUp.finishSetUp(std::cout);
+
+
+	OutputStream outFile(outOpts);
+
+	auto bamFnps = njh::files::gatherFilesByPatOrNames(std::regex{pat}, bams);
+	checkBamFilesForIndexesAndAbilityToOpen(bamFnps);
+	if(setUp.pars_.verbose_){
+		printVector(bamFnps, "\t", std::cout);
+	}
+	auto bed3s = getBed3s(bedFnp);
+	std::vector<GenomicRegion> inputRegions;
+	bool allAbove3 = true;
+	for(const auto & b : bed3s){
+		if(b->extraFields_.size() < 3){
+			allAbove3 = false;
+			break;
+		}
+	}
+	if (allAbove3) {
+		inputRegions = bedPtrsToGenomicRegs(getBeds(bedFnp));
+	} else {
+		inputRegions = bed3PtrsToGenomicRegs(bed3s);
+	}
+
+	//collapse identical regions
+	std::vector<GenomicRegion> regions;
+	for(const auto & inputRegion : inputRegions){
+		if(regions.empty()){
+			regions.emplace_back(inputRegion);
+		}else{
+			if(regions.back().sameRegion(inputRegion)){
+				regions.back().uid_ += "," + inputRegion.uid_;
+			}else{
+				regions.emplace_back(inputRegion);
+			}
+		}
+	}
+
+	struct BamFnpRegionPair {
+		BamFnpRegionPair(const bfs::path & bamFnp, const GenomicRegion & region) :
+				bamFnp_(bamFnp), region_(region) {
+			regUid_ = region_.createUidFromCoords();
+			bamFname_ = bamFnp_.filename().string();
+		}
+		bfs::path bamFnp_;
+		GenomicRegion region_;
+		uint32_t coverage_ = 0;
+
+		std::string regUid_;
+		std::string bamFname_;
+	};
+
+	std::vector<std::shared_ptr<BamFnpRegionPair>> pairs;
+	for(const auto & bamFnp : bamFnps){
+		for(const auto & region : regions){
+			pairs.emplace_back(std::make_shared<BamFnpRegionPair>(bamFnp, region));
+		}
+	}
+
+	njh::concurrent::LockableVec<std::shared_ptr<BamFnpRegionPair>> pairsList(pairs);
+
+	auto getCov = [&pairsList](){
+		std::shared_ptr<BamFnpRegionPair> val;
+		while(pairsList.getVal(val)){
+			BamTools::BamReader bReader;
+
+			bReader.Open(val->bamFnp_.string());
+			bReader.LocateIndex();
+			setBamFileRegionThrow(bReader, val->region_);
+			auto refData = bReader.GetReferenceData();
+			BamTools::BamAlignment bAln;
+			while(bReader.GetNextAlignmentCore(bAln)){
+				if(bAln.IsMapped()){
+
+					/**@todo this doesn't take into account gaps, so base coverage isn't precise right here, more of an approximation, should improve */
+					GenomicRegion alnRegion(bAln, refData);
+					val->coverage_ += val->region_.getOverlapLen(alnRegion);
+				}
+			}
+		}
+	};
+
+	{
+		std::vector<std::thread> threads;
+		for(uint32_t t = 0; t < numThreads; ++t){
+			threads.emplace_back(std::thread(getCov));
+		}
+
+		for(auto & t : threads){
+			t.join();
+		}
+	}
+
+	VecStr header = {"chrom", "start", "end", "name", "score", "strand"};
+	std::unordered_map<std::string, uint32_t> bamFnpToCol;
+	uint32_t bIndex = 6;
+	for(const auto & b : bamFnps){
+		header.emplace_back(b.filename().string());
+		bamFnpToCol[b.filename().string()] = bIndex;
+		++bIndex;
+	}
+
+	njh::sort(regions,
+			[](const GenomicRegion & reg1,
+					const GenomicRegion & reg2) {
+				return reg1.createUidFromCoords() < reg2.createUidFromCoords();
+			});
+	table output(header);
+	output.content_ = std::vector<std::vector<std::string>>{regions.size(), std::vector<std::string>{header.size()}};
+	uint32_t regRowCount = 0;
+	std::unordered_map<std::string, uint32_t> regUidToRowPos;
+	for(const auto & reg : regions){
+		auto regAsBed = reg.genBedRecordCore();
+		auto toks = tokenizeString(regAsBed.toDelimStr(), "\t");
+		for(const auto & col : iter::range(toks.size())){
+			output.content_[regRowCount][col] = toks[col];
+		}
+		regUidToRowPos[reg.createUidFromCoords()] = regRowCount;
+		++regRowCount;
+	}
+	pairsList.reset();
+	auto fillTable = [&output, &pairsList, &regUidToRowPos, &bamFnpToCol](){
+		std::shared_ptr<BamFnpRegionPair> val;
+		while(pairsList.getVal(val)){
+			output.content_[regUidToRowPos[val->regUid_]][bamFnpToCol[val->bamFname_]] = estd::to_string(val->coverage_);
+		}
+	};
+
+	{
+		std::vector<std::thread> threads;
+		for(uint32_t t = 0; t < numThreads; ++t){
+			threads.emplace_back(std::thread(fillTable));
+		}
+
+		for(auto & t : threads){
+			t.join();
+		}
+	}
+	if(noHeader){
+		output.hasHeader_ = false;
+	}
+	output.outPutContents(outFile, "\t");
 
 	return 0;
 }
@@ -1279,80 +1445,180 @@ int bamExpRunner::BamExtractReadsFromRegion(
 
 
 
+class GenomeRegionsGenerator {
+public:
+	struct Params {
+		uint32_t step_{100};
+		uint32_t window_{100};
+	};
+
+	GenomeRegionsGenerator(const std::vector<GenomicRegion> & regions,
+			const Params & pars) :
+			regions_(regions), pars_(pars) {
+
+	}
+
+	std::vector<GenomicRegion> regions_;
+	Params pars_;
+
+	uint32_t currentRegPos_{0};
+	uint32_t currentPositionInReg_{0};
+	std::mutex mut_;
+
+	bool genRegionLockFree(GenomicRegion & reg){
+		if(currentRegPos_ < regions_.size()){
+			reg = GenomicRegion("",
+					regions_[currentRegPos_].chrom_,
+					regions_[currentRegPos_].start_ + currentPositionInReg_,
+					std::min(regions_[currentRegPos_].start_ + currentPositionInReg_ + pars_.step_, regions_[currentRegPos_].end_),
+					regions_[currentRegPos_].reverseSrand_);
+			currentPositionInReg_ += pars_.step_;
+			if(currentPositionInReg_ >= regions_[currentRegPos_].end_){
+				++currentRegPos_;
+				currentPositionInReg_ = 0;
+			}
+			return true;
+		}
+		return false;
+	}
+
+	bool genRegion(GenomicRegion & reg){
+		std::lock_guard<std::mutex> lock(mut_);
+		return genRegionLockFree(reg);
+	}
+
+	std::vector<GenomicRegion> genRegions(uint32_t numberOfRegions){
+		std::vector<GenomicRegion> ret;
+		std::lock_guard<std::mutex> lock(mut_);
+		GenomicRegion reg;
+		while(genRegionLockFree(reg)){
+			ret.emplace_back(reg);
+		}
+		return ret;
+	}
+
+};
+
+
 
 
 
 int bamExpRunner::getInsertSizesStats(const njh::progutils::CmdArgs & inputCommands) {
 	uint32_t testNum = std::numeric_limits<uint32_t>::max();
-
+	uint32_t numThreads = 1;
+	OutOptions outOpts(bfs::path(""), ".tab.txt");
+	bfs::path bedFnp = "";
+	uint32_t hardInsertSizeCutOff = 10000;
+	uint32_t mapQualityCutOff = 20;
+	GenomeRegionsGenerator::Params genPars;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
+	setUp.setOption(hardInsertSizeCutOff, "--hardInsertSizeCutOff", "Hard Insert Size Cut Off");
 	setUp.setOption(testNum, "--testNum", "Test Number");
-	setUp.processDefaultReader(VecStr{"-bam"},true);
+	setUp.processReadInNames(VecStr { "--bam" }, true);
+	setUp.processWritingOptions(outOpts);
+	setUp.setOption(bedFnp, "--bed", "Check just for these regions");
+	setUp.setOption(mapQualityCutOff, "--mapQualityCutOff", "Mapping Quality Cut Off");
+	setUp.setOption(genPars.step_, "--windowStep", "Window Step");
+	setUp.setOption(genPars.window_, "--windowSize", "Window Size");
+
 	setUp.finishSetUp(std::cout);
 
-	BamTools::BamReader bReader;
-	BamTools::BamReader mateReader;
-	bReader.Open(setUp.pars_.ioOptions_.firstName_.string());
-	if(!bReader.IsOpen()){
-		std::stringstream ss;
-		ss << "Error in opening: " << setUp.pars_.ioOptions_.firstName_ << std::endl;
-		throw std::runtime_error{ss.str()};
-	}
-	if(!bReader.LocateIndex()){
-		std::stringstream ss;
-		ss << "Error: can't find index for " << setUp.pars_.ioOptions_.firstName_ << std::endl;
-		throw std::runtime_error{ss.str()};
-	}
-	mateReader.Open(setUp.pars_.ioOptions_.firstName_.string());
-	mateReader.LocateIndex();
-	BamTools::BamAlignment aln;
-	BamTools::BamAlignment mateAln;
-	uint32_t totalCount = 0;
-	uint32_t unMatchedCount = 0;
-	uint32_t unpaired = 0;
-	uint32_t bothUnmapped = 0;
-	std::vector<uint32_t> insertSizes;
-	auto refInfo = bReader.GetReferenceData();
-	while (bReader.GetNextAlignmentCore(aln)) {
-		++totalCount;
-		if(!aln.IsPaired()){
-			++unpaired;
-		}
-		if (aln.IsMapped() && aln.IsMateMapped()) {
-			if (aln.RefID != aln.MateRefID) {
-				++unMatchedCount;
-			}else{
-				insertSizes.emplace_back(std::abs(aln.InsertSize));
-			}
 
-			if(setUp.pars_.verbose_){
-				std::cout << "\r" << totalCount;
-			}
-			if (totalCount >= testNum) {
-				break;
-			}
-		}else{
-			++bothUnmapped;
-		}
-	}
-	if(setUp.pars_.verbose_){
-		std::cout << std::endl;
+	std::unordered_map<std::string, std::vector<uint32_t>> insertSizes;
+	std::mutex insertSizesMut;
+	OutputStream out(outOpts);
+	concurrent::BamReaderPool bPool(setUp.pars_.ioOptions_.firstName_, numThreads);
+	bPool.openBamFile();
+	std::vector<GenomicRegion> regions;
+	if("" != bedFnp){
+		regions =	bed3PtrsToGenomicRegs(getBed3s(bedFnp));
+	}else{
+		auto bReader = bPool.popReader();
+		regions = genChromosomeGenRegions(bReader->GetReferenceData());
 	}
 
-	std::cout << getPercentageString(unMatchedCount, totalCount) << "\t" << totalCount << std::endl;
-	auto stats = getStatsOnVec(insertSizes);
-	printOutMapContents(stats,"\t", std::cout);
-	std::map<uint32_t, uint32_t> counts;
-	for(auto count : insertSizes){
-		++counts[count];
+	GenomeRegionsGenerator regionFactory(regions, genPars);
+	std::atomic_uint32_t totalCount{0};
+
+	auto getInsertSizes = [&insertSizesMut,&insertSizes,&bPool,&regionFactory,&hardInsertSizeCutOff,&mapQualityCutOff,&totalCount,&testNum](){
+		auto bReader = bPool.popReader();
+		GenomicRegion reg;
+		std::unordered_map<std::string, std::vector<uint32_t>> currentInsertSizes;
+		BamTools::BamAlignment aln;
+		while(regionFactory.genRegion(reg)){
+			setBamFileRegionThrow(*bReader, reg);
+			while (bReader->GetNextAlignmentCore(aln)) {
+				//skip alignments that don't start in this region
+				//this way if regions are close to each other it will avoid counting twice
+				if(aln.Position <reg.start_ || aln.Position >= reg.end_){
+					continue;
+				}
+				if (aln.IsMapped() && aln.IsMateMapped() && aln.IsPrimaryAlignment()) {
+					if (aln.RefID == aln.MateRefID) {
+						if(std::abs(aln.InsertSize) > hardInsertSizeCutOff|| aln.MapQuality < mapQualityCutOff){
+							continue;
+						}
+						++totalCount;
+						std::string readGroupName = "none";
+						aln.BuildCharData();
+						aln.GetTag("RG", readGroupName);
+						currentInsertSizes[readGroupName].emplace_back(std::abs(aln.InsertSize));
+						if(totalCount.load() > testNum){
+							break;
+						}
+					}
+				}
+			}
+		}
+		{
+			std::lock_guard<std::mutex> lock(insertSizesMut);
+			for(const auto & rg : currentInsertSizes){
+				addOtherVec(insertSizes[rg.first], rg.second);
+			}
+		}
+	};
+	std::vector<std::thread> threads;
+	for(uint32_t t = 0; t < numThreads; ++t){
+		threads.emplace_back(getInsertSizes);
 	}
-	//printOutMapContents(counts,"\t", std::cout);
-	table outStatTabe(VecStr{"stat", "value"});
-	outStatTabe.addRow("Unpaired", getPercentageString(unpaired, totalCount));
-	outStatTabe.addRow("DifferentChrom", getPercentageString(unMatchedCount, totalCount));
-	outStatTabe.addRow("BothUnmapped", getPercentageString(bothUnmapped, totalCount));
-	outStatTabe.outPutContentOrganized(std::cout);
+	njh::concurrent::joinAllThreads(threads);
+
+
+
+	table outStatTable(VecStr {"ReadGroup", "stat", "value" });
+	for( auto & rg : insertSizes){
+		if(rg.second.empty()){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "read group: " << rg.first << " had no insert sizes" << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		njh::sort(rg.second);
+		auto std = vectorStandardDeviationPop(rg.second);
+		auto max = rg.second.back();
+		auto min = rg.second.front();
+		double sum = 0;
+		for(const auto val : rg.second){
+			sum += val;
+		}
+		auto mean = sum/rg.second.size();
+		double median = rg.second[1 + (rg.second.size()/2)];
+		if(0 == rg.second.size() % 2){
+			median = rg.second[rg.second.size()/2];
+			median /=2;
+		}
+
+		table rgStatTable(VecStr {"ReadGroup", "stat", "value" });
+		rgStatTable.addRow(rg.first,"max", max);
+		rgStatTable.addRow(rg.first,"mean", mean);
+		rgStatTable.addRow(rg.first,"median", median);
+		rgStatTable.addRow(rg.first,"std", std);
+		rgStatTable.addRow(rg.first,"min", min);
+		outStatTable.rbind(rgStatTable, false);
+	}
+	outStatTable.sortTable("ReadGroup", "stat", false);
+	outStatTable.outPutContents(out, "\t");
+
 	return 0;
 }
 
