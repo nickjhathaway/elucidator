@@ -11,6 +11,234 @@
 namespace njhseq {
 
 
+class ChimeraProfiler{
+public:
+	struct SharedSegments {
+
+		struct Segment{
+			Segment(const uint32_t starta, const uint32_t startb, uint32_t size) :
+					starta_(starta), startb_(startb), size_(size) {
+
+			}
+			uint32_t starta_;
+			uint32_t startb_;
+			uint32_t size_;
+			uint32_t enda() const{
+				return starta_ + size_;
+			}
+			uint32_t endb() const{
+				return startb_ + size_;
+			}
+
+			bool doesSegsOverLapInA(const Segment & otherSeg){
+				if((otherSeg.starta_ > starta_ && otherSeg.starta_ < enda()) || (otherSeg.enda() > starta_ && otherSeg.enda() < enda())){
+					return true;
+				}
+				return false;
+			}
+			bool doesSegsOverLapInB(const Segment & otherSeg){
+				if((otherSeg.startb_ > startb_ && otherSeg.startb_ < endb()) || (otherSeg.endb() > startb_ && otherSeg.endb() < endb())){
+					return true;
+				}
+				return false;
+			}
+		};
+
+		SharedSegments(const std::string & namea, const std::string & nameb) :
+				seqNameA_(namea), seqNameB_(nameb) {
+
+		}
+
+		void addSegment(Segment newSeg){
+			//check to make sure there's no overlap
+			for(const auto seg : segs_){
+				if(newSeg.doesSegsOverLapInA(seg)){
+					std::stringstream ss;
+					ss << __PRETTY_FUNCTION__ << ", error " << "adding segment,"
+							<< "start: " << newSeg.starta_ << " size: " << newSeg.size_
+							<< " that overlaps with "
+							<<"start: " <<  seg.starta_<< " size: " << seg.size_<< "\n";
+					throw std::runtime_error{ss.str()};
+				}
+				if(newSeg.doesSegsOverLapInA(seg)){
+					std::stringstream ss;
+					ss << __PRETTY_FUNCTION__ << ", error " << "adding segment,"
+							<< "start: " << newSeg.starta_ << " size: " << newSeg.size_
+							<< " that overlaps with "
+							<<"start: " <<  seg.starta_<< " size: " << seg.size_<< "\n";
+					throw std::runtime_error{ss.str()};
+				}
+			}
+			segs_.emplace_back(newSeg);
+		}
+		void addSegment(uint32_t starta, uint32_t startb, uint32_t size){
+			addSegment(Segment{starta, startb, size});
+
+		}
+
+		std::string seqNameA_;
+		std::string seqNameB_;
+
+		std::vector<Segment> segs_;
+
+	};
+
+	struct SegmentsForSeqs {
+		SegmentsForSeqs(const seqInfo & seqBase) :
+			seqBase_(seqBase) {
+
+		}
+		seqInfo seqBase_;
+		std::unordered_map<std::string, SharedSegments> sharedSegs_;
+
+		uint32_t minSegmentStart(){
+			uint32_t ret = std::numeric_limits<uint32_t>::max();
+			for(const auto & seg : sharedSegs_){
+				if(seg.second.segs_.front().starta_ < ret){
+					ret = seg.second.segs_.front().starta_;
+				}
+			}
+			return ret;
+		}
+		uint32_t maxSegmentEnd(){
+			uint32_t ret = 0;
+			for(const auto & seg : sharedSegs_){
+				if(seg.second.segs_.back().enda() > ret){
+					ret = seg.second.segs_.back().enda();
+				}
+			}
+			return ret;
+		}
+
+		void addSegments(const seqInfo & alnA, const seqInfo & alnB, uint32_t padding){
+			if(njh::in(alnB.name_, sharedSegs_)){
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << " error, already have segments for " << alnB.name_<< "\n";
+				throw std::runtime_error{ss.str()};
+			}
+
+			uint32_t aLen = len(alnA) - countOccurences(alnA.seq_, "-");
+			uint32_t bLen = len(alnB) - countOccurences(alnB.seq_, "-");
+
+			uint32_t firstNonGap = std::max(alnA.seq_.find_first_not_of("-"), alnB.seq_.find_first_not_of("-"));
+			uint32_t lastNonGap = std::max(alnA.seq_.find_last_not_of("-"), alnB.seq_.find_last_not_of("-"));
+			uint32_t currentSegLength = 0;
+			uint32_t currentSegStart = std::numeric_limits<uint32_t>::max();
+			SharedSegments segs(alnA.name_, alnB.name_);
+
+			for(const auto pos : iter::range(firstNonGap, lastNonGap + 1)){
+				if(alnA.seq_[pos] != '-' && alnA.seq_[pos] == alnB.seq_[pos]){
+					if(0 == currentSegLength){
+						currentSegLength = 1;
+						currentSegStart = pos;
+					}else{
+						++currentSegLength;
+					}
+				}else{
+					if(currentSegLength > 0 && currentSegLength > padding ){
+						uint32_t startA = getRealPosForAlnPos(alnA.seq_, currentSegStart);
+						uint32_t startB = getRealPosForAlnPos(alnB.seq_, currentSegStart);
+//						std::cout << "pos: " << pos << std::endl;
+//						std::cout <<"startA + currentSegLength: " << startA + currentSegLength << std::endl;
+//						std::cout <<"aLen                     : " << aLen << std::endl;
+//						std::cout <<"startB + currentSegLength: " << startB + currentSegLength << std::endl;
+//						std::cout <<"bLen                     : " << bLen << std::endl;
+//						std::cout << std::endl;
+						if(!(startA + currentSegLength == aLen && startB + currentSegLength == bLen) && !(0 == startA && 0 == startB)){
+							segs.addSegment(startA + padding, startB + padding, currentSegLength - padding);
+						}
+					}
+					currentSegLength = 0;
+					currentSegStart = std::numeric_limits<uint32_t>::max();
+				}
+			}
+			if(currentSegLength > 0 && currentSegLength > padding ){
+				uint32_t startA = getRealPosForAlnPos(alnA.seq_, currentSegStart);
+				uint32_t startB = getRealPosForAlnPos(alnB.seq_, currentSegStart);
+//				std::cout << "after" << std::endl;
+//				std::cout <<"startA + currentSegLength: " << startA + currentSegLength << std::endl;
+//				std::cout <<"aLen                     : " << aLen << std::endl;
+//				std::cout <<"startB + currentSegLength: " << startB + currentSegLength << std::endl;
+//				std::cout <<"bLen                     : " << bLen << std::endl;
+
+				if(!(startA + currentSegLength == aLen && startB + currentSegLength == bLen) && !(0 == startA && 0 == startB)){
+					segs.addSegment(startA + padding, startB + padding, currentSegLength - padding);
+				}
+			}
+			if(!segs.segs_.empty()){
+				sharedSegs_.emplace(alnB.name_, segs);
+			}
+		}
+
+		struct SeqNameSeg {
+			SeqNameSeg(const std::string & name, uint32_t pos):name_(name), pos_(pos){
+
+			}
+			std::string name_;
+			uint32_t pos_;
+
+		};
+
+		std::vector<SeqNameSeg> genPosChimeras(uint32_t pos){
+			std::vector<SeqNameSeg> ret;
+			for(const auto & seq : sharedSegs_){
+				for(const auto & seg : seq.second.segs_){
+					if(pos >= seg.starta_ && pos < seg.enda()){
+						ret.emplace_back(seq.first, seg.startb_ + (pos - seg.starta_));
+					}
+				}
+			}
+			return ret;
+		}
+
+	};
+
+	std::unordered_map<std::string, std::shared_ptr<SegmentsForSeqs>> segsForSeqs_;
+
+
+	template<typename T>
+	void addSegsForSeqs(const std::vector<T> & seqs, aligner & alignerObj, uint32_t padding){
+		segsForSeqs_.clear();
+		for(const auto & seq : seqs){
+			segsForSeqs_[getSeqBase(seq).name_] = std::make_shared<SegmentsForSeqs>(getSeqBase(seq));
+		}
+		for (auto pos1 : iter::range(seqs.size())) {
+			for (auto pos2 : iter::range(pos1 + 1, seqs.size())) {
+				alignerObj.alignCacheGlobal(getSeqBase(seqs[pos1]), getSeqBase(seqs[pos2]));
+				alignerObj.profileAlignment(getSeqBase(seqs[pos1]), getSeqBase(seqs[pos2]), false, false, false);
+				segsForSeqs_[getSeqBase(seqs[pos1]).name_]->addSegments(alignerObj.alignObjectA_.seqBase_,
+						alignerObj.alignObjectB_.seqBase_, padding);
+				segsForSeqs_[getSeqBase(seqs[pos2]).name_]->addSegments(alignerObj.alignObjectB_.seqBase_,
+						alignerObj.alignObjectA_.seqBase_, padding);
+			}
+		}
+	}
+
+	template<typename T>
+	void addSegsForSeq(const T & seq, aligner & alignerObj, uint32_t padding){
+		if(njh::in(getSeqBase(seq).name_, segsForSeqs_)){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << " already have seq with name " << getSeqBase(seq).name_ << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		segsForSeqs_[getSeqBase(seq).name_] = std::make_shared<SegmentsForSeqs>(getSeqBase(seq));
+		for (const auto & otherSeq : segsForSeqs_) {
+			if(otherSeq.first == getSeqBase(seq).name_){
+				continue;
+			}
+			alignerObj.alignCacheGlobal(otherSeq.second->seqBase_, getSeqBase(seq));
+			alignerObj.profileAlignment(otherSeq.second->seqBase_, getSeqBase(seq), false, false, false);
+			segsForSeqs_[otherSeq.second->seqBase_.name_]->addSegments(alignerObj.alignObjectA_.seqBase_,
+					alignerObj.alignObjectB_.seqBase_, padding);
+			segsForSeqs_[getSeqBase(seq).name_]->addSegments(alignerObj.alignObjectB_.seqBase_,
+					alignerObj.alignObjectA_.seqBase_, padding);
+		}
+	}
+
+};
+
+
+
 PCRSimulator::PCRSimulator(uint64_t intErrorRate) :
 		intErrorRate_(intErrorRate) {
 
@@ -210,7 +438,29 @@ std::vector<PCRSimulator::SeqGenomeCnt> PCRSimulator::randomlySampleGenomes(
 	std::vector<uint32_t> seqPositions;
 	std::vector<double> seqFracs;
 	std::unordered_map<uint32_t, uint64_t> genomeCounts;
+	bool allFracZero = std::all_of(seqs.begin(), seqs.end(), [](const seqInfo & seq){
+		return 0 == seq.frac_;
+	});
+
+//	bool allCntZero = std::all_of(seqs.begin(), seqs.end(), [](const seqInfo & seq){
+//		return 0 == seq.cnt_;
+//	});
+
+	if(allFracZero){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << " all the fractions can't be set to zero" << "\n";
+		ss << "Fracs: ";
+		njh::for_each(seqs, [&ss](const seqInfo & seq){
+			ss << "\n" << seq.name_ << ":" << seq.frac_;
+		});
+		ss << "\n";
+		throw std::runtime_error{ss.str()};
+	}
 	for(const auto & seqPos : iter::range(seqs.size())){
+
+//		std::cout << "seqs[seqPos].frac_: " << seqs[seqPos].frac_ << std::endl;
+//		std::cout << "seqs[seqPos].cnt_: " << seqs[seqPos].cnt_ << std::endl;
+
 		seqPositions.emplace_back(seqPos);
 		seqFracs.emplace_back(seqs[seqPos].frac_);
 		//to make sure if none is sampled the haplotype name still appears
@@ -263,10 +513,26 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 		totalTemplateStrandCount += seq.genomeCnt_ * 2;
 	}
 
+
+
+	uint32_t numberOfSeqsSampled = 0;
+	std::vector<SeqGenomeCnt> seqsSampled;
+	for (const auto & seq : seqs) {
+		//if the gnomes sampled is zero don't simulate any seqs
+		if(genomeCounts[seq.seqBase_.name_] > 0){
+			++numberOfSeqsSampled;
+			seqsSampled.emplace_back(seq);
+		}
+	}
+
 	std::unordered_map<std::string,std::unordered_map<std::string, uint64_t>> allSeqCounts;
 	std::unordered_map<std::string,std::string> barcodedSeqs;
 //	std::unordered_map<std::string,std::pair<uint64_t,uint64_t>> templateNonMutated;
-	for (const auto & seq : seqs) {
+	for (const auto & seq : seqsSampled) {
+		//if the gnomes sampled is zero don't simulate any seqs
+		if(0 == genomeCounts[seq.seqBase_.name_]){
+			continue;
+		}
 		std::unordered_map<std::string, uint64_t> seqCounts;
 		std::mutex seqMapLock;
 
@@ -288,6 +554,573 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 			barcodedSeqs[seq.seqBase_.name_] = seq.seqBase_.seq_;
 		}
 	}
+
+	uint64_t totalFinalChimeraCount = 0;
+	std::vector<seqInfo> chimeraSeqs;
+
+	if(!noChimeras_){
+		if(numberOfSeqsSampled > 1){
+			auto maxLen = readVec::getMaxLength(seqsSampled);
+			ChimeraProfiler chiProf;
+			aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0));
+			chiProf.addSegsForSeqs(seqsSampled, alignerObj, chimeraPad_);
+			uint32_t seqsWithSegs = 0;
+			for(const auto & seq : chiProf.segsForSeqs_){
+				if(!seq.second->sharedSegs_.empty()){
+					++seqsWithSegs;
+				}
+			}
+
+//			std::cout << "seqsWithSegs: " << seqsWithSegs << std::endl;
+			if(seqsWithSegs > 0 ){
+				std::unordered_map<std::string, uint32_t> seqPositions;
+				for(const auto pos : iter::range(seqsSampled.size())){
+					seqPositions[seqsSampled[pos].seqBase_.name_] = pos;
+				}
+
+
+//				for(const auto & seq : chiProf.segsForSeqs_){
+//					std::cout << seq.first << std::endl;
+//					for(const auto & otherSeq : seq.second->sharedSegs_){
+//						std::cout << "\t" << otherSeq.first << std::endl;
+//						for(const auto & seg : otherSeq.second.segs_){
+//							std::cout << "\t\tseg.starta_:" << seg.starta_ << std::endl;
+//							std::cout << "\t\tseg.startb_:" << seg.startb_ << std::endl;
+//							std::cout << "\t\tseg.size_:" << seg.size_ << std::endl;
+//							seqsSampled[seqPositions[seq.first]].seqBase_.getSubRead(seg.starta_, seg.size_).outPutSeqAnsi(std::cout);
+//							seqsSampled[seqPositions[otherSeq.first]].seqBase_.getSubRead(seg.startb_, seg.size_).outPutSeqAnsi(std::cout);
+//						}
+//					}
+//				}
+				njh::randomGenerator rGen;
+				std::unordered_map<std::string, uint64_t> finishedAmount;
+				std::unordered_map<std::string, uint64_t> partialTotalAmount;
+				uint64_t intialRoundChiTotal = 0;
+				std::unordered_map<std::string, uint64_t> chimeras;
+				std::mutex chimerasMut;
+
+				{
+
+					table roundCountsTab(VecStr{"round", "seqName", "total", "fullTemplateFinished", "fullTemplateThisRound", "partialThisRound", "fracPartialThisRound", "partialTotalAmount", "partialTotalAmountFrac"});
+					for(const auto & seqSampled : seqsSampled){
+						finishedAmount[seqSampled.seqBase_.name_] = seqSampled.genomeCnt_ * 2;
+						partialTotalAmount[seqSampled.seqBase_.name_] = 0;
+					}
+
+					for(auto round : iter::range<uint32_t>(1, initialPcrRounds + 1)){
+//						std::cout << "round: " << round << std::endl;
+						for(const auto & seqSampled : seqsSampled){
+
+//							std::cout << "seq: " << seqSampled.seqBase_.name_ << std::endl;
+							auto chiStart = chiProf.segsForSeqs_[seqSampled.seqBase_.name_]->minSegmentStart();
+							auto chiStop = chiProf.segsForSeqs_[seqSampled.seqBase_.name_]->maxSegmentEnd();
+							uint64_t finished = 0;
+							uint64_t partial = 0;
+							if (round > 10) {
+								finished += std::min<uint64_t>(std::round(pcrEfficiency_ * finishedAmount[seqSampled.seqBase_.name_]), templateCap_);
+		 						partial +=  std::min<uint64_t>(std::round((1 - pcrEfficiency_) * finishedAmount[seqSampled.seqBase_.name_]), templateCap_);
+							} else {
+								for(uint64_t temp = 0; temp < finishedAmount[seqSampled.seqBase_.name_]; ++temp){
+									if(rGen.unifRand() < pcrEfficiency_){
+										++finished;
+									}else{
+										++partial;
+									}
+								}
+							}
+							if(partial > 0){
+								std::vector<uint64_t> partials;
+								if(partial > numThreads){
+									partials = spreadReadNumAcrossThreads(partial, numThreads);
+								}else{
+									partials.emplace_back(partial);
+									for(uint32_t t = 1; t < numThreads; ++t){
+										partials.emplace_back(0);
+									}
+								}
+								auto genPartials = [&partials,&seqSampled,&chiProf,&chiStart,&chiStop,&chimerasMut,&chimeras,&finishedAmount](const uint32_t threadNum){
+									njh::randomGenerator ranGen;
+									std::unordered_map<std::string, uint32_t> threadChimeras;
+									uint32_t chisGenerated = 0;
+									for(uint64_t temp = 0; temp < partials[threadNum]; ++temp){
+										//ranGen.unifRand();
+										auto partLength = ranGen.unifRand<uint32_t>(0, seqSampled.seqBase_.seq_.size());
+//											std::cout << "chiStart: " << chiStart  << " chiStop:" << chiStop << std::endl;
+//											std::cout << "partLength: " << partLength << " chi pos? " << njh::colorBool(partLength >= chiStart && partLength <chiStop) << std::endl;
+										if(partLength >= chiStart && partLength <chiStop){
+											auto posChis = chiProf.segsForSeqs_[seqSampled.seqBase_.name_]->genPosChimeras(partLength);
+											VecStr names;
+											names.emplace_back(seqSampled.seqBase_.name_);
+//												std::cout << "Pos chis" << std::endl;
+											std::unordered_map<std::string, uint32_t> otherTempPos;
+											for(const auto & posChi : posChis){
+												names.emplace_back(posChi.name_);
+//													std::cout << posChi.name_ << " " << posChi.pos_ << std::endl;
+												otherTempPos[posChi.name_] = posChi.pos_;
+											}
+											std::vector<double> fracs;
+											for(const auto & name : names){
+												fracs.emplace_back(finishedAmount[name]);
+											}
+											njh::randObjectGen gen(names,fracs);
+											std::string templatedLandedOn = gen.genObj();
+//												std::cout << "templatedLandedOn different? " << njh::colorBool(templatedLandedOn != seqSampled.seqBase_.name_) << std::endl;
+											if(templatedLandedOn != seqSampled.seqBase_.name_){
+												++chisGenerated;
+												++threadChimeras[seqSampled.seqBase_.seq_.substr(0, partLength) + chiProf.segsForSeqs_[templatedLandedOn]->seqBase_.seq_.substr(otherTempPos[templatedLandedOn])];
+											}
+										}
+									}
+									{
+										std::lock_guard<std::mutex> lock(chimerasMut);
+										for(const auto & chi : threadChimeras){
+											chimeras[chi.first] += chi.second;
+										}
+									}
+//										std::cout << "chisGenerated: " << chisGenerated << std::endl;
+//										std::cout << "partials[threadNum]: " << partials[threadNum] << std::endl;
+								};
+
+								{
+									std::vector<std::thread> threads;
+									for(uint32_t t = 0; t < numThreads; ++t){
+										threads.emplace_back(genPartials,t);
+									}
+									njh::concurrent::joinAllThreads(threads);
+								}
+							}
+							partialTotalAmount[seqSampled.seqBase_.name_] += partial;
+							finishedAmount[seqSampled.seqBase_.name_] += finished;
+							roundCountsTab.addRow(round, seqSampled.seqBase_.name_, partialTotalAmount[seqSampled.seqBase_.name_] + finishedAmount[seqSampled.seqBase_.name_], finishedAmount[seqSampled.seqBase_.name_],
+									finished, partial, static_cast<double>(partial)/(finished + partial),
+									partialTotalAmount[seqSampled.seqBase_.name_], static_cast<double>(partialTotalAmount[seqSampled.seqBase_.name_])/(partialTotalAmount[seqSampled.seqBase_.name_] + finishedAmount[seqSampled.seqBase_.name_]));
+						}
+
+						for(const auto & chiSeq : chimeraSeqs){
+
+//							std::cout << "seq: " << chiSeq.name_ << std::endl;
+							auto chiStart = chiProf.segsForSeqs_[chiSeq.name_]->minSegmentStart();
+							auto chiStop = chiProf.segsForSeqs_[chiSeq.name_]->maxSegmentEnd();
+							uint64_t finished = 0;
+							uint64_t partial = 0;
+							if (round > 10) {
+								finished += std::min<uint64_t>(std::round(pcrEfficiency_ * finishedAmount[chiSeq.name_]), templateCap_);
+		 						partial +=  std::min<uint64_t>(std::round((1 - pcrEfficiency_) * finishedAmount[chiSeq.name_]), templateCap_);
+							} else {
+								for(uint64_t temp = 0; temp < finishedAmount[chiSeq.name_]; ++temp){
+									if(rGen.unifRand() < pcrEfficiency_){
+										++finished;
+									}else{
+										++partial;
+									}
+								}
+							}
+							if(partial > 0){
+								std::vector<uint64_t> partials;
+								if(partial > numThreads){
+									partials = spreadReadNumAcrossThreads(partial, numThreads);
+								}else{
+									partials.emplace_back(partial);
+									for(uint32_t t = 1; t < numThreads; ++t){
+										partials.emplace_back(0);
+									}
+								}
+								auto genPartials = [&partials,&chiSeq,&chiProf,&chiStart,&chiStop,&chimerasMut,&chimeras,&finishedAmount](const uint32_t threadNum){
+									//std::unordered_map<std::string, uint32_t> chimeras;
+									njh::randomGenerator ranGen;
+									std::unordered_map<std::string, uint32_t> threadChimeras;
+									uint32_t chisGenerated = 0;
+									for(uint64_t temp = 0; temp < partials[threadNum]; ++temp){
+										//ranGen.unifRand();
+										auto partLength = ranGen.unifRand<uint32_t>(0, chiSeq.seq_.size());
+//											std::cout << "chiStart: " << chiStart  << " chiStop:" << chiStop << std::endl;
+//											std::cout << "partLength: " << partLength << " chi pos? " << njh::colorBool(partLength >= chiStart && partLength <chiStop) << std::endl;
+										if(partLength >= chiStart && partLength <chiStop){
+											auto posChis = chiProf.segsForSeqs_[chiSeq.name_]->genPosChimeras(partLength);
+											VecStr names;
+											names.emplace_back(chiSeq.name_);
+//												std::cout << "Pos chis" << std::endl;
+											std::unordered_map<std::string, uint32_t> otherTempPos;
+											for(const auto & posChi : posChis){
+												names.emplace_back(posChi.name_);
+//													std::cout << posChi.name_ << " " << posChi.pos_ << std::endl;
+												otherTempPos[posChi.name_] = posChi.pos_;
+											}
+											std::vector<double> fracs;
+											for(const auto & name : names){
+												fracs.emplace_back(finishedAmount[name]);
+											}
+											njh::randObjectGen gen(names,fracs);
+											std::string templatedLandedOn = gen.genObj();
+//												std::cout << "templatedLandedOn different? " << njh::colorBool(templatedLandedOn != seqSampled.seqBase_.name_) << std::endl;
+											if(templatedLandedOn != chiSeq.name_){
+												++chisGenerated;
+												++threadChimeras[chiSeq.seq_.substr(0, partLength) + chiProf.segsForSeqs_[templatedLandedOn]->seqBase_.seq_.substr(otherTempPos[templatedLandedOn])];
+											}
+										}
+									}
+									{
+										std::lock_guard<std::mutex> lock(chimerasMut);
+										for(const auto & chi : threadChimeras){
+											chimeras[chi.first] += chi.second;
+										}
+									}
+//										std::cout << "chisGenerated: " << chisGenerated << std::endl;
+//										std::cout << "partials[threadNum]: " << partials[threadNum] << std::endl;
+								};
+
+								{
+									std::vector<std::thread> threads;
+									for(uint32_t t = 0; t < numThreads; ++t){
+										threads.emplace_back(genPartials,t);
+									}
+									njh::concurrent::joinAllThreads(threads);
+								}
+
+							}
+
+							partialTotalAmount[chiSeq.name_] += partial;
+							finishedAmount[chiSeq.name_] += finished;
+
+							roundCountsTab.addRow(round, chiSeq.name_, partialTotalAmount[chiSeq.name_] + finishedAmount[chiSeq.name_], finishedAmount[chiSeq.name_],
+									finished, partial, static_cast<double>(partial)/(finished + partial),
+									partialTotalAmount[chiSeq.name_], static_cast<double>(partialTotalAmount[chiSeq.name_])/(partialTotalAmount[chiSeq.name_] + finishedAmount[chiSeq.name_]));
+						}
+						//add in chimeras
+						for(const auto & chi : chimeras){
+							bool matchesInputSeq = false;
+							for(const auto & seqSampled : seqsSampled){
+								if(seqSampled.seqBase_.seq_ == chi.first){
+									matchesInputSeq = true;
+									finishedAmount[seqSampled.seqBase_.name_] += chi.second;
+									break;
+								}
+							}
+							bool matchesPreviousChimera = false;
+							for(const auto & chimeraSeq : chimeraSeqs){
+								if(chimeraSeq.seq_ == chi.first){
+									matchesPreviousChimera = true;
+									finishedAmount[chimeraSeq.name_] += chi.second;
+									break;
+								}
+							}
+							if(!matchesInputSeq && !matchesPreviousChimera){
+								std::string name =njh::pasteAsStr("Chi.", chimeraSeqs.size(), "[PCRRound=", round, "]");
+								auto backSeq = chimeraSeqs.emplace_back(seqInfo(name, chi.first));
+								backSeq.cnt_ = chi.second;
+								chiProf.addSegsForSeq(backSeq, alignerObj, chimeraPad_);
+								finishedAmount[backSeq.name_] = chi.second;
+								partialTotalAmount[backSeq.name_] = 0;
+							}
+						}
+					}
+//					roundCountsTab.outPutContentOrganized(std::cout);
+					for(const auto & chi : chimeras){
+
+						bool matchesInputSeq = false;
+						for(const auto & seqSampled : seqsSampled){
+							if(seqSampled.seqBase_.seq_ == chi.first){
+								matchesInputSeq = true;
+								finishedAmount[seqSampled.seqBase_.name_] += chi.second;
+
+								allSeqCounts[seqSampled.seqBase_.name_][seqSampled.seqBase_.seq_]+= chi.second;
+								break;
+							}
+						}
+						bool matchesPreviousChimera = false;
+						if(!matchesInputSeq){
+
+							intialRoundChiTotal+= chi.second;
+							for(const auto & chimeraSeq : chimeraSeqs){
+								if(chimeraSeq.seq_ == chi.first){
+									matchesPreviousChimera = true;
+									finishedAmount[chimeraSeq.name_] += chi.second;
+
+									allSeqCounts[chimeraSeq.name_][chimeraSeq.seq_] = chi.second;
+						//			templateNonMutated[seq.name_] = {seqCounts[seq.seq_], finalPerfectAmount};
+									barcodedSeqs[chimeraSeq.name_] = chimeraSeq.seq_;
+									break;
+								}
+							}
+
+
+
+						}
+						if(!matchesInputSeq && !matchesPreviousChimera){
+							std::string name =njh::pasteAsStr("Chi.", chimeraSeqs.size(), "[PCRRound=", initialPcrRounds, "]");
+							auto backSeq = chimeraSeqs.emplace_back(seqInfo(name, chi.first));
+							backSeq.cnt_ = chi.second;
+							chiProf.addSegsForSeq(backSeq, alignerObj, chimeraPad_);
+							finishedAmount[backSeq.name_] = chi.second;
+							partialTotalAmount[backSeq.name_] = 0;
+							allSeqCounts[backSeq.name_][backSeq.seq_] = chi.second;
+				//			templateNonMutated[seq.name_] = {seqCounts[seq.seq_], finalPerfectAmount};
+							barcodedSeqs[backSeq.name_] = backSeq.seq_;
+						}
+
+//						if(matchesInputSeq){
+//							std::cout << njh::bashCT::green << std::endl;
+//						}else if(matchesPreviousChimera){
+//							std::cout << njh::bashCT::red << std::endl;
+//						}
+//
+//						std::cout << chi.first << std::endl;
+//						std::cout << chi.second << std::endl << std::endl;
+//						if(matchesInputSeq || matchesPreviousChimera){
+//							std::cout << njh::bashCT::reset << std::endl;
+//						}
+					}
+					uint64_t all_finishedAmount = 0;
+					for(const auto & finised : finishedAmount){
+						all_finishedAmount += finised.second;
+					}
+//					std::cout << "chiTotal: " << intialRoundChiTotal << " " << static_cast<double>(intialRoundChiTotal)/(all_finishedAmount + intialRoundChiTotal) << std::endl;
+					//exit(1);
+				}
+				{
+					uint64_t all_intialFinishedAmount = 0;
+					for(const auto & finised : finishedAmount){
+						all_intialFinishedAmount += finised.second;
+					}
+
+					table roundCountsTab(VecStr{"round", "seqName", "total", "fullTemplateFinished", "fullTemplateThisRound", "partialThisRound", "fracPartialThisRound", "partialTotalAmount", "partialTotalAmountFrac"});
+					std::unordered_map<uint32_t, uint64_t> roundPartialCounts;
+
+					for(auto round : iter::range<uint32_t>(initialPcrRounds + 1, pcrRounds + 1)){
+						uint64_t roundPartials = 0;
+//						std::cout << "round: " << round << std::endl;
+						for(const auto & seqSampled : seqsSampled){
+//							std::cout << "seq: " << seqSampled.seqBase_.name_ << std::endl;
+							uint64_t finished = 0;
+							uint64_t partial = 0;
+							if (round > 10) {
+								finished += std::min<uint64_t>(std::round(pcrEfficiency_ * finishedAmount[seqSampled.seqBase_.name_]), templateCap_);
+		 						partial +=  std::min<uint64_t>(std::round((1 - pcrEfficiency_) * finishedAmount[seqSampled.seqBase_.name_]), templateCap_);
+							} else {
+								for(uint64_t temp = 0; temp < finishedAmount[seqSampled.seqBase_.name_]; ++temp){
+									if(rGen.unifRand() < pcrEfficiency_){
+										++finished;
+									}else{
+										++partial;
+									}
+								}
+							}
+							roundPartials+= partial;
+							partialTotalAmount[seqSampled.seqBase_.name_] += partial;
+							finishedAmount[seqSampled.seqBase_.name_] += finished;
+							roundCountsTab.addRow(round, seqSampled.seqBase_.name_, partialTotalAmount[seqSampled.seqBase_.name_] + finishedAmount[seqSampled.seqBase_.name_], finishedAmount[seqSampled.seqBase_.name_],
+									finished, partial, static_cast<double>(partial)/(finished + partial),
+									partialTotalAmount[seqSampled.seqBase_.name_], static_cast<double>(partialTotalAmount[seqSampled.seqBase_.name_])/(partialTotalAmount[seqSampled.seqBase_.name_] + finishedAmount[seqSampled.seqBase_.name_]));
+						}
+						roundPartialCounts[round] = roundPartials;
+					}
+//					roundCountsTab.outPutContentOrganized(std::cout);
+					uint64_t allFinishedPlusPartial = 0;
+					std::unordered_map<std::string, double> percPartial;
+					for(const auto & seqSampled : seqsSampled){
+						allFinishedPlusPartial += finishedAmount[seqSampled.seqBase_.name_] + partialTotalAmount[seqSampled.seqBase_.name_];
+						percPartial[seqSampled.seqBase_.name_] = static_cast<double>(partialTotalAmount[seqSampled.seqBase_.name_])/(partialTotalAmount[seqSampled.seqBase_.name_] + finishedAmount[seqSampled.seqBase_.name_]);
+					}
+					VecStr seqNames;
+					std::vector<double> seqPercs;
+					for(const auto & seqSampled: seqsSampled){
+						double perc = static_cast<double>(finishedAmount[seqSampled.seqBase_.name_] + partialTotalAmount[seqSampled.seqBase_.name_])/allFinishedPlusPartial;
+						seqPercs.emplace_back(perc);
+						seqNames.emplace_back(seqSampled.seqBase_.name_);
+					}
+					njh::randObjectGen rObj(seqNames, seqPercs);
+
+
+
+					std::vector<uint32_t> rounds;
+					std::vector<uint64_t> roundsCounts;
+					for(const auto & roundPar : roundPartialCounts){
+						rounds.emplace_back(roundPar.first);
+						roundsCounts.emplace_back(roundPar.second);
+					}
+					njh::randObjectGen roundGen(rounds, roundsCounts);
+
+
+
+					std::unordered_map<std::string, uint64_t> finalPartials;
+					for(uint32_t r = 0; r < finalReadAmount - (finalReadAmount *(static_cast<double>(intialRoundChiTotal)/(all_intialFinishedAmount + intialRoundChiTotal))); ++r){
+						auto seqSampled = rObj.genObj();
+						if(rGen.unifRand() < percPartial[seqSampled]){
+							++finalPartials[seqSampled];
+						}
+					}
+
+					std::unordered_map<uint32_t, std::unordered_map<std::string, uint64_t>> finalChimerasPerRound;
+					std::unordered_map<std::string, uint64_t> finalChimeras;
+					for(const auto & finalPartial : finalPartials){
+//						std::cout << "seq: " << finalPartial.first << " final partial: " << finalPartial.second << std::endl;
+						auto chiStart = chiProf.segsForSeqs_[finalPartial.first]->minSegmentStart();
+						auto chiStop = chiProf.segsForSeqs_[finalPartial.first]->maxSegmentEnd();
+
+						std::vector<uint64_t> partials;
+						if(finalPartial.second > numThreads){
+							partials = spreadReadNumAcrossThreads(finalPartial.second, numThreads);
+						}else{
+							partials.emplace_back(finalPartial.second);
+							for(uint32_t t = 1; t < numThreads; ++t){
+								partials.emplace_back(0);
+							}
+						}
+
+						auto genPartials = [&finalPartial,&partials,&chiProf,&chiStart,&chiStop,&chimerasMut,&finishedAmount,&finalChimeras,&roundGen,&finalChimerasPerRound](const uint32_t threadNum){
+							njh::randomGenerator ranGen;
+							std::unordered_map<std::string, uint32_t> threadChimeras;
+							uint32_t chisGenerated = 0;
+							for(uint64_t temp = 0; temp < partials[threadNum]; ++temp){
+								//ranGen.unifRand();
+								auto partLength = ranGen.unifRand<uint32_t>(0, chiProf.segsForSeqs_[finalPartial.first]->seqBase_.seq_.size());
+//											std::cout << "chiStart: " << chiStart  << " chiStop:" << chiStop << std::endl;
+//											std::cout << "partLength: " << partLength << " chi pos? " << njh::colorBool(partLength >= chiStart && partLength <chiStop) << std::endl;
+								if(partLength >= chiStart && partLength <chiStop){
+									auto posChis = chiProf.segsForSeqs_[chiProf.segsForSeqs_[finalPartial.first]->seqBase_.name_]->genPosChimeras(partLength);
+									VecStr names;
+									names.emplace_back(chiProf.segsForSeqs_[finalPartial.first]->seqBase_.name_);
+//												std::cout << "Pos chis" << std::endl;
+									std::unordered_map<std::string, uint32_t> otherTempPos;
+									for(const auto & posChi : posChis){
+										names.emplace_back(posChi.name_);
+//													std::cout << posChi.name_ << " " << posChi.pos_ << std::endl;
+										otherTempPos[posChi.name_] = posChi.pos_;
+									}
+									std::vector<double> fracs;
+									for(const auto & name : names){
+										fracs.emplace_back(finishedAmount[name]);
+									}
+									njh::randObjectGen gen(names,fracs);
+									std::string templatedLandedOn = gen.genObj();
+//												std::cout << "templatedLandedOn different? " << njh::colorBool(templatedLandedOn != chiProf.segsForSeqs_[finalPartial.first]->seqBase_.name_) << std::endl;
+									if(templatedLandedOn != chiProf.segsForSeqs_[finalPartial.first]->seqBase_.name_){
+										++chisGenerated;
+										++threadChimeras[chiProf.segsForSeqs_[finalPartial.first]->seqBase_.seq_.substr(0, partLength) + chiProf.segsForSeqs_[templatedLandedOn]->seqBase_.seq_.substr(otherTempPos[templatedLandedOn])];
+									}
+								}
+							}
+							{
+								std::lock_guard<std::mutex> lock(chimerasMut);
+								for(const auto & chi : threadChimeras){
+									finalChimeras[chi.first] += chi.second;
+									for(uint32_t count = 0; count < chi.second; ++count){
+										auto round = roundGen.genObj();
+										++finalChimerasPerRound[round][chi.first];
+									}
+								}
+							}
+//										std::cout << "chisGenerated: " << chisGenerated << std::endl;
+//										std::cout << "partials[threadNum]: " << partials[threadNum] << std::endl;
+						};
+
+						{
+							std::vector<std::thread> threads;
+							for(uint32_t t = 0; t < numThreads; ++t){
+								threads.emplace_back(genPartials,t);
+							}
+							njh::concurrent::joinAllThreads(threads);
+						}
+					}
+					std::unordered_map<uint32_t, uint32_t> totalsForRounds;
+					for(const auto & finalChimeraForRound : finalChimerasPerRound){
+//						std::cout << "finalChimeraForRound.first: " << finalChimeraForRound.first << std::endl;
+						uint32_t totalForthisRound = 0;
+						for(const auto & finalChimera : finalChimeraForRound.second){
+							bool matchesInputSeq = false;
+							for(const auto & seqSampled : seqsSampled){
+								if(seqSampled.seqBase_.seq_ == finalChimera.first){
+									matchesInputSeq = true;
+									break;
+								}
+							}
+							if(!matchesInputSeq){
+								totalForthisRound += finalChimera.second;
+								bool matchesPreviousChimera = false;
+								if(!matchesInputSeq){
+									for(const auto & chimeraSeq : chimeraSeqs){
+										if(chimeraSeq.seq_ == finalChimera.first){
+											matchesPreviousChimera = true;
+											break;
+										}
+									}
+								}
+								if(!matchesInputSeq && !matchesPreviousChimera){
+									std::string name =njh::pasteAsStr("Chi.", chimeraSeqs.size(), "[PCRRound=", finalChimeraForRound.first, "]");
+									auto backSeq = chimeraSeqs.emplace_back(seqInfo(name, finalChimera.first));
+									backSeq.cnt_ = finalChimera.second;
+								}
+							}
+						}
+						totalsForRounds[finalChimeraForRound.first] = totalForthisRound;
+//						std::cout << "\t" << "totalForthisRound: " << totalForthisRound << std::endl;
+					}
+					std::unordered_map<std::string, uint32_t> chiSeqPositions;
+					for(const auto pos : iter::range(chimeraSeqs.size())){
+						chiSeqPositions[chimeraSeqs[pos].seq_] = pos;
+					}
+
+					for(const auto & finalChimeraForRound : finalChimerasPerRound){
+						std::unordered_map<std::string,std::unordered_map<std::string, uint64_t>> currentChiAllSeqCounts;
+						std::unordered_map<std::string, std::string> barcodedSeqsCurrent;
+						for(const auto & finalChi : finalChimeraForRound.second){
+							bool matchesInputSeq = false;
+							for(const auto & seqSampled : seqsSampled){
+								if(seqSampled.seqBase_.seq_ == finalChi.first){
+									matchesInputSeq = true;
+									break;
+								}
+							}
+							if(!matchesInputSeq){
+								const auto & finalChimeraSeq = chimeraSeqs[chiSeqPositions[finalChi.first]];
+								currentChiAllSeqCounts[finalChimeraSeq.name_][finalChimeraSeq.seq_] = finalChi.second;
+								barcodedSeqsCurrent[finalChimeraSeq.name_] = finalChimeraSeq.seq_;
+							}
+						}
+						if(!barcodedSeqsCurrent.empty()){
+							auto sampleNumberAll = sampleReadsWithoutReplacementFinishPCR(barcodedSeqsCurrent,
+									currentChiAllSeqCounts, totalsForRounds[finalChimeraForRound.first], libOutFile, seqFileLock,
+									pcrRounds - finalChimeraForRound.first, numThreads);
+							for(const auto & info : sampleNumberAll){
+								ret.chimerasSampledForSequencing_[info.first].mutated_ += info.second.mutated_;
+								ret.chimerasSampledForSequencing_[info.first].nonMutated_ += info.second.nonMutated_;
+							}
+						}
+					}
+
+					for(const auto & finalChimera : finalChimeras){
+						bool matchesInputSeq = false;
+						for(const auto & seqSampled : seqsSampled){
+							if(seqSampled.seqBase_.seq_ == finalChimera.first){
+								matchesInputSeq = true;
+								break;
+							}
+						}
+//						if(matchesInputSeq){
+//							std::cout << njh::bashCT::green << std::endl;
+//						}
+//						std::cout << finalChimera.first << std::endl;
+//						std::cout << finalChimera.second << std::endl;
+//
+//						std::cout << std::endl;
+//						if(matchesInputSeq ){
+//							std::cout << njh::bashCT::reset << std::endl;
+//						}
+						if(!matchesInputSeq){
+							totalFinalChimeraCount+= finalChimera.second;
+						}
+					}
+//					std::cout << "totalFinalChimera: " << totalFinalChimeraCount << " " << getPercentageString(totalFinalChimeraCount, finalReadAmount) << std::endl;
+				}
+				//can only sim chimeras if there are more than 1 sequence
+			}
+		}
+	}
+
+
+
+
+
 	if(verbose_){
 		uint64_t templateAmountAfterInitialPCR = 0;
 		for(const auto  & allSeqCount : allSeqCounts){
@@ -300,11 +1133,22 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 	}
 
 	//now sample the rest of PCR
-	auto sampleNumber = sampleReadsWithoutReplacementFinishPCR(barcodedSeqs,
-			allSeqCounts, finalReadAmount, libOutFile, seqFileLock,
+	auto sampleNumberAll = sampleReadsWithoutReplacementFinishPCR(barcodedSeqs,
+			allSeqCounts, finalReadAmount - totalFinalChimeraCount, libOutFile, seqFileLock,
 			pcrRounds - initialPcrRounds, numThreads);
+	std::unordered_map<std::string, PCRSimulator::SimHapCounts::MutInfo> sampleNumber;
+	for(const auto & samp : sampleNumberAll){
+		if(!njh::beginsWith("Chi.", samp.first)){
+			sampleNumber.emplace(samp);
+		}else{
+			ret.chimerasSampledForSequencing_[samp.first].mutated_ += samp.second.mutated_;
+			ret.chimerasSampledForSequencing_[samp.first].nonMutated_ += samp.second.nonMutated_;
+		}
+	}
 	ret.genomesSampled_ = genomeCounts;
 	ret.sampledForSequencing_ = sampleNumber;
+	ret.chimeraSeqs_ = chimeraSeqs;
+
 	return ret;
 
 //	if(verbose){
@@ -387,9 +1231,11 @@ std::unordered_map<std::string, PCRSimulator::SimHapCounts::MutInfo> PCRSimulato
 		}
 	}
 
+	numThreads = std::min<uint32_t>(numThreads, finalReadAmount);
 	if(verbose_){
 		auto names = getVectorOfMapKeys(seqs);
-		//std::cout << "Sampling from " << njh::conToStr(names,",") << " ..." << std::endl;
+		std::cout << "Sampling from " << njh::conToStr(names,",") << " ..." << std::endl;
+		std::cout << "numThreads: " << numThreads << std::endl;
 	}
 
 	std::random_device rd;
@@ -427,6 +1273,18 @@ std::unordered_map<std::string, PCRSimulator::SimHapCounts::MutInfo> PCRSimulato
 	if(verbose_){
 		std::cout << std::endl;;
 	}
+
+//	std::cout << "sampled" << std::endl;
+//	uint32_t totalSampled = 0;
+//	for(const auto & sampled : allSampledSeqs){
+//		std::cout << sampled.first << std::endl;
+//		std::cout << "\t" << sampled.second.size() << std::endl;
+//		totalSampled += sampled.second.size();
+//	}
+//	std::cout << "totalSampled:   " << totalSampled << std::endl;
+//	std::cout << "finalReadAmount:" << finalReadAmount << std::endl;
+
+
 	auto finishPCR =
 			[this,&allSampledSeqs,&numberOfPCRRoundsLeft,&seqs,&seqFileLock,&sequenceOutFile,&ret,&finalReadAmount](uint32_t threadNumber ) {
 				njh::stopWatch watch;
@@ -497,6 +1355,9 @@ std::string PCRSimulator::runPcrSampleSingleTemplate(
 		uint64_t randomNumberSelector,
 		uint64_t randomNumberSelectorMax,
 		std::string seq ){
+	if(0 == roundsOfPcr){
+		return seq;
+	}
 	std::unordered_map<std::string, uint64_t> finalProducts;
 	std::mutex finalProductsMutex;
 	runPcr(1, roundsOfPcr, seq, 1, finalProducts, finalProductsMutex);

@@ -54,6 +54,8 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	static int getFirstRegionPerChrom(const njh::progutils::CmdArgs & inputCommands);
 	static int getLastRegionPerChrom(const njh::progutils::CmdArgs & inputCommands);
 
+	static int fillInRegionsByBestScore(const njh::progutils::CmdArgs & inputCommands);
+
 	//combing bed files
 	static int bedCreateSpanningRegions(const njh::progutils::CmdArgs & inputCommands);
 
@@ -88,7 +90,14 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	//extraction
 	static int extractBedRecordsWithName(const njh::progutils::CmdArgs & inputCommands);
 
+	//getting new regions
+	static int getInterveningRegions(const njh::progutils::CmdArgs & inputCommands);
 
+	//coverage
+	static int roughSmoothingForBedCoverage(const njh::progutils::CmdArgs & inputCommands);
+
+	//creating bed files
+	static int fastaToBed(const njh::progutils::CmdArgs & inputCommands);
 
 };
 } /* namespace njhseq */

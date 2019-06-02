@@ -70,6 +70,8 @@ class programWrapperRunner : public njh::progutils::ProgramRunner {
 	static int runBowtieOnAdapterReomvalOutputSinglesCombined(const njh::progutils::CmdArgs & inputCommands);
 
 
+	static int runPicardMarkDups(const njh::progutils::CmdArgs & inputCommands);
+
 	static int runBwaOnAdapterReomvalOutputSE(const njh::progutils::CmdArgs & inputCommands);
 
 

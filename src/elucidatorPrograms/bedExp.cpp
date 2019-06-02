@@ -68,11 +68,39 @@ bedExpRunner::bedExpRunner()
 					 addFunc("reorientBasedOnSingleReadsOrientationCounts", reorientBasedOnSingleReadsOrientationCounts, false),
 					 addFunc("getFirstRegionPerChrom", getFirstRegionPerChrom, false),
 					 addFunc("getLastRegionPerChrom", getLastRegionPerChrom, false),
-					 addFunc("getGCContentOrRegion", getGCContentOfRegion, false),
+					 addFunc("getGCContentOfRegions", getGCContentOfRegion, false),
 					 addFunc("getLongestHomopolymerLengthInRegion", getLongestHomopolymerLengthInRegion, false),
-           },//,
+					 addFunc("roughSmoothingForBedCoverage", roughSmoothingForBedCoverage, false),
+					 addFunc("fastaToBed", fastaToBed, false),
+					 addFunc("getInterveningRegions", getInterveningRegions, false),
+					 addFunc("fillInRegionsByBestScore", fillInRegionsByBestScore, false),
+           },//
           "bedExp") {}
 
+
+
+
+int bedExpRunner::fastaToBed(const njh::progutils::CmdArgs & inputCommands) {
+	OutOptions outOpts(bfs::path(""), ".bed");
+	seqSetUp setUp(inputCommands);
+	setUp.processReadInNames(true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	seqInfo seq;
+	SeqInput reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	OutputStream out(outOpts);
+	while(reader.readNextRead(seq)){
+		out << seq.name_
+				<< "\t" << 0
+				<< "\t" << len(seq) << std::endl;
+	}
+
+
+
+	return 0;
+}
 
 
 int bedExpRunner::getFirstRegionPerChrom(const njh::progutils::CmdArgs & inputCommands) {
@@ -461,7 +489,7 @@ int bedExpRunner::bedCreateSpanningRegions(const njh::progutils::CmdArgs & input
 	bool sameStrand = false;
 	OutOptions outOpts;
 	seqSetUp setUp(inputCommands);
-	setUp.description_ = "Create spanning regions between two different sizes starting from one set of beds to another set";
+	setUp.description_ = "Create spanning regions between two different beds starting from one set of beds to another set";
 	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --bed1 starts.bed --bed2 ends.bed");
 	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --bed1 starts.bed --bed2 ends.bed --ignoreStrands");
 	setUp.processVerbose();
@@ -1321,7 +1349,7 @@ int bedExpRunner::splitBedFile(const njh::progutils::CmdArgs & inputCommands) {
 	if(separateFiles){
 		table splitRegions(VecStr{"chrom", "start", "end", "name", "score", "strand"});
 		for(const auto & region : regions){
-			if(region.getLen() < windowSize){
+			if(region.getLen() >= windowSize){
 				splitRegions.addRow(region.chrom_, region.start_, region.end_, njh::pasteAsStr(region.chrom_, "_", region.start_, "_", region.end_), region.end_ - region.start_, region.reverseSrand_ ? '-':'+');
 			}else{
 				for(const auto pos : iter::range<size_t>(region.start_, region.end_ - windowSize, step)){
@@ -1330,7 +1358,7 @@ int bedExpRunner::splitBedFile(const njh::progutils::CmdArgs & inputCommands) {
 					if(basesLeft > 0 && basesLeft < step){
 						if(basesLeft > (windowSize/2.0)){
 							splitRegions.addRow(region.chrom_, pos, actualEnd, njh::pasteAsStr(region.chrom_, "_", pos, "_", actualEnd), actualEnd - pos, region.reverseSrand_ ? '-':'+');
-							splitRegions.addRow(region.chrom_, pos + step, region.end_, njh::pasteAsStr(region.chrom_, "_", pos + step, "_", region.end_), region.end_ - pos + step, region.reverseSrand_ ? '-':'+');
+							splitRegions.addRow(region.chrom_, pos + step, region.end_, njh::pasteAsStr(region.chrom_, "_", pos + step, "_", region.end_), region.end_ - (pos + step), region.reverseSrand_ ? '-':'+');
 						}else{
 							actualEnd += basesLeft;
 							splitRegions.addRow(region.chrom_, pos, actualEnd, njh::pasteAsStr(region.chrom_, "_", pos, "_", actualEnd), actualEnd - pos, region.reverseSrand_ ? '-':'+');
@@ -1353,45 +1381,36 @@ int bedExpRunner::splitBedFile(const njh::progutils::CmdArgs & inputCommands) {
 		for(const auto & region : regions){
 			if (region.getLen() < windowSize) {
 				out
-						<< njh::conToStr(
-								toVecStr(region.chrom_, region.start_, region.end_,
-										njh::pasteAsStr(region.chrom_, "_", region.start_, "_",
-												region.end_), region.end_ - region.start_,
-										region.reverseSrand_ ? '-' : '+'), "\t") << std::endl;
+						<< GenomicRegion("", region.chrom_, region.start_, region.end_,
+								region.reverseSrand_).genBedRecordCore().toDelimStr()
+						<< std::endl;
 			} else {
 				for(const auto pos : iter::range<size_t>(region.start_, region.end_ - windowSize, step)){
+
 					auto actualEnd = std::min(pos + windowSize, region.end_);
 					auto basesLeft = region.end_ - actualEnd;
 					if (basesLeft > 0 && basesLeft < step) {
 						if (basesLeft > (windowSize / 2.0)) {
 							out
-									<< njh::conToStr(
-											toVecStr(region.chrom_, pos, actualEnd,
-													njh::pasteAsStr(region.chrom_, "_", pos, "_",
-															actualEnd), actualEnd - pos,
-													region.reverseSrand_ ? '-' : '+'), "\t") << std::endl;
+									<< GenomicRegion("", region.chrom_, pos, actualEnd,
+											region.reverseSrand_).genBedRecordCore().toDelimStr()
+									<< std::endl;
 							out
-									<< njh::conToStr(
-											toVecStr(region.chrom_, pos + step, region.end_,
-													njh::pasteAsStr(region.chrom_, "_", pos + step, "_",
-															region.end_), region.end_ - pos + step,
-													region.reverseSrand_ ? '-' : '+'), "\t") << std::endl;
+									<< GenomicRegion("", region.chrom_, pos + step, region.end_,
+											region.reverseSrand_).genBedRecordCore().toDelimStr()
+									<< std::endl;
 						} else {
 							actualEnd += basesLeft;
 							out
-									<< njh::conToStr(
-											toVecStr(region.chrom_, pos, actualEnd,
-													njh::pasteAsStr(region.chrom_, "_", pos, "_",
-															actualEnd), actualEnd - pos,
-													region.reverseSrand_ ? '-' : '+'), "\t") << std::endl;
+									<< GenomicRegion("", region.chrom_, pos, actualEnd,
+											region.reverseSrand_).genBedRecordCore().toDelimStr()
+									<< std::endl;
 						}
 					} else {
 						out
-								<< njh::conToStr(
-										toVecStr(region.chrom_, pos, actualEnd,
-												njh::pasteAsStr(region.chrom_, "_", pos, "_",
-														actualEnd), actualEnd - pos,
-												region.reverseSrand_ ? '-' : '+'), "\t") << std::endl;
+								<< GenomicRegion("", region.chrom_, pos, actualEnd,
+										region.reverseSrand_).genBedRecordCore().toDelimStr()
+								<< std::endl;
 					}
 				}
 			}

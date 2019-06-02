@@ -199,8 +199,22 @@ int seqUtilsModRunner::guessAProteinFromSeq(
 			reader.write(longest);
 
 		} else {
-			uint32_t start = 0;
-			auto seqCopy = seq.translateRet(false, false, start);
+			std::vector<seqInfo> translatedSeqs{seq.translateRet(false, false, 0),
+				seq.translateRet(false, false, 1),
+				seq.translateRet(false, false, 2)};
+
+
+			uint32_t minPos = 0;
+			uint32_t minStopCodon = std::numeric_limits<uint32_t>::max();
+			for(auto pos: iter::range(translatedSeqs.size())){
+				auto stops =  countOccurences(translatedSeqs[pos].seq_, "*");
+				if(stops < minStopCodon){
+					minStopCodon = stops;
+					minPos = pos;
+				}
+			}
+
+			seqInfo seqCopy = translatedSeqs[minPos];
 			if (mark) {
 				MetaDataInName meta;
 				bool nameHasMeta = false;
@@ -208,35 +222,14 @@ int seqUtilsModRunner::guessAProteinFromSeq(
 					meta = MetaDataInName(seqCopy.name_);
 					nameHasMeta = true;
 				}
-				meta.addMeta("frame", start);
+				meta.addMeta("frame", minPos);
 				if (nameHasMeta) {
 					meta.resetMetaInName(seqCopy.name_);
 				} else {
 					seqCopy.name_.append(" " + meta.createMetaName());
 				}
 			}
-			while (start < 3
-					&& !(std::string::npos == seqCopy.seq_.find("*")
-							|| seqCopy.seq_.find("*") + 1 == len(seqCopy))) {
-				//std::cout << "start: " << start << std::endl;
-				seqCopy = seq.translateRet(false, false, start);
-				//std::cout << seqCopy.seq_ << std::endl;
-				if (mark) {
-					MetaDataInName meta;
-					bool nameHasMeta = false;
-					if (MetaDataInName::nameHasMetaData(seqCopy.name_)) {
-						meta = MetaDataInName(seqCopy.name_);
-						nameHasMeta = true;
-					}
-					meta.addMeta("frame", start);
-					if (nameHasMeta) {
-						meta.resetMetaInName(seqCopy.name_);
-					} else {
-						seqCopy.name_.append(" " + meta.createMetaName());
-					}
-				}
-				++start;
-			}
+
 			if(removeTrailingStop ){
 				readVecTrimmer::trimAtRstripBase(seqCopy, '*');
 			}

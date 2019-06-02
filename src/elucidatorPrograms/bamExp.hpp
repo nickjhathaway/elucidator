@@ -65,6 +65,7 @@ class bamExpRunner : public njh::progutils::ProgramRunner {
 	static int bamMulticov(const njh::progutils::CmdArgs & inputCommands);
 	static int bamMulticovBasesRough(const njh::progutils::CmdArgs & inputCommands);
 	static int bamMulticovBases(const njh::progutils::CmdArgs & inputCommands);
+
 	static int bamDupCounts(const njh::progutils::CmdArgs & inputCommands);
 
 
@@ -99,6 +100,7 @@ class bamExpRunner : public njh::progutils::ProgramRunner {
 
 
 	static int printHeaderRefIndexes(const njh::progutils::CmdArgs & inputCommands);
+
 	static int refineBedRegionFromBam(const njh::progutils::CmdArgs & inputCommands);
 
 

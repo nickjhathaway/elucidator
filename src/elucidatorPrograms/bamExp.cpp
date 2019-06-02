@@ -889,10 +889,12 @@ int bamExpRunner::bamMulticovBasesRough(const njh::progutils::CmdArgs & inputCom
 	bool noHeader = false;
 	outOpts.outExtention_ = ".tab.txt";
 	bool countDups = false;
+	uint32_t mapQualityCutOff = 20;
 	seqSetUp setUp(inputCommands);
 	setUp.description_ = "Get the coverage in base count for bam files for certain regions";
 	setUp.processVerbose();
 	setUp.processDebug();
+	setUp.setOption(mapQualityCutOff, "--mapQualityCutOff",   "Only reads that are this mapping quality and above (inclusive)");
 	setUp.setOption(countDups, "--countDups",   "Count records marked duplicate");
 	setUp.setOption(numThreads, "--numThreads", "Number of threads to use");
 	setUp.processWritingOptions(outOpts);
@@ -962,7 +964,7 @@ int bamExpRunner::bamMulticovBasesRough(const njh::progutils::CmdArgs & inputCom
 
 	njh::concurrent::LockableVec<std::shared_ptr<BamFnpRegionPair>> pairsList(pairs);
 
-	auto getCov = [&pairsList,&countDups](){
+	auto getCov = [&pairsList,&countDups,&mapQualityCutOff](){
 		std::shared_ptr<BamFnpRegionPair> val;
 		while(pairsList.getVal(val)){
 			BamTools::BamReader bReader;
@@ -974,6 +976,9 @@ int bamExpRunner::bamMulticovBasesRough(const njh::progutils::CmdArgs & inputCom
 			while(bReader.GetNextAlignmentCore(bAln)){
 				if(bAln.IsMapped() && bAln.IsPrimaryAlignment()){
 					if(bAln.IsDuplicate() && !countDups){
+						continue;
+					}
+					if(bAln.MapQuality < mapQualityCutOff){
 						continue;
 					}
 					/**@todo this doesn't take into account gaps, so base coverage isn't precise right here, more of an approximation, should improve */

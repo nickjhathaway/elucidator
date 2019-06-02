@@ -29,8 +29,11 @@ public:
 
 	uint64_t intErrorRate_;/**< the error rate of PCR converted into uint64_t number, takes the rate and times std::numeric_limits<uint64_t>::max() */
 	bool verbose_{false};
-	double pcrEfficiency_{0.95}; /**< chance a product gets amplfied into the next round*/
-
+	/**@todo make this dependent on length of template **/
+	double pcrEfficiency_{0.95}; /**< chance a product gets amplified into the next round*/
+	bool noChimeras_ = false;  /**< whether to simulate chimeras or not */
+	uint32_t chimeraPad_ = 5; /**< number of bases needed for a partial template to lay down */
+	uint64_t templateCap_ = 500000000; /**< maximum amount of template that can be amplified in a round */
 	/**@brief Generate the number of mutated sequences with how many bases mutated
 	 *
 	 * @param gen the random number generator
@@ -93,6 +96,9 @@ public:
 		};
 		std::unordered_map<std::string, uint64_t> genomesSampled_;
 		std::unordered_map<std::string, MutInfo> sampledForSequencing_;
+		std::unordered_map<std::string, MutInfo> chimerasSampledForSequencing_;
+		std::vector<seqInfo> chimeraSeqs_;
+
 	};
 
 	struct SeqGenomeCnt {
