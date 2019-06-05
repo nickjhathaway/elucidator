@@ -90,12 +90,12 @@ int readSimulatorRunner::testPCRChimeraSim(const njh::progutils::CmdArgs & input
 	double pcrEfficiency = 0.95;
 	uint32_t chimeraBasesIn = 5;
 	uint32_t templateCap = 500000000;
+	bool noChimeras = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.processReadInNames(true);
 	setUp.processDirectoryOutputName(true);
-	setUp.setOption(chimeraBasesIn, "--chimeraBasesIn", "The number of bases needed for a template to lay down");
 
 	setUp.setOption(errorRate, "--errorRate", "Polymerase Error Rate");
 	setUp.setOption(numThreads, "--numThreads", "Number Threads");
@@ -105,7 +105,10 @@ int readSimulatorRunner::testPCRChimeraSim(const njh::progutils::CmdArgs & input
 	setUp.setOption(startingTemplate, "--startingTemplate", "Starting Template");
 	setUp.setOption(finalReadAmount, "--finalReadAmount", "Final Read Amount");
 	setUp.setOption(pcrEfficiency, "--pcrEfficiency", "PCR Efficiency, between 0-1, chance a product gets amplified");
+
+	setUp.setOption(noChimeras, "--noChimeras", "Don't simulate chimeras");
 	setUp.setOption(templateCap, "--templateCap", "Template Cap");
+	setUp.setOption(chimeraBasesIn, "--chimeraBasesIn", "The number of bases needed for a template to lay down");
 
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
@@ -113,16 +116,14 @@ int readSimulatorRunner::testPCRChimeraSim(const njh::progutils::CmdArgs & input
 	uint64_t intErrorRate = errorRate * std::numeric_limits<uint64_t>::max();
 	PCRSimulator pcrSim(intErrorRate);
 	pcrSim.verbose_ = setUp.pars_.verbose_;
+
 	pcrSim.pcrEfficiency_ = pcrEfficiency;
 	pcrSim.templateCap_ = templateCap;
+	pcrSim.noChimeras_ = noChimeras;
+	pcrSim.chimeraPad_ = chimeraBasesIn;
 
 	uint64_t maxLen = 0;
 	auto seqs = SeqInput::getSeqVec<seqInfo>(setUp.pars_.ioOptions_, maxLen);
-
-
-
-
-
 
 	OutOptions pcrSeqFileOpts(njh::files::make_path(setUp.pars_.directoryName_, "pcrSeqs.fasta"));
 	auto total = std::accumulate(seqs.begin(), seqs.end(), 0.0, [](double total, const seqInfo & seq){return total + seq.cnt_;});

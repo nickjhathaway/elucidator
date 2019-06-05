@@ -1138,7 +1138,7 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 			pcrRounds - initialPcrRounds, numThreads);
 	std::unordered_map<std::string, PCRSimulator::SimHapCounts::MutInfo> sampleNumber;
 	for(const auto & samp : sampleNumberAll){
-		if(!njh::beginsWith("Chi.", samp.first)){
+		if(!njh::beginsWith(samp.first, "Chi.")){
 			sampleNumber.emplace(samp);
 		}else{
 			ret.chimerasSampledForSequencing_[samp.first].mutated_ += samp.second.mutated_;

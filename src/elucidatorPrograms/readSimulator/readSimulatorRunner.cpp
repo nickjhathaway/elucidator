@@ -39,7 +39,7 @@ readSimulatorRunner::readSimulatorRunner()
 	addFunc("simMultipleMixturePCR", simMultipleMixturePCR, false),
 	addFunc("createMinorVariantsFromKnown", createMinorVariantsFromKnown, false),
 	addFunc("effectsOfPcrErrorRatePerRounds", effectsOfPcrErrorRatePerRounds, false),
-	addFunc("simMultipleMixture", simMultipleMixture, false),
+	//addFunc("simMultipleMixture", simMultipleMixture, false),
 	//addFunc("createLibrarySimMultipleMixture", createLibrarySimMultipleMixture, false),
 	addFunc("createIlluminaErrorProfile", createIlluminaErrorProfile, false),
 	addFunc("createLibrarySimMultipleMixtureDrugResistant", createLibrarySimMultipleMixtureDrugResistant, false),

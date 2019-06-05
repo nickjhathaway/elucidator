@@ -10,8 +10,475 @@
 #include <SeekDeep/objects/PrimersAndMids.hpp>
 
 #include "elucidator/common.h"
+#include "elucidator/simulation/pcrSimulation/PCRSimulator.hpp"
 
 namespace njhseq {
+
+
+
+
+class ControlPopulation {
+public:
+	class Strain {
+	public:
+		Strain(const std::string & name,
+				const std::map<std::string, std::string> & genomicRegionToHapNames) :
+				name_(name), genomicRegionToHapNames_(genomicRegionToHapNames) {
+
+		}
+		Strain(const std::string & name,
+				const std::map<std::string, std::string> & genomicRegionToHapNames,
+				double relativeAbundance) :
+				name_(name), genomicRegionToHapNames_(genomicRegionToHapNames), relativeAbundance_(
+						relativeAbundance) {
+
+		}
+		std::string name_;
+		std::map<std::string, std::string> genomicRegionToHapNames_;
+		double relativeAbundance_ { 1.0 };
+		MetaDataInName meta_;
+
+		Json::Value toJson() const {
+			Json::Value ret;
+			ret["class"] = njh::json::toJson(njh::getTypeName(*this));
+			ret["name_"] = njh::json::toJson(name_);
+			ret["genomicRegionToHapNames_"] = njh::json::toJson(genomicRegionToHapNames_);
+			ret["relativeAbundance_"] = njh::json::toJson(relativeAbundance_);
+			ret["meta_"] = njh::json::toJson(meta_);
+			return ret;
+		}
+
+		static VecStr genJsonMemNames() {
+			return VecStr { "name_", "genomicRegionToHapNames_", "relativeAbundance_", "meta_" };
+		}
+
+		static Strain genFromJson(const Json::Value & val){
+			njh::json::MemberChecker memCheck(val);
+			memCheck.failMemberCheckThrow(genJsonMemNames(), __PRETTY_FUNCTION__);
+			Strain ret(val["sampName_"].asString(),
+					njh::json::JsonToMap<std::string, std::string>(val["genomicRegionToHapNames_"]),
+							val["relativeAbundance_"].asDouble());
+			ret.meta_ = MetaDataInName::genMetaFromJson(val["meta_"]);
+			return ret;
+		}
+	};
+
+	class GenomicRegionAmp {
+	public:
+		GenomicRegionAmp(const std::string & tarName,
+				const std::map<std::string, double>& hapAbundSampled) :
+				name_(tarName), hapAbundSampled_(hapAbundSampled) {
+
+		}
+
+		std::string name_;
+		std::map<std::string, double> hapAbundSampled_;
+		std::map<std::string, double> hapAbundSequenced_;
+		std::map<std::string, double> hapAbundObserved_;
+
+		MetaDataInName meta_;
+
+		Json::Value toJson() const {
+			Json::Value ret;
+			ret["class"] = njh::json::toJson(njh::getTypeName(*this));
+			ret["name_"] = njh::json::toJson(name_);
+			ret["hapAbundSampled_"] = njh::json::toJson(hapAbundSampled_);
+			ret["hapAbundSequenced_"] = njh::json::toJson(hapAbundSequenced_);
+			ret["hapAbundObserved_"] = njh::json::toJson(hapAbundObserved_);
+			ret["meta_"] = njh::json::toJson(meta_);
+			return ret;
+		}
+
+		static VecStr genJsonMem() {
+			return VecStr { "name_", "hapAbundSampled_", "hapAbundSequenced_", "hapAbundObserved_", "meta_" };
+		}
+
+		static GenomicRegionAmp genFromJson(const Json::Value & val){
+			njh::json::MemberChecker memCheck(val);
+			memCheck.failMemberCheckThrow(genJsonMem(), __PRETTY_FUNCTION__);
+			GenomicRegionAmp ret(val["name_"].asString(), njh::json::JsonToMap<std::string, double>(val["hapAbundSampled_"]));
+			ret.hapAbundSequenced_ = njh::json::JsonToMap<std::string, double>(val["hapAbundSequenced_"]);
+			ret.hapAbundObserved_ = njh::json::JsonToMap<std::string, double>(val["hapAbundObserved_"]);
+			ret.meta_ = MetaDataInName::genMetaFromJson(val["meta_"]);
+			return ret;
+		}
+	};
+
+	struct SeqSampledAmounts{
+		uint32_t sequencedReadAmount_{0};
+		uint32_t totalGenomesSampled_{0};
+
+		Json::Value toJson() const {
+			Json::Value ret;
+			ret["class"] = njh::json::toJson(njh::getTypeName(*this));
+			ret["sequencedReadAmount_"] = njh::json::toJson(sequencedReadAmount_);
+			ret["totalGenomesSampled_"] = njh::json::toJson(totalGenomesSampled_);
+			return ret;
+		}
+		static VecStr genJsonMem(){
+			return VecStr{"sequencedReadAmount_", "totalGenomesSampled_"};
+		}
+
+		static SeqSampledAmounts genFromJson(const Json::Value & val){
+			njh::json::MemberChecker memCheck(val);
+			memCheck.failMemberCheckThrow(genJsonMem(), __PRETTY_FUNCTION__);
+			SeqSampledAmounts ret;
+			ret.sequencedReadAmount_ = val["sequencedReadAmount_"].asUInt();
+			ret.totalGenomesSampled_ = val["totalGenomesSampled_"].asUInt();
+			return ret;
+		}
+	};
+
+	class Sample {
+	public:
+		Sample(const std::string & name,
+				const std::map<std::string, Strain> & strainsExpected) :
+				sampName_(name), strainsExpected_(strainsExpected) {
+
+		}
+
+
+
+		class ExperimentRun {
+		public:
+
+			ExperimentRun(const std::string & name, const SeqSampledAmounts & expAmounts) :
+					runName_(name), expAmounts_(expAmounts) {
+
+			}
+			std::string runName_;
+			std::map<std::string, Strain> hapAbundGenomesSampled_;
+			std::map<std::string, GenomicRegionAmp> hapRegionAmplified_;
+			SeqSampledAmounts expAmounts_;
+			MetaDataInName meta_;
+
+			void setGenomesSampled(const std::map<std::string, Strain> & strainsExpected){
+				hapAbundGenomesSampled_.clear();
+				hapRegionAmplified_.clear();
+				std::vector<seqInfo> seqs;
+				for(const auto & strain : strainsExpected){
+					seqInfo seq(strain.second.name_);
+					seq.cnt_ = strain.second.relativeAbundance_;
+					seq.frac_ = strain.second.relativeAbundance_;
+					seqs.emplace_back(seq);
+				}
+				auto genomesSampled = PCRSimulator::randomlySampleGenomes(seqs,
+						expAmounts_.totalGenomesSampled_);
+				std::map<std::string, std::map<std::string, double>> subRegionsSampled;
+				for (const auto & strainSampled : genomesSampled) {
+					Strain strain(strainSampled.seqBase_.name_,
+							strainsExpected.at(strainSampled.seqBase_.name_).genomicRegionToHapNames_,
+							strainSampled.genomeCnt_);
+					strain.meta_ = strainsExpected.at(strainSampled.seqBase_.name_).meta_;
+					hapAbundGenomesSampled_.emplace(strainSampled.seqBase_.name_, strain);
+					for(const auto & hap : strain.genomicRegionToHapNames_){
+						subRegionsSampled[hap.first][hap.second] += strain.relativeAbundance_;
+					}
+				}
+				for(const auto & subRegionSampled : subRegionsSampled){
+					hapRegionAmplified_.emplace(subRegionSampled.first, GenomicRegionAmp(subRegionSampled.first,subRegionSampled.second));
+				}
+			}
+
+			Json::Value toJson() const {
+				Json::Value ret;
+				ret["class"] = njh::json::toJson(njh::getTypeName(*this));
+				ret["runName_"] = njh::json::toJson(runName_);
+				ret["hapAbundGenomesSampled_"] = njh::json::toJson(hapAbundGenomesSampled_);
+				ret["hapRegionAmplified_"] = njh::json::toJson(hapRegionAmplified_);
+				ret["expAmounts_"] = njh::json::toJson(expAmounts_);
+				ret["meta_"] = njh::json::toJson(meta_);
+				return ret;
+			}
+
+			static VecStr genJsonMem(){
+				return VecStr{"runName_", "hapAbundGenomesSampled_", "expAmounts_", "hapRegionAmplified_", "meta_"};
+			}
+
+			static ExperimentRun genFromJson(const Json::Value & val){
+				njh::json::MemberChecker memCheck(val);
+				memCheck.failMemberCheckThrow(genJsonMem(), __PRETTY_FUNCTION__);
+				ExperimentRun ret(val["runName_"].asString(), SeqSampledAmounts::genFromJson(val["expAmounts_"]));
+				for(const auto & sName : val["hapAbundGenomesSampled_"].getMemberNames()){
+					ret.hapAbundGenomesSampled_.emplace(sName, Strain::genFromJson(val["hapAbundGenomesSampled_"][sName]));
+				}
+				for(const auto & region : val["hapRegionAmplified_"].getMemberNames()){
+					ret.hapRegionAmplified_.emplace(region, GenomicRegionAmp::genFromJson(val["hapRegionAmplified_"][region]));
+				}
+				ret.meta_ = MetaDataInName::genMetaFromJson(val["meta_"]);
+				return ret;
+			}
+
+			static std::map<std::string, Strain> averageStrainsSampled(const std::vector<ExperimentRun> & runs, const uint32_t runsRequired){
+				std::map<std::string, Strain> ret;
+
+				std::map<std::string, std::vector<Strain>> acrossRuns;
+				for(const auto & run : runs){
+					for(const auto & strain : run.hapAbundGenomesSampled_){
+						acrossRuns[strain.first].emplace_back(strain.second);
+					}
+				}
+				for (const auto & strain : acrossRuns) {
+					if (runsRequired == strain.second.size()) {
+						double sum = 0;
+						for (const auto & s : strain.second) {
+							sum += s.relativeAbundance_;
+						}
+						auto nonZeroStrain = strain.second.front();
+						nonZeroStrain.relativeAbundance_ = sum/runs.size();
+						ret.emplace(nonZeroStrain.name_, nonZeroStrain);
+					}else{
+						auto zeroStrain = strain.second.front();
+						zeroStrain.relativeAbundance_ = 0;
+						ret.emplace(zeroStrain.name_, zeroStrain);
+					}
+				}
+				//normalize fractions
+				double total = 0;
+				for(const auto & s : ret){
+					total += s.second.relativeAbundance_;
+				}
+				for(auto & s : ret){
+					s.second.relativeAbundance_ = s.second.relativeAbundance_/total;
+				}
+				return ret;
+			}
+
+			static std::map<std::string,std::map<std::string, double>> averageHapAbundSampled(const std::vector<ExperimentRun> & runs, const uint32_t runsRequired){
+				std::map<std::string,std::map<std::string, double>> ret;
+				std::map<std::string,std::map<std::string, std::vector<double>>> acrossRuns;
+				for(const auto & run : runs){
+					for(const auto & region : run.hapRegionAmplified_){
+						for(const auto & hap : region.second.hapAbundSampled_){
+							if(hap.second > 0){
+								acrossRuns[region.first][hap.first].emplace_back(hap.second);
+							}
+						}
+					}
+				}
+				for(const auto & region : acrossRuns){
+					for(const auto & hap : region.second){
+						if(hap.second.size() == runsRequired){
+							auto sum = vectorSum(hap.second);
+							ret[region.first][hap.first] = sum/runs.size();
+						}else{
+							ret[region.first][hap.first] = 0;
+						}
+					}
+				}
+				//normalize fractions
+				for (auto & region : ret) {
+					double total = 0;
+					for (auto & hap : region.second) {
+						total += hap.second;
+					}
+					for (auto & hap : region.second) {
+						hap.second = hap.second / total;
+					}
+				}
+				return ret;
+			}
+
+			static std::map<std::string,std::map<std::string, double>> averageHapAbundSequenced(const std::vector<ExperimentRun> & runs, const uint32_t runsRequired){
+				std::map<std::string,std::map<std::string, double>> ret;
+				std::map<std::string,std::map<std::string, std::vector<double>>> acrossRuns;
+				for(const auto & run : runs){
+					for(const auto & region : run.hapRegionAmplified_){
+						for(const auto & hap : region.second.hapAbundSequenced_){
+							if(hap.second > 0){
+								acrossRuns[region.first][hap.first].emplace_back(hap.second);
+							}
+						}
+					}
+				}
+				for(const auto & region : acrossRuns){
+					for(const auto & hap : region.second){
+						if(hap.second.size() == runsRequired){
+							auto sum = vectorSum(hap.second);
+							ret[region.first][hap.first] = sum/runs.size();
+						}else{
+							ret[region.first][hap.first] = 0;
+						}
+					}
+				}
+				//normalize fractions
+				for (auto & region : ret) {
+					double total = 0;
+					for (auto & hap : region.second) {
+						total += hap.second;
+					}
+					for (auto & hap : region.second) {
+						hap.second = hap.second / total;
+					}
+				}
+				return ret;
+			}
+
+			static std::map<std::string,std::map<std::string, double>> averageHapAbundObserved(const std::vector<ExperimentRun> & runs, const uint32_t runsRequired){
+				std::map<std::string,std::map<std::string, double>> ret;
+				std::map<std::string,std::map<std::string, std::vector<double>>> acrossRuns;
+				for(const auto & run : runs){
+					for(const auto & region : run.hapRegionAmplified_){
+						for(const auto & hap : region.second.hapAbundObserved_){
+							if(hap.second > 0){
+								acrossRuns[region.first][hap.first].emplace_back(hap.second);
+							}
+						}
+					}
+				}
+				for(const auto & region : acrossRuns){
+					for(const auto & hap : region.second){
+						if(hap.second.size() == runsRequired){
+							auto sum = vectorSum(hap.second);
+							ret[region.first][hap.first] = sum/runs.size();
+						}else{
+							ret[region.first][hap.first] = 0;
+						}
+					}
+				}
+				//normalize fractions
+				for (auto & region : ret) {
+					double total = 0;
+					for (auto & hap : region.second) {
+						total += hap.second;
+					}
+					for (auto & hap : region.second) {
+						hap.second = hap.second / total;
+					}
+				}
+				return ret;
+			}
+
+			static std::map<std::string, Strain> averageStrainsSampled(const std::vector<ExperimentRun> & runs){
+				return averageStrainsSampled(runs, runs.size());
+			}
+
+			static std::map<std::string,std::map<std::string, double>> averageHapAbundSampled(const std::vector<ExperimentRun> & runs){
+				return averageHapAbundSampled(runs, runs.size());
+			}
+
+			static std::map<std::string,std::map<std::string, double>> averageHapAbundSequenced(const std::vector<ExperimentRun> & runs){
+				return averageHapAbundSequenced(runs, runs.size());
+			}
+
+			static std::map<std::string,std::map<std::string, double>> averageHapAbundObserved(const std::vector<ExperimentRun> & runs){
+				return averageHapAbundObserved(runs, runs.size());
+			}
+		};
+
+		std::string sampName_;
+		std::map<std::string, std::vector<ExperimentRun>> expRuns_; /**< replicates will be placed in the same sub-vector*/
+		std::map<std::string, Strain> strainsExpected_;
+		MetaDataInName meta_;
+
+		Json::Value toJson() const {
+			Json::Value ret;
+			ret["class"] = njh::json::toJson(njh::getTypeName(*this));
+			ret["sampName_"] = njh::json::toJson(sampName_);
+			ret["expRuns_"] = njh::json::toJson(expRuns_);
+			ret["strainsExpected_"] = njh::json::toJson(strainsExpected_);
+			ret["meta_"] = njh::json::toJson(meta_);
+			return ret;
+		}
+
+		static VecStr genJsonMem() {
+			return VecStr { "sampName_", "strainsExpected_", "expRuns_", "meta_" };
+		}
+
+		static Sample genFromJson(const Json::Value & val){
+			njh::json::MemberChecker memCheck(val);
+			memCheck.failMemberCheckThrow(genJsonMem(), __PRETTY_FUNCTION__);
+			std::map<std::string, Strain> strainsExpected;
+			for(const auto & strain : val["strainsExpected_"].getMemberNames()){
+				strainsExpected.emplace(strain, Strain::genFromJson((val["strainsExpected_"][strain])));
+			}
+			Sample ret(val["sampName_"].asString(), strainsExpected);
+			for(const auto & run : val["expRuns_"].getMemberNames()){
+				std::vector<ExperimentRun> runs;
+				for(const auto & subRun : val["expRuns_"][run] ){
+					runs.emplace_back(ExperimentRun::genFromJson(subRun)) ;
+				}
+				ret.expRuns_.emplace(run, runs);
+			}
+			ret.meta_ = MetaDataInName::genMetaFromJson(val["meta_"]);
+			return ret;
+		}
+
+		bool hasExpRun(const std::string & run){
+			return njh::in(run, expRuns_);
+		}
+
+		void addExpRun(const std::string & run, const SeqSampledAmounts & amounts, const uint32_t numOfRuns = 1) {
+			if (hasExpRun(run)) {
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "already have experiment "
+						<< run << "\n";
+				throw std::runtime_error { ss.str() };
+			}
+
+			std::vector<ExperimentRun> runs;
+			for(uint32_t runNum = 1; runNum <= numOfRuns; ++runNum){
+				std::string eRunName = run;
+				if(numOfRuns > 1){
+					eRunName += njh::pasteAsStr("-rep", runNum);
+				}
+				ExperimentRun eRun(eRunName, amounts);
+				eRun.setGenomesSampled(strainsExpected_);
+				runs.emplace_back(eRun);
+			}
+			expRuns_.emplace(run, runs);
+		}
+	};
+
+	ControlPopulation(const std::string & name): populationName_(name){
+
+	}
+	std::string populationName_;
+	std::map<std::string, Sample> samples_;
+	MetaDataInName meta_;
+	Json::Value toJson() const {
+		Json::Value ret;
+		ret["class"] = njh::json::toJson(njh::getTypeName(*this));
+		ret["populationName_"] = njh::json::toJson(populationName_);
+		ret["samples_"] = njh::json::toJson(samples_);
+		ret["meta_"] = njh::json::toJson(meta_);
+		return ret;
+	}
+
+	static VecStr genJsonMem() {
+		return VecStr { "populationName_", "samples_", "meta_" };
+	}
+
+	static ControlPopulation genFromJson(const Json::Value & val){
+		njh::json::MemberChecker memCheck(val);
+		memCheck.failMemberCheckThrow(genJsonMem(), __PRETTY_FUNCTION__);
+		ControlPopulation ret(val["populationName_"].asString());
+		for(const auto & reg : val["samples_"].getMemberNames()){
+			ret.samples_.emplace(reg, Sample::genFromJson((val["samples_"][reg])));
+		}
+		ret.meta_ = MetaDataInName::genMetaFromJson(val["meta_"]);
+		return ret;
+	}
+
+	bool hasSample(const std::string & samp) {
+		return njh::in(samp, samples_);
+	}
+	void addSample(const Sample & samp) {
+		if (hasSample(samp.sampName_)) {
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "already have sample: " << samp.sampName_
+					<< "\n";
+			throw std::runtime_error { ss.str() };
+		}
+		samples_.emplace(samp.sampName_, samp);
+	}
+	void addSample(const std::string & samp,
+			const std::map<std::string, Strain> & strainsExpected) {
+		addSample(Sample(samp, strainsExpected));
+	}
+};
+
+
 
 class MixtureSetUp {
 public:
@@ -85,9 +552,9 @@ public:
 	std::shared_ptr<MidSetup> forwardBarcode_;
 	std::shared_ptr<MidSetup> reverseBarcode_;
 
-	std::unordered_map<std::string, double> expectedAbundances_;
+	std::map<std::string, double> expectedAbundances_;
 
-	std::unordered_map<std::string, uint64_t> genomeCounts_;
+	std::map<std::string, uint64_t> genomeCounts_;
 
 	uint32_t startingTemplateAmount_{3000};
 	uint32_t finalReadAmount_{1000};
@@ -207,7 +674,7 @@ public:
 	}
 
 	std::string name_;
-	std::unordered_map<std::string, std::shared_ptr<MixtureSetUp>> mixtures_;
+	std::map<std::string, std::shared_ptr<MixtureSetUp>> mixtures_;
 
 	void addMixture(const std::shared_ptr<MixtureSetUp> & mixture){
 		if(hasMixture(mixture->name_)){
@@ -283,14 +750,17 @@ public:
 	};
 
 	LibrarySetup(const std::string & name, const SimLibrarySetupPars & pars) :
-			name_(name), pars_(pars) {
+			name_(name), pars_(pars), pop_(name) {
 
 	}
 
 	LibrarySetup(const std::string & name, const SimLibrarySetupPars & pars,
 			const Json::Value & librarySetUp,
-			const std::unordered_map<std::string, seqInfo> & refSeqs) :
-			name_(name), pars_(pars) {
+			const VecStr & refSeqsNames) :
+			name_(name), pars_(pars), pop_(name) {
+
+		njh::json::MemberChecker memcheck(librarySetUp);
+		memcheck.failMemberCheckThrow(jsonMembers(), __PRETTY_FUNCTION__);
 
 		ids_ = std::make_unique<PrimersAndMids>(std::unordered_map<std::string, PrimersAndMids::Target>{});
 		for(const auto & sample : librarySetUp["samples"]){
@@ -306,10 +776,10 @@ public:
 				{
 					auto memebers = mixture["expectedAbundances_"].getMemberNames();
 					for(const auto & member : memebers){
-						if(!njh::in(member, refSeqs)){
+						if(!njh::in(member, refSeqsNames)){
 							std::stringstream ss;
 							ss << __PRETTY_FUNCTION__ << ", error, " << " no reference seq named: " << member << "\n";
-							ss << "options are: " << njh::conToStr(getVectorOfMapKeys(refSeqs)) << "\n";
+							ss << "options are: " << njh::conToStr(refSeqsNames) << "\n";
 							throw std::runtime_error{ss.str()};
 						}
 						mixtureSet->addAbundance(member, mixture["expectedAbundances_"][member].asDouble());
@@ -318,10 +788,10 @@ public:
 				{
 					auto memebers = mixture["genomeCounts_"].getMemberNames();
 					for(const auto & member : memebers){
-						if(!njh::in(member, refSeqs)){
+						if(!njh::in(member, refSeqsNames)){
 							std::stringstream ss;
 							ss << __PRETTY_FUNCTION__ << ", error, " << " no reference seq named: " << member << "\n";
-							ss << "options are: " << njh::conToStr(getVectorOfMapKeys(refSeqs)) << "\n";
+							ss << "options are: " << njh::conToStr(refSeqsNames) << "\n";
 							throw std::runtime_error{ss.str()};
 						}
 						mixtureSet->addGenomeCount(member, mixture["genomeCounts_"][member].asUInt64());
@@ -458,7 +928,7 @@ public:
 			}
 			addSample(sampleSet);
 		}
-
+		pop_ = ControlPopulation::genFromJson(librarySetUp["pop_"]);
 	}
 	std::string name_;
 	std::unordered_map<std::string, std::shared_ptr<SampleSetup>> samples_;
@@ -466,6 +936,7 @@ public:
 	SimLibrarySetupPars pars_;
 
 	std::unique_ptr<PrimersAndMids> ids_;
+	ControlPopulation pop_;
 
 	void addSample(const std::shared_ptr<SampleSetup> & sample){
 		if(hasSample(sample->name_)){
@@ -483,7 +954,8 @@ public:
 		return {
 		"name",
 		"samples",
-		"pars"};
+		"pars",
+		"pop_"};
 	}
 	Json::Value toJson() const{
 		Json::Value ret;
@@ -491,8 +963,10 @@ public:
 		ret["name"] = njh::json::toJson(name_);
 		ret["samples"] = njh::json::toJson(samples_);
 		ret["pars"] = njh::json::toJson(pars_);
+		ret["pop_"] = njh::json::toJson(pop_);
 		return ret;
 	}
+
 
 	table createAbundanceTable() const{
 		table ret(VecStr{"library", "sample", "mix", "hap", "abundanceRaw", "totalRawAbundance", "Percentage"});

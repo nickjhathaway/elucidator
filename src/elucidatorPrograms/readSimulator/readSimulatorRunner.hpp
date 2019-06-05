@@ -42,7 +42,7 @@ class readSimulatorRunner : public njh::progutils::ProgramRunner {
   static int simMultipleMixturePCR(const njh::progutils::CmdArgs & inputCommands);
 
   static int createIlluminaErrorProfile(const njh::progutils::CmdArgs & inputCommands);
-  static int simMultipleMixture(const njh::progutils::CmdArgs & inputCommands);
+  //static int simMultipleMixture(const njh::progutils::CmdArgs & inputCommands);
   static int simMultipleMixtureSimPCR(const njh::progutils::CmdArgs & inputCommands);
 
   //static int createLibrarySimMultipleMixture(const njh::progutils::CmdArgs & inputCommands);
