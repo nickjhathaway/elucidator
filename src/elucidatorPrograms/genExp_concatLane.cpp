@@ -31,69 +31,155 @@
 #include <njhseq/GenomeUtils.h>
 
 #include <TwoBit.h>
-
+#include <SeekDeep/objects/ReadPairsOrganizer.hpp>
 
 
 namespace njhseq {
 
+std::vector<bfs::path> VecStrToVecPath(const VecStr & strs){
+	std::vector<bfs::path> ret;
+	std::transform(strs.begin(), strs.end(), std::back_inserter(ret), [](const std::string & str){return bfs::path(str);});
+	return ret;
+}
+
 int genExpRunner::concatenateDifferentLanes(const njh::progutils::CmdArgs & inputCommands){
-	std::string regexPatStr = "(.*)(_L[0-9]{3}_)(.*)";
+	std::string removeRegexPatStr = "";
 	bool removeOldFiles = false;
 	bool overWrite = false;
 	uint32_t numThreads = 1;
+	bfs::path dir = "./";
+	bfs::path outDir = "./";
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(dir, "--dir", "directory to search");
+	setUp.setOption(outDir, "--outDir", "output directory");
+	setUp.setOption(removeRegexPatStr, "--removeRegexPatStr", "Remove Regex Pat Str");
+
 	setUp.setOption(numThreads, "--numThreads", "Number of cpus to use");
 	setUp.setOption(overWrite, "--overWrite", "over write output files");
 	setUp.setOption(removeOldFiles, "--removeOldFiles", "remove old files");
 	setUp.finishSetUp(std::cout);
-	std::regex regexPat{regexPatStr};
 
+
+
+	ReadPairsOrganizer pOrg{VecStr{}};
+
+	std::regex regexPat{ReadPairsOrganizer::illuminaPat_};
 	auto fullFnps = njh::files::listAllFiles("./", false, {regexPat});
 
-	std::vector<bfs::path> fnps;
-	for(const auto & fnp : fullFnps){
-		fnps.emplace_back(fnp.first.filename());
-	}
-	std::unordered_map<std::string, std::vector<bfs::path>> outputFiles;
-	for(const auto & fnp : fnps){
-		std::smatch match;
-		if(std::regex_match(fnp.string(), match, regexPat)){
-			if(4 == match.size()){
-				std::stringstream ss;
-				ss << match[1] << "_" << match[3];
-				outputFiles[ss.str()].emplace_back(fnp);
+	pOrg.processFiles(fullFnps);
+	pOrg.readPairs_ = pOrg.readPairsUnrecognized_;
+	auto pairs = pOrg.processReadPairs();
+
+	if(setUp.pars_.debug_){
+		std::cout << "fullFnps.size(): " << fullFnps.size() << std::endl;
+
+		std::cout << "pairs.size(): " << pairs.size() << std::endl;
+		for(const auto & pair : pairs){
+			std::cout << pair.first << std::endl;
+			if("" != removeRegexPatStr){
+				std::string newName = std::regex_replace(pair.first, std::regex{removeRegexPatStr}, "");
+				std::cout << newName << std::endl;
+			}
+
+			std::cout << "\tfirst" << std::endl;
+			for(const auto & sub : pair.second.first){
+				std::cout << "\t\t" << sub << std::endl;
+				std::smatch mat;
+				std::regex_match(sub, mat, ReadPairsOrganizer::illuminaPat_);
+				std::cout << "\t\t" << "mat[mat.size() - 1] == \".gz\": " << njh::colorBool(mat[mat.size() - 1] == ".gz") << std::endl;
+//				for(const auto & m : mat){
+//					std::cout << "\t\t" << m << std::endl;
+//				}
+			}
+			std::cout << "\tsecond" << std::endl;
+			for(const auto & sub : pair.second.second){
+				std::cout << "\t\t" << sub << std::endl;
+				std::smatch mat;
+				std::regex_match(sub, mat, ReadPairsOrganizer::illuminaPat_);
+				std::cout << "\t\t" << "mat[mat.size() - 1] == \".gz\": " << njh::colorBool(mat[mat.size() - 1] == ".gz") << std::endl;
+//				for(const auto & m : mat){
+//					std::cout << "\t\t" << m << std::endl;
+//				}
 			}
 		}
+		return 1;
 	}
+	njh::files::makeDirP(njh::files::MkdirPar{outDir});
 
 	//check if files exits already
-	for (const auto & outs : outputFiles) {
+	std::map<std::string, std::vector<bfs::path>> outputFiles;
+	{
+		bool fail = false;
 		std::stringstream ss;
 		ss << __PRETTY_FUNCTION__ << ", error the following files already exist, use --overWrite to overwrite it" << "\n";
-		bool fail = false;
-		OutOptions outOpts(bfs::path(outs.first));
-		outOpts.overWriteFile_ = overWrite;
-		if (outOpts.outExists() && !overWrite) {
-			ss << outOpts.outName() << "\n";
-			fail = true;
+		for (const auto & pair : pairs) {
+			bool anyGz = false;
+			for(const auto & sub : pair.second.first){
+				std::smatch mat;
+				std::regex_match(sub, mat, ReadPairsOrganizer::illuminaPat_);
+				if(mat[mat.size() - 1] == ".gz"){
+					anyGz = true;
+					break;
+				}
+			}
+			for(const auto & sub : pair.second.second){
+				std::smatch mat;
+				std::regex_match(sub, mat, ReadPairsOrganizer::illuminaPat_);
+				if(mat[mat.size() - 1] == ".gz"){
+					anyGz = true;
+					break;
+				}
+			}
+			std::string extension = ".fastq";
+			if(anyGz){
+				extension += ".gz";
+			}
+			std::string outStub = pair.first;
+			if("" != removeRegexPatStr){
+				std::string newName = std::regex_replace(pair.first, std::regex{removeRegexPatStr}, "");
+				outStub = newName;
+			}
+			{
+				OutOptions outOpts(bfs::path(njh::files::make_path(outDir, outStub + "_R1" + extension ) ) ) ;
+				if (outOpts.outExists() && !overWrite) {
+					ss << outOpts.outName() << "\n";
+					fail = true;
+				}
+				outputFiles[outOpts.outName().string()] = VecStrToVecPath(pair.second.first);
+			}
+			{
+				OutOptions outOpts(bfs::path(njh::files::make_path(outDir, outStub + "_R2" + extension ) ) ) ;
+				if (outOpts.outExists() && !overWrite) {
+					ss << outOpts.outName() << "\n";
+					fail = true;
+				}
+				outputFiles[outOpts.outName().string()] = VecStrToVecPath(pair.second.second);
+
+			}
 		}
 		if(fail){
 			throw std::runtime_error { ss.str() };
 		}
 	}
+
+
+
+
 	for(const auto & outs : outputFiles){
 		OutOptions outOpts(bfs::path(outs.first));
 		outOpts.overWriteFile_ = overWrite;
 		if(setUp.pars_.verbose_){
-			std::cout << "Combining " << njh::conToStr(outs.second, ", ") << " into " << outOpts.outName();
+			std::cout << "Combining " << njh::conToStr(outs.second, ", ") << " into " << outOpts.outName() << std::endl;
 		}
 	}
+
 	auto keys = getVectorOfMapKeys(outputFiles);
 
 	njh::concurrent::LockableQueue<std::string> queue(keys);
 
-	auto catFiles = [&queue,&outputFiles,&overWrite,&removeOldFiles](){
+	std::function<void()> catFiles = [&queue,&outputFiles,&overWrite,&removeOldFiles](){
 		std::string outName = "";
 		while(queue.getVal(outName)){
 			OutOptions outOpts{bfs::path(outName)};
@@ -106,14 +192,7 @@ int genExpRunner::concatenateDifferentLanes(const njh::progutils::CmdArgs & inpu
 			}
 		}
 	};
-
-	std::vector<std::thread> threads;
-	for(uint32_t t = 0; t < numThreads; ++t){
-		threads.emplace_back(catFiles);
-	}
-	for(auto & t : threads){
-		t.join();
-	}
+	njh::concurrent::runVoidFunctionThreaded(catFiles, numThreads);
 	return 0;
 }
 
