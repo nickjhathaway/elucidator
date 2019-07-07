@@ -31,10 +31,12 @@ int programWrapperRunner::runPicardMarkDups(const njh::progutils::CmdArgs & inpu
 	setUp.setOption(extraArgs, "--extraArgs", "Extra arguments to give to picard");
 	setUp.setOption(overWrite, "--overWrite", "over write existing files");
 	setUp.setOption(outDir, "--outDir", "output Directory");
+	bfs::path logDir = outDir;
+	setUp.setOption(logDir, "--logDir", "logs Directory");
 	setUp.setOption(outNameStub, "--outNameStub", "Out Name Stub");
 
 	setUp.finishSetUp(std::cout);
-	setUp.startARunLog(outDir.string());
+	setUp.startARunLog(logDir.string());
 	njh::sys::requireExternalProgramThrow("picard");
 	if("" == outNameStub){
 		outNameStub = bamFnp.filename().string();
@@ -50,10 +52,10 @@ int programWrapperRunner::runPicardMarkDups(const njh::progutils::CmdArgs & inpu
 			outNameStub + ".mdups.sorted.bam.bai");
 	bfs::path outBamBaiPicardFnp = njh::files::make_path(outDir,
 			outNameStub + ".mdups.sorted.bai");
-	bfs::path outMetricsFnp = njh::files::make_path(outDir,
+	bfs::path outMetricsFnp = njh::files::make_path(logDir,
 			outNameStub + ".mdups_MarkDuplicates.metrics.txt");
 	;
-	bfs::path outRunLog = njh::files::make_path(outDir,
+	bfs::path outRunLog = njh::files::make_path(logDir,
 			outNameStub + "_runPicardMarkDups_" + njh::getCurrentDate() + ".txt");
 	if (!overWrite) {
 		VecStr fnpExists;
