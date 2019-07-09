@@ -85,6 +85,7 @@ genExpRunner::genExpRunner()
 					 addFunc("bowtie2ExtractAndCompareMultiple", bowtie2ExtractAndCompareMultiple, false),
 					 addFunc("splitLibrary", splitLibrary, false),
 					 addFunc("lastzExtractAndCompare", lastzExtractAndCompare, false),
+					 addFunc("countSeqNamePortion", countSeqNamePortion, false),
            },//
           "genExp") {}
 

@@ -112,6 +112,8 @@ class genExpRunner : public njh::progutils::ProgramRunner {
 
 	static int splitLibrary(const njh::progutils::CmdArgs & inputCommands);
 
+	static int countSeqNamePortion(const njh::progutils::CmdArgs & inputCommands);
+
 };
 } /* namespace njhseq */
 
