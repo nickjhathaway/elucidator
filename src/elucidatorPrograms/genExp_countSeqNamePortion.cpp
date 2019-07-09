@@ -9,13 +9,14 @@
 
 
 #include "genExp.hpp"
-#
+#include <SeekDeep/objects.h>
 
 namespace njhseq {
 
+
 int genExpRunner::countSeqNamePortion(const njh::progutils::CmdArgs & inputCommands){
-	std::string regexPatStr = "";
-	uint32_t markCount = 1;
+	std::string regexPatStr = "([A-Za-z0-9_]+):([0-9]+):([A-Za-z0-9-]+):([0-9]+):([0-9]+):([0-9]+):([0-9]+) ([12]):([NY]):([0-9]):([AGCTN+]+))";
+	uint32_t markCount = 11;
 	OutOptions outOpts(bfs::path(""), ".tab.txt");
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -49,6 +50,34 @@ int genExpRunner::countSeqNamePortion(const njh::progutils::CmdArgs & inputComma
 	outTab.outPutContents(out, "\t");
 	return 0;
 }
+
+int genExpRunner::countIlluminaSampleNumber(const njh::progutils::CmdArgs & inputCommands){
+	OutOptions outOpts(bfs::path(""), ".tab.txt");
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.processWritingOptions(outOpts);
+	setUp.processReadInNames(true);
+	setUp.finishSetUp(std::cout);
+
+	SeqInput reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	OutputStream out(outOpts);
+	seqInfo seq;
+	std::unordered_map<std::string, uint32_t> counts;
+
+	while(reader.readNextRead(seq)){
+		IlluminaNameFormatDecoder decoded(seq.name_);
+		++counts[decoded.getSampleNumber()];
+	}
+
+	table outTab(counts, VecStr{"sample", "count"});
+	outTab.sortTable("count", "sample", true);
+	outTab.outPutContents(out, "\t");
+	return 0;
+}
+
+
 
 
 }  //namespace njhseq
