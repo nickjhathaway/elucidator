@@ -211,10 +211,10 @@ int bamExpRunner::BamFindDifferenceInUnmappedFileIndexPosition(const njh::progut
 
 int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & inputCommands){
 	OutOptions outOpts(bfs::path(""), ".tab.txt");
-	std::string name = "";
+	VecStr names;
 	seqSetUp setUp(inputCommands);
 	setUp.processReadInNames({"--bam"}, true);
-	setUp.setOption(name, "--name", "Name", true);
+	setUp.setOption(names, "--names", "names", true);
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 
@@ -227,7 +227,7 @@ int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & 
 	uint32_t count = 0;
 	std::cout << "FileIndexPosition\tName\tPosition\tEndPosition\tQueryBasesSize\tRefId\tRefName\tMateRefID\tMatePosition\tIsMateMapped\tIsMapped\tIsPaired\tIsPrimaryAlignment\tIsFirstMate" << "\n";
 	while(bReader.GetNextAlignment(bAln)){
-		if (name == bAln.Name) {
+		if (njh::in(bAln.Name, names)) {
 			std::cout << count
 					<< "\t" << bAln.Name
 					<< "\t" << bAln.Position
