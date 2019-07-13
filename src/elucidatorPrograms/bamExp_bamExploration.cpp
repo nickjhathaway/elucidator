@@ -210,11 +210,12 @@ int bamExpRunner::BamFindDifferenceInUnmappedFileIndexPosition(const njh::progut
 }
 
 int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & inputCommands){
-
+	OutOptions outOpts(bfs::path(""), ".tab.txt");
 	std::string name = "";
 	seqSetUp setUp(inputCommands);
 	setUp.processReadInNames({"--bam"}, true);
-	setUp.setOption(name, "--name", "Name");
+	setUp.setOption(name, "--name", "Name", true);
+	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 
 	BamTools::BamReader bReader;
