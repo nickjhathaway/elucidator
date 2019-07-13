@@ -225,7 +225,7 @@ int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & 
 	auto refData = bReader.GetReferenceData();
 	BamTools::BamAlignment bAln;
 	uint32_t count = 0;
-	std::cout << "FileIndexPosition\tName\tPosition\tEndPosition\tQueryBasesSize\tRefId\tRefName\tMateRefID\tMatePosition\tIsMateMapped\tIsMapped\tIsPaired\tIsPrimaryAlignment" << "\n";
+	std::cout << "FileIndexPosition\tName\tPosition\tEndPosition\tQueryBasesSize\tRefId\tRefName\tMateRefID\tMatePosition\tIsMateMapped\tIsMapped\tIsPaired\tIsPrimaryAlignment\tIsFirstMate" << "\n";
 	while(bReader.GetNextAlignment(bAln)){
 		if (name == bAln.Name) {
 			std::cout << count
@@ -240,7 +240,8 @@ int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & 
 					<< "\t" << njh::boolToStr(bAln.IsMateMapped())
 					<< "\t" << njh::boolToStr(bAln.IsMapped())
 					<< "\t" << njh::boolToStr(bAln.IsPaired())
-					<< "\t" << njh::boolToStr(bAln.IsPrimaryAlignment()) << std::endl;
+					<< "\t" << njh::boolToStr(bAln.IsPrimaryAlignment())
+					<< "\t" << njh::boolToStr(bAln.IsFirstMate())<< std::endl;
 		}
 		++count;
 	}
