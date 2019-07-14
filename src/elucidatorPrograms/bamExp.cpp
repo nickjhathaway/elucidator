@@ -1434,11 +1434,9 @@ int bamExpRunner::bamToFastq(const njh::progutils::CmdArgs & inputCommands) {
 	setUp.finishSetUp(std::cout);
 	BamExtractor bExtractor(setUp.pars_.verbose_);
 	if (onlyMapped) {
-		bExtractor.writeExtractReadsFromBamOnlyMapped(
-				setUp.pars_.ioOptions_.firstName_, setUp.pars_.ioOptions_.out_);
+		bExtractor.writeExtractReadsFromBamOnlyMapped(setUp.pars_.ioOptions_.firstName_, setUp.pars_.ioOptions_.out_);
 	} else {
-		bExtractor.writeExtractReadsFromBam(setUp.pars_.ioOptions_.firstName_,
-				setUp.pars_.ioOptions_.out_);
+		bExtractor.writeExtractReadsFromBam(setUp.pars_.ioOptions_.firstName_, setUp.pars_.ioOptions_.out_);
 	}
 	return 0;
 }
