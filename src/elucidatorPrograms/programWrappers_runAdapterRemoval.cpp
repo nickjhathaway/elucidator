@@ -48,7 +48,7 @@ struct RunAdapterRemovalPars {
 	std::string extraArgs = "";
 	bool keepSinglesAfterCombining = false;
 	uint32_t maxQual = 52;
-
+	std::vector<bfs::path> addToSingles;
 
 	void processArgs(seqSetUp & setUp){
 		setUp.setOption(adapterList, "--adapterList", "Adapter List");
@@ -209,6 +209,9 @@ njh::sys::RunOutput RunAdapterRemoval(RunAdapterRemovalPars adapRemovPars){
 			addIfExists(singletonFnp);
 			addIfExists(collapdedFnp);
 			addIfExists(truncCollapdedFnp);
+			for(const auto & add : adapRemovPars.addToSingles){
+				addIfExists(add);
+			}
 
 			if(!collapseSingleFnps.empty()){
 				OutOptions collapsedSinglesOpts(bfs::path(adapRemovPars.outOpts.outFilename_.string() + "_singles" + extention));
@@ -411,20 +414,39 @@ int programWrapperRunner::setUpRunAdapterRemoval(const njh::progutils::CmdArgs &
 		auto r1OrphansPars = adapRemovPars;
 		r1OrphansPars.inOpts = SeqIOOptions(r1Orphans, SeqIOOptions::getInFormatFromFnp(r1Orphans), false);
 		r1OrphansPars.outOpts = njh::files::prependFileBasename(adapRemovPars.outOpts.outName(), "r1Orphans_");
+		r1OrphansPars.outOpts.transferOverwriteOpts(adapRemovPars.outOpts);
 		r1OrphansPars.gzip = r1OrphansPars.inOpts.isInGz();
 		RunAdapterRemovalSE(r1OrphansPars);
+		std::string outFnp = r1OrphansPars.outOpts.outName().string();
+		outFnp += ".fastq";
+		if(r1OrphansPars.gzip){
+			outFnp += ".gz";
+		}
+		if(bfs::exists(outFnp)){
+			adapRemovPars.addToSingles.emplace_back(outFnp);
+		}
 	}
 
 	if(bfs::exists(r2Orphans)){
 		auto r2OrphansPars = adapRemovPars;
 		r2OrphansPars.inOpts = SeqIOOptions(r2Orphans, SeqIOOptions::getInFormatFromFnp(r2Orphans), false);
 		r2OrphansPars.outOpts = njh::files::prependFileBasename(adapRemovPars.outOpts.outName(), "r2Orphans_");
+		r2OrphansPars.outOpts.transferOverwriteOpts(adapRemovPars.outOpts);
 		r2OrphansPars.gzip = r2OrphansPars.inOpts.isInGz();
 		r2OrphansPars.adapter1 = adapRemovPars.adapter2;
 		RunAdapterRemovalSE(r2OrphansPars);
+		std::string outFnp = r2OrphansPars.outOpts.outName().string();
+		outFnp += ".fastq";
+		if(r2OrphansPars.gzip){
+			outFnp += ".gz";
+		}
+		if(bfs::exists(outFnp)){
+			adapRemovPars.addToSingles.emplace_back(outFnp);
+		}
 	}
 
 	RunAdapterRemoval(adapRemovPars);
+
 	return 0;
 }
 
