@@ -49,6 +49,7 @@ struct RunAdapterRemovalPars {
 	bool keepSinglesAfterCombining = false;
 	uint32_t maxQual = 52;
 
+
 	void processArgs(seqSetUp & setUp){
 		setUp.setOption(adapterList, "--adapterList", "Adapter List");
 		setUp.setOption(force, "--force", "force");
@@ -316,9 +317,15 @@ njh::sys::RunOutput RunAdapterRemovalSE(RunAdapterRemovalPars adapRemovPars){
 int programWrapperRunner::setUpRunAdapterRemoval(const njh::progutils::CmdArgs & inputCommands){
 	RunAdapterRemovalPars adapRemovPars;
 	bfs::path detectPrimersDir = "";
+	bfs::path r1Orphans = "";
+	bfs::path r2Orphans = "";
+
 	seqSetUp setUp(inputCommands);
 	adapRemovPars.processArgs(setUp);
 	setUp.setOption(detectPrimersDir, "--detectPrimersDir", "Detect Primers Dir");
+	setUp.setOption(r1Orphans, "--r1Orphans", "R1 Orphans");
+	setUp.setOption(r2Orphans, "--r2Orphans", "R2 Orphans");
+
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.finishSetUp(std::cout);
@@ -399,6 +406,24 @@ int programWrapperRunner::setUpRunAdapterRemoval(const njh::progutils::CmdArgs &
 		}
 		adapRemovPars.adapterList = adapterListOpts.outName();
 	}
+
+	if(bfs::exists(r1Orphans)){
+		auto r1OrphansPars = adapRemovPars;
+		r1OrphansPars.inOpts = SeqIOOptions(r1Orphans, SeqIOOptions::getInFormatFromFnp(r1Orphans), false);
+		r1OrphansPars.outOpts = njh::files::prependFileBasename(adapRemovPars.outOpts.outName(), "r1Orphans_");
+		r1OrphansPars.gzip = r1OrphansPars.inOpts.isInGz();
+		RunAdapterRemovalSE(r1OrphansPars);
+	}
+
+	if(bfs::exists(r2Orphans)){
+		auto r2OrphansPars = adapRemovPars;
+		r2OrphansPars.inOpts = SeqIOOptions(r2Orphans, SeqIOOptions::getInFormatFromFnp(r2Orphans), false);
+		r2OrphansPars.outOpts = njh::files::prependFileBasename(adapRemovPars.outOpts.outName(), "r2Orphans_");
+		r2OrphansPars.gzip = r2OrphansPars.inOpts.isInGz();
+		r2OrphansPars.adapter1 = adapRemovPars.adapter2;
+		RunAdapterRemovalSE(r2OrphansPars);
+	}
+
 	RunAdapterRemoval(adapRemovPars);
 	return 0;
 }
