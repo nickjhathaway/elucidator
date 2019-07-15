@@ -832,6 +832,73 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSinglesCombined(const njh:
 }
 
 
+
+int programWrapperRunner::processAdaptorRemovalLog(const njh::progutils::CmdArgs & inputCommands){
+	OutOptions outOpts("", ".tab.txt");
+	bfs::path runlog;
+	std::string sample = "";
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(runlog, "--runLog", "Run log", true);
+	setUp.setOption(sample, "--sample", "sample name", true);
+
+	outOpts.outFilename_ = runlog;
+	outOpts.outFilename_.replace_extension("");
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	InputStream in(runlog);
+	OutOptions runInfoOpts(outOpts.outFilename_.string() + "_runStats", outOpts.outExtention_);
+	OutOptions outLensOpts(outOpts.outFilename_.string() + "_outputLengths", outOpts.outExtention_);
+	runInfoOpts.transferOverwriteOpts(outOpts);
+	outLensOpts.transferOverwriteOpts(outOpts);
+	OutputStream runInfoOut(runInfoOpts);
+	OutputStream outLensOut(outLensOpts);
+
+	std::string line;
+	bool readingLengths = false;
+	bool readingStats = false;
+	table trimStatsTab(VecStr{"sample", "stat", "val"});
+	table outLenTab;
+	while(njh::files::crossPlatGetline(in, line)){
+		if(allWhiteSpaceStr(line)){
+			continue;
+		}
+		if(njh::beginsWith(line, "[Length distribution]")){
+			readingLengths = true;
+			continue;
+		} if(njh::beginsWith(line, "[Trimming statistics]")){
+			readingStats = true;
+			continue;
+		}
+		if(readingLengths){
+			auto toks = tokenizeString(line, "\t");
+			if(0 == outLenTab.columnNames_.size()){
+				toks.emplace_back("sample");
+				outLenTab = table(toks);
+			}else{
+				toks.emplace_back(sample);
+				outLenTab.addRow(toks);
+			}
+		}else if(readingStats){
+			auto toks = tokenizeString(line, ":");
+			if(2 != toks.size()){
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "in processing line for trimming stats, found " << toks.size() << " instead of the expected 2"<< "\n";
+				ss << "line: " << line << "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			trimStatsTab.addRow(sample, std::regex_replace(toks[0], std::regex{R"(\s)"}, "_"), toks[1]);
+		}
+	}
+	trimStatsTab.outPutContents(runInfoOut, "\t");
+	outLenTab.outPutContents(outLensOut, "\t");
+
+	return 0;
+}
+
+
 int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path outputDir = "";
 	bfs::path trimStub = "";

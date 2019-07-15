@@ -60,6 +60,7 @@ programWrapperRunner::programWrapperRunner()
 					 addFunc("testHasProgram", testHasProgram, false),
 					 addFunc("runBowtieOnAdapterReomvalOutputSinglesCombined", runBowtieOnAdapterReomvalOutputSinglesCombined, false),
 					 addFunc("runPicardMarkDups", runPicardMarkDups, false),
+					 addFunc("processAdaptorRemovalLog", processAdaptorRemovalLog, false),
            },//
           "programWrapper") {}
 int programWrapperRunner::generatingPrime3TemplatesBasedOnMALN(const njh::progutils::CmdArgs & inputCommands) {

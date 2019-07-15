@@ -68,6 +68,7 @@ class programWrapperRunner : public njh::progutils::ProgramRunner {
 	static int setUpRunAdapterRemoval(const njh::progutils::CmdArgs & inputCommands);
 	static int runBwaOnAdapterReomvalOutputSinglesCombined(const njh::progutils::CmdArgs & inputCommands);
 	static int runBowtieOnAdapterReomvalOutputSinglesCombined(const njh::progutils::CmdArgs & inputCommands);
+	static int processAdaptorRemovalLog(const njh::progutils::CmdArgs & inputCommands);
 
 
 	static int runPicardMarkDups(const njh::progutils::CmdArgs & inputCommands);
