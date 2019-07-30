@@ -73,6 +73,7 @@ bamExpRunner::bamExpRunner()
 					 addFunc("refineBedRegionFromBam", refineBedRegionFromBam, false),
 					 addFunc("bamMulticovBasesRough", bamMulticovBasesRough, false),
 					 addFunc("bamDupCounts", bamDupCounts, false),
+					 addFunc("BamRefIdsToBed", BamRefIdsToBed, false),
           }, //
 				"bamExp") {
 }
@@ -1407,7 +1408,7 @@ int bamExpRunner::printBamRefIds(const njh::progutils::CmdArgs & inputCommands) 
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
 	setUp.processVerbose();
-	setUp.processDefaultReader( { "-bam" }, true);
+	setUp.processDefaultReader( { "--bam" }, true);
 
 	setUp.finishSetUp(std::cout);
 
@@ -1420,6 +1421,27 @@ int bamExpRunner::printBamRefIds(const njh::progutils::CmdArgs & inputCommands) 
 		std::cout << ref.RefName << "\t"<< ref.RefLength << std::endl;
 	}
 
+	return 0;
+}
+
+int bamExpRunner::BamRefIdsToBed(const njh::progutils::CmdArgs & inputCommands) {
+	OutOptions outOpts(bfs::path(""), ".bed");
+	bfs::path bamFnp = "";
+	seqSetUp setUp(inputCommands);
+	setUp.processDebug();
+	setUp.processVerbose();
+	setUp.setOption(bamFnp, "--bam", "bam file", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	BamTools::BamReader bReader;
+	bReader.Open(bamFnp.string());
+	checkBamOpenThrow(bReader,bamFnp.string());
+	auto refData = bReader.GetReferenceData();
+	OutputStream out(outOpts);
+	for(const auto & ref : refData){
+		out << ref.RefName << "\t" << "0" << "\t" << ref.RefLength << std::endl;
+	}
 	return 0;
 }
 

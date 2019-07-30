@@ -72,6 +72,9 @@ class bamExpRunner : public njh::progutils::ProgramRunner {
 	static int outputSoftClipCounts(const njh::progutils::CmdArgs & inputCommands);
 
 	static int printBamRefIds(const njh::progutils::CmdArgs & inputCommands);
+	static int BamRefIdsToBed(const njh::progutils::CmdArgs & inputCommands);
+
+
 	static int bamToBed(const njh::progutils::CmdArgs & inputCommands);
 
 
