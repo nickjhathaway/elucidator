@@ -35,8 +35,7 @@ int bamExpRunner::bamMulticovBases(const njh::progutils::CmdArgs & inputCommands
 	bool countDups = false;
 	uint32_t mapQualityCutOff = 20;
 	bool dontHandlePairs = false;
-	bfs::path directory = "";
-
+	bfs::path directory = "./";
 	seqSetUp setUp(inputCommands);
 	setUp.description_ = "Get the coverage in base count for bam files for certain regions";
 	setUp.processVerbose();
@@ -60,6 +59,11 @@ int bamExpRunner::bamMulticovBases(const njh::progutils::CmdArgs & inputCommands
 	OutputStream outFile(outOpts);
 
 	auto bamFnps = njh::files::gatherFilesByPatOrNames(directory, std::regex{pat}, bams);
+	if(bamFnps.empty()){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << "no bam files found with pattern: " << pat << " in " << directory << "\n";
+		throw std::runtime_error{ss.str()};
+	}
 	checkBamFilesForIndexesAndAbilityToOpen(bamFnps);
 	if(setUp.pars_.verbose_){
 		printVector(bamFnps, "\t", std::cout);

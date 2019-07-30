@@ -35,20 +35,31 @@
 namespace njhseq {
 
 
+uint32_t getTotalSoftClippedBases(const BamTools::BamAlignment & baln){
+	uint32_t ret = 0;
+	if('C' == baln.CigarData.front().Type){
+		ret += baln.CigarData.front().Length;
+	}
+	if(baln.CigarData.size() > 1 && 'C' == baln.CigarData.back().Type){
+		ret += baln.CigarData.front().Length;
+	}
+	return ret;
+}
+
 int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommands){
 	std::string chromFnp = "";
 	OutOptions outOpts(bfs::path("out"));
+	uint32_t allowableSoftClip = 10;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(allowableSoftClip, "--allowableSoftClip", "Number of bases that can be soft clipped in order to be included in the filtered off sequences, keep this zero to be more conservative in what gets filtered");
 	setUp.setOption(chromFnp, "--chroms", "chromosomes to filter", true);
 	setUp.processReadInNames({"--bam"}, true);
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 
 	auto chroms = getInputValues(chromFnp, ",");
-
-
-
 
 	BamTools::BamReader bReader;
 	bReader.Open(setUp.pars_.ioOptions_.firstName_.string());
@@ -75,7 +86,6 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	BamAlnsCache filterAlnCache;
 
 	auto refData = bReader.GetReferenceData();
-
 	//check to make sure chroms contains chromosome from the input bam file
 	VecStr missing;
 	for(const auto & chrom : chroms){
@@ -114,7 +124,8 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 			if (bAln.IsMapped() &&
 					bAln.IsMateMapped() &&
 					njh::in(refData[bAln.RefID].RefName, chroms) &&
-					njh::in(refData[bAln.MateRefID].RefName, chroms)){
+					njh::in(refData[bAln.MateRefID].RefName, chroms) ){
+
 				if (!filterAlnCache.has(bAln.Name)) {
 					//pair hasn't been added to cache yet so add to cache
 					//this only works if mate and first mate have the same name
@@ -122,10 +133,19 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 					continue;
 				} else {
 					auto search = filterAlnCache.get(bAln.Name);
-					if (bAln.IsFirstMate()) {
-						filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
-					} else {
-						filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
+					if(getTotalSoftClippedBases(*search) <= allowableSoftClip &&
+							getTotalSoftClippedBases(bAln)   <= allowableSoftClip){
+						if (bAln.IsFirstMate()) {
+							filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
+						} else {
+							filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
+						}
+					}else{
+						if (bAln.IsFirstMate()) {
+							pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
+						} else {
+							pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
+						}
 					}
 					// now that operations have been computed, remove ther other mate found from cache
 					filterAlnCache.remove(search->Name);
