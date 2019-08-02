@@ -87,9 +87,9 @@ genExpRunner::genExpRunner()
 					 addFunc("lastzExtractAndCompare", lastzExtractAndCompare, false),
 					 addFunc("countSeqNamePortion", countSeqNamePortion, false),
 					 addFunc("countIlluminaSampleNumber", countIlluminaSampleNumber, false),
+					 addFunc("countBasesPerPosition", countBasesPerPosition, false),
            },//
           "genExp") {}
-
 
 
 

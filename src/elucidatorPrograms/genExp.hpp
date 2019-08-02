@@ -115,6 +115,9 @@ class genExpRunner : public njh::progutils::ProgramRunner {
 	static int countSeqNamePortion(const njh::progutils::CmdArgs & inputCommands);
 	static int countIlluminaSampleNumber(const njh::progutils::CmdArgs & inputCommands);
 
+
+	static int countBasesPerPosition(const njh::progutils::CmdArgs & inputCommands);
+
 };
 } /* namespace njhseq */
 
