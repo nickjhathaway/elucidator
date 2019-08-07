@@ -17,6 +17,7 @@ namespace njhseq {
 int genExpRunner::countSeqNamePortion(const njh::progutils::CmdArgs & inputCommands){
 	std::string regexPatStr = "([A-Za-z0-9_]+):([0-9]+):([A-Za-z0-9-]+):([0-9]+):([0-9]+):([0-9]+):([0-9]+) ([12]):([NY]):([0-9]):([AGCTN+]+)";
 	uint32_t markCount = 11;
+	std::string name = "";
 	OutOptions outOpts(bfs::path(""), ".tab.txt");
 	uint64_t numberOfReadsToCount = std::numeric_limits<uint64_t>::max();
 	seqSetUp setUp(inputCommands);
@@ -25,6 +26,8 @@ int genExpRunner::countSeqNamePortion(const njh::progutils::CmdArgs & inputComma
 	setUp.setOption(numberOfReadsToCount, "--numberOfReadsToCount", "Number Of Reads To Count", false);
 	setUp.setOption(regexPatStr, "--regexPatStr", "Regex Pat Str", false);
 	setUp.setOption(markCount, "--markCount", "The mark subexpression to count");
+	setUp.setOption(name, "--name", "name to add to output file");
+
 	setUp.processWritingOptions(outOpts);
 	setUp.processReadInNames(true);
 	setUp.finishSetUp(std::cout);
@@ -55,6 +58,9 @@ int genExpRunner::countSeqNamePortion(const njh::progutils::CmdArgs & inputComma
 	}
 
 	table outTab(counts, VecStr{"mark", "count"});
+	if("" != name){
+		outTab.addColumn({name}, "name");
+	}
 	outTab.sortTable("count", "mark", true);
 	outTab.outPutContents(out, "\t");
 	return 0;
