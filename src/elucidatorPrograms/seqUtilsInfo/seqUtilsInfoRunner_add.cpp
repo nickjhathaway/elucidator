@@ -236,8 +236,8 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 	}
 
 	//get region and ref seq for mapping of variants
-	OutputStream bedOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "inputRegionBeforeExpand.bed")));
-	bedOut << gPos->toDelimStrWithExtra() << std::endl;
+	OutputStream inputRegionBeforeExpandOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "inputRegionBeforeExpand.bed")));
+	inputRegionBeforeExpandOut << gPos->toDelimStrWithExtra() << std::endl;
 
 	uint32_t oldLen = gPos->length();
 	BedUtility::extendLeftRight(*gPos, outwardsExpand, outwardsExpand,
