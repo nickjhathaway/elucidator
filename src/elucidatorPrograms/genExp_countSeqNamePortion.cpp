@@ -15,13 +15,15 @@ namespace njhseq {
 
 
 int genExpRunner::countSeqNamePortion(const njh::progutils::CmdArgs & inputCommands){
-	std::string regexPatStr = "([A-Za-z0-9_]+):([0-9]+):([A-Za-z0-9-]+):([0-9]+):([0-9]+):([0-9]+):([0-9]+) ([12]):([NY]):([0-9]):([AGCTN+]+))";
+	std::string regexPatStr = "([A-Za-z0-9_]+):([0-9]+):([A-Za-z0-9-]+):([0-9]+):([0-9]+):([0-9]+):([0-9]+) ([12]):([NY]):([0-9]):([AGCTN+]+)";
 	uint32_t markCount = 11;
 	OutOptions outOpts(bfs::path(""), ".tab.txt");
+	uint64_t numberOfReadsToCount = std::numeric_limits<uint64_t>::max();
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
-	setUp.setOption(regexPatStr, "--regexPatStr", "Regex Pat Str", true);
+	setUp.setOption(numberOfReadsToCount, "--numberOfReadsToCount", "Number Of Reads To Count", false);
+	setUp.setOption(regexPatStr, "--regexPatStr", "Regex Pat Str", false);
 	setUp.setOption(markCount, "--markCount", "The mark subexpression to count");
 	setUp.processWritingOptions(outOpts);
 	setUp.processReadInNames(true);
@@ -38,10 +40,17 @@ int genExpRunner::countSeqNamePortion(const njh::progutils::CmdArgs & inputComma
 		ss << __PRETTY_FUNCTION__ << ", error " << "--markCount(" << markCount << ") can't be larger than the mark_count()(" << regexPat.mark_count() << ") of regular expression "<< "\n";
 		throw std::runtime_error{ss.str()};
 	}
+	uint64_t totalCount = 0;
+
+
 	while(reader.readNextRead(seq)){
 		std::smatch match;
 		if(std::regex_match(seq.name_, match, regexPat)){
 			++counts[match[markCount]];
+		}
+		++totalCount;
+		if(totalCount >= numberOfReadsToCount){
+			break;
 		}
 	}
 

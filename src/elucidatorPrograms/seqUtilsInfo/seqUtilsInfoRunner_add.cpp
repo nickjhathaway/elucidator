@@ -236,6 +236,9 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 	}
 
 	//get region and ref seq for mapping of variants
+	OutputStream bedOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "inputRegionBeforeExpand.bed")));
+	bedOut << gPos->toDelimStrWithExtra() << std::endl;
+
 	uint32_t oldLen = gPos->length();
 	BedUtility::extendLeftRight(*gPos, outwardsExpand, outwardsExpand,
 			gMapper.genomes_.at(gPars.primaryGenome_)->chromosomeLengths_.at(
@@ -243,6 +246,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 	if(oldLen == gPos->score_){
 		gPos->score_ = gPos->length();
 	}
+
 	OutputStream bedOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "inputRegion.bed")));
 	bedOut << gPos->toDelimStrWithExtra() << std::endl;
 
@@ -438,7 +442,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 				gene.second->writeOutGeneInfo(tReader, outOpts);
 			}
 			//check for multiple transcripts
-			/**@todo add inputing what transcript to avoid this check, cannot be handled now because the input positions can only refere to one transcript*/
+			/**@todo add inputing what transcript to avoid this check, cannot be handled now because the input positions can only refer to one transcript*/
 			bool failed = false;
 			VecStr idsWithMoreThanOneTranscript;
 			for(const auto & idTrans : idToTranscriptName){
