@@ -361,7 +361,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 			}
 		}
 		OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "basicInfo.tab.txt"));
-		out << "id\ttotalHaplotypes\tuniqueHaplotypes\tsingletons\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism\tnSNPsAbove"
+		out << "id\ttotalHaplotypes\tuniqueHaplotypes\tnsamples\tsingletons\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism\tnSNPsAbove"
 				<< lowVariantCutOff * 100 << "%" << "\tvariableRegionID\t" << "avgGCContent";
 		//out << "\tAvgPairwiseDistWeighted";
 		out << std::endl;
@@ -891,6 +891,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 		out << identifier
 				<< "\t" << totalInput
 				<< "\t" << clusters.size()
+				<< "\t" << samplesCalled
 				<< "\t" << divMeasures.singlets_
 				<< "\t" << divMeasures.doublets_
 				<< "\t" << divMeasures.expShannonEntropy_
@@ -911,7 +912,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 
 	if(calculatingFst){
 		OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, popMeta + "_basicInfo.tab.txt"));
-		out << "id\t" << popMeta << "\ttotalHaplotypes\tuniqueHaplotypes\tsingletons\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism\tnSNPsAbove" << lowVariantCutOff * 100 << "%" << std::endl;
+		out << "id\t" << popMeta << "\ttotalHaplotypes\tuniqueHaplotypes\tnsamples\tsingletons\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism\tnSNPsAbove" << lowVariantCutOff * 100 << "%" << std::endl;
 		std::unordered_map<std::string, double> heForFields;
 
 		for(auto & field : uniqueSeqsByMeta){
@@ -1029,6 +1030,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 					<< "\t" << field.first
 					<< "\t" << seqCount
 					<< "\t" << field.second->size()
+					<< "\t" << samplesByMeta.at(field.first).size()
 					<< "\t" << divMeasures.singlets_
 					<< "\t" << divMeasures.doublets_
 					<< "\t" << divMeasures.expShannonEntropy_
@@ -1198,6 +1200,9 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 		}
 		OutputStream popDiffOut(njh::files::make_path(setUp.pars_.directoryName_, "popDiffMeasures.tab.txt"));
 		popDiffOut << "identifier"
+				<<"\t"<< "totalHaps"
+				<<"\t"<< "uniqueHaps"
+				<<"\t"<< "nsamples"
 				<<"\t"<< "HsSample"
 				<<"\t"<<"HsEst"
 				<<"\t"<<"HtSample"
@@ -1212,7 +1217,12 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 
 		PopDifferentiationMeasures temp;
 		auto diffMeasures = getOverallPopDiff(uniqueSeqsByMeta);
+
 		popDiffOut << identifier
+
+				<< "\t" << totalInput
+				<< "\t" << clusters.size()
+				<< "\t" << samplesCalled
 		    << "\t" << diffMeasures.hsSample_
 				<< "\t" << diffMeasures.hsEst_
 				<< "\t" << diffMeasures.htSample_
