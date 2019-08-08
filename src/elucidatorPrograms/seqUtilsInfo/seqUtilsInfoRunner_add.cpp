@@ -1141,8 +1141,14 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 			}
 		}
 		OutputStream pairwiseDiffsOut(njh::files::make_path(setUp.pars_.directoryName_, "pairwisePopDiffMeasures.tab.txt"));
-		pairwiseDiffsOut << "identifier\t" << popMeta << "1\t" << popMeta << "2"
-				<<"\t"<< "HsSample"
+		pairwiseDiffsOut << "identifier"
+				<< "\t" << popMeta << "1"
+				<< "\t" << "popMeta" << "1_total"
+				<< "\t" << "popMeta" << "1_unique"
+				<< "\t" << popMeta << "2"
+				<< "\t" << "popMeta" << "2_total"
+				<< "\t" << "popMeta" << "2_unique"
+				<< "\t" << "HsSample"
 								<<"\t"<<"HsEst"
 								<<"\t"<<"HtSample"
 								<<"\t"<<"HtEst"
@@ -1153,12 +1159,25 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 								<<"\t"<<"ChaoA"
 								<<"\t"<<"ChaoB"
 								<<"\t"<<"JostDChaoEst" << std::endl;
+
 		auto pairwiseMeasurements = getPairwisePopDiff(uniqueSeqsByMeta);
 		for(const auto & field1 : pairwiseMeasurements){
 			for(const auto & field2 : field1.second){
+				uint32_t total1 = 0;
+				uint32_t total2 = 0;
+				for(const auto & haps1 : *uniqueSeqsByMeta.at(field1.first)){
+					total1 += haps1.seqBase_.cnt_;
+				}
+				for(const auto & haps2 : *uniqueSeqsByMeta.at(field2.first)){
+					total2 += haps2.seqBase_.cnt_;
+				}
 				pairwiseDiffsOut << identifier
 						<< "\t" << field1.first
+						<< "\t" << total1
+						<< "\t" << uniqueSeqsByMeta.at(field1.first)->size()
 						<< "\t" << field2.first
+						<< "\t" << total2
+						<< "\t" << uniqueSeqsByMeta.at(field2.first)->size()
 				    << "\t" << field2.second.hsSample_
 						<< "\t" << field2.second.hsEst_
 						<< "\t" << field2.second.htSample_
