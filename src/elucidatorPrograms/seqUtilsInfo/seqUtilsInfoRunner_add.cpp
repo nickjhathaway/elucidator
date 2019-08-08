@@ -1143,11 +1143,13 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 		OutputStream pairwiseDiffsOut(njh::files::make_path(setUp.pars_.directoryName_, "pairwisePopDiffMeasures.tab.txt"));
 		pairwiseDiffsOut << "identifier"
 				<< "\t" << popMeta << "1"
-				<< "\t" << "popMeta" << "1_total"
-				<< "\t" << "popMeta" << "1_unique"
+				<< "\t" << "popMeta" << "1_totalHaps"
+				<< "\t" << "popMeta" << "1_uniqueHaps"
+				<< "\t" << "popMeta" << "1_samples"
 				<< "\t" << popMeta << "2"
-				<< "\t" << "popMeta" << "2_total"
-				<< "\t" << "popMeta" << "2_unique"
+				<< "\t" << "popMeta" << "2_totalHaps"
+				<< "\t" << "popMeta" << "2_uniqueHaps"
+				<< "\t" << "popMeta" << "2_samples"
 				<< "\t" << "HsSample"
 								<<"\t"<<"HsEst"
 								<<"\t"<<"HtSample"
@@ -1175,9 +1177,11 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 						<< "\t" << field1.first
 						<< "\t" << total1
 						<< "\t" << uniqueSeqsByMeta.at(field1.first)->size()
+						<< "\t" << samplesByMeta.at(field1.first).size()
 						<< "\t" << field2.first
 						<< "\t" << total2
 						<< "\t" << uniqueSeqsByMeta.at(field2.first)->size()
+						<< "\t" << samplesByMeta.at(field2.first).size()
 				    << "\t" << field2.second.hsSample_
 						<< "\t" << field2.second.hsEst_
 						<< "\t" << field2.second.htSample_
