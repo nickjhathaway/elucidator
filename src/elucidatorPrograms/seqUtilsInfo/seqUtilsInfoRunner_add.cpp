@@ -395,6 +395,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 
 
 		std::unordered_map<std::string, std::unordered_map<std::string, GenomicAminoAcidPositionTyper::GeneAminoTyperInfo>> popHapsTyped;
+		std::unordered_map<std::string, std::unordered_map<std::string, GenomicAminoAcidPositionTyper::GeneAminoTyperInfo>> popHapsTypeddenovo;
 
 		if("" != gffFnp){
 			BioCmdsUtils bRunner(setUp.pars_.verbose_);
@@ -419,6 +420,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 
 			//initiate typer
 			GenomicAminoAcidPositionTyper aaTyper(proteinMutantTypingFnp, zeroBased);
+
 			// get gene information
 			auto geneInfoDir = njh::files::make_path(setUp.pars_.directoryName_, "geneInfos");
 			njh::files::makeDir(njh::files::MkdirPar{geneInfoDir});
@@ -564,13 +566,16 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 						std::unordered_map<uint32_t, std::unordered_map<std::string,uint32_t>> deletionsFinal;
 					};
 					std::unordered_map<std::string, VariantsInfo> variantInfoPerGene;
-						//
+
+					//
 					//std::cout << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
 					auto typeOnChrom = [&bamPool,&alnPool,&proteinSeqOuts,&proteinSeqOutsMut,
 															&chromRegionsVec,&refData,&genes,
 															&geneInfos,&alnRegionToGeneIds,&transferInfoMut,
 															&setUp,&twoBitFnp,&aaTyper,
-															&popHapsTyped,&variantInfoPerGene](){
+															&popHapsTyped,&variantInfoPerGene
+															](){
+
 						GenomicRegion currentChrom;
 						auto curAligner = alnPool.popAligner();
 						auto curBReader = bamPool.popReader();
@@ -580,6 +585,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 						std::unordered_map<std::string, std::unordered_map<std::string, GenomicAminoAcidPositionTyper::GeneAminoTyperInfo>> currentPopHapsTyped;
 
 						while(chromRegionsVec.getVal(currentChrom)){
+
 							//std::cout << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
 							setBamFileRegionThrow(*curBReader, currentChrom);
 							//std::cout << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
@@ -716,6 +722,43 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 
 							OutputStream bedVariableRegionOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr(geneVarInfo.first +  "-protein_variableRegion.bed"))));
 							bedVariableRegionOut << variableRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+							//initiate denovo typer
+							std::unordered_map<std::string, std::vector<uint32_t>> denovoAmino;
+							denovoAmino[geneVarInfo.first]=variablePositions;
+							GenomicAminoAcidPositionTyper denovoAATyper(denovoAmino);
+							GenomicRegion currentChrom(*genes[geneVarInfo.first]->gene_);
+							auto curAligner = alnPool.popAligner();
+							auto curBReader = bamPool.popReader();
+							TwoBit::TwoBitFile tReader(twoBitFnp);
+							BamTools::BamAlignment bAln;
+							//std::cout << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
+							setBamFileRegionThrow(*curBReader, currentChrom);
+							//std::cout << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
+							while (curBReader->GetNextAlignment(bAln)) {
+								if (bAln.IsMapped() && bAln.IsPrimaryAlignment()) {
+									//std::cout << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
+									auto balnGenomicRegion = GenomicRegion(bAln, refData);
+									if (setUp.pars_.verbose_) {
+										std::cout << balnGenomicRegion.genBedRecordCore().toDelimStr() << std::endl;
+									}
+									if(!njh::in(balnGenomicRegion.createUidFromCoords(), alnRegionToGeneIds)){
+										continue;
+									}
+									//std::cout << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
+									for (const auto & g : alnRegionToGeneIds.at(balnGenomicRegion.createUidFromCoords())) {
+										//std::cout << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
+										const auto & currentGene = genes.at(g);
+										const auto & currentGeneInfo = geneInfos.at(g);
+										//std::cout << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
+										auto aminoTyping = denovoAATyper.typeAlignment(bAln, *currentGene, *currentGeneInfo, tReader, *curAligner, refData);
+										if (!aminoTyping.empty() && njh::in(g, denovoAATyper.aminoPositionsForTyping_)) {
+											//std::cout << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
+											popHapsTypeddenovo[bAln.Name].emplace(g, GenomicAminoAcidPositionTyper::GeneAminoTyperInfo(g, aminoTyping));
+										}
+									}
+									//std::cout << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
+								}
+							}
 						}
 					}
 				}
@@ -724,9 +767,12 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 		if(!allMetaKeys.empty()){
 			OutputStream metaOutPut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "popHapMeta.tab.txt")));
 			VecStr columnNames = allMetaKeysVec;
-			if(!popHapsTyped.empty()){
-				columnNames.emplace_back("proteinTyped");
+			if("" != gffFnp){
+				columnNames.emplace_back("knownProteinPositionsTyped");
+				columnNames.emplace_back("denovoProteinPositionsTyped");
 			}
+
+
 			metaOutPut << "PopName\t" << njh::conToStr(columnNames, "\t") << std::endl;
 			for(const auto & popSeq : clusters){
 				for(const auto & inputSeq : popSeq.reads_){
@@ -768,6 +814,29 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 							}
 						}
 						metaOutPut << "\t" << type;
+					}else if("" != gffFnp){
+						metaOutPut << "\t";
+					}
+					if(!popHapsTypeddenovo.empty()){
+						std::string type = "";
+						for(const auto & gene : popHapsTypeddenovo[popSeq.seqBase_.name_]){
+							std::string geneType = gene.first + "=";
+							for(const auto & amino : gene.second.aminos_){
+								if(' ' != amino.second){
+									if(gene.first + "=" != geneType){
+										geneType += "-";
+									}
+									//+1 to make it non zero-based amino acid positioning
+									geneType += njh::pasteAsStr(amino.first + 1, ":", amino.second);
+								}
+							}
+							if(gene.first + "=" != geneType){
+								type += geneType + ";";
+							}
+						}
+						metaOutPut << "\t" << type;
+					}else if("" != gffFnp){
+						metaOutPut << "\t";
 					}
 					metaOutPut<< std::endl;
 				}
