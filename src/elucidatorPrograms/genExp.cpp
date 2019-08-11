@@ -1371,6 +1371,7 @@ int genExpRunner::tableCountToDistGraph(const njh::progutils::CmdArgs & inputCom
 	uint32_t mismatches = 0;
   std::string nameStub = "Bar";
   std::string column = "";
+  std::string nameCol = "";
 	uint32_t numThreads = 1;
 	double hueStart = 0;
 	double hueStop = 360;
@@ -1379,24 +1380,37 @@ int genExpRunner::tableCountToDistGraph(const njh::progutils::CmdArgs & inputCom
 	double lumStart = 0.5;
 	double lumStop = 0.5;
 	uint32_t groupCutOff = 2;
+	std::string countCol = "";
+	setUp.setOption(groupCutOff, "--groupCutOff", "Group Cut Off");
+
 	setUp.setOption(mismatches, "--mismatches", "Number of mismatches to allow");
-	setUp.setOption(numThreads, "-t,--numThreads", "Number of Threads to Use");
-  setUp.setOption(filename, "-i,--inFile", "Filename of a table of first column seq and second column counts, or a table to count a column of", true);
+	setUp.setOption(numThreads, "--numThreads", "Number of Threads to Use");
+  setUp.setOption(filename, "--inFile", "Filename of a table of first column seq and second column counts, or a table to count a column of", true);
   setUp.setOption(nameStub, "--name", "Name Stuf for seqs");
-  setUp.setOption(column, "-c,--column", "name of the column to count and create seqs from");
+  setUp.setOption(column, "--column", "name of the column to count and create seqs from");
+  setUp.setOption(nameCol, "--nameCol", "name of the input");
+  setUp.setOption(countCol, "--countCol", "name of the input");
+
   setUp.processDirectoryOutputName(filename + "_" + inputCommands.getProgramName() + "_TODAY", true);
   setUp.processVerbose();
   setUp.finishSetUp(std::cout);
 
   table inTab(filename, "\t", true);
   std::vector<readObject> seqs;
-  if(column == ""){
-    std::map<std::string, uint32_t> counts;
+  if("" != nameCol && "" != column){
+    TableReader tab(TableIOOpts::genTabFileIn(filename, true));
+    VecStr row;
+    while(tab.getNextRow(row)){
+    	seqs.emplace_back(seqInfo(row[tab.header_.getColPos(nameCol)],row[tab.header_.getColPos(column)] ));
+    	seqs.back().seqBase_.cnt_ = njh::StrToNumConverter::stoToNum<uint32_t>(row[tab.header_.getColPos(countCol)]);
+    }
+  }else if("" == column){
+  	std::map<std::string, uint32_t> counts;
     for(const auto & row : inTab.content_){
     	counts[row[0]] = estd::stou(row[1]);
     }
     seqs = seqMapCountsToSeqs(counts, nameStub);
-  }else{
+  } else{
   	seqs = vecStrMultiplesToSeqs(inTab.getColumn(column), nameStub);
   }
   njh::stopWatch watch;
@@ -1406,6 +1420,7 @@ int genExpRunner::tableCountToDistGraph(const njh::progutils::CmdArgs & inputCom
   std::function<uint32_t(const readObject & ,
   		const readObject &)> misFun = countBarcodeMismatches<readObject>;
 	auto misDistances = getDistance(seqs, numThreads, misFun);
+	std::cout << seqs.size() << std::endl;
 	watch.startNewLap("create graph");
   readDistGraph<uint32_t> graphMis(misDistances, seqs);
 	std::vector<std::string> names;
