@@ -771,9 +771,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 				columnNames.emplace_back("knownProteinPositionsTyped");
 				columnNames.emplace_back("denovoProteinPositionsTyped");
 			}
-
-
-			metaOutPut << "PopName\t" << njh::conToStr(columnNames, "\t") << std::endl;
+			metaOutPut << "PopName\tHapPopUIDCount" << njh::conToStr(columnNames, "\t") << std::endl;
 			for(const auto & popSeq : clusters){
 				for(const auto & inputSeq : popSeq.reads_){
 					MetaDataInName outMeta;
@@ -793,9 +791,13 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 						outMeta.addMeta(mf, "NA");
 					}
 					metaOutPut << popSeq.seqBase_.name_;
+					MetaDataInName popSeqMeta(popSeq.seqBase_.name_);
+					metaOutPut << "\t" << popSeqMeta.getMeta("HapPopUIDCount");
+
 					for(const auto & mf : allMetaKeysVec){
 						metaOutPut << '\t' << outMeta.meta_[mf];
 					}
+
 					if(!popHapsTyped.empty()){
 						std::string type = "";
 						for(const auto & gene : popHapsTyped[popSeq.seqBase_.name_]){
@@ -817,6 +819,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 					}else if("" != gffFnp){
 						metaOutPut << "\t";
 					}
+
 					if(!popHapsTypeddenovo.empty()){
 						std::string type = "";
 						for(const auto & gene : popHapsTypeddenovo[popSeq.seqBase_.name_]){
@@ -838,6 +841,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 					}else if("" != gffFnp){
 						metaOutPut << "\t";
 					}
+
 					metaOutPut<< std::endl;
 				}
 			}
