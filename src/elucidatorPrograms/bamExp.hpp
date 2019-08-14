@@ -85,6 +85,7 @@ class bamExpRunner : public njh::progutils::ProgramRunner {
 	static int getUnmappedAlnsFromBam(const njh::progutils::CmdArgs & inputCommands);
 
 
+	static int bamToFastqAlns(const njh::progutils::CmdArgs & inputCommands);
 
 	static int countUnMappedMateStatus(const njh::progutils::CmdArgs & inputCommands);
 

@@ -88,6 +88,7 @@ genExpRunner::genExpRunner()
 					 addFunc("countSeqNamePortion", countSeqNamePortion, false),
 					 addFunc("countIlluminaSampleNumber", countIlluminaSampleNumber, false),
 					 addFunc("countBasesPerPosition", countBasesPerPosition, false),
+					 addFunc("translateSeqsBasedOnGFF", translateSeqsBasedOnGFF, false),
            },//
           "genExp") {}
 

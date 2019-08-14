@@ -34,6 +34,55 @@
 
 namespace njhseq {
 
+
+
+int bamExpRunner::bamToFastqAlns(const njh::progutils::CmdArgs & inputCommands){
+	bfs::path bedFile = "";
+	OutOptions outOpts(bfs::path(""));
+	bfs::path twoBitFnp = "";
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.setOption(bedFile, "--bedFile", "Bed file");
+	setUp.setOption(twoBitFnp, "--2bit", "Two bit file of the genome aligned to", true);
+	setUp.processReadInNames({"--bam"}, true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	BamTools::BamReader bReader;
+	bReader.Open(setUp.pars_.ioOptions_.firstName_.string());
+	checkBamOpenThrow(bReader, setUp.pars_.ioOptions_.firstName_.string());
+	loadBamIndexThrow(bReader);
+	BamTools::BamAlignment bAln;
+
+	if("" != bedFile){
+		auto regions = bedPtrsToGenomicRegs(getBeds(bedFile));
+		setBamFileRegionThrow(bReader, regions.front());
+	}
+	auto refData = bReader.GetReferenceData();
+	TwoBit::TwoBitFile tReader(twoBitFnp);
+	auto seqOutOpts = SeqIOOptions::genFastqOut(outOpts.outFilename_);
+	seqOutOpts.out_.transferOverwriteOpts(outOpts);
+	SeqOutput seqOut(seqOutOpts);
+	while(bReader.GetNextAlignment(bAln)){
+		if(!bAln.IsPrimaryAlignment() && !bAln.IsMapped()){
+			continue;
+		}
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		AlignmentResults results(bAln, refData);
+		results.setRefSeq(tReader);
+		results.setAlignedObjects();
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		seqOut.openWrite(results.refSeqAligned_);
+		seqOut.openWrite(results.alnSeqAligned_);
+	}
+	if(setUp.pars_.verbose_){
+		std::cout << std::endl;
+	}
+
+	return 0;
+}
+
+
 int bamExpRunner::countUnMappedMateStatus(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path bedFile = "";
 	OutOptions outOpts(bfs::path(""));

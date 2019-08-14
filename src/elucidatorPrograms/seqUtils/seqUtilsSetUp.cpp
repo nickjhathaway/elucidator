@@ -35,6 +35,8 @@ void seqUtilsSetUp::setUpCompareToRef() {
   processRefFilename(true);
   processVerbose();
   pars_.gapLeft_ = "0,0";
+  pars_.gapRight_ = "0,0";
+  pars_.gapInfo_ = gapScoringParameters(5,1,0,0,0,0);
   pars_.colOpts_.iTOpts_.weighHomopolyer_ = false;
   processAlignerDefualts();
   processDirectoryOutputName(false);

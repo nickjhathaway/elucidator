@@ -118,7 +118,11 @@ class genExpRunner : public njh::progutils::ProgramRunner {
 
 	static int countBasesPerPosition(const njh::progutils::CmdArgs & inputCommands);
 
+
+	static int translateSeqsBasedOnGFF(const njh::progutils::CmdArgs & inputCommands);
+
 };
 } /* namespace njhseq */
 
 
+//

@@ -74,6 +74,7 @@ bamExpRunner::bamExpRunner()
 					 addFunc("bamMulticovBasesRough", bamMulticovBasesRough, false),
 					 addFunc("bamDupCounts", bamDupCounts, false),
 					 addFunc("BamRefIdsToBed", BamRefIdsToBed, false),
+					 addFunc("bamToFastqAlns", bamToFastqAlns, false),
           }, //
 				"bamExp") {
 }

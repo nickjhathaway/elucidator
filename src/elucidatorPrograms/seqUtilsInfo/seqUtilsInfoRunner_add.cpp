@@ -585,7 +585,6 @@ int seqUtilsInfoRunner::quickHaplotypeInformationAndVariants(const njh::progutil
 						std::unordered_map<std::string, std::unordered_map<std::string, GenomicAminoAcidPositionTyper::GeneAminoTyperInfo>> currentPopHapsTyped;
 
 						while(chromRegionsVec.getVal(currentChrom)){
-
 							//std::cout << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
 							setBamFileRegionThrow(*curBReader, currentChrom);
 							//std::cout << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
