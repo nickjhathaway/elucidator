@@ -56,12 +56,13 @@ seqUtilsInfoRunner::seqUtilsInfoRunner()
 	addFunc("qualCounts", qualCounts, false),
 	addFunc("printSeqs", printSeqs, false),
 	addFunc("quickHaplotypeInformation", quickHaplotypeInformation, false),
-	addFunc("quickHaplotypeInformationAndVariants", quickHaplotypeInformationAndVariants, false),
+	addFunc("oldQuickHaplotypeInformationAndVariants", oldQuickHaplotypeInformationAndVariants, false),
 	addFunc("getGCContent", getGCContent, false),
 	addFunc("quickHaplotypeVariantsWithRegion", quickHaplotypeVariantsWithRegion, false),
 	addFunc("readLengthDistribution", readLengthDistribution, false),
 	addFunc("getReadLens", getReadLens, false),
 	addFunc("multipleAlnProteinToPcaInput", multipleAlnProteinToPcaInput, false),
+	addFunc("getHapPopDifAndVariantsInfo", getHapPopDifAndVariantsInfo, false),
 	},
                     "seqUtilsInfo") {}
 //

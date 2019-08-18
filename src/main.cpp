@@ -24,6 +24,10 @@
 #include "elucidatorPrograms.h"
 
 
+namespace njhseq {
+
+
+}  // namespace njhseq
 
 
 int main(int argc, char* argv[]) {
