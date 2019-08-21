@@ -65,9 +65,11 @@ int printInfoRunner::printAminoAcidInfo(const njh::progutils::CmdArgs & inputCom
 	outInfo.sortTable("letCode", false);
 	std::stringstream infoStream;
 	outInfo.outPutContentOrganized(infoStream);
+	infoStream.flush();
 	VecStr lines = streamToVecStr(infoStream);
+
 	VecStr classificationVec = outInfo.getColumn("classification");
-	for(const auto & pos : iter::range(len(outInfo.content_))){
+	for(const auto & pos : iter::range(len(outInfo.content_) +1)){
 		if(pos > 0 && colorOutput){
 			njh::color currentColor = njh::color(aminoAcidInfo::infos::aaClassColorCode.at(classificationVec[pos -1]));
 					std::cout <<

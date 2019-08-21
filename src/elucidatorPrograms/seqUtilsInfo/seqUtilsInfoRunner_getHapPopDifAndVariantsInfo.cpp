@@ -114,9 +114,6 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 			knownMutationsLocationsMap[row[knownAminoAcidChanges.getColPos("transcriptid")]].emplace(njh::StrToNumConverter::stoToNum<uint32_t>(row[knownAminoAcidChanges.getColPos("aaposition")]));
 		}
 	}
-	for(const auto & known : knownMutationsLocationsMap){
-		std::cout << known.first << "\t" << njh::conToStr(known.second, ", ") << std::endl;
-	}
 
 	uint64_t maxLen = 0;
 	SeqInput reader(setUp.pars_.ioOptions_);
@@ -449,21 +446,28 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 		//       seqName               transcript   amino acid positions and amino acid
 		//std::map<std::string, std::map<std::string, MetaDataInName>> fullAATyped;
 		//seqname meta
+		struct AAInfo {
+			AAInfo(std::string transcriptName, char aa, uint32_t zeroBasedPos, std::tuple<char, char, char> codon,
+					bool knownMut) : transcriptName_(transcriptName),
+					aa_(aa), zeroBasedPos_(zeroBasedPos), codon_(codon), knownMut_(
+							knownMut) {
+			}
+			std::string transcriptName_;
+			char aa_;
+			uint32_t zeroBasedPos_;
+			std::tuple<char, char, char> codon_;
+			bool knownMut_;
+		};
 		std::map<std::string, MetaDataInName> fullAATyped;
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		std::map<std::string, std::vector<AAInfo>> fullAATypedWithCodonInfo;
 		if("" != transPars.gffFnp_){
 			auto uniqueSeqInOpts = SeqIOOptions::genFastaIn(uniqueSeqsOpts.out_.outName());
-			std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			auto variantInfoDir =  njh::files::make_path(setUp.pars_.directoryName_, "proteinVariantInfo");
 
 			njh::files::makeDir(njh::files::MkdirPar{variantInfoDir});
-			std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			translator->pars_.keepTemporaryFiles_ = true;
-			std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			translator->pars_.workingDirtory_ = variantInfoDir;
-			std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			auto translatedRes = translator->run(uniqueSeqInOpts, sampCountsForPopHaps, variantCallerRunPars);
-			std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			SeqOutput transwriter(SeqIOOptions::genFastaOut(njh::files::make_path(variantInfoDir, "translatedInput.fasta")));
 			for(const auto & seqName : translatedRes.translations_){
 				for(const auto & transcript : seqName.second){
@@ -551,9 +555,39 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 							std::string popName = seqName.first.substr(0, seqName.first.rfind("_f"));
 							std::string transcript = varPerTrans.first;
 							for (const auto & loc : allLocations) {
-
+								//location is not within the aligned translation
+								if(loc < std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).aaPos_ || loc > std::get<0>(seqName.second[varPerTrans.first].lastAminoInfo_).aaPos_){
+									continue;
+								}
 								auto aa = seqName.second[varPerTrans.first].queryAlnTranslation_.seq_[getAlnPosForRealPos(seqName.second[varPerTrans.first].refAlnTranslation_.seq_,loc)];
 								fullAATyped[popName].addMeta(njh::pasteAsStr(varPerTrans.first, "-", loc + 1), aa);
+//								std::cout << "loc: " << loc << std::endl;
+								uint32_t refCDnaPos = loc * 3;
+//								std::cout << "cDnaPos: " << cDnaPos << std::endl;
+//								std::cout << "std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).cDNAPos_: " << std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).cDNAPos_ << std::endl;
+								//subtract off the start location
+								refCDnaPos -= std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).cDNAPos_;
+//								seqName.second[varPerTrans.first].cDna_.outPutSeqAnsi(std::cout);
+//								seqName.second[varPerTrans.first].refAlnTranslation_.outPutSeq(std::cout);
+//								seqName.second[varPerTrans.first].queryAlnTranslation_.outPutSeq(std::cout);
+//								std::cout << "std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).cDNAPos_;: " << std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).cDNAPos_ << std::endl;
+//								std::cout << "std::get<0>(seqName.second[varPerTrans.first].lastAminoInfo_).cDNAPos_;: " << std::get<0>(seqName.second[varPerTrans.first].lastAminoInfo_).cDNAPos_ << std::endl;
+//								std::cout << "std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).aaPos_;: " << std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).aaPos_ << std::endl;
+//								std::cout << "std::get<0>(seqName.second[varPerTrans.first].lastAminoInfo_).aaPos_;: " << std::get<0>(seqName.second[varPerTrans.first].lastAminoInfo_).aaPos_ << std::endl;
+								uint32_t alnPosForLoc = getAlnPosForRealPos(seqName.second[varPerTrans.first].refAlnTranslation_.seq_,loc);
+								uint32_t queryCDNAPos = getRealPosForAlnPos(seqName.second[varPerTrans.first].queryAlnTranslation_.seq_,alnPosForLoc ) * 3;
+
+								if(queryCDNAPos +2 >=seqName.second[varPerTrans.first].cDna_.seq_.size()){
+									std::stringstream ss;
+									ss << __PRETTY_FUNCTION__ << ", error " << "" << queryCDNAPos +2 << " is greater than seqName.second[varPerTrans.first].cDna_.seq_.size(): " << seqName.second[varPerTrans.first].cDna_.seq_.size()<< "\n";
+									throw std::runtime_error{ss.str()};
+								}
+								fullAATypedWithCodonInfo[popName].emplace_back(
+										AAInfo(varPerTrans.first, aa, loc,
+												std::tie(
+														seqName.second[varPerTrans.first].cDna_.seq_[queryCDNAPos+ 0],
+														seqName.second[varPerTrans.first].cDna_.seq_[queryCDNAPos+ 1],
+														seqName.second[varPerTrans.first].cDna_.seq_[queryCDNAPos+ 2]), njh::in(loc, knownMutationsLocations)));
 							}
 						}
 					}
@@ -581,7 +615,6 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 				for( auto & varPerChrom : translatedRes.seqVariants_){
 					auto snpsPositions = getVectorOfMapKeys(varPerChrom.second.snpsFinal);
 					njh::sort(snpsPositions);
-					std::cout << "snps: " << njh::conToStr(snpsPositions, ", ") << std::endl;
 					OutputStream snpTabOut(OutOptions(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-SNPs.tab.txt"))));
 					snpTabOut << "chromosome\tposition(0-based)\trefBase\tbase\tcount\tfraction\talleleDepth\tsamples" << std::endl;
 					for(const auto & snpPos : snpsPositions){
@@ -596,12 +629,12 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 									<< "\t" << samplesCalled << std::endl;
 						}
 					}
-					if(!knownMutationsLocationsMap[varPerChrom.first].empty()){
+					if(!knownAAMutsChromPositions[varPerChrom.first].empty()){
 						OutputStream knownAASNPTabOut(OutOptions(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-knownAA_SNPs.tab.txt"))));
-						snpTabOut << "chromosome\tposition(0-based)\trefBase\tbase\tcount\tfraction\talleleDepth\tsamples" << std::endl;
-						for(const auto & snpPos : knownMutationsLocationsMap[varPerChrom.first]){
+						knownAASNPTabOut << "chromosome\tposition(0-based)\trefBase\tbase\tcount\tfraction\talleleDepth\tsamples" << std::endl;
+						for(const auto & snpPos : knownAAMutsChromPositions[varPerChrom.first]){
 							for(const auto & base : varPerChrom.second.allBases[snpPos]){
-								snpTabOut << varPerChrom.first
+								knownAASNPTabOut << varPerChrom.first
 										<< "\t" << snpPos
 //<< "\t" <<
 										<< "\t" << translatedRes.baseForPosition_[varPerChrom.first][snpPos]
@@ -639,16 +672,7 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 		if(!allMetaKeys.empty()){
 			OutputStream metaOutPut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "popHapMeta.tab.txt")));
 			VecStr columnNames = allMetaKeysVec;
-			metaOutPut << "PopName\tHapPopUIDCount" << njh::conToStr(columnNames, "\t");
-			std::set<std::string> aminoTypingFields;
-			for(const auto & popHapTyped : fullAATyped){
-				for(const auto & aminoMetaLevel : popHapTyped.second.meta_){
-					aminoTypingFields.emplace(aminoMetaLevel.first);
-				}
-			}
-			if(!aminoTypingFields.empty()){
-				metaOutPut << njh::conToStr(aminoTypingFields, "\t");
-			}
+			metaOutPut << "PopName\tHapPopUIDCount" << "\t" << njh::conToStr(columnNames, "\t");
 			metaOutPut << std::endl;
 			for(const auto & popSeq : clusters){
 				for(const auto & inputSeq : popSeq.reads_){
@@ -674,17 +698,78 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 					for(const auto & mf : allMetaKeysVec){
 						metaOutPut << '\t' << outMeta.meta_[mf];
 					}
-					for(const auto & aminoField : aminoTypingFields){
-						if(fullAATyped[popSeq.seqBase_.name_].containsMeta(aminoField)){
-							metaOutPut <<"\t" << fullAATyped[popSeq.seqBase_.name_].getMeta(aminoField);
-						}else{
-							metaOutPut <<"\t" << "NA";
-						}
-					}
+
 					metaOutPut<< std::endl;
 				}
 			}
 		}
+
+		//amino typing
+		{
+			OutputStream aminoMetaOutPut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "popHapMetaWithAminoChanges.tab.txt")));
+
+			std::set<std::string> aminoTypingFields;
+			for (const auto & popHapTyped : fullAATyped) {
+				for (const auto & aminoMetaLevel : popHapTyped.second.meta_) {
+					aminoTypingFields.emplace(aminoMetaLevel.first);
+				}
+			}
+			if (!aminoTypingFields.empty()) {
+
+				aminoMetaOutPut << "PopName\tHapPopUIDCount";
+				if(!allMetaKeys.empty()){
+					aminoMetaOutPut << "\t" << njh::conToStr(allMetaKeys, "\t");
+				}
+				//aminoMetaOutPut << "\t" << njh::conToStr(aminoTypingFields, "\t");
+				aminoMetaOutPut << "\t" << "transcript"
+						<< "\t" << "AA"
+						<< "\t" << "AAPos(1-based)"
+						<< "\t" << "codon"
+						<< "\t" << "knownMutation(based-on-supplied)";
+
+				aminoMetaOutPut << std::endl;
+
+				for(const auto & popSeq : clusters){
+					for(const auto & inputSeq : popSeq.reads_){
+						MetaDataInName outMeta;
+						if(!allMetaKeys.empty()){
+							VecStr missingMetaFields;
+							if (MetaDataInName::nameHasMetaData(inputSeq->seqBase_.name_)) {
+								MetaDataInName seqMeta(inputSeq->seqBase_.name_);
+								outMeta = seqMeta;
+								for (const auto & mf : allMetaKeysVec) {
+									if (!njh::in(mf, seqMeta.meta_)) {
+										missingMetaFields.emplace_back(mf);
+									}
+								}
+							} else {
+								missingMetaFields = allMetaKeysVec;
+							}
+							for(const auto & mf : missingMetaFields){
+								outMeta.addMeta(mf, "NA");
+							}
+						}
+						for(const auto & aminoInfo : fullAATypedWithCodonInfo[popSeq.seqBase_.name_]){
+							aminoMetaOutPut << popSeq.seqBase_.name_;
+							MetaDataInName popSeqMeta(popSeq.seqBase_.name_);
+							aminoMetaOutPut << "\t" << popSeqMeta.getMeta("HapPopUIDCount");
+							if(!allMetaKeys.empty()){
+								for(const auto & mf : allMetaKeysVec){
+									aminoMetaOutPut << '\t' << outMeta.meta_[mf];
+								}
+							}
+							aminoMetaOutPut << "\t" << aminoInfo.transcriptName_
+									<< "\t" << aminoInfo.aa_
+									<< "\t" << aminoInfo.zeroBasedPos_ + 1
+									<< "\t" << std::get<0>(aminoInfo.codon_) << std::get<1>(aminoInfo.codon_) << std::get<2>(aminoInfo.codon_)
+									<< "\t" << njh::boolToStr(aminoInfo.knownMut_);
+							aminoMetaOutPut<< std::endl;
+						}
+					}
+				}
+			}
+		}
+
 
 
 

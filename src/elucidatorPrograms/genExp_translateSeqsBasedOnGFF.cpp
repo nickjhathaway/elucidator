@@ -38,7 +38,6 @@ namespace njhseq {
 int genExpRunner::translateSeqsBasedOnGFF(const njh::progutils::CmdArgs & inputCommands){
 
   TranslatorByAlignment::RunPars variantCallerRunPars;
-
 	TranslatorByAlignment::TranslatorByAlignmentPars transPars;
 
 	seqSetUp setUp(inputCommands);
@@ -65,10 +64,18 @@ int genExpRunner::translateSeqsBasedOnGFF(const njh::progutils::CmdArgs & inputC
 	auto results = translator.run(setUp.pars_.ioOptions_, counts, variantCallerRunPars);
 	SeqOutput writer(SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "translatedInput.fasta")));
 	SeqOutput writerAln(SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "aln_translatedInput.fasta")));
-
+	SeqOutput writerCDNA(SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "cdna_input.fasta")));
+	OutputStream outInfo(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "aa_position_info.tab.txt")));
+	outInfo << "seqName\ttranscript\taminoAcidStart\taminoAcidStop" << std::endl;
 	for(const auto & seqName : results.translations_){
 		for(const auto & transcript : seqName.second){
+			outInfo << seqName.first
+					<< "\t" << transcript.first
+					<< "\t" << std::get<0>(transcript.second.firstAminoInfo_).aaPos_
+					<< "\t" << std::get<0>(transcript.second.lastAminoInfo_).aaPos_<< std::endl;
+
 			writer.openWrite(transcript.second.translation_);
+			writerCDNA.openWrite(transcript.second.cDna_);
 			if(setUp.pars_.debug_){
 				writerAln.openWrite(transcript.second.refAlnTranslation_);
 				writerAln.openWrite(transcript.second.queryAlnTranslation_);
