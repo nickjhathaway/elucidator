@@ -1304,6 +1304,8 @@ int bamExpRunner::getInsertSizesStats(const njh::progutils::CmdArgs & inputComma
 	setUp.setOption(mapQualityCutOff, "--mapQualityCutOff", "Mapping Quality Cut Off");
 	setUp.setOption(genPars.step_, "--windowStep", "Window Step", njh::progutils::ProgramSetUp::CheckCase::NONZERO);
 	setUp.setOption(genPars.window_, "--windowSize", "Window Size", njh::progutils::ProgramSetUp::CheckCase::NONZERO);
+	setUp.setOption(numThreads, "--numThreads", "Number of Threads", njh::progutils::ProgramSetUp::CheckCase::NONZERO);
+
 
 	setUp.finishSetUp(std::cout);
 
@@ -1337,9 +1339,12 @@ int bamExpRunner::getInsertSizesStats(const njh::progutils::CmdArgs & inputComma
 				if(aln.Position <reg.start_ || aln.Position >= reg.end_){
 					continue;
 				}
-				if (aln.IsMapped() && aln.IsMateMapped() && aln.IsPrimaryAlignment()) {
+				if (aln.IsMapped() &&
+						aln.IsMateMapped() &&
+						aln.IsPrimaryAlignment() &&
+						aln.IsReverseStrand() != aln.IsMateReverseStrand()) {
 					if (aln.RefID == aln.MateRefID) {
-						if(std::abs(aln.InsertSize) > hardInsertSizeCutOff|| aln.MapQuality < mapQualityCutOff){
+						if(std::abs(aln.InsertSize) > hardInsertSizeCutOff || aln.MapQuality < mapQualityCutOff){
 							continue;
 						}
 						++totalCount;
