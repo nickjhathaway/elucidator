@@ -224,6 +224,9 @@ seqInfo RoughIlluminaSimulator::ReadProfile::simRead(seqInfo input, uint32_t len
 		ss << __PRETTY_FUNCTION__ << ", error length is longer than can be simulated" << "\n";
 		throw std::runtime_error{ss.str()};
 	}
+	if(len(input) > length){
+		input = input.getSubRead(0, length);
+	}
 	for(const auto pos : iter::range(len(input))){
 		//decide if error
 		if(rGen_() <= errorRates_[pos]){

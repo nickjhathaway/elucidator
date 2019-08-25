@@ -46,6 +46,7 @@ readSimulatorRunner::readSimulatorRunner()
 	addFunc("simMultipleMixtureSimPCR", simMultipleMixtureSimPCR, false),
 	addFunc("testPCRSim", testPCRSim, false),
 	addFunc("testPCRChimeraSim", testPCRChimeraSim, false),
+	addFunc("simIlluminaOnSeqs", simIlluminaOnSeqs, false),
 },
                     "readSimulator") {}
 //

@@ -55,6 +55,9 @@ class readSimulatorRunner : public njh::progutils::ProgramRunner {
   static int testPCRSim(const njh::progutils::CmdArgs & inputCommands);
   static int testPCRChimeraSim(const njh::progutils::CmdArgs & inputCommands);
 
+
+  static int simIlluminaOnSeqs(const njh::progutils::CmdArgs & inputCommands);
+
 };
 }  // namespace njhseq
 

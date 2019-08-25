@@ -137,16 +137,20 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	bool rawPatientSetupFile = false;
 	PCRAmountPars pcrNumbers;
 	std::vector<uint32_t> timePoints;
+	double adjustAroundGivenFrac = 0.5;
 	readSimulatorSetUp setUp(inputCommands);
 	setUp.setOption(pcrNumbers.startingTemplateAmounts_, "--startingTemplateAmount", "Starting PCR Template Amount", njh::progutils::ProgramSetUp::ConCheckCase::NONZERO);
 	setUp.setOption(pcrNumbers.finalReadAmount_, "--perMixtureReadAmount", "Final Read Amount to create per mixture", njh::progutils::ProgramSetUp::ConCheckCase::NONZERO);
 	setUp.setOption(simReplicates, "--replicates", "Replicates");
+	setUp.setOption(adjustAroundGivenFrac, "--adjustAroundGivenFrac", "Adjust Around Given Frac", njh::progutils::ProgramSetUp::CheckCase::GREATERZERO);
+	adjustAroundGivenFrac = std::min(adjustAroundGivenFrac, 0.99);
 	setUp.setOption(timePoints, "--timePoints", "Additional time points, will automatically have time point 00", njh::progutils::ProgramSetUp::ConCheckCase::NONZERO);
 	setUp.setOption(patientSetupFile, "--patientSetupFile", "Patient Setup File", true);
 	setUp.setOption(rawPatientSetupFile, "--rawPatientSetupFile", "Patient Setup File designates individual samples");
 	setUp.setOption(coiTableFnp, "--coiTable", "COI Table", true);
 	setUp.setOption(haplotypeInfo, "--haplotypeInfo", "Haplotype Info", true);
 	setUp.setOption(primerMidFnp, "--primerMidFnp", "Primer MID Fnp", true);
+	setUp.setOption(simPars.pairedEndLength_, "--pairedEndLength", "Paired End Length");
 	setUp.setOption(simPars.noAddPrimers_, "--noAddPrimers", "Primers are already present");
 	setUp.setOption(simPars.barcodeRandomPrecedingBases_, "--barcodeRandomPrecedingBases", "Barcode Random Preceding Bases");
 	setUp.setOption(simPars.primerRandomPrecedingBases_, "--primerRandomPrecedingBases", "Primer Random Preceding Bases");
@@ -191,6 +195,9 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 		}
 		if(njh::in(std::string("replicate"), metaLevels ) ){
 			removeElement<std::string>(metaLevels, "replicate");
+		}
+		if(njh::in(std::string("COI"), metaLevels ) ){
+			removeElement<std::string>(metaLevels, "COI");
 		}
 	}else{
 		removeElement<std::string>(metaLevels, "number");
@@ -312,16 +319,20 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	//   create a key for identifier
 	//   uid, primer pair name, hap for primer pair
 	std::unordered_map<std::string, std::map<std::string, std::string>> haplotypeKey;
-	auto haplotypeInfoTableNames = haplotypeInfoTable.getColumns(primerPairNames).getUniqueRows();
-	for(const auto & row : haplotypeInfoTableNames){
+	auto justHapNames_from_haplotypeInfoTable = haplotypeInfoTable.getColumns(primerPairNames).getUniqueRows();
+	justHapNames_from_haplotypeInfoTable.setColNamePositions();
+
+	for(const auto & row : justHapNames_from_haplotypeInfoTable){
 		std::map<std::string, std::string> haps;
 		VecStr hapNames;
 		for(const auto & primerpair : primerPairNames){
-			haps[primerpair] = row[haplotypeInfoTableNames.getColPos(primerpair)];
-			hapNames.emplace_back(row[haplotypeInfoTableNames.getColPos(primerpair)]);
+			haps[primerpair] = row[justHapNames_from_haplotypeInfoTable.getColPos(primerpair)];
+			hapNames.emplace_back(row[justHapNames_from_haplotypeInfoTable.getColPos(primerpair)]);
 		}
+		njh::sort(hapNames);
 		haplotypeKey.emplace(njh::conToStr(hapNames, "__"), haps);
 	}
+
 	// resistance factor
 	std::unordered_map<std::string, double> haplotypeKeyTorResistanceFactor;
 	auto haplotypeInfoTableRes = haplotypeInfoTable.getColumns(njh::catVecs(primerPairNames, VecStr{"resistantFactor"})).getUniqueRows();
@@ -331,6 +342,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 		for(const auto & primerpair : primerPairNames){
 			hapNames.emplace_back(row[haplotypeInfoTableRes.getColPos(primerpair)]);
 		}
+		njh::sort(hapNames);
 		double res = njh::StrToNumConverter::stoToNum<double>(row[haplotypeInfoTableRes.getColPos("resistantFactor")]);
 		haplotypeKeyTorResistanceFactor[njh::conToStr(hapNames, "__")] = res;
 	}
@@ -338,6 +350,11 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	std::unordered_map<std::string, std::unordered_map<std::string, double>> hapFracForLevels;
 	std::unordered_map<std::string, std::pair<std::vector<std::string>, std::vector<double>>> hapCounts;
 	std::unordered_map<std::string, njh::randObjectGen<std::string, double>> hapRGenerator;
+
+//	for(const auto pos : iter::range(haplotypeInfoTable.columnNames_.size())){
+//		std::cout << "pos: " << pos << " vs " << haplotypeInfoTable.getColPos(haplotypeInfoTable.columnNames_[pos]) << " for " << haplotypeInfoTable.columnNames_[pos] << std::endl;
+//	}
+
 	for(const auto & row : haplotypeInfoTable){
 		VecStr currentLevelVec;
 		for (const auto & col : metaLevels) {
@@ -346,9 +363,16 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 		std::string currentLevel = njh::pasteAsStr(currentLevelVec);
 		VecStr hapNames;
 		for(const auto & primerpair : primerPairNames){
-			hapNames.emplace_back(row[haplotypeInfoTableNames.getColPos(primerpair)]);
+//			std::cout << "primerpair: " << primerpair << std::endl;
+//			std::cout << "\t" << "haplotypeInfoTableNames.getColPos(primerpair): " << haplotypeInfoTable.getColPos(primerpair) << std::endl;
+//			std::cout << "\t" << "row[haplotypeInfoTableNames.getColPos(primerpair)] : " << row[haplotypeInfoTable.getColPos(primerpair)] << std::endl;
+			hapNames.emplace_back(row[haplotypeInfoTable.getColPos(primerpair)] );
 		}
+		njh::sort(hapNames);
 		std::string hapUID = njh::conToStr(hapNames, "__");
+//		std::cout << "hapUID: " << hapUID << std::endl;
+
+		//exit(1);
 		double frac = njh::StrToNumConverter::stoToNum<double>(row[haplotypeInfoTable.getColPos("frac")]);
 		hapFracForLevels[currentLevel][hapUID] = frac;
 		hapCounts[currentLevel].first.emplace_back(hapUID);
@@ -413,6 +437,10 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 		if(njh::in<std::string>("replicate", patientSetupTable.columnNames_)){
 			hasReplicateCol = true;
 		}
+		bool hasCOICol = false;
+		if(njh::in<std::string>("COI", patientSetupTable.columnNames_)){
+			hasCOICol = true;
+		}
 		std::set<std::string> alreadyAddedNames;
 		for(const auto & row : patientSetupTable){
 			MetaDataInName meta;
@@ -431,7 +459,10 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 			}
 			auto currentLevel = currentPatient.meta_.pasteLevels(metaLevels);
 			uint32_t initalCOI = njh::mapAt(coiRGenerator, currentLevel).genObj();
-			initalCOI = std::min<uint32_t>(initalCOI, njh::mapAt(hapRGenerator,currentLevel).objs().size() );
+			if(hasCOICol){
+				initalCOI = njh::StrToNumConverter::stoToNum<uint32_t>(row[patientSetupTable.getColPos("COI")]);
+			}
+
 			coiCout << currentPatient.name_ << "\t" << initalCOI << std::endl;
 			currentPatient.initalCOI_ = initalCOI;
 			if (simReplicates && !hasReplicateCol) {
@@ -441,7 +472,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 						== njh::strToLowerRet(row[patientSetupTable.getColPos("replicate")])
 						|| "t"
 								== njh::strToLowerRet(
-										row[patientSetupTable.getColPos("replicate")]);
+										row[patientSetupTable.getColPos("replicate")] ) ;
 			}
 			patientSetUpPars.emplace_back(currentPatient);
 			++patientCount;
@@ -484,7 +515,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 			TimePoint initialTimePoint;
 			initialTimePoint.time_ = 0;
 			for(const auto & hap : haplotypes){
-				double hapFrac = 100 * rGen.unifRand(0.5,1.5) * hapFracForLevels[currentLevel][hap];
+				double hapFrac = 100 * rGen.unifRand(1-adjustAroundGivenFrac, 1+adjustAroundGivenFrac) * hapFracForLevels[currentLevel][hap];
 				initialTimePoint.hapFracs_[hap] = hapFrac;
 			}
 			currentPatient.timePoints_.emplace_back(initialTimePoint);
@@ -574,6 +605,11 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 				totalFracs += hap.second;
 			}
 			for (const auto & hap : tp.hapFracs_) {
+//				std::cout << "hap.first: " << hap.first << std::endl;
+//				std::cout << "hap.second/totalFracs: " << hap.second/totalFracs << std::endl;
+//				std::cout << "njh::in(hap.first, haplotypeKey): " << njh::colorBool(njh::in(hap.first, haplotypeKey)) << std::endl;
+//				std::cout << "haplotypeKey.size(): " << haplotypeKey.size() << std::endl;
+//				std::cout << "hap.first.size(): " << hap.first.size() << std::endl;
 				strains.emplace(hap.first,
 						ControlPopulation::Strain(hap.first, haplotypeKey[hap.first],
 								hap.second/totalFracs));
@@ -638,9 +674,20 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 						mixtures[primerPair]->primers_->reverse_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
 						mixtures[primerPair]->primers_->forward_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
 					}
+//					std::cout << sampleKey << std::endl;
+//					std::cout << "sample.strainsExpected_: " << sample.strainsExpected_.size() << std::endl;
+
 					for (const auto & strain : sample.strainsExpected_) {
+//						std::cout << strain.first << std::endl;
+//						std::cout << "\tstrain.second.name_: " << strain.second.name_ << std::endl;
+//						std::cout << "\tstrain.second.relativeAbundance_: " << strain.second.relativeAbundance_ << std::endl;
+//						std::cout << "\tstrain.second.genomicRegionToHapNames_.size(): " << strain.second.genomicRegionToHapNames_.size() << std::endl;
 						for (const auto & subHapName : strain.second.genomicRegionToHapNames_) {
 							uint32_t genomeCountsForSubRegion = run.hapRegionAmplified_.at(subHapName.first).hapAbundSampled_.at(subHapName.second);
+//							std::cout << strain.first << std::endl;
+//							std::cout << '\t' << subHapName.first << std::endl;
+//							std::cout << "\t" << genomeCountsForSubRegion << std::endl;
+
 							if (njh::in(subHapName.second, mixtures[subHapName.first]->expectedAbundances_)) {
 								mixtures[subHapName.first]->expectedAbundances_[subHapName.second] += strain.second.relativeAbundance_;
 								mixtures[subHapName.first]->genomeCounts_[subHapName.second] += genomeCountsForSubRegion;
@@ -1551,9 +1598,11 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 	uint32_t chimeraBasesIn = 5;
 	uint32_t templateCap = 500000000;
 	bool noChimeras = false;
-
+	uint32_t pairedEndLength = std::numeric_limits<uint32_t>::max();
 	setUp.processVerbose();
 	setUp.processDebug();
+	setUp.setOption(pairedEndLength, "--pairedEndLength", "Paired End Length");
+
 	setUp.setOption(noChimeras, "--noChimeras", "Don't simulate chimeras");
 	setUp.setOption(templateCap, "--templateCap", "Template Cap");
 	setUp.setOption(chimeraBasesIn, "--chimeraBasesIn", "The number of bases needed for a template to lay down");
@@ -1592,6 +1641,9 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 	njh::json::MemberChecker libraryChecker(librarySetUp);
 	libraryChecker.failMemberCheckThrow(LibrarySetup::jsonMembers(), __PRETTY_FUNCTION__);
 	LibrarySetup::SimLibrarySetupPars simPars(librarySetUp["pars"]);
+	if(std::numeric_limits<uint32_t>::max() != pairedEndLength){
+		simPars.pairedEndLength_ = pairedEndLength;
+	}
 	LibrarySetup lSetup(librarySetUp["name"].asString(), simPars, librarySetUp, getVectorOfMapKeys(refSeqs));
 
 	OutOptions idOutOpts(njh::files::make_path(setUp.pars_.directoryName_, "ids.tab.txt"));

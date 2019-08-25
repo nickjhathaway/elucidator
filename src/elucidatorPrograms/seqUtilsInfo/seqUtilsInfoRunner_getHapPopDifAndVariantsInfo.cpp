@@ -672,7 +672,7 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 		if(!allMetaKeys.empty()){
 			OutputStream metaOutPut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "popHapMeta.tab.txt")));
 			VecStr columnNames = allMetaKeysVec;
-			metaOutPut << "PopName\tHapPopUIDCount" << "\t" << njh::conToStr(columnNames, "\t");
+			metaOutPut << "Identifier\tPopName\tHapPopUIDCount" << "\t" << njh::conToStr(columnNames, "\t");
 			metaOutPut << std::endl;
 			for(const auto & popSeq : clusters){
 				for(const auto & inputSeq : popSeq.reads_){
@@ -692,7 +692,8 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 					for(const auto & mf : missingMetaFields){
 						outMeta.addMeta(mf, "NA");
 					}
-					metaOutPut << popSeq.seqBase_.name_;
+					metaOutPut << identifier
+							<< "\t" << popSeq.seqBase_.name_;
 					MetaDataInName popSeqMeta(popSeq.seqBase_.name_);
 					metaOutPut << "\t" << popSeqMeta.getMeta("HapPopUIDCount");
 					for(const auto & mf : allMetaKeysVec){
