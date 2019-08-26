@@ -139,6 +139,8 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	std::vector<uint32_t> timePoints;
 	double adjustAroundGivenFrac = 0.5;
 	readSimulatorSetUp setUp(inputCommands);
+	setUp.processDebug();
+	setUp.processVerbose();
 	setUp.setOption(pcrNumbers.startingTemplateAmounts_, "--startingTemplateAmount", "Starting PCR Template Amount", njh::progutils::ProgramSetUp::ConCheckCase::NONZERO);
 	setUp.setOption(pcrNumbers.finalReadAmount_, "--perMixtureReadAmount", "Final Read Amount to create per mixture", njh::progutils::ProgramSetUp::ConCheckCase::NONZERO);
 	setUp.setOption(simReplicates, "--replicates", "Replicates");
@@ -502,23 +504,48 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	}
 	//add time points
 	for(auto & currentPatient : patientSetUpPars){
+		if(setUp.pars_.verbose_){
+			std::cout << currentPatient.name_ << std::endl;
+		}
 		auto currentLevel = currentPatient.meta_.pasteLevels(metaLevels);
 		std::vector<std::string> haplotypes{njh::mapAt(hapRGenerator, currentLevel).genObj()};
 		if(currentPatient.initalCOI_ > 1){
-			for(uint32_t hapNum = 1; hapNum < currentPatient.initalCOI_; ++hapNum){
-				std::string currentHap = njh::mapAt(hapRGenerator, currentLevel).genObj();
-				while(njh::in(currentHap, haplotypes)){
-					currentHap = njh::mapAt(hapRGenerator,currentLevel).genObj();
+			if(currentPatient.initalCOI_ >= njh::mapAt(hapRGenerator, currentLevel).objs().size()){
+				if (setUp.pars_.verbose_) {
+					std::cout << "For patient " << currentPatient.name_ << " COI of "
+							<< currentPatient.initalCOI_
+							<< " is greater than the number of haplotypes supplied, setting COI to "
+							<< njh::mapAt(hapRGenerator, currentLevel).objs().size()
+							<< std::endl;
+					;
 				}
-				haplotypes.emplace_back(currentHap);
+				currentPatient.initalCOI_ = njh::mapAt(hapRGenerator, currentLevel).objs().size();
+				haplotypes = njh::mapAt(hapRGenerator, currentLevel).objs();
+			}else{
+				for(uint32_t hapNum = 1; hapNum < currentPatient.initalCOI_; ++hapNum){
+					if(setUp.pars_.verbose_){
+						std::cout << "Simulating hapNum: " << hapNum << std::endl;
+					}
+					std::string currentHap = njh::mapAt(hapRGenerator, currentLevel).genObj();
+					while(njh::in(currentHap, haplotypes)){
+						currentHap = njh::mapAt(hapRGenerator,currentLevel).genObj();
+					}
+					if(setUp.pars_.verbose_){
+						std::cout << "\tPicked: " << currentHap << std::endl;
+					}
+					haplotypes.emplace_back(currentHap);
+				}
 			}
+
 			TimePoint initialTimePoint;
 			initialTimePoint.time_ = 0;
+
 			for(const auto & hap : haplotypes){
 				double hapFrac = 100 * rGen.unifRand(1-adjustAroundGivenFrac, 1+adjustAroundGivenFrac) * hapFracForLevels[currentLevel][hap];
 				initialTimePoint.hapFracs_[hap] = hapFrac;
 			}
 			currentPatient.timePoints_.emplace_back(initialTimePoint);
+
 			for(const auto & time : timePoints){
 				TimePoint tPoint;
 				tPoint.time_ = time;
@@ -1592,6 +1619,8 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 	bfs::path illuminaProfileDir = "";
 	uint32_t pcrRounds = 30;
 	uint32_t initialPcrRounds = 10;
+	std::map<uint32_t, uint32_t> initialPcrRoundsMap;
+	bfs::path initialPcrRoundsMapFnp;
 	long double errorRate = 3.5e-06;
 	double pcrEfficiency = 0.95;
 	bool keepPCRSeqs = false;
@@ -1611,6 +1640,8 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 	setUp.setOption(pcrEfficiency, "--pcrEfficiency", "PCR Efficiency, between 0-1, chance a product gets amplified");
 	setUp.setOption(pcrRounds, "--pcrRounds", "Number of PCR rounds");
 	setUp.setOption(initialPcrRounds, "--initialPcrRounds", "Number of Initial rounds of PCR before sampling");
+	setUp.setOption(initialPcrRoundsMapFnp, "--initialPcrRoundsTable", "Number of Initial rounds of PCR before sampling per starting template amount, columns 1)template, 2) rounds");
+
 	setUp.setOption(librarySetUpFile, "--librarySetUpFile", "Library Set Up File", true);
 	setUp.processReadInNames(VecStr{"--fasta", "--fastagz"},true);
 	setUp.setOption(numThreads, "--numThreads", "Number of Threads to Use");
@@ -1621,6 +1652,15 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 	setUp.processDirectoryOutputName("simMultipleMixture_TODAY", true);
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
+	initialPcrRoundsMap[1] = initialPcrRounds;
+	if(bfs::exists(initialPcrRoundsMapFnp)){
+		initialPcrRoundsMap.clear();
+		table initialPcrRoundsMapTab(initialPcrRoundsMapFnp, "\t", true);
+		initialPcrRoundsMapTab.checkForColumnsThrow(VecStr{"template", "rounds"}, __PRETTY_FUNCTION__);
+		for(const auto & row : initialPcrRoundsMapTab){
+			initialPcrRoundsMap[njh::StrToNumConverter::stoToNum<uint32_t>(row[initialPcrRoundsMapTab.getColPos("template")])] =njh::StrToNumConverter::stoToNum<uint32_t>(row[initialPcrRoundsMapTab.getColPos("rounds")]);
+		}
+	}
 	uint64_t intErrorRate = errorRate * std::numeric_limits<uint64_t>::max();
 
 	setUp.writeParametersFile(setUp.pars_.directoryName_ + "parameters.tab.txt", false, true);
@@ -1713,7 +1753,7 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 										&lSetup,&illuminaProfileDir,&singleEnd,&refSeqs,
 										&intErrorRate, &pcrRounds, &initialPcrRounds,&verbose,
 										&keepPCRSeqs, &pcrNumThreads,&pcrEfficiency,&simAmountsDir,
-										&chimeraDirectory,&templateCap,&noChimeras,&chimeraBasesIn](){
+										&chimeraDirectory,&templateCap,&noChimeras,&chimeraBasesIn,&initialPcrRoundsMap](){
 		std::string sampleKey = "";
 		njh::randObjectGen<char,uint32_t> baseRGen({'A', 'C', 'G', 'T'}, {1,1,1,1});
 		RoughIlluminaSimulator simulator(illuminaProfileDir);
@@ -1818,6 +1858,7 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 				auto pcrReadsFnp = njh::files::make_path(fastqDirectory, sampleKey + mixture.second->name_, "reads.fasta");
 				OutOptions pcrReadsOpts(pcrReadsFnp);
 				std::vector<PCRSimulator::SeqGenomeCnt> seqGCounts;
+				uint32_t totalGenomes = 0;
 				for(const auto & currentSeq : currentSeqs){
 					if(!njh::in(currentSeq.name_, mixture.second->genomeCounts_)){
 						std::stringstream ss;
@@ -1826,10 +1867,18 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 						throw std::runtime_error{ss.str()};
 					}
 					if(mixture.second->genomeCounts_.at(currentSeq.name_) > 0){
+						totalGenomes += mixture.second->genomeCounts_.at(currentSeq.name_);
 						seqGCounts.emplace_back(currentSeq, mixture.second->genomeCounts_.at(currentSeq.name_));
 					}
 				}
-				auto pcrSimAmounts = pcrSim.simLibFast(seqGCounts, pcrReadsOpts,mixture.second->finalReadAmount_, pcrRounds, initialPcrRounds, pcrNumThreads);
+				uint32_t currentInitial = initialPcrRounds;
+				for(const auto & initialRound : initialPcrRoundsMap){
+					if(initialRound.first >= totalGenomes){
+						currentInitial = initialRound.second;
+						break;
+					}
+				}
+				auto pcrSimAmounts = pcrSim.simLibFast(seqGCounts, pcrReadsOpts,mixture.second->finalReadAmount_, pcrRounds, currentInitial, pcrNumThreads);
 				//PrimerPair	experiment	runNumber	sampName_
 				std::string PrimerPair = mixture.second->meta_->getMeta("PrimerPair");
 				std::string experiment = mixture.second->meta_->getMeta("experiment");
