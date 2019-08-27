@@ -110,9 +110,11 @@ class bamExpRunner : public njh::progutils::ProgramRunner {
 
 	static int BamFilterByChroms(const njh::progutils::CmdArgs & inputCommands);
 
-
-
 	static int BamExtractReAlignToRef(const njh::progutils::CmdArgs & inputCommands);
+
+
+	static int BamCreateErrorProfileToRef(const njh::progutils::CmdArgs & inputCommands);
+
 
 };
 

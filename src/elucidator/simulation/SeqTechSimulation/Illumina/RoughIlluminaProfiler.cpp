@@ -44,6 +44,85 @@ void RoughIlluminaProfiler::Counts::addOtherCounts(const Counts & other){
 			qualErrorsCounts[pos.first][qual.first] += qual.second;
 		}
 	}
+	for(const auto & pos : other.deletions_){
+		addOtherVec(deletions_[pos.first], pos.second);
+	}
+
+	for(const auto & pos : other.insertions_){
+		addOtherVec(insertions_[pos.first], pos.second);
+	}
+}
+
+void RoughIlluminaProfiler::Counts::increaseCounts(const seqInfo & refAln,
+		const seqInfo & queryAln,
+		const comparison & comp){
+	if(refAln.seq_.size() != queryAln.seq_.size()){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error ref alignment seq size, " << refAln.seq_.size() << " does not match query aln size, " <<  queryAln.seq_.size()<< "\n";
+		throw std::runtime_error{ss.str()};
+	}
+	uint32_t alnSeqPosOffSet = 0;
+	for(const auto pos : iter::range(queryAln.seq_.size())){
+		if('-' == queryAln.seq_[pos]){
+			++alnSeqPosOffSet;
+		}
+		uint32_t realPosition = pos - alnSeqPosOffSet;
+		if('-' != queryAln.seq_[pos] && '-' != refAln.seq_[pos]){
+			++positionTotalCounts[realPosition];
+			if(queryAln.seq_[pos] != refAln.seq_[pos]){
+				//error
+				++positionErrorCounts[realPosition];
+				++qualErrorsCounts[realPosition][queryAln.qual_[pos]];
+				++baseChangeCounts[refAln.seq_[pos]][queryAln.seq_[pos]];
+				++baseChangeCountsPerPosition[realPosition][refAln.seq_[pos]][queryAln.seq_[pos]];
+			}else{
+				//correct
+				++qualCounts[realPosition][queryAln.qual_[pos]];
+			}
+		}
+	}
+	auto isHomopolymer =
+			[](const std::string & k) {
+				return std::all_of(k.begin(), k.end(),[&k](const char c) {return k.front() == c;});
+			};
+	for(const auto & gap : comp.distances_.alignmentGaps_){
+		std::string refHomopolymer;
+		if(isHomopolymer(gap.second.gapedSequence_)){
+			{//search back
+				auto seqAlnPosition = gap.first;
+				while(seqAlnPosition > 0){
+					--seqAlnPosition;
+					if(gap.second.gapedSequence_.front() == queryAln.seq_[seqAlnPosition] &&
+						 gap.second.gapedSequence_.front() == refAln.seq_[seqAlnPosition]){
+						refHomopolymer.push_back(gap.second.gapedSequence_.front());
+					}else{
+						break;
+					}
+				}
+			}
+			{//search forward
+				auto seqAlnPosition = gap.first + gap.second.gapedSequence_.size();
+				while(seqAlnPosition < (queryAln.seq_.size() - 1) ){
+					++seqAlnPosition;
+					if(gap.second.gapedSequence_.front() == queryAln.seq_[seqAlnPosition] &&
+						 gap.second.gapedSequence_.front() == refAln.seq_[seqAlnPosition]){
+						refHomopolymer.push_back(gap.second.gapedSequence_.front());
+					}else{
+						break;
+					}
+				}
+			}
+		}
+		if(gap.second.ref_){
+			insertions_[gap.second.seqPos_].emplace_back(Indel(gap.second, refHomopolymer));
+		}else{
+			deletions_[gap.second.seqPos_].emplace_back(Indel(gap.second, refHomopolymer));
+		}
+	}
+}
+
+void RoughIlluminaProfiler::Counts::increaseCounts(const ReAlignedSeq & res){
+	increaseCounts(res.alnRefSeq_, res.alnQuerySeq_, res.comp_);
 }
 
 void RoughIlluminaProfiler::Counts::increaseCounts(const AlignmentResults & res){
@@ -52,23 +131,40 @@ void RoughIlluminaProfiler::Counts::increaseCounts(const AlignmentResults & res)
 		ss << __PRETTY_FUNCTION__ << ", error alignment sequences don't appear to be set" << "\n";
 		throw std::runtime_error{ss.str()};
 	}
-	uint32_t alnSeqPosOffSet = 0;
-	for(const auto pos : iter::range(len(*res.alnSeqAligned_))){
-		if('-' == res.alnSeqAligned_->seq_[pos]){
-			++alnSeqPosOffSet;
+	increaseCounts(*res.alnSeqAligned_, *res.refSeqAligned_, res.comp_);
+}
+
+
+
+
+void RoughIlluminaProfiler::Counts::writeIndels(const std::string & prefix, bool overWrite){
+	//positional error rate
+	OutOptions positional_error_rateOpts(bfs::path(prefix + "_indels.tab.txt"));
+	positional_error_rateOpts.overWriteFile_ = overWrite;
+	OutputStream positional_error_rateOut(positional_error_rateOpts);
+	positional_error_rateOut << "position\tindel\tgapSeq\trefHomopolymer" << std::endl;
+	{
+		auto posKeys = getVectorOfMapKeys(deletions_);
+		njh::sort(posKeys);
+		for(const auto & pos : posKeys){
+			for(const auto & del : deletions_[pos]){
+				positional_error_rateOut << pos
+						<< "\t" << "deletion"
+						<< "\t" << del.gapinfo_.gapedSequence_
+						<< "\t" << del.refHomopolymer_ << std::endl;
+			}
 		}
-		uint32_t realPosition = pos - alnSeqPosOffSet;
-		if('-' != res.alnSeqAligned_->seq_[pos] && '-' != res.refSeqAligned_->seq_[pos]){
-			++positionTotalCounts[realPosition];
-			if(res.alnSeqAligned_->seq_[pos] != res.refSeqAligned_->seq_[pos]){
-				//error
-				++positionErrorCounts[realPosition];
-				++qualErrorsCounts[realPosition][res.alnSeqAligned_->qual_[pos]];
-				++baseChangeCounts[res.refSeqAligned_->seq_[pos]][res.alnSeqAligned_->seq_[pos]];
-				++baseChangeCountsPerPosition[realPosition][res.refSeqAligned_->seq_[pos]][res.alnSeqAligned_->seq_[pos]];
-			}else{
-				//correct
-				++qualCounts[realPosition][res.alnSeqAligned_->qual_[pos]];
+	}
+
+	{
+		auto posKeys = getVectorOfMapKeys(insertions_);
+		njh::sort(posKeys);
+		for(const auto & pos : posKeys){
+			for(const auto & ins : insertions_[pos]){
+				positional_error_rateOut << pos
+						<< "\t" << "insertion"
+						<< "\t" << ins.gapinfo_.gapedSequence_
+						<< "\t" << ins.refHomopolymer_ << std::endl;
 			}
 		}
 	}
@@ -190,6 +286,7 @@ void RoughIlluminaProfiler::Counts::writeProfiles(const std::string & prefix, bo
 void RoughIlluminaProfiler::addOther(const RoughIlluminaProfiler & other){
 	r1_counts.addOtherCounts(other.r1_counts);
 	r2_counts.addOtherCounts(other.r2_counts);
+
 }
 
 void RoughIlluminaProfiler::increaseCounts(
@@ -205,6 +302,17 @@ void RoughIlluminaProfiler::increaseCounts(
 		r2_counts.increaseCounts(res);
 	}
 }
+
+void RoughIlluminaProfiler::increaseCounts(const ReAlignedSeq & res) {
+	if (res.bAln_.IsFirstMate()) {
+		r1_counts.increaseCounts(res);
+	} else {
+		r2_counts.increaseCounts(res);
+	}
+}
+
+
+
 
 }  // namespace njhseq
 

@@ -76,6 +76,7 @@ bamExpRunner::bamExpRunner()
 					 addFunc("BamRefIdsToBed", BamRefIdsToBed, false),
 					 addFunc("bamToFastqAlns", bamToFastqAlns, false),
 					 addFunc("BamExtractReAlignToRef", BamExtractReAlignToRef, false),
+					 addFunc("BamCreateErrorProfileToRef", BamCreateErrorProfileToRef, false),
           }, //
 				"bamExp") {
 }

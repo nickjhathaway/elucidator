@@ -109,6 +109,7 @@ int readSimulatorRunner::createIlluminaErrorProfile(
 	profiler.r2_counts.writeProfiles(njh::files::make_path(setUp.pars_.directoryName_, "r2").string(), false);
 	return 0;
 }
+
 struct PCRAmountPars {
 	PCRAmountPars() {
 	}
