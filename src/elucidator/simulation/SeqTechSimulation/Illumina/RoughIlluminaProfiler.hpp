@@ -51,7 +51,7 @@ public:
 
 		void writeProfiles(const std::string & prefix, bool overWrite);
 		void writeIndels(const std::string & prefix, bool overWrite);
-
+		uint32_t softClipCutOff_{10};
 	};
 
 	Counts r1_counts;

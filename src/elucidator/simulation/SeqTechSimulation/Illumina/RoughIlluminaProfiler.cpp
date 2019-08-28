@@ -121,8 +121,21 @@ void RoughIlluminaProfiler::Counts::increaseCounts(const seqInfo & refAln,
 	}
 }
 
+uint32_t getSoftClipAmount(const BamTools::BamAlignment & bAln){
+	uint32_t ret = 0;
+	if(bAln.CigarData.size() > 0 && 'S' == bAln.CigarData.front().Type){
+		ret += bAln.CigarData.front().Length;
+	}
+	if(bAln.CigarData.size() > 1 && 'S' == bAln.CigarData.back().Type){
+		ret += bAln.CigarData.back().Length;
+	}
+	return ret;
+}
+
 void RoughIlluminaProfiler::Counts::increaseCounts(const ReAlignedSeq & res){
-	increaseCounts(res.alnRefSeq_, res.alnQuerySeq_, res.comp_);
+	if(getSoftClipAmount(res.bAln_) < softClipCutOff_){
+		increaseCounts(res.alnRefSeq_, res.alnQuerySeq_, res.comp_);
+	}
 }
 
 void RoughIlluminaProfiler::Counts::increaseCounts(const AlignmentResults & res){
@@ -131,7 +144,9 @@ void RoughIlluminaProfiler::Counts::increaseCounts(const AlignmentResults & res)
 		ss << __PRETTY_FUNCTION__ << ", error alignment sequences don't appear to be set" << "\n";
 		throw std::runtime_error{ss.str()};
 	}
-	increaseCounts(*res.alnSeqAligned_, *res.refSeqAligned_, res.comp_);
+	if(getSoftClipAmount(res.bAln_) < softClipCutOff_){
+		increaseCounts(*res.alnSeqAligned_, *res.refSeqAligned_, res.comp_);
+	}
 }
 
 
