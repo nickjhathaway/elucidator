@@ -51,15 +51,22 @@ void RoughIlluminaProfiler::Counts::addOtherCounts(const Counts & other){
 	for(const auto & pos : other.insertions_){
 		addOtherVec(insertions_[pos.first], pos.second);
 	}
+	perfectHits_ += other.perfectHits_;
+	addOtherVec(percentIds_, other.percentIds_);
 }
 
 void RoughIlluminaProfiler::Counts::increaseCounts(const seqInfo & refAln,
 		const seqInfo & queryAln,
 		const comparison & comp){
+
 	if(refAln.seq_.size() != queryAln.seq_.size()){
 		std::stringstream ss;
 		ss << __PRETTY_FUNCTION__ << ", error ref alignment seq size, " << refAln.seq_.size() << " does not match query aln size, " <<  queryAln.seq_.size()<< "\n";
 		throw std::runtime_error{ss.str()};
+	}
+	percentIds_.emplace_back(comp.distances_.eventBasedIdentity_);
+	if(comp.distances_.eventBasedIdentity_ >= 1){
+		++perfectHits_;
 	}
 	uint32_t alnSeqPosOffSet = 0;
 	for(const auto pos : iter::range(queryAln.seq_.size())){
@@ -186,6 +193,27 @@ void RoughIlluminaProfiler::Counts::writeIndels(const std::string & prefix, bool
 }
 
 void RoughIlluminaProfiler::Counts::writeProfiles(const std::string & prefix, bool overWrite){
+
+	//scores
+	OutOptions scoresOpts(bfs::path(prefix + "_scores.tab.txt"));
+	scoresOpts.overWriteFile_ = overWrite;
+	OutputStream scoresOut(scoresOpts);
+	scoresOut << "score" << std::endl;
+	{
+		scoresOut << njh::conToStr(percentIds_, "\n") << std::endl;
+	}
+	//percent hits
+	OutOptions hitsOpts(bfs::path(prefix + "_hits.tab.txt"));
+	hitsOpts.overWriteFile_ = overWrite;
+	OutputStream hitsOut(hitsOpts);
+	hitsOut << "totalReads\tperfectHits\tperfectHitsRatio" << std::endl;
+	{
+		hitsOut << percentIds_.size()
+				<< "\t" << perfectHits_
+				<< "\t" << perfectHits_/static_cast<double>(percentIds_.size()) << std::endl;
+	}
+
+
 	//positional error rate
 	OutOptions positional_error_rateOpts(bfs::path(prefix + "_positional_error_rate.tab.txt"));
 	positional_error_rateOpts.overWriteFile_ = overWrite;
