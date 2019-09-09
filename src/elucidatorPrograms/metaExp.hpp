@@ -44,6 +44,8 @@ class metaExpRunner : public njh::progutils::ProgramRunner {
   static int createTableFromSeqs(const njh::progutils::CmdArgs & inputCommands);
   static int printMetaFieldsFromSeqs(const njh::progutils::CmdArgs & inputCommands);
 
+
+  static int addMetaFieldToAll(const njh::progutils::CmdArgs & inputCommands);
 };
 
 } //  namespace njhseq

@@ -42,6 +42,7 @@ metaExpRunner::metaExpRunner()
 					 addFunc("splitSeqFileWithExternalMeta", splitSeqFileWithExternalMeta, false),
 					 addFunc("createTableFromSeqs", createTableFromSeqs, false),
 					 addFunc("printMetaFieldsFromSeqs", printMetaFieldsFromSeqs, false),
+					 addFunc("printMetaFieldsFromSeqs", printMetaFieldsFromSeqs, false),
 
            },//
           "metaExp") {}
@@ -121,6 +122,42 @@ int metaExpRunner::addMetaBySampleName(const njh::progutils::CmdArgs & inputComm
 		reader.write(seq);
 	}
 	//
+	return 0;
+}
+
+
+
+int metaExpRunner::addMetaFieldToAll(const njh::progutils::CmdArgs & inputCommands){
+	bool overWriteMeta = false;
+
+	std::string metaField = "";
+	std::string metaData = "";
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(metaData, "--metaData", "The meta value to add for the field", true);
+	setUp.setOption(metaField, "--metaField", "Name of the meta data field", true);
+	setUp.setOption(overWriteMeta, "--overWriteMeta", "Over Write Meta Fields in names");
+	setUp.processDefaultReader(true);
+	setUp.description_ = "Set meta field to a set value for all sequences";
+	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --metaData condition1 --metaField experiment --fasta infile.fasta");
+
+	setUp.finishSetUp(std::cout);
+
+
+	seqInfo seq;
+	SeqIO reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	reader.openOut();
+	while (reader.readNextRead(seq)) {
+		MetaDataInName seqMeta;
+		if (MetaDataInName::nameHasMetaData(seq.name_)){
+			seqMeta = MetaDataInName(seq.name_);
+		}
+		seqMeta.addMeta(metaField, metaData, overWriteMeta);
+		reader.write(seq);
+	}
+
 	return 0;
 }
 
