@@ -811,10 +811,10 @@ int bedExpRunner::bedRenameWithCoords(const njh::progutils::CmdArgs & inputComma
 	while(nullptr != reg){
 		GenomicRegion gRegion(*reg);
 		gRegion.setUidWtihCoordsStrand();
-		reg->name_ = gRegion.uid_;
 		if("" != keyOutFnp){
 			(*keyOut) << reg->name_ << "\t" << gRegion.uid_ << std::endl;
 		}
+		reg->name_ = gRegion.uid_;
 		reader.write(*reg, [](const Bed6RecordCore & bRecord, std::ostream & out){
 			out << bRecord.toDelimStrWithExtra() << "\n";
 		});

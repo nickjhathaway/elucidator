@@ -123,15 +123,9 @@ int bamExpRunner::BamGetSpanningReadsForRegion(
 								//see if stitching is even plausible
 
 								if(mate->GetEndPosition() >  bAln.Position){
-									std::cout << "mate: " <<  mate->Position - static_cast<int64_t>(currentRegion.start_) << '\t' << mate->GetEndPosition()- static_cast<int64_t>(currentRegion.end_) << std::endl;
-									std::cout << "baln: " <<  bAln.Position - static_cast<int64_t>(currentRegion.start_) << '\t' << bAln.GetEndPosition()- static_cast<int64_t>(currentRegion.end_) << std::endl;
-									std::cout << "mate: " << mate->Position << ":" << mate->GetEndPosition() << std::endl;
-									std::cout << "baln: " << bAln.Position << ":" << bAln.GetEndPosition() << std::endl;
-
 									if(mate->Position <= currentRegion.start_ &&
 										 bAln.GetEndPosition() >= currentRegion.end_ &&
 										 mate->IsReverseStrand() != bAln.IsReverseStrand()){
-										std::cout << '\t' << "pair over region: " << njh::colorBool(true) << std::endl;
 										//stitching plausible and spanning
 										//spanning read
 										seqInfo firstMate;
@@ -150,10 +144,6 @@ int bamExpRunner::BamGetSpanningReadsForRegion(
 										PairedRead pseq(firstMate, secondMate);
 										pseq.mateRComplemented_ = false;
 										auto pairRes = pProcess.processPairedEnd(pseq, processCounts, alignerObj);
-										std::cout << '\t' << "pProcess.params_.minOverlap_: " << pProcess.params_.minOverlap_ << std::endl;
-										std::cout << '\t' << "stitched pair: " << njh::colorBool(nullptr != pairRes.combinedSeq_) << std::endl;
-										alignerObj.alignObjectA_.seqBase_.outPutSeqAnsi(std::cout);
-										alignerObj.alignObjectB_.seqBase_.outPutSeqAnsi(std::cout);
 										if(nullptr != pairRes.combinedSeq_){
 											readVec::getMaxLength(*pairRes.combinedSeq_, maxlen);
 											alignerObj.parts_.setMaxSize(maxlen);
@@ -186,10 +176,7 @@ int bamExpRunner::BamGetSpanningReadsForRegion(
 												seqIOOutCache.add(currentRegion.uid_, querySeq);
 											}
 										}
-									}else{
-										std::cout << '\t' << "pair over region: " << njh::colorBool(false) << std::endl;
 									}
-									std::cout << std::endl;
 								}
 								cache.remove(bAln.Name);
 							} else {
