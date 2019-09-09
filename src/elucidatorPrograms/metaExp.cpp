@@ -42,7 +42,7 @@ metaExpRunner::metaExpRunner()
 					 addFunc("splitSeqFileWithExternalMeta", splitSeqFileWithExternalMeta, false),
 					 addFunc("createTableFromSeqs", createTableFromSeqs, false),
 					 addFunc("printMetaFieldsFromSeqs", printMetaFieldsFromSeqs, false),
-					 addFunc("printMetaFieldsFromSeqs", printMetaFieldsFromSeqs, false),
+					 addFunc("addMetaFieldToAll", addMetaFieldToAll, false),
 
            },//
           "metaExp") {}
