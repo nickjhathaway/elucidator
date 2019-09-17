@@ -65,6 +65,7 @@ seqUtilsTrimRunner::seqUtilsTrimRunner()
 			addFunc("trimWithSlidingQualityAvgWindow", trimWithSlidingQualityAvgWindow, false),
 			addFunc("trimToPositionsForEachName", trimToPositionsForEachName, false),
 			addFunc("breakupAtRegexPat", breakupAtRegexPat, false),
+			addFunc("trimFrontForTandemRepeat", trimFrontForTandemRepeat, false),
 },
                     "seqUtilsTrim") {}
 //

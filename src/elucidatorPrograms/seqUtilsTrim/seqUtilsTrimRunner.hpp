@@ -81,6 +81,8 @@ class seqUtilsTrimRunner : public njh::progutils::ProgramRunner {
 
   static int breakupAtRegexPat(const njh::progutils::CmdArgs & inputCommands);
 
+
+  static int trimFrontForTandemRepeat(const njh::progutils::CmdArgs & inputCommands);
   //
   //
 };
