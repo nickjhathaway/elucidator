@@ -116,6 +116,8 @@ class bamExpRunner : public njh::progutils::ProgramRunner {
 	static int BamCreateErrorProfileToRef(const njh::progutils::CmdArgs & inputCommands);
 
 	static int BamGetSpanningReadsForRegion(const njh::progutils::CmdArgs & inputCommands);
+	static int BamGetPileupForRegion(const njh::progutils::CmdArgs & inputCommands);
+	static int MultipleBamGetPileupForRegion(const njh::progutils::CmdArgs & inputCommands);
 
 };
 

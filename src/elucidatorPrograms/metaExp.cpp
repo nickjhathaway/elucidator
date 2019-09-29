@@ -157,8 +157,9 @@ int metaExpRunner::addMetaFieldToAll(const njh::progutils::CmdArgs & inputComman
 		seqMeta.addMeta(metaField, metaData, overWriteMeta);
 		if (MetaDataInName::nameHasMetaData(seq.name_)){
 			seqMeta.resetMetaInName(seq.name_);
+		}else{
+			seq.name_.append(seqMeta.createMetaName());
 		}
-		seq.name_.append(seqMeta.createMetaName());
 		reader.write(seq);
 	}
 

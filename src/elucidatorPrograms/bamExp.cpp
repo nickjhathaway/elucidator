@@ -78,6 +78,8 @@ bamExpRunner::bamExpRunner()
 					 addFunc("BamExtractReAlignToRef", BamExtractReAlignToRef, false),
 					 addFunc("BamCreateErrorProfileToRef", BamCreateErrorProfileToRef, false),
 					 addFunc("BamGetSpanningReadsForRegion", BamGetSpanningReadsForRegion, false),
+					 addFunc("BamGetPileupForRegion", BamGetPileupForRegion, false),
+					 addFunc("MultipleBamGetPileupForRegion", MultipleBamGetPileupForRegion, false),
           }, //
 				"bamExp") {
 }
@@ -477,6 +479,8 @@ int bamExpRunner::outputSoftClipCounts(const njh::progutils::CmdArgs & inputComm
 
 	return 0;
 }
+
+
 
 int bamExpRunner::bamMulticov(const njh::progutils::CmdArgs & inputCommands){
 	OutOptions outOpts(bfs::path(""));

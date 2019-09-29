@@ -128,16 +128,7 @@ void RoughIlluminaProfiler::Counts::increaseCounts(const seqInfo & refAln,
 	}
 }
 
-uint32_t getSoftClipAmount(const BamTools::BamAlignment & bAln){
-	uint32_t ret = 0;
-	if(bAln.CigarData.size() > 0 && 'S' == bAln.CigarData.front().Type){
-		ret += bAln.CigarData.front().Length;
-	}
-	if(bAln.CigarData.size() > 1 && 'S' == bAln.CigarData.back().Type){
-		ret += bAln.CigarData.back().Length;
-	}
-	return ret;
-}
+
 
 void RoughIlluminaProfiler::Counts::increaseCounts(const ReAlignedSeq & res){
 	if(getSoftClipAmount(res.bAln_) < softClipCutOff_){

@@ -789,7 +789,10 @@ int bedExpRunner::bedRenameWithCoords(const njh::progutils::CmdArgs & inputComma
 	setUp.setOption(bedFile, "--bed", "Bed6 file to rename", true);
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
-	if("" == outOpts.outFilename_){
+	if ("STDIN" == bedFile && "" == outOpts.outFilename_) {
+		outOpts.outFilename_ = "STDOUT";
+	}
+	if ("" == outOpts.outFilename_) {
 		outOpts.outFilename_ = njh::files::prependFileBasename(bedFile, "renamed_");
 	}
 	OutOptions keyOpts(keyOutFnp);
