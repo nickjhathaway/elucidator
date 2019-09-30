@@ -69,7 +69,7 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 	for(const auto & regSeq : regionSeqs){
 		readVec::getMaxLength(regSeq.second, maxlenForRegions);
 	}
-	std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> counts;
+	std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> allCounts;
 
 	std::function<void()> extractReadsForRegion = [&regionsQueue,
 																&bamPool,&pars,
@@ -77,7 +77,7 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 																&spanRCountsMut,
 																&regionSeqs,
 																&maxlenForRegions,
-																&counts](){
+																&allCounts](){
 
 		aligner alignerObj(std::max<uint64_t>(maxlenForRegions, 500), gapScoringParameters(10,1,0,0,0,0));
 		GenomicRegion currentRegion;
@@ -86,6 +86,7 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 		BamTools::BamAlignment bAln;
 		std::unordered_map<std::string, uint32_t> currentSpanningReadCounts;
 		std::unordered_map<std::string, uint32_t> currentTotalReadCounts;
+		std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> currentCounts;
 
 		uint64_t maxlen = 0;
 		PairedReadProcessor pProcess(pars.pairPars);
@@ -153,7 +154,7 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 												if(vectorMean(pairRes.combinedSeq_->qual_) > pars.baseQuality){
 													//spanning read
 													++currentSpanningReadCounts[currentRegion.uid_];
-													++counts[currentRegion.uid_][pairRes.combinedSeq_->seq_];
+													++currentCounts[currentRegion.uid_][pairRes.combinedSeq_->seq_];
 												}
 											}
 										}else if(bAln.Position <= currentRegion.start_ && bAln.GetEndPosition() >= currentRegion.end_){
@@ -172,7 +173,7 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 												if(vectorMean(querySeq.qual_) > pars.baseQuality){
 													//spanning read
 													++currentSpanningReadCounts[currentRegion.uid_];
-													++counts[currentRegion.uid_][querySeq.seq_];
+													++currentCounts[currentRegion.uid_][querySeq.seq_];
 												}
 											}
 										}else if(mate->Position <= currentRegion.start_ && mate->GetEndPosition() >= currentRegion.end_){
@@ -192,7 +193,7 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 												if(vectorMean(querySeq.qual_) > pars.baseQuality){
 													//spanning read
 													++currentSpanningReadCounts[currentRegion.uid_];
-													++counts[currentRegion.uid_][querySeq.seq_];
+													++currentCounts[currentRegion.uid_][querySeq.seq_];
 												}
 											}
 										}
@@ -218,7 +219,7 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 										if(vectorMean(querySeq.qual_) > pars.baseQuality){
 											//spanning read
 											++currentSpanningReadCounts[currentRegion.uid_];
-											++counts[currentRegion.uid_][querySeq.seq_];
+											++currentCounts[currentRegion.uid_][querySeq.seq_];
 										}
 									}
 								}
@@ -241,7 +242,7 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 								if(vectorMean(querySeq.qual_) > pars.baseQuality){
 									//spanning read
 									++currentSpanningReadCounts[currentRegion.uid_];
-									++counts[currentRegion.uid_][querySeq.seq_];
+									++currentCounts[currentRegion.uid_][querySeq.seq_];
 								}
 							}
 						}
@@ -258,6 +259,11 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 			for(const auto & totalCount : currentTotalReadCounts){
 				totalReadCounts[totalCount.first] = totalCount.second;
 			}
+
+			for(const auto & regionCount : currentCounts){
+				allCounts[regionCount.first] = regionCount.second;
+			}
+
 		}
 	};
 
@@ -269,7 +275,7 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 	}
 
 	std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> ret;
-	for(const auto & count : counts){
+	for(const auto & count : allCounts){
 		uint64_t total = 0;
 		for(const auto & subCount : count.second){
 			if(subCount.second > pars.perBaseCountCutOff){
@@ -353,6 +359,9 @@ int bamExpRunner::MultipleBamGetPileupForRegion(
 	outCounts << "bamFile\tregion\trefSeq\tseq\tcount" << std::endl;
 
 	for(const auto & bam : bamFnps){
+		if(setUp.pars_.verbose_){
+			std::cout << bam << std::endl;
+		}
 		auto counts = BamCountSpecficRegions(inputRegions, regionSeqs, bam, countPars);
 		for(const auto & region : inputRegions){
 			std::set<std::string> subCounts;
@@ -362,7 +371,6 @@ int bamExpRunner::MultipleBamGetPileupForRegion(
 			for(const auto & seq : subCounts){
 				total += counts[region.uid_][seq];
 			}
-
 			for(const auto & seq : subCounts){
 				outCounts << bam.filename().string()
 						<< "\t" << region.uid_
