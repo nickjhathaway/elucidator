@@ -816,35 +816,28 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 					}
 //					roundCountsTab.outPutContentOrganized(std::cout);
 					for(const auto & chi : chimeras){
-
 						bool matchesInputSeq = false;
 						for(const auto & seqSampled : seqsSampled){
 							if(seqSampled.seqBase_.seq_ == chi.first){
 								matchesInputSeq = true;
 								finishedAmount[seqSampled.seqBase_.name_] += chi.second;
-
 								allSeqCounts[seqSampled.seqBase_.name_][seqSampled.seqBase_.seq_]+= chi.second;
 								break;
 							}
 						}
 						bool matchesPreviousChimera = false;
 						if(!matchesInputSeq){
-
 							intialRoundChiTotal+= chi.second;
 							for(const auto & chimeraSeq : chimeraSeqs){
 								if(chimeraSeq.seq_ == chi.first){
 									matchesPreviousChimera = true;
 									finishedAmount[chimeraSeq.name_] += chi.second;
-
 									allSeqCounts[chimeraSeq.name_][chimeraSeq.seq_] = chi.second;
 						//			templateNonMutated[seq.name_] = {seqCounts[seq.seq_], finalPerfectAmount};
 									barcodedSeqs[chimeraSeq.name_] = chimeraSeq.seq_;
 									break;
 								}
 							}
-
-
-
 						}
 						if(!matchesInputSeq && !matchesPreviousChimera){
 							std::string name =njh::pasteAsStr("Chi.", chimeraSeqs.size(), "[PCRRound=", initialPcrRounds, "]");
@@ -1307,7 +1300,6 @@ std::unordered_map<std::string, PCRSimulator::SimHapCounts::MutInfo> PCRSimulato
 							finalSeq);
 					MetaDataInName nameMeta;
 					nameMeta.addMeta("hap", namesSeqs.first);
-
 					if (finalSeq != seqs.at(namesSeqs.first)) {
 						nameMeta.addMeta("mutated", true);
 						nameMeta.addMeta("idNum", leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].mutated_, finalReadAmount));
@@ -1317,6 +1309,7 @@ std::unordered_map<std::string, PCRSimulator::SimHapCounts::MutInfo> PCRSimulato
 						nameMeta.addMeta("idNum", leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].nonMutated_, finalReadAmount));
 						++mutInfo[namesSeqs.first].nonMutated_;
 					}
+					nameMeta.addMeta("threadNumber", threadNumber);
 					outputs.emplace_back(std::make_pair(">" + nameMeta.createMetaName(), finalSeq));
 				}
 				{
