@@ -1717,7 +1717,7 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 	aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0));
 	for(const auto & refSeqs : refSeqsByPrimerName){
 		SeqOutput seqWriter(SeqIOOptions::genFastaOut(njh::files::make_path(refSeqsDir, refSeqs.first)));
-		if("NoPrimers" == refSeqs.first){
+		if("NoPrimers" == refSeqs.first || !lSetup.pars_.noAddPrimers_){
 			for(const auto & refSeq : refSeqs.second){
 				seqWriter.openWrite(refSeq);
 			}
