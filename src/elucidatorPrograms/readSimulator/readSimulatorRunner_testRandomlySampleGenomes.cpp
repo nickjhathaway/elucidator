@@ -95,8 +95,8 @@ int readSimulatorRunner::simRandomlySampleGenomes(
 	for(const auto & sim : iter::range(sims)){
 		for(const auto & gCount : totalGenomesCounts){
 			for(const auto & maf : minorAlleleFreqs){
-				seqInfo major("major");
-				seqInfo minor("minor");
+				seqInfo major{"major"};
+				seqInfo minor{"minor"};
 				major.cnt_ = 100 - maf;
 				major.frac_ = major.cnt_/100;
 				minor.cnt_ = maf;
