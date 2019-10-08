@@ -152,33 +152,7 @@ public:
 			SeqSampledAmounts expAmounts_;
 			MetaDataInName meta_;
 
-			void setGenomesSampled(const std::map<std::string, Strain> & strainsExpected){
-				hapAbundGenomesSampled_.clear();
-				hapRegionAmplified_.clear();
-				std::vector<seqInfo> seqs;
-				for(const auto & strain : strainsExpected){
-					seqInfo seq(strain.second.name_);
-					seq.cnt_ = strain.second.relativeAbundance_;
-					seq.frac_ = strain.second.relativeAbundance_;
-					seqs.emplace_back(seq);
-				}
-				auto genomesSampled = PCRSimulator::randomlySampleGenomes(seqs,
-						expAmounts_.totalGenomesSampled_);
-				std::map<std::string, std::map<std::string, double>> subRegionsSampled;
-				for (const auto & strainSampled : genomesSampled) {
-					Strain strain(strainSampled.seqBase_.name_,
-							strainsExpected.at(strainSampled.seqBase_.name_).genomicRegionToHapNames_,
-							strainSampled.genomeCnt_);
-					strain.meta_ = strainsExpected.at(strainSampled.seqBase_.name_).meta_;
-					hapAbundGenomesSampled_.emplace(strainSampled.seqBase_.name_, strain);
-					for(const auto & hap : strain.genomicRegionToHapNames_){
-						subRegionsSampled[hap.first][hap.second] += strain.relativeAbundance_;
-					}
-				}
-				for(const auto & subRegionSampled : subRegionsSampled){
-					hapRegionAmplified_.emplace(subRegionSampled.first, GenomicRegionAmp(subRegionSampled.first,subRegionSampled.second));
-				}
-			}
+			void setGenomesSampled(const std::map<std::string, Strain> & strainsExpected);
 
 			Json::Value toJson() const {
 				Json::Value ret;
@@ -968,21 +942,7 @@ public:
 	}
 
 
-	table createAbundanceTable() const{
-		table ret(VecStr{"library", "sample", "mix", "hap", "abundanceRaw", "totalRawAbundance", "Percentage"});
-		for(const auto & sample : samples_){
-			for(const auto & mix : sample.second->mixtures_){
-				double totalRawAbundance = 0.0;
-				for(const auto & hap : mix.second->expectedAbundances_){
-					totalRawAbundance += hap.second;
-				}
-				for(const auto & hap : mix.second->expectedAbundances_){
-					ret.addRow(name_, sample.second->name_, mix.second->name_, hap.first, hap.second, totalRawAbundance, 100 * (hap.second/totalRawAbundance));
-				}
-			}
-		}
-		return ret;
-	}
+	table createAbundanceTable() const;
 
 };
 

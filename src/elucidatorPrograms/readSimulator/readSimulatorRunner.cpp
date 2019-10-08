@@ -47,6 +47,9 @@ readSimulatorRunner::readSimulatorRunner()
 	addFunc("testPCRSim", testPCRSim, false),
 	addFunc("testPCRChimeraSim", testPCRChimeraSim, false),
 	addFunc("simIlluminaOnSeqs", simIlluminaOnSeqs, false),
+	addFunc("testRandomlySampleGenomes", testRandomlySampleGenomes, false),
+	addFunc("simRandomlySampleGenomes", simRandomlySampleGenomes, false),
+	addFunc("testSDFinalReadAmount", testSDFinalReadAmount, false),
 },
                     "readSimulator") {}
 //

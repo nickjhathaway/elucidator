@@ -55,6 +55,10 @@ class readSimulatorRunner : public njh::progutils::ProgramRunner {
   static int testPCRSim(const njh::progutils::CmdArgs & inputCommands);
   static int testPCRChimeraSim(const njh::progutils::CmdArgs & inputCommands);
 
+  static int testRandomlySampleGenomes(const njh::progutils::CmdArgs & inputCommands);
+  static int testSDFinalReadAmount(const njh::progutils::CmdArgs & inputCommands);
+
+  static int simRandomlySampleGenomes(const njh::progutils::CmdArgs & inputCommands);
 
   static int simIlluminaOnSeqs(const njh::progutils::CmdArgs & inputCommands);
 
