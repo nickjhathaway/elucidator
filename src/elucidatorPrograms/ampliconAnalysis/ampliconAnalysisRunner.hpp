@@ -36,7 +36,6 @@ class ampliconAnalysisRunner : public njh::progutils::ProgramRunner {
   static int markChimeras(const njh::progutils::CmdArgs & inputCommands);
   static int greedyCluster(const njh::progutils::CmdArgs & inputCommands);
   static int singleLinkageClusteringOnPerId(const njh::progutils::CmdArgs & inputCommands);
-  static int gatherInfoOnTargetedAmpliconSeqFile(const njh::progutils::CmdArgs & inputCommands);
 
 };
 }  // namespace njhseq
