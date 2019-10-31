@@ -30,7 +30,7 @@
 
 namespace njhseq {
 
-struct CoverageFinderPars{
+struct RunCoverageFinderMultiPars{
 	OutOptions outOpts{bfs::path(""), ".tab.txt"};
 	uint32_t numThreads = 1;
 	std::string bams = "";
@@ -44,7 +44,25 @@ struct CoverageFinderPars{
 
 
 };
-void RunCoverageFinder(const CoverageFinderPars & pars);
+
+void RunCoverageFinderMulti(const RunCoverageFinderMultiPars & pars);
+
+struct RunCoverageFinderSinglePars{
+	OutOptions outOpts{bfs::path(""), ".tab.txt"};
+	uint32_t numThreads = 1;
+
+	std::string bamFnp = "";
+	uint32_t window = 500;
+	uint32_t step = 100;
+	uint32_t coverageCutOff = 1;
+	uint32_t regionBatchSize = 100;
+	bool byBases = false;
+
+
+
+};
+
+void RunCoverageFinderSingle(const RunCoverageFinderSinglePars & pars);
 
 struct RegionRefinementPars{
 	bfs::path bedFnp;

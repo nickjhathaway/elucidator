@@ -374,7 +374,7 @@ int bamExpRunner::determineRegionLastz(
 
 
 int bamExpRunner::multiBamCoverageFinder(const njh::progutils::CmdArgs & inputCommands){
-	CoverageFinderPars covPars;
+	RunCoverageFinderMultiPars covPars;
 
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -392,7 +392,7 @@ int bamExpRunner::multiBamCoverageFinder(const njh::progutils::CmdArgs & inputCo
 	setUp.finishSetUp(std::cout);
 
 
-	RunCoverageFinder(covPars);
+	RunCoverageFinderMulti(covPars);
 
 	return 0;
 }

@@ -33,7 +33,7 @@
 namespace njhseq {
 
 
-void RunCoverageFinder(const CoverageFinderPars & pars){
+void RunCoverageFinderMulti(const RunCoverageFinderMultiPars & pars){
 	VecStr header = {"#chrom", "start", "end", "name", "score", "strand"};
 
 	std::vector<bfs::path> bamFnps;
@@ -163,9 +163,19 @@ void RunCoverageFinder(const CoverageFinderPars & pars){
 							}
 						}
 					}
-					if(coverage.coverage_ >= pars.coverageCutOff){
-						coverages.emplace_back(coverage);
+					bool pass = false;
+					if(pars.byBases){
+						if(coverage.coverage_/static_cast<double>(coverage.region_.getLen()) >= pars.coverageCutOff){
+							coverages.emplace_back(coverage);
+							pass = true;
+						}
 					}else{
+						if(coverage.coverage_ >= pars.coverageCutOff){
+							coverages.emplace_back(coverage);
+							pass = true;
+						}
+					}
+					if(!pass){
 						break;
 					}
 				}
@@ -193,6 +203,159 @@ void RunCoverageFinder(const CoverageFinderPars & pars){
 		for(auto & t : threads){
 			t.join();
 		}
+	}
+}
+
+
+void RunCoverageFinderSingle(const RunCoverageFinderSinglePars & pars){
+	VecStr header = {"#chrom", "start", "end", "name", "score", "strand"};
+
+
+	std::vector<bfs::path> bamFnps{pars.bamFnp};
+	OutputStream out(pars.outOpts);
+	std::mutex outMut;
+	out << njh::conToStr(header, "\t");
+	for(const auto & bamFnp : bamFnps){
+		out << "\t" << bamFnp.filename().string();
+	}
+	out << std::endl;
+
+
+
+	class GenomeRegionSlider {
+	public:
+		GenomeRegionSlider(const BamTools::RefVector & refData, uint32_t windowSize,
+				uint32_t step) :
+				refLengths_(refData), windowSize_(windowSize), step_(step) {
+		}
+		BamTools::RefVector refLengths_;
+		uint32_t windowSize_;
+		uint32_t step_;
+	private:
+		uint32_t currentPos_ = 0;
+		uint32_t currentRefId_ = 0;
+		std::mutex mut_;
+		bool getRegionNoLock(GenomicRegion & region) {
+			region.chrom_ = "*";
+			if (currentRefId_ < refLengths_.size()) {
+				if (currentPos_ + windowSize_ < static_cast<uint64_t>(refLengths_[currentRefId_].RefLength)) {
+					region = GenomicRegion("", refLengths_[currentRefId_].RefName, currentPos_, currentPos_ + windowSize_, false);
+					region.setUidWtihCoords();
+					currentPos_ += step_;
+					return true;
+				} else {
+					++currentRefId_;
+					currentPos_ = 0;
+					if (currentRefId_ < refLengths_.size()) {
+						if (currentPos_ + windowSize_
+								< static_cast<uint64_t>(refLengths_[currentRefId_].RefLength)) {
+							region = GenomicRegion("", refLengths_[currentRefId_].RefName, currentPos_, currentPos_ + windowSize_, false);
+							region.setUidWtihCoords();
+							currentPos_ += step_;
+							return true;
+						}
+					}
+				}
+			}
+			return false;
+		}
+
+	public:
+
+		bool getRegion(GenomicRegion & region) {
+			std::lock_guard<std::mutex> lock(mut_);
+			return getRegionNoLock(region);
+		}
+
+		bool getRegions(std::vector<GenomicRegion> & regions, uint32_t batchSize){
+			std::lock_guard<std::mutex> lock(mut_);
+			regions.clear();
+			bool added = false;
+			for(uint32_t batch = 0; batch < batchSize; ++batch){
+				GenomicRegion region;
+				if(getRegionNoLock(region)){
+					regions.emplace_back(region);
+					added = true;
+				}else{
+					break;
+				}
+			}
+			return added;
+		}
+
+	};
+
+	struct BamFnpRegionPair {
+		BamFnpRegionPair(const bfs::path & bamFnp, const GenomicRegion & region) :
+				bamFnp_(bamFnp), region_(region) {
+			regUid_ = region_.createUidFromCoords();
+			bamFname_ = bamFnp_.filename().string();
+		}
+		bfs::path bamFnp_;
+		GenomicRegion region_;
+		uint32_t coverage_ = 0;
+
+		std::string regUid_;
+		std::string bamFname_;
+	};
+
+
+	auto bamFnp = pars.bamFnp;
+	njhseq::concurrent::BamReaderPool bPool(pars.bamFnp, pars.numThreads);
+	bPool.openBamFile();
+	BamTools::RefVector refData;
+	{
+		auto bReader = bPool.popReader();
+		refData = bReader->GetReferenceData();
+	}
+	GenomeRegionSlider slider(refData, pars.window, pars.step);
+	std::function<void()> getCovForBam = [&slider,&bamFnp,
+																				&outMut,&out,
+																				&refData,&pars,
+																				&bPool](){
+		auto bReader = bPool.popReader();
+		std::vector<GenomicRegion> regions;
+		while(slider.getRegions(regions, pars.regionBatchSize)){
+
+			std::vector<BamFnpRegionPair> allCoverages;
+			for(const auto & region : regions){
+				BamFnpRegionPair coverage(bamFnp, region);
+				setBamFileRegionThrow(*bReader, region);
+				BamTools::BamAlignment bAln;
+				while(bReader->GetNextAlignmentCore(bAln) && bAln.IsPrimaryAlignment()){
+					if(pars.byBases){
+						if(bAln.IsMapped()){
+							GenomicRegion alnRegion(bAln, refData);
+							coverage.coverage_ += region.getOverlapLen(alnRegion);
+						}
+					}else{
+						if(bAln.IsMapped() && bAln.IsPrimaryAlignment()){
+							coverage.coverage_ += 1;
+						}
+					}
+				}
+				if(pars.byBases){
+					if(coverage.coverage_/static_cast<double>(coverage.region_.getLen()) >= pars.coverageCutOff){
+						allCoverages.emplace_back(coverage);
+					}
+				}else{
+					if(coverage.coverage_ >= pars.coverageCutOff){
+						allCoverages.emplace_back(coverage);
+					}
+				}
+			}
+			if(!allCoverages.empty()){
+				std::lock_guard<std::mutex> lock(outMut);
+				for(const auto & coverage : allCoverages){
+					out << coverage.region_.genBedRecordCore().toDelimStr() ;
+					out << "\t" << coverage.coverage_;
+					out << "\n";
+				}
+			}
+		}
+	};
+	{
+		njh::concurrent::runVoidFunctionThreaded(getCovForBam, pars.numThreads);
 	}
 }
 std::vector<std::shared_ptr<Bed6RecordCore>> RunRegionRefinement(const RegionRefinementPars & pars){

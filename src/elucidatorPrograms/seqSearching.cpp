@@ -300,7 +300,7 @@ int seqSearchingRunner::chopAndMap(const njh::progutils::CmdArgs & inputCommands
 int seqSearchingRunner::chopAndMapAndRefineInvidual(const njh::progutils::CmdArgs & inputCommands) {
 	ChopAndMapPars globalChopPars;
 
-	CoverageFinderPars covPars;
+	RunCoverageFinderSinglePars covPars;
 	RegionRefinementPars refinePars;
 	uint32_t expandLeft = 0;
 	uint32_t expandRight = 0;
@@ -353,9 +353,9 @@ int seqSearchingRunner::chopAndMapAndRefineInvidual(const njh::progutils::CmdArg
 		covPars.coverageCutOff = 5;
 		covPars.window = chopParsCurrent.windowLength;
 		covPars.step = chopParsCurrent.windowStep;
-		covPars.bams = njh::files::make_path(chopParsCurrent.outputDirectory, "fragments.sorted.bam").string();
+		covPars.bamFnp = njh::files::make_path(chopParsCurrent.outputDirectory, "fragments.sorted.bam").string();
 		covPars.outOpts = OutOptions(njh::files::make_path(chopParsCurrent.outputDirectory, "coverage.bed"));
-		RunCoverageFinder(covPars);
+		RunCoverageFinderSingle(covPars);
 		//merge regions
 		auto beds = getBed3s(covPars.outOpts.outName());
 		njh::for_each(beds,
@@ -453,7 +453,7 @@ int seqSearchingRunner::chopAndMapAndRefineInvidual(const njh::progutils::CmdArg
 
 int seqSearchingRunner::chopAndMapAndRefine(const njh::progutils::CmdArgs & inputCommands) {
 	ChopAndMapPars chopPars;
-	CoverageFinderPars covPars;
+	RunCoverageFinderSinglePars covPars;
 	RegionRefinementPars refinePars;
 	uint32_t expandLeft = 0;
 	uint32_t expandRight = 0;
@@ -495,9 +495,9 @@ int seqSearchingRunner::chopAndMapAndRefine(const njh::progutils::CmdArgs & inpu
 	covPars.numThreads = chopPars.numThreads;
 	covPars.window = chopPars.windowLength;
 	covPars.step = chopPars.windowStep;
-	covPars.bams = njh::files::make_path(chopPars.outputDirectory, "fragments.sorted.bam").string();
+	covPars.bamFnp = njh::files::make_path(chopPars.outputDirectory, "fragments.sorted.bam").string();
 	covPars.outOpts = OutOptions(njh::files::make_path(chopPars.outputDirectory, "coverage.bed"));
-	RunCoverageFinder(covPars);
+	RunCoverageFinderSingle(covPars);
 	//merge regions
 	auto beds = getBed3s(covPars.outOpts.outName());
 	njh::for_each(beds,
