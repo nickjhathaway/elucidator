@@ -40,9 +40,6 @@
 namespace njhseq {
 
 int genExpRunner::lastzExtractAndCompare(const njh::progutils::CmdArgs & inputCommands){
-	/**@todo add intersecting with gff files, add check for same name in input reads
-	 *
-	 */
 	std::string genomesStr = "";
 	bfs::path genomesDir = "";
 	uint32_t numThreads = 1;
@@ -179,8 +176,11 @@ int genExpRunner::lastzExtractAndCompare(const njh::progutils::CmdArgs & inputCo
 		//alignment comparisons
 		OutOptions comparisonOpts(njh::files::make_path(genomeDir, "refComparisonInfo.tab.txt"));
 		OutputStream comparisonOut(comparisonOpts);
-
 		comparisonOut << "ReadNumber\tReadId\tBestRef\tscore\talnScore\thqScore\tkDist-5\t1bIndel\t2bIndel\t>2bIndel\tlqMismatch\thqMismatch" << std::endl;
+		//alignments
+		auto alnOut = SeqIOOptions::genFastaOut(njh::files::make_path(genomeDir, "refAlignments.fasta"));
+		SeqOutput writer(alnOut);
+		writer.openOut();
 		uint32_t readNumber = 0;
 		std::vector<std::shared_ptr<seqInfo>> refSeqs;
 		std::unordered_map<std::string, VecStr> readNamesToRefSeqs;
@@ -209,8 +209,10 @@ int genExpRunner::lastzExtractAndCompare(const njh::progutils::CmdArgs & inputCo
 				kmerInfo refInfo(results->refSeq_->seq_, 5, false);
 				kmerInfo seqKInfo(results->alnSeq_->seq_, 5, false);
 
-				results->setComparison(false);
-				//results->setComparison(true);
+				//results->setComparison(false);
+				results->setComparison(true);
+				writer.write(results->refSeqAligned_);
+				writer.write(results->alnSeqAligned_);
 
 				alignedRegions.emplace_back(results->gRegion_.genBedRecordCore());
 				std::string appName = "";

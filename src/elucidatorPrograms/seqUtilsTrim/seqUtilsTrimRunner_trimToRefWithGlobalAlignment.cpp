@@ -32,6 +32,8 @@
 namespace njhseq {
 
 int seqUtilsTrimRunner::trimToRefWithGlobalAlignment(const njh::progutils::CmdArgs & inputCommands) {
+	//readVecTrimmer::GlobalAlnTrimPars trimPars;
+
 	seqUtilsTrimSetUp setUp(inputCommands);
 	setUp.pars_.gapInfo_ = gapScoringParameters(5, 1, 0, 0, 0, 0);
 	setUp.pars_.gapRight_ = "0,0";
@@ -44,6 +46,7 @@ int seqUtilsTrimRunner::trimToRefWithGlobalAlignment(const njh::progutils::CmdAr
 	setUp.processAlnInfoInput();
 	setUp.processIoOptions();
 	setUp.processRefFilename(true);
+	//setUp.setOption(trimPars.needJustOneEnd_, "--needJustOneEnd", "Keep on if only one end trimmed");
 	setUp.setOption(pars.keepOnlyOn, "--keepOnlyOn", "Keep Only the Reads that are still on");
 	setUp.finishSetUp(std::cout);
 
