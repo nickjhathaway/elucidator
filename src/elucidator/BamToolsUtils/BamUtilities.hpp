@@ -27,6 +27,7 @@
 //
 
 #include <njhseq/BamToolsUtils.h>
+#include <SeekDeep/objects/PairedReadProcessor.hpp>
 
 namespace njhseq {
 
@@ -75,6 +76,29 @@ struct RegionRefinementPars{
 
 std::vector<std::shared_ptr<Bed6RecordCore>> RunRegionRefinement(const RegionRefinementPars & pars);
 
+
+struct BamCountSpecficRegionsPars{
+	BamCountSpecficRegionsPars();
+	uint32_t extendAmount = 30;
+	uint32_t numThreads = 1;
+	uint32_t mappingQuality = 20;
+	uint32_t baseQuality = 25;
+	double matchIDCutOff = 0.70;
+
+	uint32_t totalCountCutOff = 5;
+	uint32_t perBaseCountCutOff = 3;
+	bool forcePlusStrand = false;
+	bool countDuplicates = false;
+	PairedReadProcessor::ProcessParams pairPars;
+
+	void setDefaults(seqSetUp & setUp);
+};
+
+std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCountSpecficRegions(
+		const std::vector<GenomicRegion> & inputRegions,
+		const std::unordered_map<std::string, seqInfo> & regionSeqs,
+		const bfs::path bamFnp,
+		const BamCountSpecficRegionsPars & pars);
 
 }  // namespace njhseq
 
