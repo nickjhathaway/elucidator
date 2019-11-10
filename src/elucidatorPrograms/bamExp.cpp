@@ -1091,7 +1091,7 @@ int bamExpRunner::bamToBed(const njh::progutils::CmdArgs & inputCommands){
 					<< "\t" << bAln.Name
 					<< "\t" << bAln.GetEndPosition() - bAln.Position
 					<< "\t" << (bAln.IsReverseStrand() ? '-' : '+') << std::endl;
-		}else if(includeUnmapped){
+		} else if (includeUnmapped) {
 			out << "*"
 					<< "\t" << "*"
 					<< "\t" << "*"

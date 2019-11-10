@@ -1,0 +1,13 @@
+ref	seq	count
+A	C	555
+A	G	98
+A	T	352
+C	A	397
+C	G	129
+C	T	19
+G	A	26
+G	C	167
+G	T	191
+T	A	481
+T	C	44
+T	G	507

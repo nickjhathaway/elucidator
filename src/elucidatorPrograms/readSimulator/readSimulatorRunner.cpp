@@ -50,6 +50,8 @@ readSimulatorRunner::readSimulatorRunner()
 	addFunc("testRandomlySampleGenomes", testRandomlySampleGenomes, false),
 	addFunc("simRandomlySampleGenomes", simRandomlySampleGenomes, false),
 	addFunc("testSDFinalReadAmount", testSDFinalReadAmount, false),
+	addFunc("shearSequences", shearSequences, false),
+	addFunc("shearSimIlluminaAlign", shearSimIlluminaAlign, false),
 },
                     "readSimulator") {}
 //

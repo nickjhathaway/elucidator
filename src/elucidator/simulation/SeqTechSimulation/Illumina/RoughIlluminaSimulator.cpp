@@ -227,7 +227,8 @@ seqInfo RoughIlluminaSimulator::ReadProfile::simRead(seqInfo input, uint32_t len
 	if(len(input) > length){
 		input = input.getSubRead(0, length);
 	}
-	for(const auto pos : iter::range(len(input))){
+	auto lengthOfFragment = len(input);
+	for(const auto pos : iter::range(lengthOfFragment)){
 		//decide if error
 		if(rGen_() <= errorRates_[pos]){
 			//error
@@ -239,14 +240,14 @@ seqInfo RoughIlluminaSimulator::ReadProfile::simRead(seqInfo input, uint32_t len
 		}
 	}
 	//add overhang
-	if(length > len(input)){
-		for(uint32_t pos = len(input); pos < length; ++pos){
-			uint32_t overHangPos = pos - len(input);
-			if(overHangPos > overHangBaseGen_.size()){
+	if(length > lengthOfFragment){
+		for(uint32_t pos = lengthOfFragment; pos < length; ++pos){
+			uint32_t overHangPos = pos - lengthOfFragment;
+			if(overHangPos >= overHangBaseGen_.size()){
 				char overhangBase = overHangBaseGen_.back().genObj();
 				uint32_t qual = overHangQualForBaseGen_.back().at(overhangBase).genObj();
 				input.append(overhangBase, qual);
-			}else{
+			} else {
 				char overhangBase = overHangBaseGen_[overHangPos].genObj();
 				uint32_t qual = overHangQualForBaseGen_[overHangPos].at(overhangBase).genObj();
 				input.append(overhangBase, qual);

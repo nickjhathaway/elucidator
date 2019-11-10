@@ -62,6 +62,10 @@ class readSimulatorRunner : public njh::progutils::ProgramRunner {
 
   static int simIlluminaOnSeqs(const njh::progutils::CmdArgs & inputCommands);
 
+  static int shearSequences(const njh::progutils::CmdArgs & inputCommands);
+
+  static int shearSimIlluminaAlign(const njh::progutils::CmdArgs & inputCommands);
+
 };
 }  // namespace njhseq
 
