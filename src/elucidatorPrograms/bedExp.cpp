@@ -74,11 +74,60 @@ bedExpRunner::bedExpRunner()
 					 addFunc("fastaToBed", fastaToBed, false),
 					 addFunc("getInterveningRegions", getInterveningRegions, false),
 					 addFunc("fillInRegionsByBestScore", fillInRegionsByBestScore, false),
+					 addFunc("centerBedRegionWithFixSize", centerBedRegionWithFixSize, false),
            },//
           "bedExp") {}
 
 
 
+int bedExpRunner::centerBedRegionWithFixSize(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path bedFile;
+	OutOptions outOpts(bfs::path(""), ".bed");
+	uint32_t windowSize = 25;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+
+	setUp.setOption(windowSize, "--windowSize", "Window Size", true);
+	setUp.setOption(bedFile, "--bed", "Bed file to parse", true);
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+
+	BioDataFileIO<Bed3RecordCore> reader{IoOptions(InOptions(bedFile))};
+	reader.openIn();
+
+	std::ofstream outFile;
+	std::ostream out(determineOutBuf(outFile, outOpts));
+	Bed3RecordCore reg;
+	while(reader.readNextRecord(reg)){
+		if(reg.length() > windowSize - 2){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << reg.toDelimStr() << " size is longer than desired window size"<< "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		uint32_t left = (windowSize - reg.length())/2;
+		uint32_t right = windowSize - reg.length() - left;
+		if(left > reg.chromStart_){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "can't extend region " <<reg.toDelimStr() << " to left by " << left << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		auto oldLength = reg.length();
+
+		reg.chromStart_ = reg.chromStart_ - left;
+		reg.chromEnd_ += right;
+		//reg.score_ = reg.length();
+		if(reg.extraFields_.size() >=3){
+			bool scoreIsLen = estd::to_string(oldLength) == reg.extraFields_[1];
+			if(scoreIsLen){
+				reg.extraFields_[1] = estd::to_string(reg.length());
+			}
+		}
+		out << reg.toDelimStrWithExtra() << std::endl;
+	}
+	return 0;
+}
 
 int bedExpRunner::fastaToBed(const njh::progutils::CmdArgs & inputCommands) {
 	OutOptions outOpts(bfs::path(""), ".bed");
@@ -136,7 +185,6 @@ int bedExpRunner::getFirstRegionPerChrom(const njh::progutils::CmdArgs & inputCo
 			out << reg.toDelimStrWithExtra() << std::endl;
 		});
 	}
-
 
 	return 0;
 }
