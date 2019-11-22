@@ -39,9 +39,10 @@
 
 namespace njhseq {
 
+
+
 int genExpRunner::lastzExtractAndCompare(const njh::progutils::CmdArgs & inputCommands){
 	std::string genomesStr = "";
-	bfs::path genomesDir = "";
 	uint32_t numThreads = 1;
 	MultiGenomeMapper::inputParameters mapperPars;
 	BioCmdsUtils::LastZPars lzPars;

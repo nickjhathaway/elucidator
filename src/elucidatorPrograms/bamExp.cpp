@@ -651,7 +651,8 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 	bfs::path bedFnp = "";
 	std::string bams = "";
 	std::string pat = ".*.bam$";
-	uint32_t insertSizeCutOff = 1000;
+	uint32_t insertSizeCutOff = 5000;
+	double percentInRegion = 0.5;
 	//outOpts.outExtention_ = ".tab.txt";
 	bool noHeader = false;
 	seqSetUp setUp(inputCommands);
@@ -664,6 +665,7 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 	setUp.setOption(pat, "--pat", "Pattern in current directory to get coverage for");
 	setUp.setOption(bams, "--bams", "Either a file with the name of a bam file on each line or a comma separated value of bam file paths");
 	setUp.setOption(noHeader, "--noHeader", "Don't output a header so output can be treated like a bed file");
+	setUp.setOption(percentInRegion, "--percentInRegion", "Percent In Region");
 	setUp.finishSetUp(std::cout);
 
 
@@ -751,22 +753,36 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 
 	njh::concurrent::LockableVec<std::shared_ptr<BamFnpRegionPair>> pairsList(pairs);
 
-	auto getCov = [&pairsList,&insertSizeCutOff](){
+	auto getCov = [&pairsList,&insertSizeCutOff,&percentInRegion](){
 		std::shared_ptr<BamFnpRegionPair> val;
 		while(pairsList.getVal(val)){
 			BamTools::BamReader bReader;
+
 			bReader.Open(val->bamFnp_.string());
 			bReader.LocateIndex();
+			auto refData = bReader.GetReferenceData();
 			setBamFileRegionThrow(bReader, val->region_);
 			BamTools::BamAlignment bAln;
 			while(bReader.GetNextAlignmentCore(bAln)){
-				if(bAln.IsPrimaryAlignment() && bAln.IsMapped() && bAln.IsPaired()){
+				if(!bAln.IsPrimaryAlignment()){
+					continue;
+				}
+				if(!bAln.IsMapped()){
+					continue;
+				}
+				GenomicRegion bAlnReg(bAln, refData);
+				double total = std::min(val->region_.getLen(), bAlnReg.getLen());
+				if(percentInRegion > 0 && (val->region_.getOverlapLen(bAlnReg)/total) < percentInRegion){
+					continue;
+				}
+				//just counting pairs
+				if(bAln.IsPaired()){
 					++(val->totalPairCnt_);
 					if(bAln.IsMateMapped() && bAln.MateRefID == bAln.RefID && std::abs(bAln.InsertSize) <= insertSizeCutOff){
 						++(val->properPairCnt_);
 					}else if(!bAln.IsMateMapped()){
 						++(val->mateUnmappedCnt_);
-					}else if(bAln.IsMateMapped() && (bAln.MateRefID != bAln.RefID || std::abs(bAln.InsertSize) > insertSizeCutOff)){
+					}else if(bAln.IsMateMapped() && (bAln.MateRefID != bAln.RefID || std::abs(bAln.InsertSize) > insertSizeCutOff) ){
 						++(val->discordantCnt_);
 					}
 				}
