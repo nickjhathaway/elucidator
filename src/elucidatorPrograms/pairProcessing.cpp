@@ -78,6 +78,15 @@ int pairProcessingRunner::StitchPairedReads(
 		ss << "Error in setting errorAllowed, error should be between 0 and 1, not " << params.errorAllowed_ << "\n";
 		setUp.addWarning(ss.str());
 	}
+
+	setUp.setOption(params.qualWindowPar_.avgQualCutOff_, "--qWindowTrimAvgQualCutOff", "Quality Window Trim Avg Qual Cut Off");
+	setUp.setOption(params.qualWindowPar_.windowSize_, "--qWindowSize", "Quality Window Trim Size");
+	setUp.setOption(params.qualWindowPar_.windowStep_, "--qWindowStep", "Quality Window Trim Step");
+	bool noTrimLowQualWindows = false;
+	setUp.setOption(noTrimLowQualWindows, "--noTrimLowQualWindows", "Don't Trim Low Qual Windows");
+	params.trimLowQaulWindows_ = !noTrimLowQualWindows;
+
+
 	setUp.processReadInNames(VecStr { "--fastq1", "--fastq2", "--fastq1gz", "--fastq2gz" }, true);
 	setUp.processWritingOptions(outOpts);
 	setUp.setOption(setUp.pars_.ioOptions_.revComplMate_, "--revCompMate", "revCompMate");

@@ -81,6 +81,8 @@ class programWrapperRunner : public njh::progutils::ProgramRunner {
 	static int testHasProgram(const njh::progutils::CmdArgs & inputCommands);
 	static int generatingPrime3TemplatesBasedOnMALN(const njh::progutils::CmdArgs & inputCommands);
 
+	static int runDada2(const njh::progutils::CmdArgs & inputCommands);
+	static int runDada2SingleSamplePaired(const njh::progutils::CmdArgs & inputCommands);
 
 
 };
