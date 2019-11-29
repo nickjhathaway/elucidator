@@ -286,6 +286,7 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 				seqMeta.addMeta("fprimerStart", processRes.fprimerStart_);
 				seqMeta.addMeta("forwardBar", forwardBar);
 				seqMeta.addMeta("reverseBar", reverseBar);
+				seqMeta.addMeta("fullBar", njh::pasteAsStr(forwardBar, "+", reverseBar));
 				seqMeta.addMeta("rprimerStart", processRes.rprimerStart_);
 				seq.name_ += seqMeta.createMetaName();
 				writer.write(seq);
@@ -343,6 +344,7 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 				seqMeta.addMeta("forwardBar", forwardBar);
 				seqMeta.addMeta("reverseBar", reverseBar);
 				seqMeta.addMeta("rprimerStart", processRes.rprimerStart_);
+				seqMeta.addMeta("fullBar", njh::pasteAsStr(forwardBar, "+", reverseBar));
 				seq.name_ += seqMeta.createMetaName();
 				writer.write(seq);
 				outPass << seq.name_
