@@ -37,9 +37,10 @@ seqUtilsExtractRunner::seqUtilsExtractRunner()
   addFunc("extractSeqsBeginsWith", extractSeqsBeginsWith, false),
 	addFunc("extractSeqsEndsWith", extractSeqsEndsWith, false),
 	addFunc("extractSeqsBeginsWithEndsWith", extractSeqsBeginsWithEndsWith, false),
+	addFunc("extractByIlluminaAaptors", extractByIlluminaAaptors, false),
 },
                     "seqUtilsExtract") {}
-//, ,
+//
 
 int seqUtilsExtractRunner::extractSeqsBeginsWith(const njh::progutils::CmdArgs & inputCommands) {
 	bool allowableErrors = 0;

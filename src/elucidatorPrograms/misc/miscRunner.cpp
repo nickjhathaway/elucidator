@@ -76,6 +76,7 @@ miscRunner::miscRunner()
 
 										 addFunc("createConnectedHaplotypeNetwork", createConnectedHaplotypeNetwork, false),
 										 addFunc("getLinkedInfoFromAdjList", getLinkedInfoFromAdjList, false),
+										 addFunc("printSeqsColored", printSeqsColored, false),
 
 										 },//
                     "misc") {}
@@ -83,6 +84,21 @@ miscRunner::miscRunner()
 
 
 
+int miscRunner::printSeqsColored(const njh::progutils::CmdArgs & inputCommands){
+	OutOptions outOpts(bfs::path(""), ".fasta");
+	seqSetUp setUp(inputCommands);
+	setUp.processReadInNames();
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+	OutputStream out(outOpts);
+	SeqInput seqReader(setUp.pars_.ioOptions_);
+	seqReader.openIn();
+	seqInfo seq;
+	while(seqReader.readNextRead(seq)){
+		seq.outPutSeqAnsi(out);
+	}
+	return 0;
+}
 
 
 int miscRunner::isFileEmpty(const njh::progutils::CmdArgs & inputCommands){

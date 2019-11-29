@@ -70,6 +70,8 @@ class miscRunner : public njh::progutils::ProgramRunner {
   static int calculateShannonEntropySimple(const njh::progutils::CmdArgs & inputCommands);
 
 
+  static int printSeqsColored(const njh::progutils::CmdArgs & inputCommands);
+
 
 
 };
