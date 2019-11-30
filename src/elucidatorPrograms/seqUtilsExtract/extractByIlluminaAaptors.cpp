@@ -399,7 +399,10 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 				seqInfo fwdBarSeq("determined-fwd", forwardBar);
 				seqInfo revBarSeq("determined-rev", reverseBar);
 
-				if(forwardBar.size() < maxBarLen && reverseBar.size() < maxBarLen){
+				if(forwardBar.size() < maxBarLen &&
+						reverseBar.size() < maxBarLen &&
+						forwardBar.size() > 5 &&
+						reverseBar.size() > 5){
 					for(const auto & bar : barcodes){
 						alignerBarObj.alignCacheGlobal(bar.fwBar_, fwdBarSeq);
 						alignerBarObj.profilePrimerAlignment(bar.fwBar_, fwdBarSeq);
