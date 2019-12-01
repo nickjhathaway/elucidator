@@ -955,6 +955,8 @@ void simpleCollapse(std::vector<cluster> & consensusReads, aligner & alignerObj,
 		}
 	}
 	//now do a second compare with some errors allowed
+	//decreacse kDist cut off
+	kdistCutOff = .80;
 	std::vector<uint32_t> positions(consensusReads.size(), 0);
 	njh::iota<uint32_t>(positions, 0);
 	for (const auto & firstPos : iter::reversed(positions)) {

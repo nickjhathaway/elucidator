@@ -137,6 +137,9 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 	bfs::path illuminaBarcodeSampleSheet = "";
 
 	seqUtilsExtractSetUp setUp(inputCommands);
+	setUp.setOption(illuminaForward, "--illuminaForward", "Illumina Forward adaptor/primer");
+	setUp.setOption(illuminaReverse, "--illuminaReverse", "Illumina Reverse adaptor/primer");
+
 	setUp.setOption(extractPars.primerUpper_, "--primerUpper", "When keeping primer, keep upper case");
 	setUp.setOption(extractPars.keepPrimer_, "--keepPrimer", "Keep Primer sequence, otherwise remove it");
 
