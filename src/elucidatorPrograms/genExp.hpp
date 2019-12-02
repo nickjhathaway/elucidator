@@ -122,6 +122,8 @@ class genExpRunner : public njh::progutils::ProgramRunner {
 	static int translateSeqsBasedOnGFF(const njh::progutils::CmdArgs & inputCommands);
 
 
+	static int randomSampConsensusCompareToExpected(const njh::progutils::CmdArgs & inputCommands);
+
 
 };
 } /* namespace njhseq */

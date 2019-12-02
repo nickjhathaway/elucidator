@@ -89,6 +89,7 @@ genExpRunner::genExpRunner()
 					 addFunc("countIlluminaSampleNumber", countIlluminaSampleNumber, false),
 					 addFunc("countBasesPerPosition", countBasesPerPosition, false),
 					 addFunc("translateSeqsBasedOnGFF", translateSeqsBasedOnGFF, false),
+					 addFunc("randomSampConsensusCompareToExpected", randomSampConsensusCompareToExpected, false),
            },//
           "genExp") {}
 
