@@ -48,6 +48,8 @@ class gffExpRunner : public njh::progutils::ProgramRunner {
 
 	static int gffToJsonByID(const njh::progutils::CmdArgs & inputCommands);
 
+	static int gffSortInefficient(const njh::progutils::CmdArgs & inputCommands);
+
 
 	static int extractGffRecordWithChildren(const njh::progutils::CmdArgs & inputCommands);
 	static int gffToBedByAttributeIncludeExonInfo(const njh::progutils::CmdArgs & inputCommands);

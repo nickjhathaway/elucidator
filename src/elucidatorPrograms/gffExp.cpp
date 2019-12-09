@@ -61,6 +61,7 @@ gffExpRunner::gffExpRunner()
 					 addFunc("gffGetNumOfTranscriptsForGenes", gffGetNumOfTranscriptsForGenes, false),
 					 addFunc("aaPositionsToBed", aaPositionsToBed, false),
 					 addFunc("bedGetRegionsCompletelyInGenesInGff", bedGetRegionsCompletelyInGenesInGff, false),
+					 addFunc("gffSortInefficient", gffSortInefficient, false),
            },//
           "gffExp") {}
 class AmionoAcidPositionInfo {
