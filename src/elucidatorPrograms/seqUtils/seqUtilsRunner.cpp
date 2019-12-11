@@ -220,14 +220,23 @@ int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommand
 	setUp.setOption(numThreads, "--numThreads", "Number of Threads to Use");
 	setUp.setOption(diagonal,   "--diagonal",   "Just solve a global diagonal");
   setUp.pars_.gapLeft_ = "0,0";
+  setUp.pars_.gapRight_ = "0,0";
   setUp.processAlignerDefualts();
 	setUp.pars_.colOpts_.iTOpts_.weighHomopolyer_ = false;
 	setUp.setOption(setUp.pars_.colOpts_.iTOpts_.weighHomopolyer_,
 			"--weighHomopolymerIndels", "Do Homopolymer Weighting");
   setUp.processDirectoryOutputName(false);
   if(setUp.pars_.verbose_){
-    std::cout << "go: " << setUp.pars_.gapInfo_.gapOpen_ << std::endl;
-    std::cout << "ge: " << setUp.pars_.gapInfo_.gapExtend_ << std::endl;
+    std::cout << "gapOpen_: " << setUp.pars_.gapInfo_.gapOpen_ << std::endl;
+    std::cout << "gapExtend_" << setUp.pars_.gapInfo_.gapExtend_ << std::endl;
+    std::cout << "gapRightQueryOpen_" << setUp.pars_.gapInfo_.gapRightQueryOpen_ << std::endl;
+    std::cout << "gapRightQueryExtend_: " << setUp.pars_.gapInfo_.gapRightQueryExtend_ << std::endl;
+    std::cout << "gapLeftQueryOpen_: " << setUp.pars_.gapInfo_.gapLeftQueryOpen_ << std::endl;
+    std::cout << "gapLeftQueryExtend_: " << setUp.pars_.gapInfo_.gapLeftQueryExtend_ << std::endl;
+    std::cout << "gapRightRefOpen_: " << setUp.pars_.gapInfo_.gapRightRefOpen_ << std::endl;
+    std::cout << "gapRightRefExtend_: " << setUp.pars_.gapInfo_.gapRightRefExtend_ << std::endl;
+    std::cout << "gapLeftRefOpen_: " << setUp.pars_.gapInfo_.gapLeftRefOpen_ << std::endl;
+    std::cout << "gapLeftRefExtend_: " << setUp.pars_.gapInfo_.gapLeftRefExtend_ << std::endl;
   }
   setUp.finishSetUp(std::cout);
   //read in
