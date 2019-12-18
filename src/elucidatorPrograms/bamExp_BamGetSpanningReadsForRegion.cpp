@@ -80,7 +80,7 @@ int bamExpRunner::MultipleBamGetPileupForRegion(
 		inputRegionSeqs[reg.uid_] = reg.extractSeq(topRReader);
 	}
 	auto bamFnps = njh::files::gatherFilesByPatOrNames(dir, std::regex{pat}, bams);
-	checkBamFilesForIndexesAndAbilityToOpen(bamFnps);
+	checkBamFilesForIndexesAndAbilityToOpen(bamFnps, countPars.numThreads);
 	OutputStream outCounts(njh::files::make_path(setUp.pars_.directoryName_, "seqCounts.tab.txt.gz"));
 	outCounts << "bamFile\tregion\trefSeq\tseq\tcount" << std::endl;
 
