@@ -618,8 +618,8 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 						mixtures[primerPair]->startingTemplateAmount_ = run.expAmounts_.totalGenomesSampled_;
 						mixtures[primerPair]->finalReadAmount_ = run.expAmounts_.sequencedReadAmount_;
 						mixtures[primerPair]->setPrimers(primerPair,
-								njh::mapAt(lSetup.ids_->targets_, primerPair).info_.forwardPrimer_,
-								njh::mapAt(lSetup.ids_->targets_, primerPair).info_.reversePrimer_);
+								njh::mapAt(lSetup.ids_->targets_, primerPair).info_.forwardPrimerRaw_,
+								njh::mapAt(lSetup.ids_->targets_, primerPair).info_.reversePrimerRaw_);
 						mixtures[primerPair]->primers_->reverse_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
 						mixtures[primerPair]->primers_->forward_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
 					}
@@ -709,8 +709,8 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 						mixtures[primerPair]->startingTemplateAmount_ = run.expAmounts_.totalGenomesSampled_;
 						mixtures[primerPair]->finalReadAmount_ = run.expAmounts_.sequencedReadAmount_;
 						mixtures[primerPair]->setPrimers(primerPair,
-								njh::mapAt(lSetup.ids_->targets_, primerPair).info_.forwardPrimer_,
-								njh::mapAt(lSetup.ids_->targets_, primerPair).info_.reversePrimer_);
+								njh::mapAt(lSetup.ids_->targets_, primerPair).info_.forwardPrimerRaw_,
+								njh::mapAt(lSetup.ids_->targets_, primerPair).info_.reversePrimerRaw_);
 						mixtures[primerPair]->primers_->reverse_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
 						mixtures[primerPair]->primers_->forward_randomPrecedingBases_ = simPars.primerRandomPrecedingBases_;
 					}

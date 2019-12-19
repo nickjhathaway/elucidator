@@ -782,7 +782,7 @@ public:
 				}
 				if(mixture.isMember("primers")){
 					if(ids_->hasTarget(mixture["primers"]["name"].asString())){
-						if (ids_->targets_.at(mixture["primers"]["name"].asString()).info_.forwardPrimer_
+						if (ids_->targets_.at(mixture["primers"]["name"].asString()).info_.forwardPrimerRaw_
 								!= mixture["primers"]["forward"].asString()) {
 							std::stringstream ss;
 							ss << __PRETTY_FUNCTION__ << ", error, target "
@@ -790,11 +790,11 @@ public:
 									<< " already added with a different forward primer " << "\n";
 							ss << "New Forward: " << mixture["primers"]["forward"].asString()
 									<< " , Current Forward: "
-									<< ids_->targets_.at(mixture["primers"]["name"].asString()).info_.forwardPrimer_
+									<< ids_->targets_.at(mixture["primers"]["name"].asString()).info_.forwardPrimerRaw_
 									<< "\n";
 							throw std::runtime_error { ss.str() };
 						}
-						if (ids_->targets_.at(mixture["primers"]["name"].asString()).info_.reversePrimer_
+						if (ids_->targets_.at(mixture["primers"]["name"].asString()).info_.reversePrimerRaw_
 								!= mixture["primers"]["reverse"].asString()) {
 							std::stringstream ss;
 							ss << __PRETTY_FUNCTION__ << ", error, target "
@@ -802,7 +802,7 @@ public:
 									<< " already added with a different forward primer " << "\n";
 							ss << "New Reverse: " << mixture["primers"]["reverse"].asString()
 									<< " , Current Reverse: "
-									<< ids_->targets_.at(mixture["primers"]["name"].asString()).info_.reversePrimer_
+									<< ids_->targets_.at(mixture["primers"]["name"].asString()).info_.reversePrimerRaw_
 									<< "\n";
 							throw std::runtime_error { ss.str() };
 						}

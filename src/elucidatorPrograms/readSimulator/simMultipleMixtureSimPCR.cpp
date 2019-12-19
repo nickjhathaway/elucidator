@@ -137,8 +137,8 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 			for(const auto & refSeq : refSeqs.second){
 				seqInfo copySeqToTrim = *refSeq;
 				readVecTrimmer::trimBetweenSequences(copySeqToTrim,
-						lSetup.ids_->pDeterminator_->primers_.at(refSeqs.first).forwardPrimerInfo_,
-						lSetup.ids_->pDeterminator_->primers_.at(refSeqs.first).reversePrimerInfo_,
+						lSetup.ids_->pDeterminator_->primers_.at(refSeqs.first).fwds_.front().info_ ,
+						lSetup.ids_->pDeterminator_->primers_.at(refSeqs.first).revs_.front().infoRC_,
 						alignerObj, allowableErrors, trimPars);
 				seqWriter.openWrite(copySeqToTrim);
 			}
