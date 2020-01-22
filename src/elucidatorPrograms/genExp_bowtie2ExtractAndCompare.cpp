@@ -36,16 +36,22 @@
 
 namespace njhseq {
 
+
+
 int genExpRunner::bowtie2ExtractAndCompareMultiple(const njh::progutils::CmdArgs & inputCommands){
-	std::string genomes = "";
-	bfs::path genomesDir = "";
+	std::string genomesStr = "";
 	uint32_t numThreads = 1;
+	MultiGenomeMapper::inputParameters mapperPars;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
+
 	setUp.setOption(numThreads, "--numThreads", "number of cpus to use");
-  setUp.setOption(genomes, "--genomes", "Names of the genomes to extract from (should not have extension, e.g. Pf3d7 for Pf3d7.fasta", true);
-  setUp.setOption(genomesDir, "--genomeDir", "Names of the genome directory where the genomes are stored", true);
+  setUp.setOption(genomesStr, "--genomes", "Names of the genomes to extract from (should not have extension, e.g. Pf3d7 for Pf3d7.fasta");
+  setUp.setOption(mapperPars.genomeDir_, "--genomeDir", "Names of the genome directory where the genomes are stored", true);
+  setUp.setOption(mapperPars.gffDir_, "--gffDir", "A directory of gffs that go with the genomes");
+  setUp.setOption(mapperPars.gffIntersectPars_.extraAttributes_, "--gffExtraAttributes", "gff Extra Attributes");
+
   setUp.processReadInNames();
   setUp.processDirectoryOutputName(true);
 	setUp.finishSetUp(std::cout);
@@ -53,28 +59,94 @@ int genExpRunner::bowtie2ExtractAndCompareMultiple(const njh::progutils::CmdArgs
 	setUp.startARunLog(setUp.pars_.directoryName_);
 	BioCmdsUtils bRunner(setUp.pars_.verbose_);
 
-	MultiGenomeMapper gMapper(genomesDir, genomes.substr(0, genomes.find(",")));
+	MultiGenomeMapper gMapper(mapperPars);
 	gMapper.pars_.numThreads_ = numThreads;
-	gMapper.setSelectedGenomes(njh::strToSet<std::string>(genomes, ","));
+	if("" != genomesStr){
+		gMapper.setSelectedGenomes(njh::strToSet<std::string>(genomesStr, ","));
+	}
 	gMapper.loadInGenomes();
 	gMapper.setUpGenomes();
 
 	std::map<std::string, std::unordered_map<std::string, std::vector<std::shared_ptr<AlignmentResults>>>> allAlnResults;
 	std::unordered_map<std::string, uint32_t> unmappedCounts;
+
+	std::unordered_map<std::string, uint32_t> readLengths;
+	std::unordered_map<std::string, std::string> nameKey;
+	std::unordered_map<std::string, uint32_t> nameToPositionKey;
+	auto tempSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "temp_" + bfs::basename(setUp.pars_.ioOptions_.firstName_) ));
+
+	{
+		seqInfo seq;
+		SeqInput reader(setUp.pars_.ioOptions_);
+		SeqOutput tempWriter(tempSeqOpts);
+		tempWriter.openOut();
+		reader.openIn();
+		uint32_t count = 0;
+
+		while(reader.readNextRead(seq)){
+			nameToPositionKey[seq.name_] = count;
+			readLengths[seq.name_] = len(seq);
+			nameKey[estd::to_string(count)] = seq.name_;
+			seq.name_ = estd::to_string(count);
+			tempWriter.write(seq);
+			++count;
+		}
+	}
+	auto tempInOpts = SeqIOOptions::genFastaIn(tempSeqOpts.out_.outName());
+	tempInOpts.out_.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
+
+	{
+		table nameKeyTab(nameKey, VecStr{"key", "name"});
+		OutOptions nameKeyOpts(njh::files::make_path(setUp.pars_.directoryName_, "nameKey.tab.txt"));
+		OutputStream nameKeyOut(nameKeyOpts);
+		nameKeyTab.outPutContents(nameKeyOut, "\t");
+	}
+	//align to genomes in parallel
+	njh::concurrent::LockableQueue<std::string> genomesQueue(getVectorOfMapKeys(gMapper.genomes_));
+	auto alignToGenome = [&setUp,&genomesQueue,&gMapper,&bRunner,&tempInOpts](){
+		std::string genome = "";
+		while(genomesQueue.getVal(genome)){
+			bfs::path genomeDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{genome});
+//			//align seqs
+//			auto seqOpts = tempInOpts;
+//			seqOpts.out_.outFilename_ = njh::files::make_path(genomeDir, "alignedSeqs.sorted.bam");
+//
+//			BioCmdsUtils::LastZPars copyLzPars = lzPars;
+//			copyLzPars.genomeFnp = gMapper.genomes_.at(genome)->fnpTwoBit_;
+//			auto runOut = bRunner.lastzAlign(seqOpts, copyLzPars);
+//			OutOptions lastzAlignLogOpts(njh::files::make_path(genomeDir, "lastzLog.json"));
+//			OutputStream lastzAlignLogOut(lastzAlignLogOpts);
+//			lastzAlignLogOut << njh::json::toJson(runOut) << std::endl;
+
+
+			//align seqs
+			auto seqOpts = tempInOpts;
+			seqOpts.out_.outFilename_ = njh::files::make_path(genomeDir, "alignedSeqs.sorted.bam");
+
+			auto runOut = bRunner.bowtie2Align(seqOpts, gMapper.genomes_.at(genome)->fnp_, "-a");
+			OutOptions bowtie2AlignLogOpts(njh::files::make_path(genomeDir, "bowtie2Log.json"));
+			OutputStream bowtie2AlignLogOut(bowtie2AlignLogOpts);
+			bowtie2AlignLogOut << njh::json::toJson(runOut) << std::endl;
+		}
+	};
+
+	std::vector<std::thread> threads;
+	for(uint32_t t = 0; t < numThreads; ++t){
+		threads.emplace_back(std::thread(alignToGenome));
+	}
+	njh::concurrent::joinAllThreads(threads);
+
 	for(const auto & genome : gMapper.genomes_){
-		bfs::path genomeDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{genome.first});
+		bfs::path genomeDir = njh::files::make_path(setUp.pars_.directoryName_, genome.first);
 		//align seqs
 		auto seqOpts = setUp.pars_.ioOptions_;
 		seqOpts.out_.outFilename_ = njh::files::make_path(genomeDir, "alignedSeqs.sorted.bam");
-		auto runOut = bRunner.bowtie2Align(seqOpts, genome.second->fnp_, "-a");
-		OutOptions bowtie2AlignLogOpts(njh::files::make_path(genomeDir, "bowtie2Log.json"));
-		OutputStream bowtie2AlignLogOut(bowtie2AlignLogOpts);
-		bowtie2AlignLogOut << njh::json::toJson(runOut) << std::endl;
-		//extract locations and mapping stats
 
+
+		//extract locations and mapping stats
 		BamTools::BamAlignment bAln;
-		std::map<std::string, std::vector<BamTools::BamAlignment>> bamAligns;
-		std::vector<BamTools::BamAlignment> unmapped;
+		std::unordered_map<std::string, std::vector<BamTools::BamAlignment>> bamAligns;
+		std::unordered_set<std::string> mappedReads;
 		BamTools::BamReader bReader;
 		bReader.Open(seqOpts.out_.outFilename_.string());
 		checkBamOpenThrow(bReader, seqOpts.out_.outFilename_.string());
@@ -82,16 +154,24 @@ int genExpRunner::bowtie2ExtractAndCompareMultiple(const njh::progutils::CmdArgs
 
 		while (bReader.GetNextAlignment(bAln)) {
 			if (bAln.IsMapped()) {
+				bAln.Name = nameKey[bAln.Name];
 				bamAligns[bAln.Name].emplace_back(bAln);
-			} else {
-				unmapped.emplace_back(bAln);
-				++unmappedCounts[bAln.Name];
+				mappedReads.emplace(bAln.Name);
 			}
 		}
+
+		std::set<std::string> unmappedReads;
+		for(const auto & readName : readLengths){
+			if(!njh::in(readName.first, mappedReads)){
+				unmappedReads.emplace(readName.first);
+				++unmappedCounts[readName.first];
+			}
+		}
+
 		TwoBit::TwoBitFile twobitReader(genome.second->fnpTwoBit_);
-		std::vector<GenomicRegion> alignedRegions;
+		std::vector<Bed6RecordCore> alignedRegions;
 		std::map<uint32_t, uint32_t> mapCounts;
-		mapCounts[0] = unmapped.size();
+		mapCounts[0] = mappedReads.size();
 
 		auto regionsExtractedOpts = SeqIOOptions::genFastaOut(njh::files::make_path(genomeDir, "regions"));
 		SeqOutput extractedWriter(regionsExtractedOpts);
@@ -100,15 +180,24 @@ int genExpRunner::bowtie2ExtractAndCompareMultiple(const njh::progutils::CmdArgs
 		//alignment comparisons
 		OutOptions comparisonOpts(njh::files::make_path(genomeDir, "refComparisonInfo.tab.txt"));
 		OutputStream comparisonOut(comparisonOpts);
-
 		comparisonOut << "ReadNumber\tReadId\tBestRef\tscore\talnScore\thqScore\tkDist-5\t1bIndel\t2bIndel\t>2bIndel\tlqMismatch\thqMismatch" << std::endl;
+		//alignments
+		auto alnOut = SeqIOOptions::genFastaOut(njh::files::make_path(genomeDir, "refAlignments.fasta"));
+		SeqOutput writer(alnOut);
+		writer.openOut();
 		uint32_t readNumber = 0;
 		std::vector<std::shared_ptr<seqInfo>> refSeqs;
 		std::unordered_map<std::string, VecStr> readNamesToRefSeqs;
-		for (const auto & alnForRead : bamAligns) {
-			++mapCounts[alnForRead.second.size()];
+		auto bamAlignKeys = getVectorOfMapKeys(bamAligns);
+		njh::sort(bamAlignKeys, [&nameToPositionKey](const std::string & name1, const std::string & name2){
+			return nameToPositionKey[name1] < nameToPositionKey[name2];
+		});
+		for (const auto & bamAlignKey : bamAlignKeys) {
+			const auto & alnForRead = bamAligns[bamAlignKey];
+			++mapCounts[alnForRead.size()];
 			uint32_t extractionCount = 0;
-			for (const auto & aln : alnForRead.second) {
+			for (const auto & aln : alnForRead) {
+
 				auto results = std::make_shared<AlignmentResults>(aln, refData);
 				results->setRefSeq(twobitReader);
 				MetaDataInName refMeta;
@@ -123,10 +212,26 @@ int genExpRunner::bowtie2ExtractAndCompareMultiple(const njh::progutils::CmdArgs
 				readNamesToRefSeqs[results->refSeq_->name_].emplace_back(aln.Name);
 				kmerInfo refInfo(results->refSeq_->seq_, 5, false);
 				kmerInfo seqKInfo(results->alnSeq_->seq_, 5, false);
-				results->setComparison(false);
-				alignedRegions.emplace_back(results->gRegion_);
+
+				//results->setComparison(false);
+				results->setComparison(true);
+				writer.write(results->refSeqAligned_);
+				writer.write(results->alnSeqAligned_);
+
+				alignedRegions.emplace_back(results->gRegion_.genBedRecordCore());
+				std::string appName = "";
+				MetaDataInName rangeMeta;
+				if('H' == results->bAln_.CigarData.front().Type ){
+					rangeMeta.addMeta("start",results->bAln_.CigarData.front().Length);
+				}
+				if('H' == results->bAln_.CigarData.back().Type ){
+					rangeMeta.addMeta("end", readLengths[results->bAln_.Name] - results->bAln_.CigarData.back().Length);
+				}
+				if(!rangeMeta.meta_.empty()){
+					appName = rangeMeta.createMetaName();
+				}
 				comparisonOut << readNumber
-						<< '\t' << aln.Name
+						<< '\t' << aln.Name << appName
 						<< '\t' << results->gRegion_.createUidFromCoordsStrand()
 						<< '\t' << results->comp_.distances_.eventBasedIdentityHq_
 						<< '\t' << results->comp_.alnScore_
@@ -170,8 +275,10 @@ int genExpRunner::bowtie2ExtractAndCompareMultiple(const njh::progutils::CmdArgs
 		//genomic regions hit
 		OutOptions regionsOpts(njh::files::make_path(genomeDir, "regions.bed"));
 		OutputStream regionsOut(regionsOpts);
+
+		BedUtility::coordSort(alignedRegions);
 		for(const auto & reg : alignedRegions){
-			regionsOut << reg.genBedRecordCore().toDelimStr() << std::endl;
+			regionsOut << reg.toDelimStrWithExtra() << std::endl;
 		}
 
 		//map counts
@@ -183,13 +290,16 @@ int genExpRunner::bowtie2ExtractAndCompareMultiple(const njh::progutils::CmdArgs
 		//names of unmapped sequences
 		OutOptions unmmapedOpts(njh::files::make_path(genomeDir, "unmappedReads.txt"));
 		OutputStream unmappedOut(unmmapedOpts);
-		for(const auto & unmappedAln : unmapped){
-			unmappedOut << unmappedAln.Name << std::endl;
+		for(const auto & unmappedAln : unmappedReads){
+			unmappedOut << unmappedAln << std::endl;
 		}
 	}
 
 
 	//get best hits only
+
+
+
 	auto regionsExtractedOpts = SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "bestRegions"));
 	SeqOutput extractedWriter(regionsExtractedOpts);
 	extractedWriter.openOut();
@@ -202,30 +312,58 @@ int genExpRunner::bowtie2ExtractAndCompareMultiple(const njh::progutils::CmdArgs
 
 	comparisonOut << "ReadNumber\tReadId\tBestRef\tscore\talnScore\tkDist-5\t1bIndel\t2bIndel\t>2bIndel\tlqMismatch\thqMismatch" << std::endl;
 	uint32_t readNumber = 0;
-	for(const auto & alnResults : allAlnResults){
+	std::unordered_map<std::string, std::vector<Bed6RecordCore>> bestRegionsByGenome;
+
+	auto allAlnResultsKeys = getVectorOfMapKeys(allAlnResults);
+	njh::sort(allAlnResultsKeys, [&nameToPositionKey](const std::string & name1, const std::string & name2){
+		return nameToPositionKey[name1] < nameToPositionKey[name2];
+	});
+
+	for(const auto & allAlnResultsKey : allAlnResultsKeys){
+		const auto & alnResults = allAlnResults[allAlnResultsKey];
 		double bestScore = std::numeric_limits<double>::lowest();
 		std::vector<std::shared_ptr<AlignmentResults>> bestResults;
-		for(const auto & genomeRes : alnResults.second){
+		std::unordered_map<std::string, std::string> regionNameToGenome;
+		for(const auto & genomeRes : alnResults){
 			for(const auto & res : genomeRes.second){
 				if(res->comp_.alnScore_ > bestScore){
 					bestScore = res->comp_.alnScore_;
 					bestResults.clear();
 					bestResults.emplace_back(res);
+					regionNameToGenome[res->gRegion_.genBedRecordCore().toDelimStrWithExtra()] = genomeRes.first;
 				}else if(res->comp_.alnScore_  == bestScore){
 					bestResults.emplace_back(res);
+					regionNameToGenome[res->gRegion_.genBedRecordCore().toDelimStrWithExtra()] = genomeRes.first;
 				}
 			}
 		}
+
+		for(const auto & results : bestResults){
+			bestRegionsByGenome[regionNameToGenome[results->gRegion_.genBedRecordCore().toDelimStrWithExtra()]].emplace_back(results->gRegion_.genBedRecordCore());
+		}
+
 		for(const auto & results : bestResults){
 			if(!njh::in(results->refSeq_->name_, readNamesToRefSeqs)){
 				refSeqs.emplace_back(results->refSeq_);
 			}
+
 			readNamesToRefSeqs[results->refSeq_->name_].emplace_back(results->bAln_.Name);
 
 			kmerInfo refInfo(results->refSeq_->seq_, 5, false);
 			kmerInfo seqKInfo(results->alnSeq_->seq_, 5, false);
+			std::string appName = "";
+			MetaDataInName rangeMeta;
+			if('H' == results->bAln_.CigarData.front().Type ){
+				rangeMeta.addMeta("start",results->bAln_.CigarData.front().Length);
+			}
+			if('H' == results->bAln_.CigarData.back().Type ){
+				rangeMeta.addMeta("end", readLengths[results->bAln_.Name] - results->bAln_.CigarData.back().Length);
+			}
+			if(!rangeMeta.meta_.empty()){
+				appName = rangeMeta.createMetaName();
+			}
 			comparisonOut << readNumber
-					<< '\t' << results->bAln_.Name
+					<< '\t' << results->bAln_.Name << appName
 					<< '\t' << results->gRegion_.createUidFromCoordsStrand()
 					<< '\t' << results->comp_.distances_.eventBasedIdentityHq_
 					<< '\t' << results->comp_.alnScore_
@@ -238,6 +376,26 @@ int genExpRunner::bowtie2ExtractAndCompareMultiple(const njh::progutils::CmdArgs
 		}
 		++readNumber;
 	}
+
+
+
+	for(auto & best : bestRegionsByGenome){
+		OutOptions bestRegionsBedOpts(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr("bestRegions_", best.first, ".bed")));
+		OutputStream bestRegionsBedOut(bestRegionsBedOpts);
+		if(bfs::exists(gMapper.genomes_.at(best.first)->gffFnp_)){
+			intersectBedLocsWtihGffRecordsPars gffPars = gMapper.pars_.gffIntersectPars_;
+			gffPars.gffFnp_ = gMapper.genomes_.at(best.first)->gffFnp_;
+			intersectBedLocsWtihGffRecords(best.second, gffPars);
+		}
+		BedUtility::coordSort(best.second);
+		for(const auto & reg : best.second){
+			bestRegionsBedOut << reg.toDelimStrWithExtra() << std::endl;
+		}
+	}
+
+
+
+
 
 	//write out ref seqs;
 	//read names for ref seqs
@@ -293,12 +451,10 @@ int genExpRunner::bowtie2ExtractAndCompareMultiple(const njh::progutils::CmdArgs
 			unmappedOut << unmappedAln << std::endl;
 		}
 	}
-
-
-
-
+	bfs::remove(tempSeqOpts.out_.outName());
 	return 0;
 }
+
 
 
 int genExpRunner::bowtie2ExtractAndCompare(const njh::progutils::CmdArgs & inputCommands){
