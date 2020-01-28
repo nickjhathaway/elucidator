@@ -988,13 +988,13 @@ int gffExpRunner::gffToBedByBedLoc(const njh::progutils::CmdArgs & inputCommands
 	outOpts.outExtention_ = ".bed";
 	bfs::path bedFnp = "";
 	size_t overlapMin = 1;
-	std::string feature = "";
+	VecStr features;
 	std::string extraAttributesStr = "";
 
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(extraAttributesStr, "--extraAttributes", "Extra Attributes to output");
 	setUp.setOption(overlapMin, "--overlapMin", "overlap minimum");
-	setUp.setOption(feature, "--feature", "Only extract records of that match this feature");
+	setUp.setOption(features, "--features,--feature", "Only extract records of that match this feature or features");
 	setUp.setOption(inputFile, "--gff", "Input gff file", true);
 	setUp.setOption(bedFnp, "--bed", "Bed regions to extract", true);
 	setUp.processWritingOptions(outOpts);
@@ -1027,10 +1027,10 @@ int gffExpRunner::gffToBedByBedLoc(const njh::progutils::CmdArgs & inputCommands
 		for(const auto & inputRegion : inputRegions){
 
 			if(inputRegion.overlaps(gRegion)){
-				if("" != feature && gRecord->type_ != feature){
+				if(!features.empty() && !njh::in(gRecord->type_,features)){
 					continue;
 				}
-				outJson[gRecord->getAttr("Name")] = gRecord->toJson();
+				outJson[gRecord->getAttr("ID")] = gRecord->toJson();
 				auto outRegion = GenomicRegion(*gRecord).genBedRecordCore();
 
 				if("" != extraAttributesStr){

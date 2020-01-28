@@ -4,7 +4,6 @@
  *  Created on: Oct 29, 2017
  *      Author: nick
  */
-
 // elucidator - A library for analyzing sequence data
 // Copyright (C) 2012-2018 Nicholas Hathaway <nicholas.hathaway@umassmed.edu>,
 //
@@ -23,15 +22,8 @@
 // You should have received a copy of the GNU General Public License
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
-
-
 #include "miscRunner.hpp"
-
-
 namespace njhseq {
-
-
-
 int miscRunner::expandTableBySeparatingColumn(const njh::progutils::CmdArgs & inputCommands){
 	auto tabOpts = TableIOOpts::genTabFileOut("", false);
 	tabOpts.inDelim_ = "\t";
@@ -46,19 +38,15 @@ int miscRunner::expandTableBySeparatingColumn(const njh::progutils::CmdArgs & in
 	setUp.setOption(sep, "--sep", "separator to expand column on");
 	setUp.setOption(append, "--append", "append this onto the column elements");
 	setUp.setOption(prepend, "--prepend", "prepend this onto the column elements");
-
 	setUp.setOption(columnName, "--columnName", "Column Name to separate", true);
 	if (tabOpts.inDelim_ == "tab") {
 		tabOpts.inDelim_ = "\t";
 	}
 	tabOpts.outDelim_ = tabOpts.inDelim_;
-
 	setUp.processWritingOptions(tabOpts.out_);
 	setUp.finishSetUp(std::cout);
-
 	table namesTab(tabOpts);
 	namesTab.checkForColumnsThrow(VecStr{columnName}, __PRETTY_FUNCTION__)	;
-
 	auto colPos = namesTab.getColPos(columnName);
 	OutputStream out(tabOpts.out_);
 	if(tabOpts.hasHeader_){
@@ -83,6 +71,4 @@ int miscRunner::expandTableBySeparatingColumn(const njh::progutils::CmdArgs & in
 	}
 	return 0;
 }
-
 } // namespace njhseq
-
