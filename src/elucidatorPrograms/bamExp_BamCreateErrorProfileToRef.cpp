@@ -58,7 +58,7 @@ int bamExpRunner::BamCreateErrorProfileToRef(
 		bamPools.openBamFile();
 		std::mutex mut;
 		auto increaseCount = [&regionsQueue,&bamPools,&mut,&twoBitFnp,&refData,&setUp,&lengthLimit,&chromLengths,&ralnPars,&profiler](){
-			aligner alignerObj(500, gapScoringParameters(5,1,0,0,0,0));
+			aligner alignerObj(700, gapScoringParameters(5,1,0,0,0,0));
 			GenomicRegion region;
 			TwoBit::TwoBitFile tReader(twoBitFnp);
 			auto bReader = bamPools.popReader();
@@ -91,14 +91,13 @@ int bamExpRunner::BamCreateErrorProfileToRef(
 		}
 		njh::concurrent::joinAllJoinableThreads(threads);
 	}else{
-		aligner alignerObj(500, gapScoringParameters(5,1,0,0,0,0));
+		aligner alignerObj(700, gapScoringParameters(5,1,0,0,0,0));
 		BamTools::BamAlignment bAln;
 		while (bReader.GetNextAlignment(bAln)) {
 			if(bAln.IsMapped() && bAln.IsPrimaryAlignment()){
 				if(bAln.GetEndPosition() - bAln.Position > lengthLimit){
 					auto realignment = ReAlignedSeq::genRealignment(bAln, refData, alignerObj, chromLengths, tReader, ralnPars);
 					profiler.increaseCounts(realignment);
-
 				}
 			}
 		}

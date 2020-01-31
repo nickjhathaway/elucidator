@@ -27,7 +27,7 @@
 #include "pairProcessing.hpp"
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/objects/counters/DNABaseCounter.hpp"
-#include <SeekDeep/objects/PairedReadProcessor.hpp>
+#include <SeekDeep/objects/IlluminaUtils/PairedReadProcessor.hpp>
 
 
 namespace njhseq {

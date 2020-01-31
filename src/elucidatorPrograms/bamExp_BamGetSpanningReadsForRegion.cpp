@@ -13,10 +13,9 @@
 
 #include "bamExp.hpp"
 #include "elucidator/simulation.h"
-#include <SeekDeep/objects/PairedReadProcessor.hpp>
+#include <SeekDeep/objects/IlluminaUtils/PairedReadProcessor.hpp>
 
 namespace njhseq {
-
 
 
 

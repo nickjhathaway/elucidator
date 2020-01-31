@@ -25,6 +25,25 @@
 //
 #include "elucidator/common.h"
 namespace njhseq {
+
+struct PCRAmountPars {
+	PCRAmountPars() {
+	}
+	PCRAmountPars(const std::vector<uint32_t> & startingTemplateAmounts,
+			const std::vector<uint32_t> & finalReadAmount) :
+			startingTemplateAmounts_(startingTemplateAmounts),
+			finalReadAmount_(finalReadAmount) {
+	}
+	PCRAmountPars(const uint32_t & startingTemplateAmount,
+			const uint32_t & finalReadAmount) :
+			startingTemplateAmounts_({startingTemplateAmount}),
+			finalReadAmount_({finalReadAmount}) {
+	}
+	std::vector<uint32_t> startingTemplateAmounts_ { std::vector<uint32_t>{ 2048 } };
+	std::vector<uint32_t> finalReadAmount_ { std::vector<uint32_t>{ 5000 } };
+};
+
+
 namespace sim {
 
 class ReadLenNormalDistribution {

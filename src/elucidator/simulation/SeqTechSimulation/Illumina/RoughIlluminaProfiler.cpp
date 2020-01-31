@@ -76,6 +76,7 @@ void RoughIlluminaProfiler::Counts::increaseCounts(const seqInfo & refAln,
 		uint32_t realPosition = pos - alnSeqPosOffSet;
 		if('-' != queryAln.seq_[pos] && '-' != refAln.seq_[pos]){
 			++positionTotalCounts[realPosition];
+			++allBaseCounts[refAln.seq_[pos]][queryAln.seq_[pos]];
 			if(queryAln.seq_[pos] != refAln.seq_[pos]){
 				//error
 				++positionErrorCounts[realPosition];
@@ -185,14 +186,28 @@ void RoughIlluminaProfiler::Counts::writeIndels(const std::string & prefix, bool
 
 void RoughIlluminaProfiler::Counts::writeProfiles(const std::string & prefix, bool overWrite){
 
-	//scores
-	OutOptions scoresOpts(bfs::path(prefix + "_scores.tab.txt"));
-	scoresOpts.overWriteFile_ = overWrite;
-	OutputStream scoresOut(scoresOpts);
-	scoresOut << "score" << std::endl;
 	{
-		scoresOut << njh::conToStr(percentIds_, "\n") << std::endl;
+		//scores
+		OutOptions scoresOpts(bfs::path(prefix + "_scores.tab.txt"));
+		scoresOpts.overWriteFile_ = overWrite;
+		OutputStream scoresOut(scoresOpts);
+		scoresOut << "score" << std::endl;
+		{
+			scoresOut << njh::conToStr(percentIds_, "\n") << std::endl;
+		}
+
+		OutOptions scoresStatsOpts(bfs::path(prefix + "_scoresStats.tab.txt"));
+		scoresStatsOpts.overWriteFile_ = overWrite;
+		OutputStream scoresStatsOut(scoresStatsOpts);
+		scoresStatsOut << "stat\tvalue" << std::endl;
+		auto scoreStats = getStatsOnVec(percentIds_);
+		for(const auto & stat : scoreStats){
+			scoresStatsOut << stat.first <<"\t" << stat.second << std::endl;
+		}
+
 	}
+
+
 	//percent hits
 	OutOptions hitsOpts(bfs::path(prefix + "_hits.tab.txt"));
 	hitsOpts.overWriteFile_ = overWrite;
@@ -221,34 +236,109 @@ void RoughIlluminaProfiler::Counts::writeProfiles(const std::string & prefix, bo
 		}
 	}
 
-
-	//base substitution rates
-	OutOptions base_substitution_ratesOpts(bfs::path(prefix + "_base_substitution_rates.tab.txt"));
-	base_substitution_ratesOpts.overWriteFile_ = overWrite;
-	OutputStream base_substitution_ratesOut(base_substitution_ratesOpts);
-	base_substitution_ratesOut << "ref\tseq\tcount" << std::endl;
 	std::vector<char> bases{'A', 'C', 'G', 'T'};
-	for(const auto & refBase : bases){
-		double total = 0;
-		for(const auto & seqBase : bases){
-			if(seqBase == refBase){
-				continue;
+
+	{
+		//base substitution rates
+		OutOptions base_substitution_ratesOpts(bfs::path(prefix + "_base_substitution_rates.tab.txt"));
+		base_substitution_ratesOpts.overWriteFile_ = overWrite;
+		OutputStream base_substitution_ratesOut(base_substitution_ratesOpts);
+		base_substitution_ratesOut << "ref\tseq\tcount" << std::endl;
+		for(const auto & refBase : bases){
+			double total = 0;
+			for(const auto & seqBase : bases){
+				if(seqBase == refBase){
+					continue;
+				}
+				total += baseChangeCounts[refBase][seqBase];
 			}
-			total += baseChangeCounts[refBase][seqBase];
-		}
-		for(const auto & seqBase : bases){
-			if(seqBase == refBase){
-				continue;
+			for(const auto & seqBase : bases){
+				if(seqBase == refBase){
+					continue;
+				}
+				base_substitution_ratesOut << refBase
+					 << "\t" << seqBase
+					 << "\t" << baseChangeCounts[refBase][seqBase] << std::endl;
 			}
-			base_substitution_ratesOut << refBase
-				 << "\t" << seqBase
-				 << "\t" << baseChangeCounts[refBase][seqBase] << std::endl;
 		}
+	}
+
+	{
+		//base substitution rates all
+		OutOptions base_substitution_ratesOpts(bfs::path(prefix + "_base_substitution_rates_all.tab.txt"));
+		base_substitution_ratesOpts.overWriteFile_ = overWrite;
+		OutputStream base_substitution_ratesOut(base_substitution_ratesOpts);
+		base_substitution_ratesOut << "ref\tseq\tmutationType\tcount\trate\ttotal" << std::endl;
+		for(const auto & refBase : bases){
+			double total = 0;
+			for(const auto & seqBase : bases){
+				total += allBaseCounts[refBase][seqBase];
+			}
+
+			for(const auto & seqBase : bases){
+				std::string type = "none";
+				if(seqBase != refBase){
+					type = ((refBase == 'G' && seqBase == 'A') || (refBase == 'A' && seqBase == 'G') || (refBase == 'C' && seqBase == 'T') || (refBase == 'T' && seqBase == 'C') ? "transition" : "transversion");
+				}
+				base_substitution_ratesOut << refBase
+					 << "\t" << seqBase
+					 << "\t" << type
+					 << "\t" << allBaseCounts[refBase][seqBase]
+					 << "\t" << allBaseCounts[refBase][seqBase]/static_cast<double>(total)
+					 << "\t" << total<< std::endl;
+			}
+		}
+	}
+
+	{
+		//per base substitution rates all
+
+		uint32_t baseSubstitions = 0;
+		uint32_t deletions = 0;
+		uint32_t insertions = 0;
+		uint32_t totalBases = 0;
+
+		for(const auto & refBase : bases){
+			for(const auto & seqBase : bases){
+				totalBases += allBaseCounts[refBase][seqBase];
+			}
+			for(const auto & seqBase : bases){
+				if(seqBase != refBase){
+					++baseSubstitions;
+				}
+			}
+		}
+		{
+			auto posKeys = getVectorOfMapKeys(deletions_);
+			njh::sort(posKeys);
+			for(const auto & pos : posKeys){
+				totalBases += deletions_[pos].size();
+				deletions += deletions_[pos].size();
+			}
+		}
+
+		{
+			auto posKeys = getVectorOfMapKeys(insertions_);
+			njh::sort(posKeys);
+			for(const auto & pos : posKeys){
+				totalBases += insertions_[pos].size();
+				insertions += insertions_[pos].size();
+			}
+		}
+		OutOptions ratesOpts(bfs::path(prefix + "_allRates.tab.txt"));
+		ratesOpts.overWriteFile_ = overWrite;
+		OutputStream ratesOut(ratesOpts);
+		ratesOut <<"rate\tvalue" << std::endl;
+		ratesOut << "perBaseSubstionRate\t" << baseSubstitions/static_cast<double>(totalBases) << std::endl;
+		ratesOut << "perBaseInsertionRate\t" << insertions/static_cast<double>(totalBases) << std::endl;
+		ratesOut << "perBaseDeletionRate\t" << deletions/static_cast<double>(totalBases) << std::endl;
+		ratesOut << "perBaseIndelRate\t" << (insertions  + deletions)/static_cast<double>(totalBases) << std::endl;
+		ratesOut << "perBaseErrorRate\t" << (insertions + deletions + baseSubstitions)/static_cast<double>(totalBases) << std::endl;
 	}
 
 	//base substitution rates per position
 	OutOptions base_substitution_rates_perPositionOpts(bfs::path(prefix + "_base_substitution_rates_perPosition.tab.txt"));
-	base_substitution_ratesOpts.overWriteFile_ = overWrite;
+	base_substitution_rates_perPositionOpts.overWriteFile_ = overWrite;
 	OutputStream base_substitution_rates_perPositionOut(base_substitution_rates_perPositionOpts);
 	base_substitution_rates_perPositionOut << "pos\tref\tseq\tcount" << std::endl;
 	auto allPositions = getVectorOfMapKeys(baseChangeCountsPerPosition);

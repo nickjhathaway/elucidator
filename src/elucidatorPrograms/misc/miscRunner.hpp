@@ -74,6 +74,9 @@ class miscRunner : public njh::progutils::ProgramRunner {
 
 
 
+  static int renameDownloadedGenome(const njh::progutils::CmdArgs & inputCommands);
+
+
 };
 }  // namespace njhseq
 

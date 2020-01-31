@@ -47,6 +47,7 @@ class readSimulatorRunner : public njh::progutils::ProgramRunner {
 
   //static int createLibrarySimMultipleMixture(const njh::progutils::CmdArgs & inputCommands);
   static int createLibrarySimMultipleMixtureDrugResistant(const njh::progutils::CmdArgs & inputCommands);
+  static int createLibrarySimMultipleMixtureSpiecesMixture(const njh::progutils::CmdArgs & inputCommands);
 
 
   static int effectsOfPcrErrorRatePerRounds(const njh::progutils::CmdArgs & inputCommands);

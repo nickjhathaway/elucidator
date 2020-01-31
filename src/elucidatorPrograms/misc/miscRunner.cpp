@@ -77,6 +77,7 @@ miscRunner::miscRunner()
 										 addFunc("createConnectedHaplotypeNetwork", createConnectedHaplotypeNetwork, false),
 										 addFunc("getLinkedInfoFromAdjList", getLinkedInfoFromAdjList, false),
 										 addFunc("printSeqsColored", printSeqsColored, false),
+										 addFunc("renameDownloadedGenome", renameDownloadedGenome, false),
 
 										 },//
                     "misc") {}

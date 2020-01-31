@@ -7,13 +7,12 @@
  *      Author: nicholashathaway
  */
 
-#include <SeekDeep/objects/PrimersAndMids.hpp>
+#include <SeekDeep/objects/TarAmpSetupUtils/PrimersAndMids.hpp>
 
 #include "elucidator/common.h"
 #include "elucidator/simulation/pcrSimulation/PCRSimulator.hpp"
 
 namespace njhseq {
-
 
 
 

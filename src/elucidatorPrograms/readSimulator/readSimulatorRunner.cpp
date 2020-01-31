@@ -24,7 +24,7 @@
 
 #include "readSimulatorRunner.hpp"
 #include "elucidator/simulation.h"
-#include <SeekDeep/objects/PrimersAndMids.hpp>
+#include <SeekDeep/objects/TarAmpSetupUtils/PrimersAndMids.hpp>
 
 namespace njhseq {
 
@@ -52,6 +52,7 @@ readSimulatorRunner::readSimulatorRunner()
 	addFunc("testSDFinalReadAmount", testSDFinalReadAmount, false),
 	addFunc("shearSequences", shearSequences, false),
 	addFunc("shearSimIlluminaAlign", shearSimIlluminaAlign, false),
+	addFunc("createLibrarySimMultipleMixtureSpiecesMixture", createLibrarySimMultipleMixtureSpiecesMixture, false),
 },
                     "readSimulator") {}
 //

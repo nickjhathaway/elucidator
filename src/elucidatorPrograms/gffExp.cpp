@@ -831,12 +831,15 @@ int gffExpRunner::gffToBed(const njh::progutils::CmdArgs & inputCommands){
 
 int gffExpRunner::gffToBedByDescription(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path inputFile;
+	VecStr features;
+
 	OutOptions outOpts(bfs::path("out"));
 	outOpts.outExtention_ = ".bed";
 	VecStr description;
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(inputFile, "--gff", "Input gff file", true);
 	setUp.setOption(description, "--description", "description of gff to extract", true);
+	setUp.setOption(features, "--features,--feature", "Only extract records of that match this feature or features");
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 
@@ -856,9 +859,16 @@ int gffExpRunner::gffToBedByDescription(const njh::progutils::CmdArgs & inputCom
 
 	Json::Value outJson;
 	while (nullptr != gRecord) {
-		if(njh::in(gRecord->getAttr("description"), description)){
-			outJson[gRecord->getAttr("ID")] = gRecord->toJson();
-			outFile << GenomicRegion(*gRecord).genBedRecordCore().toDelimStr() << std::endl;
+		if(features.empty() || njh::in(gRecord->type_, features)){
+			if(njh::in(gRecord->getAttr("description"), description)){
+				outJson[gRecord->getAttr("ID")] = gRecord->toJson();
+				auto bedOut = GenomicRegion(*gRecord).genBedRecordCore();
+				bedOut.extraFields_.emplace_back(njh::pasteAsStr("[",
+						"id=",gRecord->getAttr("ID"), ";",
+						"description=",gRecord->getAttr("description"), ";",
+						"]"));
+				outFile << bedOut.toDelimStrWithExtra() << std::endl;
+			}
 		}
 		bool end = false;
 		while ('#' == reader.inFile_->peek()) {

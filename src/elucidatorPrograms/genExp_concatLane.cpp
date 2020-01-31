@@ -31,7 +31,7 @@
 #include <njhseq/GenomeUtils.h>
 
 #include <TwoBit.h>
-#include <SeekDeep/objects/ReadPairsOrganizer.hpp>
+#include <SeekDeep/objects/IlluminaUtils/ReadPairsOrganizer.hpp>
 
 
 namespace njhseq {

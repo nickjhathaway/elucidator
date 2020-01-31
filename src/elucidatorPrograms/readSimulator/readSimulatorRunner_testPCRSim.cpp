@@ -26,7 +26,7 @@
 
 #include "readSimulatorRunner.hpp"
 #include "elucidator/simulation.h"
-#include <SeekDeep/objects/PrimersAndMids.hpp>
+#include <SeekDeep/objects/TarAmpSetupUtils/PrimersAndMids.hpp>
 
 namespace njhseq {
 

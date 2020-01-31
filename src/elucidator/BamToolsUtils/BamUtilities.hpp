@@ -6,7 +6,6 @@
  *      Author: nick
  */
 
-
 // elucidator - A library for analyzing sequence data
 // Copyright (C) 2012-2018 Nicholas Hathaway <nicholas.hathaway@umassmed.edu>,
 //
@@ -27,7 +26,7 @@
 //
 
 #include <njhseq/BamToolsUtils.h>
-#include <SeekDeep/objects/PairedReadProcessor.hpp>
+#include <SeekDeep/objects/IlluminaUtils/PairedReadProcessor.hpp>
 
 namespace njhseq {
 

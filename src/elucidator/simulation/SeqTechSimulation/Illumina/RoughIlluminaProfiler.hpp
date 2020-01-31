@@ -30,6 +30,7 @@ public:
 		std::unordered_map<uint32_t, uint32_t> positionTotalCounts;
 
 		std::unordered_map<char, std::unordered_map<char, uint32_t>> baseChangeCounts;
+		std::unordered_map<char, std::unordered_map<char, uint32_t>> allBaseCounts;
 
 		std::unordered_map<uint32_t, std::unordered_map<char, std::unordered_map<char, uint32_t>>> baseChangeCountsPerPosition;
 
