@@ -89,8 +89,8 @@ int genExpRunner::bioIndexGenome(const njh::progutils::CmdArgs & inputCommands){
 int genExpRunner::extractRefSeqsFromGenomesWithPrimers(
 		const njh::progutils::CmdArgs & inputCommands) {
 	extractBetweenSeqsPars pars;
-	std::string forwardPrimer = "";
-	std::string reversePrimer = "";
+	std::set<std::string> forwardPrimers;
+	std::set<std::string> reversePrimers;
 	std::string targetName = "";
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -98,10 +98,9 @@ int genExpRunner::extractRefSeqsFromGenomesWithPrimers(
 	pars.setUpCoreOptions(setUp, false);
 	bool setPrimersFile = setUp.setOption(pars.primersFile, "--primers", "A file that contains three columns, targetName,forwardPrimer,reversePrimer 5` to 3` directions");
 	if(!setPrimersFile){
-		setUp.processSeq(forwardPrimer, "--forwardPrimer", "Forward Primer (5`to 3` direction)", true);
-		setUp.processSeq(reversePrimer, "--reversePrimer", "Reverse Primer (5`to 3` direction)", true);
-		setUp.processSeq(targetName, "--targetName", "Name of the target associated with forward and reverse primers", true);
-
+		setUp.setOption(forwardPrimers, "--forwardPrimer", "Forward Primer (5`to 3` direction)", true);
+		setUp.setOption(reversePrimers, "--reversePrimer", "Reverse Primer (5`to 3` direction)", true);
+		setUp.setOption(targetName, "--targetName", "Name of the target associated with forward and reverse primers", true);
 	}
 	//setUp.processDirectoryOutputName("extractedRegions_TODAY", true);
 	setUp.finishSetUp(std::cout);
@@ -114,7 +113,7 @@ int genExpRunner::extractRefSeqsFromGenomesWithPrimers(
 	} else {
 		primerTable = table(
 				VecStr { "targetName", "forwardPrimer", "reversePrimer" });
-		primerTable.addRow(targetName, forwardPrimer, reversePrimer);
+		primerTable.addRow(targetName, njh::conToStr(forwardPrimers, ","), njh::conToStr(reversePrimers, ","));
 	}
 
 	std::unordered_map<std::string, PrimersAndMids::Target> targets;

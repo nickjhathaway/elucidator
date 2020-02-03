@@ -75,7 +75,11 @@ bedExpRunner::bedExpRunner()
 					 addFunc("getInterveningRegions", getInterveningRegions, false),
 					 addFunc("fillInRegionsByBestScore", fillInRegionsByBestScore, false),
 					 addFunc("centerBedRegionWithFixSize", centerBedRegionWithFixSize, false),
-           },//
+
+					 addFunc("trimBedRegions", trimBedRegions, false),
+					 addFunc("trimUpstreamRegion", trimUpstreamRegion, false),
+					 addFunc("trimDownstreamRegion", trimDownstreamRegion, false),
+           },//,,
           "bedExp") {}
 
 
@@ -667,7 +671,7 @@ int bedExpRunner::extendUpstreamRegion(const njh::progutils::CmdArgs & inputComm
 	OutOptions outOpts;
 	uint32_t length = 0;
 	seqSetUp setUp(inputCommands);
-	setUp.description_ = "Extract the upstream region from the bed file depending on the strand orientation so it's truly upstream";
+	setUp.description_ = "Extend the upstream region from the bed file depending on the strand orientation so it's truly upstream";
 	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --bed inputFile.bed --length");
 	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --bed inputFile.bed --length");
 	setUp.processVerbose();
@@ -686,7 +690,6 @@ int bedExpRunner::extendUpstreamRegion(const njh::progutils::CmdArgs & inputComm
 	while(nullptr != reg){
 		GenomicRegion inputRegion(*reg);
 		GenomicRegion upstreamRegion = inputRegion;
-		upstreamRegion.uid_ = "upstream-" + upstreamRegion.uid_;
 		if (upstreamRegion.reverseSrand_) {
 			upstreamRegion.end_ = inputRegion.end_ + length;
 		} else {
@@ -697,16 +700,60 @@ int bedExpRunner::extendUpstreamRegion(const njh::progutils::CmdArgs & inputComm
 		});
 		reg = reader.readNextRecord();
 	}
-
 	return 0;
 }
+
+int bedExpRunner::trimUpstreamRegion(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path bedFile;
+	OutOptions outOpts;
+	uint32_t length = 0;
+	seqSetUp setUp(inputCommands);
+	setUp.description_ = "Trim the upstream region from the bed file depending on the strand orientation so it's truly upstream";
+	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --bed inputFile.bed --length");
+	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --bed inputFile.bed --length");
+	setUp.processVerbose();
+	setUp.setOption(bedFile, "--bed", "Bed6 file extract upstream region from", true);
+	setUp.setOption(length, "--length", "how much upstream to output", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	BioDataFileIO<Bed6RecordCore> reader{IoOptions(InOptions(bedFile), outOpts)};
+	std::shared_ptr<Bed6RecordCore> reg;
+	reader.openIn();
+	reader.openOut();
+	std::unordered_map<std::string, std::vector<std::shared_ptr<Bed6RecordCore>>> beds;
+	reg = reader.readNextRecord();
+	std::vector<std::shared_ptr<Bed6RecordCore>> bedVec;
+	while(nullptr != reg){
+		GenomicRegion inputRegion(*reg);
+		GenomicRegion upstreamRegion = inputRegion;
+		if (upstreamRegion.reverseSrand_) {
+			upstreamRegion.end_ = length < inputRegion.end_ ? inputRegion.end_ - length : 0;
+		} else {
+			upstreamRegion.start_ = inputRegion.start_ + length;
+		}
+		if(upstreamRegion.end_ <= upstreamRegion.start_){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << inputRegion.createUidFromCoordsStrand() << " now has an end that is before or equal to it's start: " << upstreamRegion.createUidFromCoordsStrand()<< "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		reader.write(upstreamRegion.genBedRecordCore(), [](const Bed6RecordCore & bRecord, std::ostream & out){
+			out << bRecord.toDelimStrWithExtra() << "\n";
+		});
+		reg = reader.readNextRecord();
+	}
+	return 0;
+}
+
+
+
 
 int bedExpRunner::extendDownstreamRegion(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile;
 	OutOptions outOpts;
 	uint32_t length = 0;
 	seqSetUp setUp(inputCommands);
-	setUp.description_ = "Extract the downstream region from the bed file depending on the strand orientation so it's truly downstream";
+	setUp.description_ = "Extend the downstream region from the bed file depending on the strand orientation so it's truly downstream";
 	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --bed inputFile.bed --length");
 	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --bed inputFile.bed --length --include 100 #include 100 bases of the region from which you are extracting");
 	setUp.processVerbose();
@@ -725,12 +772,13 @@ int bedExpRunner::extendDownstreamRegion(const njh::progutils::CmdArgs & inputCo
 	while(nullptr != reg){
 		GenomicRegion inputRegion(*reg);
 		GenomicRegion downstreamRegion = inputRegion;
-		downstreamRegion.uid_ = "downstream-" + downstreamRegion.uid_;
 		if (downstreamRegion.reverseSrand_) {
 			downstreamRegion.start_ = length < inputRegion.start_ ? inputRegion.start_ - length : 0;
 		} else {
 			downstreamRegion.end_ = inputRegion.end_ + length;
 		}
+
+
 		reader.write(downstreamRegion.genBedRecordCore(), [](const Bed6RecordCore & bRecord, std::ostream & out){
 			out << bRecord.toDelimStrWithExtra() << "\n";
 		});
@@ -739,6 +787,54 @@ int bedExpRunner::extendDownstreamRegion(const njh::progutils::CmdArgs & inputCo
 
 	return 0;
 }
+
+
+int bedExpRunner::trimDownstreamRegion(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path bedFile;
+	OutOptions outOpts;
+	uint32_t length = 0;
+	seqSetUp setUp(inputCommands);
+	setUp.description_ = "Extend the downstream region from the bed file depending on the strand orientation so it's truly downstream";
+	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --bed inputFile.bed --length");
+	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --bed inputFile.bed --length --include 100 #include 100 bases of the region from which you are extracting");
+	setUp.processVerbose();
+	setUp.setOption(bedFile, "--bed", "Bed6 file extract downstream region from", true);
+	setUp.setOption(length, "--length", "how much downstream to output", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	BioDataFileIO<Bed6RecordCore> reader{IoOptions(InOptions(bedFile), outOpts)};
+	std::shared_ptr<Bed6RecordCore> reg;
+	reader.openIn();
+	reader.openOut();
+	std::unordered_map<std::string, std::vector<std::shared_ptr<Bed6RecordCore>>> beds;
+	reg = reader.readNextRecord();
+	std::vector<std::shared_ptr<Bed6RecordCore>> bedVec;
+	while(nullptr != reg){
+		GenomicRegion inputRegion(*reg);
+		GenomicRegion downstreamRegion = inputRegion;
+		if (downstreamRegion.reverseSrand_) {
+			downstreamRegion.start_ = inputRegion.start_ + length;
+		} else {
+			downstreamRegion.end_ = length < inputRegion.end_ ? inputRegion.end_ - length : 0;
+		}
+
+		if(downstreamRegion.end_ <= downstreamRegion.start_){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << inputRegion.createUidFromCoordsStrand() << " now has an end that is before or equal to it's start: " << downstreamRegion.createUidFromCoordsStrand()<< "\n";
+			throw std::runtime_error{ss.str()};
+		}
+
+		reader.write(downstreamRegion.genBedRecordCore(), [](const Bed6RecordCore & bRecord, std::ostream & out){
+			out << bRecord.toDelimStrWithExtra() << "\n";
+		});
+		reg = reader.readNextRecord();
+	}
+
+	return 0;
+}
+
+
 
 int bedExpRunner::getUpstreamRegion(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile;
@@ -1069,13 +1165,13 @@ int bedExpRunner::bed3ToBed6(const njh::progutils::CmdArgs & inputCommands) {
 int bedExpRunner::extendBedRegions(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile;
 	OutOptions outOpts;
-	uint32_t left = 25;
-	uint32_t right = 25;
+	uint32_t left = 0;
+	uint32_t right = 0;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 
-	setUp.setOption(left, "--left", "Expand regions to the left this much", true);
-	setUp.setOption(right, "--right", "Expand regions to the right this much", true);
+	setUp.setOption(left, "--left", "Expand regions to the left this much");
+	setUp.setOption(right, "--right", "Expand regions to the right this much");
 	setUp.setOption(bedFile, "--bed", "Bed file to parse", true);
 
 	setUp.processWritingOptions(outOpts);
@@ -1089,16 +1185,78 @@ int bedExpRunner::extendBedRegions(const njh::progutils::CmdArgs & inputCommands
 	std::ostream out(determineOutBuf(outFile, outOpts));
 	Bed3RecordCore reg;
 	while(reader.readNextRecord(reg)){
+		bool scoreIsLen = false;
+		if(reg.extraFields_.size() >=3){
+			if(njh::strAllDigits(reg.extraFields_[1])){
+				auto score = njh::StrToNumConverter::stoToNum<double>(reg.extraFields_[1]);
+				if(reg.length() == score){
+					scoreIsLen = true;
+				}
+			}
+		}
 		reg.chromStart_ = (reg.chromStart_ > left ? reg.chromStart_ - left : 0);
 		reg.chromEnd_ += right;
 		//reg.score_ = reg.length();
 		if(reg.extraFields_.size() >=3){
-			reg.extraFields_[1] = estd::to_string(reg.length());
+			if(scoreIsLen){
+				reg.extraFields_[1] = estd::to_string(reg.length());
+			}
 		}
 		out << reg.toDelimStrWithExtra() << std::endl;
 	}
 	return 0;
 }
+
+int bedExpRunner::trimBedRegions(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path bedFile;
+	OutOptions outOpts;
+	uint32_t left = 0;
+	uint32_t right = 0;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+
+	setUp.setOption(left, "--left", "Expand regions to the left this much");
+	setUp.setOption(right, "--right", "Expand regions to the right this much");
+	setUp.setOption(bedFile, "--bed", "Bed file to parse", true);
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+
+	BioDataFileIO<Bed3RecordCore> reader{IoOptions(InOptions(bedFile))};
+	reader.openIn();
+
+	OutputStream outFile(outOpts);
+	Bed3RecordCore reg;
+	while(reader.readNextRecord(reg)){
+		bool scoreIsLen = false;
+		if(reg.extraFields_.size() >=3){
+			if(njh::strAllDigits(reg.extraFields_[1])){
+				auto score = njh::StrToNumConverter::stoToNum<double>(reg.extraFields_[1]);
+				if(reg.length() == score){
+					scoreIsLen = true;
+				}
+			}
+		}
+		auto uid = njh::pasteAsStr(reg.chrom_, "-", reg.chromStart_, "-", reg.chromEnd_);
+		reg.chromStart_ += left;
+		reg.chromEnd_ -= right > reg.chromEnd_ ? 0 : reg.chromEnd_ - right;
+		if(reg.chromEnd_ <= reg.chromStart_){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "region: " << uid << " will now have a end that is before the start: " <<  njh::pasteAsStr(reg.chrom_, "-", reg.chromStart_, "-", reg.chromEnd_)<< "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		if(reg.extraFields_.size() >=3){
+			if(scoreIsLen){
+				reg.extraFields_[1] = estd::to_string(reg.length());
+			}
+		}
+		outFile << reg.toDelimStrWithExtra() << std::endl;
+	}
+	return 0;
+}
+
+
 
 int bedExpRunner::getCloseBedRegions(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile;

@@ -66,10 +66,15 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	static int getUpstreamRegion(const njh::progutils::CmdArgs & inputCommands);
 	static int getDownstreamRegion(const njh::progutils::CmdArgs & inputCommands);
 
+
+
 	//modifying starts and ends of bed regions
 	static int extendBedRegions(const njh::progutils::CmdArgs & inputCommands);
+	static int trimBedRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int extendUpstreamRegion(const njh::progutils::CmdArgs & inputCommands);
+	static int trimUpstreamRegion(const njh::progutils::CmdArgs & inputCommands);
 	static int extendDownstreamRegion(const njh::progutils::CmdArgs & inputCommands);
+	static int trimDownstreamRegion(const njh::progutils::CmdArgs & inputCommands);
 	static int extendToEndOfChrom(const njh::progutils::CmdArgs & inputCommands);
 	static int extendToStartOfChrom(const njh::progutils::CmdArgs & inputCommands);
 	static int centerBedRegionWithFixSize(const njh::progutils::CmdArgs & inputCommands);
