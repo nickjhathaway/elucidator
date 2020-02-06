@@ -125,6 +125,9 @@ class genExpRunner : public njh::progutils::ProgramRunner {
 	static int randomSampConsensusCompareToExpected(const njh::progutils::CmdArgs & inputCommands);
 
 
+
+	static int evaluateContigsWithBowtie2(const njh::progutils::CmdArgs & inputCommands);
+
 };
 } /* namespace njhseq */
 

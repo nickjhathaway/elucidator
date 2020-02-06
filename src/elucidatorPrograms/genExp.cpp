@@ -90,6 +90,7 @@ genExpRunner::genExpRunner()
 					 addFunc("countBasesPerPosition", countBasesPerPosition, false),
 					 addFunc("translateSeqsBasedOnGFF", translateSeqsBasedOnGFF, false),
 					 addFunc("randomSampConsensusCompareToExpected", randomSampConsensusCompareToExpected, false),
+					 addFunc("evaluateContigsWithBowtie2", evaluateContigsWithBowtie2, false),
            },//
           "genExp") {}
 
