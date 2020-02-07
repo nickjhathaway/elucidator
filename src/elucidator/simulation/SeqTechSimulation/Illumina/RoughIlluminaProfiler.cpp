@@ -304,7 +304,7 @@ void RoughIlluminaProfiler::Counts::writeProfiles(const std::string & prefix, bo
 			}
 			for(const auto & seqBase : bases){
 				if(seqBase != refBase){
-					++baseSubstitions;
+					baseSubstitions+= allBaseCounts[refBase][seqBase];
 				}
 			}
 		}
@@ -328,12 +328,31 @@ void RoughIlluminaProfiler::Counts::writeProfiles(const std::string & prefix, bo
 		OutOptions ratesOpts(bfs::path(prefix + "_allRates.tab.txt"));
 		ratesOpts.overWriteFile_ = overWrite;
 		OutputStream ratesOut(ratesOpts);
-		ratesOut <<"rate\tvalue" << std::endl;
-		ratesOut << "perBaseSubstionRate\t" << baseSubstitions/static_cast<double>(totalBases) << std::endl;
-		ratesOut << "perBaseInsertionRate\t" << insertions/static_cast<double>(totalBases) << std::endl;
-		ratesOut << "perBaseDeletionRate\t" << deletions/static_cast<double>(totalBases) << std::endl;
-		ratesOut << "perBaseIndelRate\t" << (insertions  + deletions)/static_cast<double>(totalBases) << std::endl;
-		ratesOut << "perBaseErrorRate\t" << (insertions + deletions + baseSubstitions)/static_cast<double>(totalBases) << std::endl;
+		ratesOut <<"error\tnumber\trate\ttotalBases" << std::endl;
+		ratesOut << "perBaseSubstitution"
+				<< "\t" << baseSubstitions
+				<< "\t" << baseSubstitions/static_cast<double>(totalBases)
+				<< "\t" << totalBases<< std::endl;
+
+		ratesOut << "perBaseInsertion"
+				<< "\t" << insertions
+				<< "\t" << insertions/static_cast<double>(totalBases)
+				<< "\t" << totalBases<< std::endl;
+
+		ratesOut << "perBaseDeletion"
+				<< "\t" << deletions
+				<< "\t" << deletions/static_cast<double>(totalBases)
+				<< "\t" << totalBases<< std::endl;
+
+		ratesOut << "perBaseIndel"
+				<< "\t" << (insertions + deletions)
+				<< "\t" << (insertions + deletions)/static_cast<double>(totalBases)
+				<< "\t" << totalBases<< std::endl;
+
+		ratesOut << "perBaseSubstion"
+				<< "\t" << (insertions + deletions + baseSubstitions)
+				<< "\t" << (insertions + deletions + baseSubstitions)/static_cast<double>(totalBases)
+				<< "\t" << totalBases<< std::endl;
 	}
 
 	//base substitution rates per position
