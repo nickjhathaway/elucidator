@@ -53,11 +53,14 @@ int bedExpRunner::getInterveningRegions(const njh::progutils::CmdArgs & inputCom
 	bfs::path bedFile = "";
 	bfs::path genomeFnp = "";
 	OutOptions outOpts(bfs::path(""), ".bed");
+	bool addMissingChromosomes = false;
 	uint32_t padding = 0;
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(bedFile, "--bed", "Bed file", true);
 	setUp.setOption(padding, "--padding", "Padding to add to the end and beginning of regions");
 	setUp.setOption(genomeFnp, "--genome", "Genome file, this is used to determine the length of the chromosome", true);
+	setUp.setOption(addMissingChromosomes, "--addMissingChromosomes", "Add whole chromosome if no windows provided for it");
+
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 	//get chrom lengths
@@ -78,10 +81,14 @@ int bedExpRunner::getInterveningRegions(const njh::progutils::CmdArgs & inputCom
 		BedUtility::extendLeftRight(*reg, padding, padding, njh::mapAt(chromosomeLengths,reg->chrom_));
 	}
 	auto mergedRegions = mergeAndSort(inRegions);
+
+	std::set<std::string> usedChromosomes;
+
 	//do the first region from beginning of chromosome
 	if(0 != mergedRegions.front().start_){
 		GenomicRegion front("", mergedRegions.front().chrom_, 0, mergedRegions.front().start_, false);
 		out << front.genBed3RecordCore().toDelimStr() << std::endl;
+		usedChromosomes.emplace(front.chrom_);
 	}
 	if(mergedRegions.size() > 1){
 		for(const auto regPos : iter::range<uint32_t>(1, mergedRegions.size())){
@@ -89,15 +96,18 @@ int bedExpRunner::getInterveningRegions(const njh::progutils::CmdArgs & inputCom
 				//on same chromosome, just do the region inbetween the two regions
 				GenomicRegion inbetween("", mergedRegions[regPos].chrom_, mergedRegions[regPos-1].end_, mergedRegions[regPos].start_, false);
 				out << inbetween.genBed3RecordCore().toDelimStr() << std::endl;
+				usedChromosomes.emplace(inbetween.chrom_);
 			} else {
 				//start of a new chromsome need to add the back of the last chromosome and the front of current chromosome
 				if(mergedRegions[regPos-1].end_ != njh::mapAt(chromosomeLengths,mergedRegions[regPos-1].chrom_)){
 					GenomicRegion back("", mergedRegions[regPos-1].chrom_,mergedRegions[regPos-1].end_, njh::mapAt(chromosomeLengths,mergedRegions[regPos-1].chrom_), false);
 					out << back.genBed3RecordCore().toDelimStr() << std::endl;
+					usedChromosomes.emplace(back.chrom_);
 				}
 				if(0 != mergedRegions[regPos].start_){
 					GenomicRegion front("", mergedRegions[regPos].chrom_, 0, mergedRegions[regPos].start_, false);
 					out << front.genBed3RecordCore().toDelimStr() << std::endl;
+					usedChromosomes.emplace(front.chrom_);
 				}
 			}
 		}
@@ -106,8 +116,142 @@ int bedExpRunner::getInterveningRegions(const njh::progutils::CmdArgs & inputCom
 	if(mergedRegions.back().end_ != njh::mapAt(chromosomeLengths,mergedRegions.back().chrom_)){
 		GenomicRegion back("", mergedRegions.back().chrom_,mergedRegions.back().end_, njh::mapAt(chromosomeLengths,mergedRegions.back().chrom_), false);
 		out << back.genBed3RecordCore().toDelimStr() << std::endl;
+		usedChromosomes.emplace(back.chrom_);
+	}
+	//add the whole chromosome if no input regions on it
+	if(addMissingChromosomes){
+		for(const auto & chrom : chromosomeLengths){
+			if(!njh::in(chrom.first, usedChromosomes)){
+				GenomicRegion chromosome(chrom.first, chrom.first, 0, chrom.second,false);
+				out << chromosome.genBed3RecordCore().toDelimStr() << std::endl;
+			}
+		}
 	}
 
+	return 0;
+}
+
+
+std::vector<GenomicRegion> createWindowsWithinRegion(
+		const GenomicRegion & region, uint32_t windowSize, uint32_t windowStep,
+		bool includeRemainer = false) {
+	std::vector<GenomicRegion> ret;
+	if (region.getLen() >= windowSize) {
+		uint32_t start = 0;
+		while (start + windowSize <= region.getLen()) {
+			ret.emplace_back("", region.chrom_, region.start_ + start,
+					region.start_ + start + windowSize, region.reverseSrand_);
+			ret.back().setUidWtihCoordsStrand();
+			start += windowStep;
+		}
+		if (start < region.getLen() && region.getLen() - start > 0
+				&& includeRemainer) {
+			ret.emplace_back("", region.chrom_, region.start_ + start, region.end_,
+					region.reverseSrand_);
+			ret.back().setUidWtihCoordsStrand();
+		}
+	} else if (includeRemainer) {
+		ret.emplace_back(region);
+		ret.back().setUidWtihCoordsStrand();
+	}
+	return ret;
+}
+
+
+int bedExpRunner::createWindowsInbetweenRegions(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path bedFile = "";
+	bfs::path genomeFnp = "";
+	OutOptions outOpts(bfs::path(""), ".bed");
+	uint32_t padding = 0;
+	uint32_t step = 50;
+	uint32_t windowSize = 200;
+	uint32_t minLen = 0;
+	bool addMissingChromosomes = false;
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(step, "--step", "step");
+	setUp.setOption(windowSize, "--windowSize", "windowSize");
+	minLen = windowSize;
+	setUp.setOption(minLen, "--minLen", "minimum length");
+	setUp.setOption(bedFile, "--bed", "Bed file", true);
+	setUp.setOption(padding, "--padding", "Padding to add to the end and beginning of regions");
+	setUp.setOption(genomeFnp, "--genome", "Genome file, this is used to determine the length of the chromosome", true);
+	setUp.setOption(addMissingChromosomes, "--addMissingChromosomes", "Add whole chromosome if no windows provided for it");
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+	//get chrom lengths
+	std::unordered_map<std::string, uint32_t> chromosomeLengths;
+	{
+		seqInfo seq;
+		auto genomeOpts = SeqIOOptions::genFastaIn(genomeFnp);
+		genomeOpts.includeWhiteSpaceInName_ = false;
+		SeqInput reader(genomeOpts);
+		reader.openIn();
+		while(reader.readNextRead(seq)){
+			chromosomeLengths[seq.name_] = len(seq);
+		}
+	}
+	OutputStream out(outOpts);
+	auto inRegions = getBed3s(bedFile);
+	for(auto & reg : inRegions){
+		BedUtility::extendLeftRight(*reg, padding, padding, njh::mapAt(chromosomeLengths,reg->chrom_));
+	}
+	auto mergedRegions = mergeAndSort(inRegions);
+
+	auto createWindowsWrite = [&out,&minLen,&windowSize,&step](const GenomicRegion & region){
+		auto windows = createWindowsWithinRegion(region, windowSize, step, true);
+		for(const auto & window : windows){
+			if(window.getLen() >= minLen){
+				out << window.genBedRecordCore().toDelimStr() << std::endl;
+			}
+		}
+	};
+	std::set<std::string> usedChromosomes;
+
+	//do the first region from beginning of chromosome
+	if(0 != mergedRegions.front().start_){
+		GenomicRegion front("", mergedRegions.front().chrom_, 0, mergedRegions.front().start_, false);
+		createWindowsWrite(front);
+		usedChromosomes.emplace(front.chrom_);
+	}
+
+	if(mergedRegions.size() > 1){
+		for(const auto regPos : iter::range<uint32_t>(1, mergedRegions.size())){
+			if (mergedRegions[regPos - 1].chrom_ == mergedRegions[regPos].chrom_) {
+				//on same chromosome, just do the region inbetween the two regions
+				GenomicRegion inbetween("", mergedRegions[regPos].chrom_, mergedRegions[regPos-1].end_, mergedRegions[regPos].start_, false);
+				createWindowsWrite(inbetween);
+				usedChromosomes.emplace(inbetween.chrom_);
+			} else {
+				//start of a new chromsome need to add the back of the last chromosome and the front of current chromosome
+				if(mergedRegions[regPos-1].end_ != njh::mapAt(chromosomeLengths,mergedRegions[regPos-1].chrom_)){
+					GenomicRegion back("", mergedRegions[regPos-1].chrom_,mergedRegions[regPos-1].end_, njh::mapAt(chromosomeLengths,mergedRegions[regPos-1].chrom_), false);
+					createWindowsWrite(back);
+					usedChromosomes.emplace(back.chrom_);
+				}
+				if(0 != mergedRegions[regPos].start_){
+					GenomicRegion front("", mergedRegions[regPos].chrom_, 0, mergedRegions[regPos].start_, false);
+					createWindowsWrite(front);
+					usedChromosomes.emplace(front.chrom_);
+				}
+			}
+		}
+	}
+	//do the last region to the end of the chromosome
+	if(mergedRegions.back().end_ != njh::mapAt(chromosomeLengths,mergedRegions.back().chrom_)){
+		GenomicRegion back("", mergedRegions.back().chrom_,mergedRegions.back().end_, njh::mapAt(chromosomeLengths,mergedRegions.back().chrom_), false);
+		createWindowsWrite(back);
+		usedChromosomes.emplace(back.chrom_);
+	}
+
+	if(addMissingChromosomes){
+		for(const auto & chrom : chromosomeLengths){
+			if(!njh::in(chrom.first, usedChromosomes)){
+				GenomicRegion chromosome(chrom.first, chrom.first, 0, chrom.second,false);
+				createWindowsWrite(chromosome);
+			}
+		}
+	}
 
 	return 0;
 }

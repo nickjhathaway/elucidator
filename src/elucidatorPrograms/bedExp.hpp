@@ -53,7 +53,6 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	static int bedUnqiue(const njh::progutils::CmdArgs & inputCommands);
 	static int getFirstRegionPerChrom(const njh::progutils::CmdArgs & inputCommands);
 	static int getLastRegionPerChrom(const njh::progutils::CmdArgs & inputCommands);
-
 	static int fillInRegionsByBestScore(const njh::progutils::CmdArgs & inputCommands);
 
 	//combing bed files
@@ -98,6 +97,7 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 
 	//getting new regions
 	static int getInterveningRegions(const njh::progutils::CmdArgs & inputCommands);
+	static int createWindowsInbetweenRegions(const njh::progutils::CmdArgs & inputCommands);
 
 	//coverage
 	static int roughSmoothingForBedCoverage(const njh::progutils::CmdArgs & inputCommands);
