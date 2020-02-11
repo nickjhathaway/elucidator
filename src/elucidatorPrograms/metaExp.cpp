@@ -43,9 +43,47 @@ metaExpRunner::metaExpRunner()
 					 addFunc("createTableFromSeqs", createTableFromSeqs, false),
 					 addFunc("printMetaFieldsFromSeqs", printMetaFieldsFromSeqs, false),
 					 addFunc("addMetaFieldToAll", addMetaFieldToAll, false),
+					 addFunc("renameSeqsWithMetaField", renameSeqsWithMetaField, false),
 
            },//
           "metaExp") {}
+
+
+
+
+
+int metaExpRunner::renameSeqsWithMetaField(const njh::progutils::CmdArgs & inputCommands){
+	VecStr metaFields;
+	std::string sep = "-";
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(sep, "--sep", "Separator between meta fields if using multiple");
+	setUp.setOption(metaFields, "--metaFields", "Meta fields within name to use", true);
+	setUp.processDefaultReader(true);
+	setUp.finishSetUp(std::cout);
+	seqInfo seq;
+	SeqIO reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	reader.openOut();
+	while (reader.readNextRead(seq)) {
+		if (MetaDataInName::nameHasMetaData(seq.name_)) {
+			MetaDataInName meta(seq.name_);
+			VecStr metaData;
+			for (const auto & field : metaFields) {
+				metaData.emplace_back(meta.getMeta(field));
+			}
+			seq.name_ = njh::conToStr(metaData, sep);
+		} else {
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << seq.name_
+					<< " doesn't contain meta data" << "\n";
+			throw std::runtime_error { ss.str() };
+		}
+		reader.write(seq);
+	}
+	return 0;
+}
 
 
 int metaExpRunner::addMetaBySampleName(const njh::progutils::CmdArgs & inputCommands){

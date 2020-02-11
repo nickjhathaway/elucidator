@@ -46,6 +46,10 @@ class metaExpRunner : public njh::progutils::ProgramRunner {
 
 
   static int addMetaFieldToAll(const njh::progutils::CmdArgs & inputCommands);
+
+  static int renameSeqsWithMetaField(const njh::progutils::CmdArgs & inputCommands);
+
+
 };
 
 } //  namespace njhseq
