@@ -213,12 +213,16 @@ uint64_t runPcr(uint64_t intErrorRate, uint32_t numThreads, uint32_t pcrRounds,
 					}
 				}
 			};
-			std::vector<std::thread> threads;
-			for (uint32_t thread = 0; thread < numThreads; ++thread) {
-				threads.emplace_back(std::thread(mutate,thread));
-			}
-			for(auto & t : threads){
-				t.join();
+			if(numThreads <=1){
+				mutate(0);
+			}else{
+				std::vector<std::thread> threads;
+				for (uint32_t thread = 0; thread < numThreads; ++thread) {
+					threads.emplace_back(std::thread(mutate,thread));
+				}
+				for(auto & t : threads){
+					t.join();
+				}
 			}
 		} else {
 			auto currentMuts = genMutCounts(gens.front(), duplicatingAmount, seq.size(),intErrorRate);
@@ -625,13 +629,17 @@ std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> sampleReadsWithou
 				}
 			};
 
-	std::vector<std::thread> threads;
-	for(uint32_t thread = 0; thread < numThreads; ++thread){
-		threads.emplace_back(std::thread(finishPCR, thread));
-	}
+	if(numThreads <=1){
+		finishPCR(0);
+	}else{
+		std::vector<std::thread> threads;
+		for(uint32_t thread = 0; thread < numThreads; ++thread){
+			threads.emplace_back(std::thread(finishPCR, thread));
+		}
 
-	for(auto & thread : threads){
-		thread.join();
+		for(auto & thread : threads){
+			thread.join();
+		}
 	}
 	return ret;
 }
@@ -747,13 +755,17 @@ std::pair<uint64_t, uint64_t> sampleReadsWithoutReplacementFinishPCR(
 				}
 			};
 
-	std::vector<std::thread> threads;
-	for(uint32_t thread = 0; thread < numThreads; ++thread){
-		threads.emplace_back(std::thread(finishPCR, thread));
-	}
+	if(numThreads <=1){
+		finishPCR(0);
+	}else{
+		std::vector<std::thread> threads;
+		for(uint32_t thread = 0; thread < numThreads; ++thread){
+			threads.emplace_back(std::thread(finishPCR, thread));
+		}
 
-	for(auto & thread : threads){
-		thread.join();
+		for(auto & thread : threads){
+			thread.join();
+		}
 	}
 	return ret;
 }

@@ -564,7 +564,7 @@ int bamExpRunner::bamMulticov(const njh::progutils::CmdArgs & inputCommands){
 
 	njh::concurrent::LockableVec<std::shared_ptr<BamFnpRegionPair>> pairsList(pairs);
 
-	auto getCov = [&pairsList](){
+	std::function<void()> getCov = [&pairsList](){
 		std::shared_ptr<BamFnpRegionPair> val;
 		while(pairsList.getVal(val)){
 			BamTools::BamReader bReader;
@@ -581,14 +581,7 @@ int bamExpRunner::bamMulticov(const njh::progutils::CmdArgs & inputCommands){
 	};
 
 	{
-		std::vector<std::thread> threads;
-		for(uint32_t t = 0; t < numThreads; ++t){
-			threads.emplace_back(std::thread(getCov));
-		}
-
-		for(auto & t : threads){
-			t.join();
-		}
+		njh::concurrent::runVoidFunctionThreaded(getCov, numThreads);
 	}
 
 	VecStr header = {"chrom", "start", "end", "name", "score", "strand"};
@@ -619,7 +612,7 @@ int bamExpRunner::bamMulticov(const njh::progutils::CmdArgs & inputCommands){
 		++regRowCount;
 	}
 	pairsList.reset();
-	auto fillTable = [&output, &pairsList, &regUidToRowPos, &bamFnpToCol](){
+	std::function<void()> fillTable = [&output, &pairsList, &regUidToRowPos, &bamFnpToCol](){
 		std::shared_ptr<BamFnpRegionPair> val;
 		while(pairsList.getVal(val)){
 			output.content_[regUidToRowPos[val->regUid_]][bamFnpToCol[val->bamFname_]] = estd::to_string(val->coverage_);
@@ -627,14 +620,7 @@ int bamExpRunner::bamMulticov(const njh::progutils::CmdArgs & inputCommands){
 	};
 
 	{
-		std::vector<std::thread> threads;
-		for(uint32_t t = 0; t < numThreads; ++t){
-			threads.emplace_back(std::thread(fillTable));
-		}
-
-		for(auto & t : threads){
-			t.join();
-		}
+		njh::concurrent::runVoidFunctionThreaded(fillTable, numThreads);
 	}
 
 	if(noHeader){
@@ -753,7 +739,7 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 
 	njh::concurrent::LockableVec<std::shared_ptr<BamFnpRegionPair>> pairsList(pairs);
 
-	auto getCov = [&pairsList,&insertSizeCutOff,&percentInRegion](){
+	std::function<void()> getCov = [&pairsList,&insertSizeCutOff,&percentInRegion](){
 		std::shared_ptr<BamFnpRegionPair> val;
 		while(pairsList.getVal(val)){
 			BamTools::BamReader bReader;
@@ -791,14 +777,7 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 	};
 
 	{
-		std::vector<std::thread> threads;
-		for(uint32_t t = 0; t < numThreads; ++t){
-			threads.emplace_back(std::thread(getCov));
-		}
-
-		for(auto & t : threads){
-			t.join();
-		}
+		njh::concurrent::runVoidFunctionThreaded(getCov, numThreads);
 	}
 
 	VecStr header = {"#chrom", "start", "end", "name", "score", "strand"};
@@ -862,7 +841,7 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 	}
 
 	pairsList.reset();
-	auto fillTables = [&outputTotalPairs,&outputProperPairs,&outputMateUnmappedPairs,&outputDiscordantPairs, &pairsList, &regUidToRowPos, &bamFnpToCol](){
+	std::function<void()> fillTables = [&outputTotalPairs,&outputProperPairs,&outputMateUnmappedPairs,&outputDiscordantPairs, &pairsList, &regUidToRowPos, &bamFnpToCol](){
 		std::shared_ptr<BamFnpRegionPair> val;
 		while(pairsList.getVal(val)){
 			outputTotalPairs.content_[regUidToRowPos[val->regUid_]][bamFnpToCol[val->bamFname_]] = estd::to_string(val->totalPairCnt_);
@@ -873,11 +852,7 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 	};
 
 	{
-		std::vector<std::thread> threads;
-		for(uint32_t t = 0; t < numThreads; ++t){
-			threads.emplace_back(std::thread(fillTables));
-		}
-		njh::concurrent::joinAllJoinableThreads(threads);
+		njh::concurrent::runVoidFunctionThreaded(fillTables, numThreads);
 	}
 
 	if(noHeader){
@@ -989,7 +964,7 @@ int bamExpRunner::bamMulticovBasesRough(const njh::progutils::CmdArgs & inputCom
 
 	njh::concurrent::LockableVec<std::shared_ptr<BamFnpRegionPair>> pairsList(pairs);
 
-	auto getCov = [&pairsList,&countDups,&mapQualityCutOff](){
+	std::function<void()> getCov = [&pairsList,&countDups,&mapQualityCutOff](){
 		std::shared_ptr<BamFnpRegionPair> val;
 		while(pairsList.getVal(val)){
 			BamTools::BamReader bReader;
@@ -1015,14 +990,7 @@ int bamExpRunner::bamMulticovBasesRough(const njh::progutils::CmdArgs & inputCom
 	};
 
 	{
-		std::vector<std::thread> threads;
-		for(uint32_t t = 0; t < numThreads; ++t){
-			threads.emplace_back(std::thread(getCov));
-		}
-
-		for(auto & t : threads){
-			t.join();
-		}
+		njh::concurrent::runVoidFunctionThreaded(getCov, numThreads);
 	}
 
 	VecStr header = {"chrom", "start", "end", "name", "score", "strand"};
@@ -1053,7 +1021,7 @@ int bamExpRunner::bamMulticovBasesRough(const njh::progutils::CmdArgs & inputCom
 		++regRowCount;
 	}
 	pairsList.reset();
-	auto fillTable = [&output, &pairsList, &regUidToRowPos, &bamFnpToCol](){
+	std::function<void()> fillTable = [&output, &pairsList, &regUidToRowPos, &bamFnpToCol](){
 		std::shared_ptr<BamFnpRegionPair> val;
 		while(pairsList.getVal(val)){
 			output.content_[regUidToRowPos[val->regUid_]][bamFnpToCol[val->bamFname_]] = estd::to_string(val->coverage_);
@@ -1061,14 +1029,7 @@ int bamExpRunner::bamMulticovBasesRough(const njh::progutils::CmdArgs & inputCom
 	};
 
 	{
-		std::vector<std::thread> threads;
-		for(uint32_t t = 0; t < numThreads; ++t){
-			threads.emplace_back(std::thread(fillTable));
-		}
-
-		for(auto & t : threads){
-			t.join();
-		}
+		njh::concurrent::runVoidFunctionThreaded(fillTable, numThreads);
 	}
 	if(noHeader){
 		output.hasHeader_ = false;
@@ -1348,7 +1309,7 @@ int bamExpRunner::getInsertSizesStats(const njh::progutils::CmdArgs & inputComma
 	GenomeRegionsGenerator regionFactory(regions, genPars);
 	std::atomic_uint32_t totalCount{0};
 
-	auto getInsertSizes = [&insertSizesMut,&insertSizes,&bPool,&regionFactory,&hardInsertSizeCutOff,&mapQualityCutOff,&totalCount,&testNum](){
+	std::function<void()> getInsertSizes = [&insertSizesMut,&insertSizes,&bPool,&regionFactory,&hardInsertSizeCutOff,&mapQualityCutOff,&totalCount,&testNum](){
 		auto bReader = bPool.popReader();
 		GenomicRegion reg;
 		std::unordered_map<std::string, std::vector<uint32_t>> currentInsertSizes;
@@ -1388,11 +1349,7 @@ int bamExpRunner::getInsertSizesStats(const njh::progutils::CmdArgs & inputComma
 			}
 		}
 	};
-	std::vector<std::thread> threads;
-	for(uint32_t t = 0; t < numThreads; ++t){
-		threads.emplace_back(getInsertSizes);
-	}
-	njh::concurrent::joinAllThreads(threads);
+	njh::concurrent::runVoidFunctionThreaded(getInsertSizes, numThreads);
 
 
 

@@ -382,12 +382,16 @@ void PCRSimulator::runPcr(uint32_t numThreads,
 						}
 					}
 				};
-				std::vector<std::thread> threads;
-				for (uint32_t thread = 0; thread < numThreads; ++thread) {
-					threads.emplace_back(std::thread(mutate,thread));
-				}
-				for(auto & t : threads){
-					t.join();
+				if(numThreads <=1){
+					mutate(0);
+				}else{
+					std::vector<std::thread> threads;
+					for (uint32_t thread = 0; thread < numThreads; ++thread) {
+						threads.emplace_back(std::thread(mutate,thread));
+					}
+					for(auto & t : threads){
+						t.join();
+					}
 				}
 				if(verbose_){
 					std::cout << "Round: " << round << std::endl;
@@ -682,11 +686,15 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 								};
 
 								{
-									std::vector<std::thread> threads;
-									for(uint32_t t = 0; t < numThreads; ++t){
-										threads.emplace_back(genPartials,t);
+									if(numThreads <=1){
+										genPartials(0);
+									}else{
+										std::vector<std::thread> threads;
+										for(uint32_t t = 0; t < numThreads; ++t){
+											threads.emplace_back(genPartials,t);
+										}
+										njh::concurrent::joinAllThreads(threads);
 									}
-									njh::concurrent::joinAllThreads(threads);
 								}
 							}
 							partialTotalAmount[seqSampled.seqBase_.name_] += partial;
@@ -770,11 +778,15 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 								};
 
 								{
-									std::vector<std::thread> threads;
-									for(uint32_t t = 0; t < numThreads; ++t){
-										threads.emplace_back(genPartials,t);
+									if(numThreads <=1){
+										genPartials(0);
+									}else{
+										std::vector<std::thread> threads;
+										for(uint32_t t = 0; t < numThreads; ++t){
+											threads.emplace_back(genPartials,t);
+										}
+										njh::concurrent::joinAllThreads(threads);
 									}
-									njh::concurrent::joinAllThreads(threads);
 								}
 
 							}
@@ -1008,11 +1020,15 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 						};
 
 						{
-							std::vector<std::thread> threads;
-							for(uint32_t t = 0; t < numThreads; ++t){
-								threads.emplace_back(genPartials,t);
+							if(numThreads <=1){
+								genPartials(0);
+							}else{
+								std::vector<std::thread> threads;
+								for(uint32_t t = 0; t < numThreads; ++t){
+									threads.emplace_back(genPartials,t);
+								}
+								njh::concurrent::joinAllThreads(threads);
 							}
-							njh::concurrent::joinAllThreads(threads);
 						}
 					}
 					std::unordered_map<uint32_t, uint32_t> totalsForRounds;
@@ -1331,13 +1347,17 @@ std::unordered_map<std::string, PCRSimulator::SimHapCounts::MutInfo> PCRSimulato
 				}
 			};
 
-	std::vector<std::thread> threads;
-	for(uint32_t thread = 0; thread < numThreads; ++thread){
-		threads.emplace_back(std::thread(finishPCR, thread));
-	}
+	if(numThreads <=1){
+		finishPCR(0);
+	}else{
+		std::vector<std::thread> threads;
+		for(uint32_t thread = 0; thread < numThreads; ++thread){
+			threads.emplace_back(std::thread(finishPCR, thread));
+		}
 
-	for(auto & thread : threads){
-		thread.join();
+		for(auto & thread : threads){
+			thread.join();
+		}
 	}
 	return ret;
 }

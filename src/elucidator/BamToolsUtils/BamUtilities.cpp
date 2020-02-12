@@ -138,7 +138,7 @@ void RunCoverageFinderMulti(const RunCoverageFinderMultiPars & pars){
 	GenomeRegionSlider slider(bReaderForRefData.GetReferenceData(), pars.window, pars.step);
 
 	auto refData = bReaderForRefData.GetReferenceData();
-	auto getCov = [&slider,&bamFnps,&outMut,&out,&refData, &pars](){
+	std::function<void()> getCov = [&slider,&bamFnps,&outMut,&out,&refData, &pars](){
 		std::vector<GenomicRegion> regions;
 		while(slider.getRegions(regions, pars.regionBatchSize)){
 			std::vector<std::vector<BamFnpRegionPair>> allCoverages;
@@ -196,13 +196,7 @@ void RunCoverageFinderMulti(const RunCoverageFinderMultiPars & pars){
 		}
 	};
 	{
-		std::vector<std::thread> threads;
-		for(uint32_t t = 0; t < pars.numThreads; ++t){
-			threads.emplace_back(std::thread(getCov));
-		}
-		for(auto & t : threads){
-			t.join();
-		}
+		njh::concurrent::runVoidFunctionThreaded(getCov, pars.numThreads);
 	}
 }
 
@@ -364,7 +358,7 @@ std::vector<std::shared_ptr<Bed6RecordCore>> RunRegionRefinement(const RegionRef
 	OutputStream out(pars.outOpts);
 	auto beds = getBeds(pars.bedFnp);
 	njh::concurrent::LockableQueue<std::shared_ptr<Bed6RecordCore>> bedQueue(beds);
-	auto refineRegions =[&bamPool,&bedQueue,&pars](){
+	std::function<void()> refineRegions =[&bamPool,&bedQueue,&pars](){
 		std::shared_ptr<Bed6RecordCore> region;
 		BamTools::BamAlignment bAln;
 		while(bedQueue.getVal(region)){
@@ -411,11 +405,8 @@ std::vector<std::shared_ptr<Bed6RecordCore>> RunRegionRefinement(const RegionRef
 		}
 	};
 
-	std::vector<std::thread> threads;
-	for(uint32_t t = 0; t < pars.numThreads; ++t){
-		threads.emplace_back(std::thread(refineRegions));
-	}
-	njh::concurrent::joinAllThreads(threads);
+	njh::concurrent::runVoidFunctionThreaded(refineRegions, pars.numThreads);
+
 	for(const auto & bed : beds){
 		out << bed->toDelimStrWithExtra() << std::endl;
 	}

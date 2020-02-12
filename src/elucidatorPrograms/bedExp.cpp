@@ -1652,50 +1652,46 @@ int bedExpRunner::reorientBasedOnSingleReadsOrientationCounts(const njh::proguti
 	njh::files::checkExistenceThrow(bamFnp, __PRETTY_FUNCTION__);
 	bool debug = setUp.pars_.debug_	;
 	concurrent::BamReaderPool bamPool(bamFnp, numThreads);
-		bamPool.openBamFile();
-		OutputStream out(outOpts);
-		auto beds = getBeds(bedFnp);
-		njh::concurrent::LockableQueue<std::shared_ptr<Bed6RecordCore>> bedQueue(beds);
-		auto refineRegions =[&bamPool,&bedQueue,&debug](){
-			std::shared_ptr<Bed6RecordCore> region;
-			BamTools::BamAlignment bAln;
-			while(bedQueue.getVal(region)){
-				auto bamReader = bamPool.popReader();
-				setBamFileRegionThrow(*bamReader, *region);
-				uint32_t forCount = 0;
-				uint32_t revCount  = 0;
-				while(bamReader->GetNextAlignmentCore(bAln)){
-					if(!bAln.IsPaired()){
-						if(bAln.IsReverseStrand() ){
-							++revCount;
-						}
-						if(!bAln.IsReverseStrand() ){
-							++forCount;
-						}
+	bamPool.openBamFile();
+	OutputStream out(outOpts);
+	auto beds = getBeds(bedFnp);
+	njh::concurrent::LockableQueue<std::shared_ptr<Bed6RecordCore>> bedQueue(beds);
+	std::function<void()> refineRegions =[&bamPool,&bedQueue,&debug](){
+		std::shared_ptr<Bed6RecordCore> region;
+		BamTools::BamAlignment bAln;
+		while(bedQueue.getVal(region)){
+			auto bamReader = bamPool.popReader();
+			setBamFileRegionThrow(*bamReader, *region);
+			uint32_t forCount = 0;
+			uint32_t revCount  = 0;
+			while(bamReader->GetNextAlignmentCore(bAln)){
+				if(!bAln.IsPaired()){
+					if(bAln.IsReverseStrand() ){
+						++revCount;
+					}
+					if(!bAln.IsReverseStrand() ){
+						++forCount;
 					}
 				}
-				if((revCount + forCount >0 ) && static_cast<double>(revCount)/(forCount + revCount) > 0.50){
-					region->strand_ = '-';
-				}else{
-					region->strand_ = '+';
-				}
-				if(debug){
-					MetaDataInName meta;
-					meta.addMeta("forCount", forCount);
-					meta.addMeta("revCount", revCount);
-					region->extraFields_.emplace_back(meta.createMetaName());
-				}
 			}
-		};
+			if((revCount + forCount >0 ) && static_cast<double>(revCount)/(forCount + revCount) > 0.50){
+				region->strand_ = '-';
+			}else{
+				region->strand_ = '+';
+			}
+			if(debug){
+				MetaDataInName meta;
+				meta.addMeta("forCount", forCount);
+				meta.addMeta("revCount", revCount);
+				region->extraFields_.emplace_back(meta.createMetaName());
+			}
+		}
+	};
 
-		std::vector<std::thread> threads;
-		for(uint32_t t = 0; t < numThreads; ++t){
-			threads.emplace_back(std::thread(refineRegions));
-		}
-		njh::concurrent::joinAllThreads(threads);
-		for(const auto & bed : beds){
-			out << bed->toDelimStrWithExtra() << std::endl;
-		}
+	njh::concurrent::runVoidFunctionThreaded(refineRegions, numThreads);
+	for(const auto & bed : beds){
+		out << bed->toDelimStrWithExtra() << std::endl;
+	}
 
 
 	return 0;

@@ -571,7 +571,7 @@ int seqUtilsInfoRunner::oldQuickHaplotypeInformationAndVariants(const njh::progu
 
 					//
 					//std::cout << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
-					auto typeOnChrom = [&bamPool,&alnPool,&proteinSeqOuts,&proteinSeqOutsMut,
+					std::function<void()> typeOnChrom = [&bamPool,&alnPool,&proteinSeqOuts,&proteinSeqOutsMut,
 															&chromRegionsVec,&refData,&genes,
 															&geneInfos,&alnRegionToGeneIds,&transferInfoMut,
 															&setUp,&twoBitFnp,&aaTyper,
@@ -650,12 +650,7 @@ int seqUtilsInfoRunner::oldQuickHaplotypeInformationAndVariants(const njh::progu
 						}
 					};
 
-					std::vector<std::thread> threads;
-					for(uint32_t t = 0; t < numOfThreadsToUse; ++t){
-						threads.emplace_back(typeOnChrom);
-					}
-					njh::concurrent::joinAllJoinableThreads(threads);
-
+					njh::concurrent::runVoidFunctionThreaded(typeOnChrom, numOfThreadsToUse);
 
 					for(auto & geneVarInfo : variantInfoPerGene){
 						//std::cout << geneVarInfo.first << " : "<< "geneVarInfo.second.snps: " << geneVarInfo.second.snps.size() << std::endl;

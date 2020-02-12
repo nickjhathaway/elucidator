@@ -70,7 +70,7 @@ int bedExpRunner::roughSmoothingForBedCoverage(const njh::progutils::CmdArgs & i
 	njh::iota<uint32_t>(regionsPos, 0);
 	njh::concurrent::LockableVec<uint32_t> regionsPosQueue(regionsPos);
 
-	auto roundRegions = [&regionsPosQueue,&regions,
+	std::function<void()> roundRegions = [&regionsPosQueue,&regions,
 											 &outTable,&sampToColPos,&coverageBySample,
 											 &samples,&within](){
 		uint32_t pos = std::numeric_limits<uint32_t>::max();
@@ -168,11 +168,7 @@ int bedExpRunner::roughSmoothingForBedCoverage(const njh::progutils::CmdArgs & i
 		}
 	};
 
-	std::vector<std::thread> threads;
-	for(uint32_t t = 0; t < numThreads; ++t){
-		threads.emplace_back(roundRegions);
-	}
-	njh::concurrent::joinAllThreads(threads);
+	njh::concurrent::runVoidFunctionThreaded(roundRegions, numThreads);
 	outTable.outPutContents(out, "\t");
 	return 0;
 }

@@ -210,7 +210,7 @@ int genExpRunner::evaluateContigsWithBowtie2(const njh::progutils::CmdArgs & inp
 	}
 	//align to genomes in parallel
 	njh::concurrent::LockableQueue<std::string> genomesQueue(getVectorOfMapKeys(gMapper.genomes_));
-	auto alignToGenome = [&setUp,&genomesQueue,&gMapper,&bRunner,&tempInOpts](){
+	std::function<void()> alignToGenome = [&setUp,&genomesQueue,&gMapper,&bRunner,&tempInOpts](){
 		std::string genome = "";
 		while(genomesQueue.getVal(genome)){
 			bfs::path genomeDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{genome});
@@ -237,11 +237,8 @@ int genExpRunner::evaluateContigsWithBowtie2(const njh::progutils::CmdArgs & inp
 		}
 	};
 
-	std::vector<std::thread> threads;
-	for(uint32_t t = 0; t < numThreads; ++t){
-		threads.emplace_back(std::thread(alignToGenome));
-	}
-	njh::concurrent::joinAllThreads(threads);
+
+	njh::concurrent::runVoidFunctionThreaded(alignToGenome, numThreads);
 
 	for(const auto & genome : gMapper.genomes_){
 		bfs::path genomeDir = njh::files::make_path(setUp.pars_.directoryName_, genome.first);

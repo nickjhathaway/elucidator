@@ -65,7 +65,7 @@ int readSimulatorRunner::createIlluminaErrorProfile(
 		concurrent::BamReaderPool bamPools(setUp.pars_.ioOptions_.firstName_, numThreads);
 		bamPools.openBamFile();
 		std::mutex mut;
-		auto increaseCount = [&regionsQueue,&bamPools,&mut,&profiler,&twoBitFnp,&refData,&setUp,&lengthLimit](){
+		std::function<void()> increaseCount = [&regionsQueue,&bamPools,&mut,&profiler,&twoBitFnp,&refData,&setUp,&lengthLimit](){
 			GenomicRegion region;
 			TwoBit::TwoBitFile tReader(twoBitFnp);
 			auto bReader = bamPools.popReader();
@@ -90,11 +90,7 @@ int readSimulatorRunner::createIlluminaErrorProfile(
 				profiler.addOther(currentProfiler);
 			}
 		};
-		std::vector<std::thread> threads;
-		for(uint32_t t = 0; t < numThreads; ++t){
-			threads.emplace_back(std::thread(increaseCount));
-		}
-		njh::concurrent::joinAllJoinableThreads(threads);
+		njh::concurrent::runVoidFunctionThreaded(increaseCount, numThreads);
 	}else{
 		BamTools::BamAlignment bAln;
 		while (bReader.GetNextAlignment(bAln)) {

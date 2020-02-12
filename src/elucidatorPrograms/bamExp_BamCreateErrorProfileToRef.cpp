@@ -57,7 +57,7 @@ int bamExpRunner::BamCreateErrorProfileToRef(
 		concurrent::BamReaderPool bamPools(setUp.pars_.ioOptions_.firstName_, numThreads);
 		bamPools.openBamFile();
 		std::mutex mut;
-		auto increaseCount = [&regionsQueue,&bamPools,&mut,&twoBitFnp,&refData,&setUp,&lengthLimit,&chromLengths,&ralnPars,&profiler](){
+		std::function<void()> increaseCount = [&regionsQueue,&bamPools,&mut,&twoBitFnp,&refData,&setUp,&lengthLimit,&chromLengths,&ralnPars,&profiler](){
 			aligner alignerObj(700, gapScoringParameters(5,1,0,0,0,0));
 			GenomicRegion region;
 			TwoBit::TwoBitFile tReader(twoBitFnp);
@@ -85,11 +85,7 @@ int bamExpRunner::BamCreateErrorProfileToRef(
 				profiler.addOther(currentProfiler);
 			}
 		};
-		std::vector<std::thread> threads;
-		for(uint32_t t = 0; t < numThreads; ++t){
-			threads.emplace_back(std::thread(increaseCount));
-		}
-		njh::concurrent::joinAllJoinableThreads(threads);
+		njh::concurrent::runVoidFunctionThreaded(increaseCount, numThreads);
 	}else{
 		aligner alignerObj(700, gapScoringParameters(5,1,0,0,0,0));
 		BamTools::BamAlignment bAln;

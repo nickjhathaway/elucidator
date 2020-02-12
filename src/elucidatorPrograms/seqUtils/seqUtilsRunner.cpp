@@ -297,7 +297,7 @@ int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommand
 	std::mutex fileMut;
 	njh::ProgressBar pbar(pairFac.totalCompares_);
 
-	auto runCompare = [&pairFac,&fileMut,&profileInfoFile, &tempFile,&setUp,&inReads, &alnPool,&pbar,&alignFunc](){
+	std::function<void()> runCompare = [&pairFac,&fileMut,&profileInfoFile, &tempFile,&setUp,&inReads, &alnPool,&pbar,&alignFunc](){
 
 		auto threadId = estd::to_string(std::this_thread::get_id());
 		PairwisePairFactory::PairwisePair pair;
@@ -339,12 +339,7 @@ int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommand
 			}
 		}
 	};
-	std::vector<std::thread> threads;
-	for(uint32_t t = 0; t < numThreads; ++t){
-		threads.emplace_back(std::thread(runCompare));
-	}
-	njh::concurrent::joinAllThreads(threads);
-
+	njh::concurrent::runVoidFunctionThreaded(runCompare, numThreads);
 	if(setUp.pars_.verbose_){
 		 setUp.logRunTime(std::cout);
 	}

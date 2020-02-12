@@ -325,7 +325,7 @@ int bamExpRunner::bamDupCounts(const njh::progutils::CmdArgs & inputCommands){
 
 	njh::concurrent::LockableVec<std::shared_ptr<BamFnpRegionPair>> pairsList(pairs);
 
-	auto getCov = [&pairsList](){
+	std::function<void()> getCov = [&pairsList](){
 		std::shared_ptr<BamFnpRegionPair> val;
 		while(pairsList.getVal(val)){
 			BamTools::BamReader bReader;
@@ -347,14 +347,7 @@ int bamExpRunner::bamDupCounts(const njh::progutils::CmdArgs & inputCommands){
 	};
 
 	{
-		std::vector<std::thread> threads;
-		for(uint32_t t = 0; t < numThreads; ++t){
-			threads.emplace_back(std::thread(getCov));
-		}
-
-		for(auto & t : threads){
-			t.join();
-		}
+		njh::concurrent::runVoidFunctionThreaded(getCov, numThreads);
 	}
 
 	VecStr header = {"chrom", "start", "end", "name", "score", "strand"};

@@ -124,7 +124,7 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
   alnPool.initAligners();
 
 
-  auto compareInput = [&dontSkipSameName,&outMut,&profileInfoFile,&tempFile,&alnPool,&setUp,&inputSeqs,&refSeqs,&counter,&pBar,&posQueue,&kmerCutOff,&forceMatch](){
+  std::function<void()> compareInput = [&dontSkipSameName,&outMut,&profileInfoFile,&tempFile,&alnPool,&setUp,&inputSeqs,&refSeqs,&counter,&pBar,&posQueue,&kmerCutOff,&forceMatch](){
   	std::vector<uint32_t> subPositions;
   	auto curAligner = alnPool.popAligner();
   	while(posQueue.getVals(subPositions, 5	)){
@@ -231,11 +231,7 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 			}
   		}
 	};
-	std::vector<std::thread> threads;
-	for (uint32_t t = 0; t < numThreads; ++t) {
-		threads.emplace_back(std::thread(compareInput));
-	}
-	njh::concurrent::joinAllJoinableThreads(threads);
+  njh::concurrent::runVoidFunctionThreaded(compareInput, numThreads);
 
 	if (setUp.pars_.verbose_) {
 		setUp.logRunTime(std::cout);

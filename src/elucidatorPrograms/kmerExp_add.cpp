@@ -478,7 +478,7 @@ int kmerExpRunner::writeKmerAccerlation(const njh::progutils::CmdArgs & inputCom
 		alignPool.initAligners();
 		alignPool.outAlnDir_ = setUp.pars_.outAlnInfoDirName_;
 
-		auto compareReads = [&alignPool, &refSeqs,&nameToColorMut,&nameToColor,&reads,&positionsQueue](){
+		std::function<void()> compareReads = [&alignPool, &refSeqs,&nameToColorMut,&nameToColor,&reads,&positionsQueue](){
 			uint32_t pos = std::numeric_limits<uint32_t>::max();
 			std::unordered_map<std::string, std::string> nameToColorCurrent;
 			auto currentAligner = alignPool.popAligner();
@@ -498,14 +498,7 @@ int kmerExpRunner::writeKmerAccerlation(const njh::progutils::CmdArgs & inputCom
 				}
 			}
 		};
-
-		std::vector<std::thread> threads;
-		for(uint32_t threadNum = 0; threadNum < numThreads; ++threadNum){
-			threads.emplace_back(std::thread(compareReads));
-		}
-		for(auto & t : threads){
-			t.join();
-		}
+		njh::concurrent::runVoidFunctionThreaded(compareReads, numThreads);
 		//auto gJson = distanceGraph.toJson(2);
 		treeJson = distanceGraph.toJson(clustersizeCutOff, nameToColor);
 	}else{

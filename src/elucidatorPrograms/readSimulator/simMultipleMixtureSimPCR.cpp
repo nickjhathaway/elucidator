@@ -162,7 +162,7 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 	bool verbose = setUp.pars_.verbose_;
 	auto simAmountsDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{"simulation_sampling_info"});
 
-	auto simSample = [&samplesQueue,&extension,&sampleCountAtom,&fastqDirectory,
+	std::function<void()> simSample = [&samplesQueue,&extension,&sampleCountAtom,&fastqDirectory,
 										&lSetup,&illuminaProfileDir,&singleEnd,&refSeqs,
 										&intErrorRate, &pcrRounds, &initialPcrRounds,&verbose,
 										&keepPCRSeqs, &pcrNumThreads,&pcrEfficiency,&simAmountsDir,
@@ -463,11 +463,7 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 			}
 		}
 	};
-	std::vector<std::thread> threads;
-	for(uint32_t t = 0; t < numThreads; ++t){
-		threads.emplace_back(std::thread(simSample));
-	}
-	njh::concurrent::joinAllJoinableThreads(threads);
+	njh::concurrent::runVoidFunctionThreaded(simSample, numThreads);
 	//bind together the sampling information
 	auto bindTables = [&verbose](const std::vector<bfs::path> & files, const bfs::path & outFnp){
 		OutputStream tabOut(outFnp);
