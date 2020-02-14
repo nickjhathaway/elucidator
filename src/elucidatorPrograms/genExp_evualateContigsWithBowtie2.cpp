@@ -45,7 +45,7 @@ int genExpRunner::evaluateContigsWithBowtie2(const njh::progutils::CmdArgs & inp
   setUp.setOption(bedFnp, "--bed", "A bed file to report coverage of");
 	setUp.setOption(idsRequired,      "--idsRequired",       "IDs Required, 2 columns, 1)genome,2)ids, ids should be comma separated", "" == bedFnp);
 
-  setUp.setOption(mapperPars.gffDir_, "--gffDir", "A directory of gffs that go with the genomes");
+  setUp.setOption(mapperPars.gffDir_, "--gffDir", "A directory of gffs that go with the genomes", "" == bedFnp);
   setUp.setOption(mapperPars.gffIntersectPars_.extraAttributes_, "--gffExtraAttributes", "gff Extra Attributes");
 
   setUp.processReadInNames();
