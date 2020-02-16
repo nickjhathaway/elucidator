@@ -414,7 +414,14 @@ int genExpRunner::evaluateContigsWithBowtie2(const njh::progutils::CmdArgs & inp
 	OutOptions comparisonOpts(njh::files::make_path(setUp.pars_.directoryName_, "refComparisonInfo.tab.txt"));
 	OutputStream comparisonOut(comparisonOpts);
 
-	comparisonOut << "ReadNumber\tReadId\tBestRef\tscore\talnScore\tkDist-5\t1bIndel\t2bIndel\t>2bIndel\tlqMismatch\thqMismatch" << std::endl;
+	comparisonOut << "ReadNumber\tReadId\tBestRef\tscore\talnScore\tkDist-5\t1bIndel\t2bIndel\t>2bIndel\tlqMismatch\thqMismatch"
+			<< '\t' << "program"
+			<< '\t' << "sample"
+			<< std::endl;
+
+
+
+
 	uint32_t readNumber = 0;
 	std::unordered_map<std::string, std::vector<Bed6RecordCore>> bestRegionsByGenome;
 
@@ -479,7 +486,10 @@ int genExpRunner::evaluateContigsWithBowtie2(const njh::progutils::CmdArgs & inp
 					<< '\t' << results->comp_.twoBaseIndel_
 					<< '\t' << results->comp_.largeBaseIndel_
 					<< '\t' << results->comp_.lqMismatches_
-					<< '\t' << results->comp_.hqMismatches_ << std::endl;
+					<< '\t' << results->comp_.hqMismatches_
+					<< '\t' << program
+					<< '\t' << sample
+					<< std::endl;
 		}
 		++readNumber;
 	}
@@ -547,10 +557,21 @@ int genExpRunner::evaluateContigsWithBowtie2(const njh::progutils::CmdArgs & inp
 					<< '\t' << "*"
 					<< '\t' << "*"
 					<< '\t' << "*"
-					<< '\t' << "*" << std::endl;
+					<< '\t' << "*"
+					<< '\t' << program
+					<< '\t' << sample
+					<< std::endl;
+			/*
+			 * 		coveredCountsTab.addColumn(VecStr{program}, "program");
+		coveredCountsTab.addColumn(VecStr{sample}, "sample");
+			 */
 			++readNumber;
 		}
 	}
+
+	std::set<std::string> matchingContigs;
+	std::set<std::string> notMatchingContigs(unmappedToAllGenomes.begin(), unmappedToAllGenomes.end());
+
 	if(!unmappedToAllGenomes.empty()){
 		OutOptions unmmapedOpts(njh::files::make_path(setUp.pars_.directoryName_, "unmappedReads.txt"));
 		OutputStream unmappedOut(unmmapedOpts);
@@ -563,18 +584,43 @@ int genExpRunner::evaluateContigsWithBowtie2(const njh::progutils::CmdArgs & inp
 
 
 	{
+
 		// determine regions covered
 		std::unordered_map<std::string, std::map<uint32_t, uint32_t>> simpleCoverageCounts;
 		for(const auto & seqAlnResults : bestAlnResults){
 			for(const auto & genome : seqAlnResults.second){
 				for(const auto & res : genome.second){
 					if(amountOfErrorForCoverageCalc.passErrorProfile(res->comp_)){
+						matchingContigs.emplace(res->bAln_.Name);
 						for(uint32_t pos = res->gRegion_.start_; pos <res->gRegion_.end_; ++pos){
 							simpleCoverageCounts[res->gRegion_.chrom_][pos] += 1;
 						}
+					}else{
+						notMatchingContigs.emplace(res->bAln_.Name);
 					}
 				}
 			}
+		}
+
+		{
+			//write out matching contigs info
+			OutputStream matchInfo(njh::files::make_path(setUp.pars_.directoryName_, "contigsMatchingExpectedInfo.tab.txt"));
+			matchInfo << "program\tsample";
+			matchInfo
+					<< "\t" << "ContigsMatchingExpectedCnt"
+					<< "\t" << "ContigsMatchingExpectedFrac"
+					<< "\t" << "ContigsMatchingExpectedCnt"
+					<< "\t" << "ContigsMatchingExpectedFrac"
+					<< "\t" << "TotalContigs" << std::endl;
+			matchInfo << program
+					<< "\t" << sample
+					<< "\t" << matchingContigs.size()
+					<< "\t" << matchingContigs.size()/static_cast<double>(readNumber)
+					<< "\t" << notMatchingContigs.size()
+					<< "\t" << notMatchingContigs.size()/static_cast<double>(readNumber)
+					<< "\t" << readNumber
+					<< std::endl;
+
 		}
 
 		//getting regions that were covered but not expected
@@ -681,7 +727,8 @@ int genExpRunner::evaluateContigsWithBowtie2(const njh::progutils::CmdArgs & inp
 		}
 
 
-
+		coveredCountsTab.addColumn(VecStr{program}, "program");
+		coveredCountsTab.addColumn(VecStr{sample}, "sample");
 		coveredCountsTab.outPutContents(
 				TableIOOpts::genTabFileOut(
 						njh::files::make_path(setUp.pars_.directoryName_,

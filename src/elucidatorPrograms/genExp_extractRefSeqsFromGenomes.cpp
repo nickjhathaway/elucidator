@@ -204,10 +204,10 @@ int genExpRunner::extractRefSeqsFromGenomes(
 	//set up genome mapper;
 	gMapper = std::make_unique<MultiGenomeMapper>(genomeMappingPars);
 	//set threads;
-	if(genomeMappingPars.numThreads_ >= 4){
-		gMapper->pars_.numThreads_ = 2;
-		genomeMappingPars.numThreads_ = genomeMappingPars.numThreads_/2;
-	}
+//	if(genomeMappingPars.numThreads_ >= 4){
+//		gMapper->pars_.numThreads_ = 2;
+//		genomeMappingPars.numThreads_ = genomeMappingPars.numThreads_/2;
+//	}
 	//set gff dir
 	gMapper->pars_.gffDir_ = gffDir;
 
