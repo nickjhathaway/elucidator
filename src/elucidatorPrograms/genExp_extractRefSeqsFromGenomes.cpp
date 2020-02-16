@@ -287,7 +287,7 @@ int genExpRunner::extractRefSeqsFromGenomes(
 		njh::sort(genomeNames);
 		njh::concurrent::LockableQueue<std::string> genomeQueue(genomeNames);
 
-		std::function<void()> combineForGenome = [&gMapper,&genomeQueue,&outputDir,&regions,&combinedByGenomeMkPars](){
+		std::function<void()> combineForGenome = [&genomeQueue,&outputDir,&regions,&combinedByGenomeMkPars](){
 			std::string genome = "";
 			while(genomeQueue.getVal(genome)){
 
