@@ -623,8 +623,7 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 			}
 			for( auto & genome : allRegionsByGenome){
 				if("" != gMapper.genomes_.at(genome.first)->gffFnp_){
-					intersectBedLocsWtihGffRecordsPars interPars;
-					interPars.extraAttributes_ = mapperPars.gffIntersectPars_.extraAttributes_;
+					intersectBedLocsWtihGffRecordsPars interPars = gMapper.pars_.gffIntersectPars_;
 					interPars.gffFnp_ = gMapper.genomes_.at(genome.first)->gffFnp_;
 					intersectBedLocsWtihGffRecords(genome.second, interPars	);
 				}
@@ -1353,8 +1352,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 			}
 			for( auto & genome : allRegionsByGenome){
 				if("" != gMapper.genomes_.at(genome.first)->gffFnp_){
-					intersectBedLocsWtihGffRecordsPars interPars;
-					interPars.extraAttributes_ = mapperPars.gffIntersectPars_.extraAttributes_;
+					intersectBedLocsWtihGffRecordsPars interPars = gMapper.pars_.gffIntersectPars_;
 					interPars.gffFnp_ = gMapper.genomes_.at(genome.first)->gffFnp_;
 					intersectBedLocsWtihGffRecords(genome.second, interPars	);
 				}
