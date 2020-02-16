@@ -106,6 +106,7 @@ class genExpRunner : public njh::progutils::ProgramRunner {
 	static int bowtie2ExtractAndCompareMultiple(const njh::progutils::CmdArgs & inputCommands);
 
 	static int lastzExtractAndCompare(const njh::progutils::CmdArgs & inputCommands);
+	static int extractFromGenomesAndCompare(const njh::progutils::CmdArgs & inputCommands);
 
 
 
@@ -126,7 +127,7 @@ class genExpRunner : public njh::progutils::ProgramRunner {
 
 
 
-	static int evaluateContigsWithBowtie2(const njh::progutils::CmdArgs & inputCommands);
+	static int evaluateContigsAgainstExpected(const njh::progutils::CmdArgs & inputCommands);
 
 };
 } /* namespace njhseq */

@@ -90,8 +90,10 @@ genExpRunner::genExpRunner()
 					 addFunc("countBasesPerPosition", countBasesPerPosition, false),
 					 addFunc("translateSeqsBasedOnGFF", translateSeqsBasedOnGFF, false),
 					 addFunc("randomSampConsensusCompareToExpected", randomSampConsensusCompareToExpected, false),
-					 addFunc("evaluateContigsWithBowtie2", evaluateContigsWithBowtie2, false),
-           },//
+					 addFunc("evaluateContigsAgainstExpected", evaluateContigsAgainstExpected, false),
+					 addFunc("evaluateContigsWithBowtie2", evaluateContigsAgainstExpected, true),
+					 addFunc("extractFromGenomesAndCompare", extractFromGenomesAndCompare, false),
+           },//evaluateContigsAgainstExpected
           "genExp") {}
 
 
