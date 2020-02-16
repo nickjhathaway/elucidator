@@ -154,7 +154,7 @@ int genExpRunner::extractRefSeqsFromGenomes(
 	bool keepRefAlignments = false;
 	bool overWriteDirs = false;
 	bool keepBestOnly = false;
-
+	bool combineByGenome = false;
 	bool extendAndTrim = false;
 	uint32_t extendAndTrimLen = 10;
 	bfs::path gffDir = "";
@@ -162,6 +162,7 @@ int genExpRunner::extractRefSeqsFromGenomes(
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
+	setUp.setOption(combineByGenome, "--combineByGenome", "Combine and merge regions extracted and create a bed file for each genome");
 	setUp.setOption(extendAndTrim, "--extendAndTrim", "Extend the determine region and then trim back, can be helpful for when variation falls at the very ends of the sequence");
 	setUp.setOption(extendAndTrimLen, "--extendAndTrimLen", "When extending and trimming, use this length");
 	setUp.setOption(lzPars.identity, "--identity", "Identity to use for when searching with lastz");
@@ -204,6 +205,7 @@ int genExpRunner::extractRefSeqsFromGenomes(
 	//set up genome mapper;
 	gMapper = std::make_unique<MultiGenomeMapper>(genomeMappingPars);
 	//set threads;
+	uint32_t originalNumThreads = genomeMappingPars.numThreads_;
 	if(genomeMappingPars.numThreads_ >= 4 && regions.size() >=4){
 		gMapper->pars_.numThreads_ = 2;
 		genomeMappingPars.numThreads_ = genomeMappingPars.numThreads_/2;
@@ -275,6 +277,78 @@ int genExpRunner::extractRefSeqsFromGenomes(
 				std::cref(gMapper), t));
 	}
 	njh::concurrent::joinAllThreads(threads);
+
+
+	if(combineByGenome){
+		njh::files::MkdirPar combinedByGenomeMkPars(njh::files::make_path(outputDir, "combinedByGenome"));
+		combinedByGenomeMkPars.overWriteDir_ = overWriteDirs;
+		njh::files::makeDir(combinedByGenomeMkPars);
+		auto genomeNames = getVectorOfMapKeys(gMapper->genomes_);
+		njh::sort(genomeNames);
+		njh::concurrent::LockableQueue<std::string> genomeQueue(genomeNames);
+
+		std::function<void()> combineForGenome = [&gMapper,&genomeQueue,&outputDir,&regions,&combinedByGenomeMkPars](){
+			std::string genome = "";
+			while(genomeQueue.getVal(genome)){
+
+				std::vector<GenomicRegion> regionsForGenome;
+				std::unordered_map<bool, std::vector<GenomicRegion>> regionsbyStrand;
+				for(const auto & region : regions){
+					auto bedFnp = njh::files::make_path(outputDir, region.createUidFromCoordsStrand(), "beds", genome + "_region.bed");
+					if(bfs::exists(bedFnp)){
+						auto locForRegion = bedPtrsToGenomicRegs(getBeds(bedFnp));
+						for(const auto & loc : locForRegion){
+							regionsbyStrand[loc.reverseSrand_].emplace_back(loc);
+						}
+					}
+				}
+				std::vector<GenomicRegion> fwdRegions;
+				sortGRegionsByStart(regionsbyStrand[false]);
+				for(const auto & reg : regionsbyStrand[false]){
+					if(fwdRegions.empty()){
+						fwdRegions.emplace_back(reg);
+					}else{
+						if(reg.start_ >= fwdRegions.back().start_ && reg.start_ <= fwdRegions.back().end_){
+							fwdRegions.back().end_ = reg.end_;
+						}else{
+							fwdRegions.emplace_back(reg);
+						}
+					}
+				}
+				std::vector<GenomicRegion> revRegions;
+				sortGRegionsByStart(regionsbyStrand[true]);
+				for(const auto & reg : regionsbyStrand[true]){
+					if(revRegions.empty()){
+						revRegions.emplace_back(reg);
+					}else{
+						if(reg.start_ >= revRegions.back().start_ && reg.start_ <= revRegions.back().end_){
+							revRegions.back().end_ = reg.end_;
+						}else{
+							revRegions.emplace_back(reg);
+						}
+					}
+				}
+				addOtherVec(regionsForGenome, fwdRegions);
+				addOtherVec(regionsForGenome, revRegions);
+				sortGRegionsByStart(regionsForGenome);
+				std::vector<Bed6RecordCore> bedsOuts;
+				for(const auto & reg : regionsForGenome){
+					bedsOuts.emplace_back(reg.genBedRecordCore());
+				}
+//				if(bfs::exists(gMapper->genomes_.at(genome)->gffFnp_)){
+//					intersectBedLocsWtihGffRecordsPars interPars = gMapper->pars_.gffIntersectPars_;
+//					interPars.gffFnp_ = gMapper->genomes_.at(genome)->gffFnp_;
+//					intersectBedLocsWtihGffRecords(bedsOuts, interPars);
+//				}
+				OutputStream bedOut(njh::files::make_path(combinedByGenomeMkPars.dirName_, genome + ".bed"));
+				for(const auto & bed : bedsOuts){
+					bedOut << bed.toDelimStrWithExtra() << std::endl;
+				}
+			}
+		};
+		njh::concurrent::runVoidFunctionThreaded(combineForGenome, originalNumThreads);
+	}
+
 
 	return 0;
 }
