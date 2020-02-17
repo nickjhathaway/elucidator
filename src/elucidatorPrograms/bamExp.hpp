@@ -119,6 +119,11 @@ class bamExpRunner : public njh::progutils::ProgramRunner {
 	static int BamGetPileupForRegion(const njh::progutils::CmdArgs & inputCommands);
 	static int MultipleBamGetPileupForRegion(const njh::progutils::CmdArgs & inputCommands);
 
+
+
+	static int BamFilterAlnsOnLenAndQual(const njh::progutils::CmdArgs & inputCommands);
+
+
 };
 
 } /* namespace njhseq */

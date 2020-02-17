@@ -36,6 +36,7 @@ namespace njhseq {
 
 
 
+
 int bamExpRunner::bamToFastqAlns(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path bedFile = "";
 	OutOptions outOpts(bfs::path(""));

@@ -80,6 +80,7 @@ bamExpRunner::bamExpRunner()
 					 addFunc("BamGetSpanningReadsForRegion", BamGetSpanningReadsForRegion, false),
 					 addFunc("BamGetPileupForRegion", BamGetPileupForRegion, false),
 					 addFunc("MultipleBamGetPileupForRegion", MultipleBamGetPileupForRegion, false),
+					 addFunc("BamFilterAlnsOnLenAndQual", BamFilterAlnsOnLenAndQual, false),
           }, //
 				"bamExp") {
 }
