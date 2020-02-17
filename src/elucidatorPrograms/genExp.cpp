@@ -93,7 +93,9 @@ genExpRunner::genExpRunner()
 					 addFunc("evaluateContigsAgainstExpected", evaluateContigsAgainstExpected, false),
 					 addFunc("evaluateContigsWithBowtie2", evaluateContigsAgainstExpected, true),
 					 addFunc("extractFromGenomesAndCompare", extractFromGenomesAndCompare, false),
-           },//evaluateContigsAgainstExpected
+					 addFunc("extractExpectedRefSeqsFromGenomes", extractExpectedRefSeqsFromGenomes, false),
+
+           },//
           "genExp") {}
 
 
