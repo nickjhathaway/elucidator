@@ -155,26 +155,30 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 		while(genomesQueue.getVal(gAndProgram)){
 			bfs::path genomeDir = njh::files::make_path(setUp.pars_.directoryName_, gAndProgram.genome_);
 			if(gAndProgram.lastz_){
-				//align seqs
-				auto seqOpts = tempLastzInOpts;
-				seqOpts.out_.outFilename_ = njh::files::make_path(genomeDir, "alignedSeqsLastz.sorted.bam");
+				if(tempLastzInOpts.inExists()){
+					//align seqs
+					auto seqOpts = tempLastzInOpts;
+					seqOpts.out_.outFilename_ = njh::files::make_path(genomeDir, "alignedSeqsLastz.sorted.bam");
 
-				BioCmdsUtils::LastZPars copyLzPars = lzPars;
-				copyLzPars.genomeFnp = gMapper.genomes_.at(gAndProgram.genome_)->fnpTwoBit_;
+					BioCmdsUtils::LastZPars copyLzPars = lzPars;
+					copyLzPars.genomeFnp = gMapper.genomes_.at(gAndProgram.genome_)->fnpTwoBit_;
 
-				auto runOut = bRunner.lastzAlign(seqOpts, copyLzPars);
-				OutOptions lastzAlignLogOpts(njh::files::make_path(genomeDir, "lastzLog.json"));
-				OutputStream lastzAlignLogOut(lastzAlignLogOpts);
-				lastzAlignLogOut << njh::json::toJson(runOut) << std::endl;
+					auto runOut = bRunner.lastzAlign(seqOpts, copyLzPars);
+					OutOptions lastzAlignLogOpts(njh::files::make_path(genomeDir, "lastzLog.json"));
+					OutputStream lastzAlignLogOut(lastzAlignLogOpts);
+					lastzAlignLogOut << njh::json::toJson(runOut) << std::endl;
+				}
 			} else {
 				//align seqs
-				auto seqOpts = tempInBowtie2Opts;
-				seqOpts.out_.outFilename_ = njh::files::make_path(genomeDir, "alignedSeqsBowtie2.sorted.bam");
+				if(tempInBowtie2Opts.inExists()){
+					auto seqOpts = tempInBowtie2Opts;
+					seqOpts.out_.outFilename_ = njh::files::make_path(genomeDir, "alignedSeqsBowtie2.sorted.bam");
 
-				auto runOut = bRunner.bowtie2Align(seqOpts, gMapper.genomes_.at(gAndProgram.genome_)->fnp_, "-a");
-				OutOptions bowtie2AlignLogOpts(njh::files::make_path(genomeDir, "bowtie2Log.json"));
-				OutputStream bowtie2AlignLogOut(bowtie2AlignLogOpts);
-				bowtie2AlignLogOut << njh::json::toJson(runOut) << std::endl;
+					auto runOut = bRunner.bowtie2Align(seqOpts, gMapper.genomes_.at(gAndProgram.genome_)->fnp_, "-a");
+					OutOptions bowtie2AlignLogOpts(njh::files::make_path(genomeDir, "bowtie2Log.json"));
+					OutputStream bowtie2AlignLogOut(bowtie2AlignLogOpts);
+					bowtie2AlignLogOut << njh::json::toJson(runOut) << std::endl;
+				}
 			}
 		}
 	};
@@ -875,26 +879,30 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 		while(genomesQueue.getVal(gAndProgram)){
 			bfs::path genomeDir = njh::files::make_path(setUp.pars_.directoryName_, gAndProgram.genome_);
 			if(gAndProgram.lastz_){
-				//align seqs
-				auto seqOpts = tempLastzInOpts;
-				seqOpts.out_.outFilename_ = njh::files::make_path(genomeDir, "alignedSeqsLastz.sorted.bam");
+				if(tempLastzInOpts.inExists()){
+					//align seqs
+					auto seqOpts = tempLastzInOpts;
+					seqOpts.out_.outFilename_ = njh::files::make_path(genomeDir, "alignedSeqsLastz.sorted.bam");
 
-				BioCmdsUtils::LastZPars copyLzPars = lzPars;
-				copyLzPars.genomeFnp = gMapper.genomes_.at(gAndProgram.genome_)->fnpTwoBit_;
+					BioCmdsUtils::LastZPars copyLzPars = lzPars;
+					copyLzPars.genomeFnp = gMapper.genomes_.at(gAndProgram.genome_)->fnpTwoBit_;
 
-				auto runOut = bRunner.lastzAlign(seqOpts, copyLzPars);
-				OutOptions lastzAlignLogOpts(njh::files::make_path(genomeDir, "lastzLog.json"));
-				OutputStream lastzAlignLogOut(lastzAlignLogOpts);
-				lastzAlignLogOut << njh::json::toJson(runOut) << std::endl;
+					auto runOut = bRunner.lastzAlign(seqOpts, copyLzPars);
+					OutOptions lastzAlignLogOpts(njh::files::make_path(genomeDir, "lastzLog.json"));
+					OutputStream lastzAlignLogOut(lastzAlignLogOpts);
+					lastzAlignLogOut << njh::json::toJson(runOut) << std::endl;
+				}
 			} else {
-				//align seqs
-				auto seqOpts = tempInBowtie2Opts;
-				seqOpts.out_.outFilename_ = njh::files::make_path(genomeDir, "alignedSeqsBowtie2.sorted.bam");
+				if(tempInBowtie2Opts.inExists()){
+					//align seqs
+					auto seqOpts = tempInBowtie2Opts;
+					seqOpts.out_.outFilename_ = njh::files::make_path(genomeDir, "alignedSeqsBowtie2.sorted.bam");
 
-				auto runOut = bRunner.bowtie2Align(seqOpts, gMapper.genomes_.at(gAndProgram.genome_)->fnp_, "-a");
-				OutOptions bowtie2AlignLogOpts(njh::files::make_path(genomeDir, "bowtie2Log.json"));
-				OutputStream bowtie2AlignLogOut(bowtie2AlignLogOpts);
-				bowtie2AlignLogOut << njh::json::toJson(runOut) << std::endl;
+					auto runOut = bRunner.bowtie2Align(seqOpts, gMapper.genomes_.at(gAndProgram.genome_)->fnp_, "-a");
+					OutOptions bowtie2AlignLogOpts(njh::files::make_path(genomeDir, "bowtie2Log.json"));
+					OutputStream bowtie2AlignLogOut(bowtie2AlignLogOpts);
+					bowtie2AlignLogOut << njh::json::toJson(runOut) << std::endl;
+				}
 			}
 		}
 	};
