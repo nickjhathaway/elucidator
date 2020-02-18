@@ -98,6 +98,7 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	//getting new regions
 	static int getInterveningRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int createWindowsInbetweenRegions(const njh::progutils::CmdArgs & inputCommands);
+	static int createWindowsInRegions(const njh::progutils::CmdArgs & inputCommands);
 
 	//coverage
 	static int roughSmoothingForBedCoverage(const njh::progutils::CmdArgs & inputCommands);

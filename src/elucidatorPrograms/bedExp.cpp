@@ -80,6 +80,7 @@ bedExpRunner::bedExpRunner()
 					 addFunc("trimUpstreamRegion", trimUpstreamRegion, false),
 					 addFunc("trimDownstreamRegion", trimDownstreamRegion, false),
 					 addFunc("createWindowsInbetweenRegions", createWindowsInbetweenRegions, false),
+					 addFunc("createWindowsInRegions", createWindowsInRegions, false),
            },//,,
           "bedExp") {}
 

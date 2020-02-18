@@ -158,6 +158,44 @@ std::vector<GenomicRegion> createWindowsWithinRegion(
 }
 
 
+
+
+int bedExpRunner::createWindowsInRegions(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path bedFile = "";
+	OutOptions outOpts(bfs::path(""), ".bed");
+	uint32_t step = 50;
+	uint32_t windowSize = 100;
+	uint32_t minLen = 0;
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(step, "--step", "step");
+	setUp.setOption(windowSize, "--windowSize", "windowSize");
+	minLen = windowSize;
+	setUp.setOption(minLen, "--minLen", "minimum length");
+	setUp.setOption(bedFile, "--bed", "Bed file", true);
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+	//get chrom lengths
+	OutputStream out(outOpts);
+	auto inRegions = getBed3s(bedFile);
+	auto mergedRegions = mergeAndSort(inRegions);
+
+	auto createWindowsWrite = [&out,&minLen,&windowSize,&step](const GenomicRegion & region){
+		auto windows = createWindowsWithinRegion(region, windowSize, step, true);
+		for(const auto & window : windows){
+			if(window.getLen() >= minLen){
+				out << window.genBedRecordCore().toDelimStr() << std::endl;
+			}
+		}
+	};
+	for(const auto & reg : mergedRegions){
+		createWindowsWrite(reg);
+	}
+	return 0;
+}
+
+
+
 int bedExpRunner::createWindowsInbetweenRegions(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile = "";
 	bfs::path genomeFnp = "";
