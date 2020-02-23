@@ -25,6 +25,8 @@
 #include <njhseq/objects/Gene/TranslatorByAlignment.hpp>
 
 
+#include <cppitertools/sorted.hpp>
+
 namespace njhseq {
 
 
@@ -62,23 +64,48 @@ int genExpRunner::translateSeqsBasedOnGFF(const njh::progutils::CmdArgs & inputC
 		counts[seq.name_] = std::ceil(seq.cnt_);
 	}
 	auto results = translator.run(setUp.pars_.ioOptions_, counts, variantCallerRunPars);
+
 	SeqOutput writer(SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "translatedInput.fasta")));
 	SeqOutput writerAln(SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "aln_translatedInput.fasta")));
 	SeqOutput writerCDNA(SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "cdna_input.fasta")));
-	OutputStream outInfo(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "aa_position_info.tab.txt")));
+	OutputStream outInfo(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "aa_positionCoveredInfo.tab.txt")));
+	OutputStream outChangesInfo(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "aa_changesInfo.tab.txt")));
 	outInfo << "seqName\ttranscript\taminoAcidStart\taminoAcidStop" << std::endl;
-	for(const auto & seqName : results.translations_){
-		for(const auto & transcript : seqName.second){
-			outInfo << seqName.first
+	outChangesInfo << "seqName\ttranscript\taaPosition(1-based)\ttype\trefAA\tseqAA\tUID" << std::endl;
+
+	for (const auto & seqName : iter::sorted(getVectorOfMapKeys(results.translations_))) {
+		for (const auto & transcript : results.translations_.at(seqName)) {
+
+			outInfo << seqName
 					<< "\t" << transcript.first
 					<< "\t" << std::get<0>(transcript.second.firstAminoInfo_).aaPos_
-					<< "\t" << std::get<0>(transcript.second.lastAminoInfo_).aaPos_<< std::endl;
-
+					<< "\t" << std::get<0>(transcript.second.lastAminoInfo_).aaPos_  << std::endl;
 			writer.openWrite(transcript.second.translation_);
 			writerCDNA.openWrite(transcript.second.cDna_);
 			if(setUp.pars_.debug_){
 				writerAln.openWrite(transcript.second.refAlnTranslation_);
 				writerAln.openWrite(transcript.second.queryAlnTranslation_);
+			}
+			for(const auto & aaMismatch : transcript.second.comp_.distances_.mismatches_){
+				outChangesInfo<< seqName
+						<< "\t" << transcript.first
+						<< "\t" << aaMismatch.second.refBasePos + 1
+						<< "\t" << "mismatch"
+						<< "\t" << aaMismatch.second.seqBase
+						<< "\t" << aaMismatch.second.refBase
+						<< "\t" << aaMismatch.second.refBase << aaMismatch.second.refBasePos +1<< aaMismatch.second.seqBase
+						<< std::endl;
+			}
+
+			for(const auto & aaIndel : transcript.second.comp_.distances_.alignmentGaps_){
+				outChangesInfo<< seqName
+						<< "\t" << transcript.first
+						<< "\t" << aaIndel.second.refPos_ + 1
+						<< "\t" << (aaIndel.second.ref_ ? "deletion": "insertion")
+						<< "\t" << (aaIndel.second.ref_ ? std::string(""): aaIndel.second.gapedSequence_)
+						<< "\t" << (aaIndel.second.ref_ ? aaIndel.second.gapedSequence_: std::string(""))
+						<< "\t" << ""
+						<< std::endl;
 			}
 		}
 	}

@@ -14,8 +14,7 @@
 #include "elucidator/objects/dataContainers/graphs.h"
 #include <njhseq/GenomeUtils.h>
 #include "elucidator/concurrency/LockableJsonLog.hpp"
-
-
+#include "elucidator/objects/seqContainers/refVariants.hpp"
 
 
 namespace njhseq {
@@ -397,6 +396,10 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 		return nameToPositionKey[name1] < nameToPositionKey[name2];
 	});
 
+
+	auto refAlnOutErrorOpts = SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "refAlignmentsWithErrors.fasta"));
+	SeqOutput refAlnOutErrorOut(refAlnOutErrorOpts);
+	refAlnOutErrorOut.openOut();
 	for(const auto & allAlnResultsKey : allAlnResultsKeys){
 		const auto & alnResults = allAlnResults[allAlnResultsKey];
 		double bestScore = std::numeric_limits<double>::lowest();
@@ -418,8 +421,14 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 		}
 
 		for(const auto & results : bestResults){
-			bestRegionsByGenome[regionNameToGenome[results->gRegion_.genBedRecordCore().toDelimStrWithExtra()]].emplace_back(results->gRegion_.genBedRecordCore());
+			if (1 != results->comp_.distances_.eventBasedIdentityHq_) {
+				refAlnOutErrorOut.write(results->refSeqAligned_);
+				refAlnOutErrorOut.write(results->alnSeqAligned_);
+			}
+		}
 
+		for(const auto & results : bestResults){
+			bestRegionsByGenome[regionNameToGenome[results->gRegion_.genBedRecordCore().toDelimStrWithExtra()]].emplace_back(results->gRegion_.genBedRecordCore());
 			bestAlnResults[allAlnResultsKey][regionNameToGenome[results->gRegion_.genBedRecordCore().toDelimStrWithExtra()]].emplace_back(results);
 		}
 
@@ -659,6 +668,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	lzPars.coverage = 95;
 	lzPars.identity = 90;
 
+	bool calcSpecificCoverage = false;
 	comparison amountOfErrorForCoverageCalc;
 	MultiGenomeMapper::inputParameters mapperPars;
 	seqSetUp setUp(inputCommands);
@@ -667,6 +677,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	setUp.processComparison(amountOfErrorForCoverageCalc);
 	setUp.setOption(lzPars.coverage, "--coverage", "coverage for lastz");
 	setUp.setOption(lzPars.identity, "--identity", "identity for lastz");
+	setUp.setOption(calcSpecificCoverage, "--calcSpecificCoverage", "calculate coverage of regions specific to each input reference");
 
   setUp.setOption(program, "--program", "Name of the program to output with the report", true);
   setUp.setOption(sample,  "--sample",  "Name of the sample to output with the report",  true);
@@ -807,6 +818,48 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	}
 
 
+	std::vector<seqInfo> requiredRegionsSeqs;
+	for(const auto  & region : requiredRegions){
+		TwoBit::TwoBitFile treader(gMapper.genomes_.at(chromosomeToGenome[region.chrom_])->fnpTwoBit_);
+		auto refSeq = region.extractSeq(treader);
+		if(region.reverseSrand_){
+			refSeq.reverseComplementRead(false, true);
+		}
+		requiredRegionsSeqs.emplace_back(refSeq);
+	}
+
+	std::unordered_map<std::string, std::vector<GenomicRegion>> specificRegions;
+	if(calcSpecificCoverage){
+		uint64_t maxLen = 0;
+		readVec::getMaxLength(requiredRegionsSeqs, maxLen);
+		std::vector<refVariants> refVariationInfo;
+		aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
+		std::unordered_map<std::string, GenomicRegion> regionByName;
+
+
+		for (const auto & refPos : iter::range(requiredRegionsSeqs.size())) {
+			regionByName[requiredRegions[refPos].uid_] = requiredRegions[refPos];
+			refVariationInfo.emplace_back(requiredRegionsSeqs[refPos]);
+		}
+		for (const auto & refPos : iter::range(requiredRegionsSeqs.size())) {
+			for (const auto & refSubPos : iter::range(requiredRegionsSeqs.size())) {
+				if (refPos == refSubPos) {
+					continue;
+				}
+				refVariationInfo[refPos].addVariant(requiredRegionsSeqs[refSubPos],
+						alignerObj, false);
+			}
+		}
+		for (const auto & refPos : iter::range(requiredRegionsSeqs.size())) {
+			auto specificPositions = refVariationInfo[refPos].getUniqueToRefPositions();
+			for(const auto & pos : specificPositions){
+				auto specReg = regionByName[requiredRegions[refPos].uid_];
+				specReg.start_ = specReg.start_ + pos;
+				specReg.end_ = specReg.start_ + 1;
+				specificRegions[requiredRegions[refPos].uid_].emplace_back(specReg);
+			}
+		}
+	}
 
 
 	std::map<std::string, std::unordered_map<std::string, std::vector<std::shared_ptr<AlignmentResults>>>> allAlnResults;
@@ -1121,6 +1174,10 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 		return nameToPositionKey[name1] < nameToPositionKey[name2];
 	});
 
+	auto refAlnOutErrorOpts = SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "refAlignmentsWithErrors.fasta"));
+	SeqOutput refAlnOutErrorOut(refAlnOutErrorOpts);
+	refAlnOutErrorOut.openOut();
+
 	for(const auto & allAlnResultsKey : allAlnResultsKeys){
 		const auto & alnResults = allAlnResults[allAlnResultsKey];
 		double bestScore = std::numeric_limits<double>::lowest();
@@ -1140,10 +1197,15 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 				}
 			}
 		}
+		for(const auto & results : bestResults){
+			if (1 != results->comp_.distances_.eventBasedIdentityHq_) {
+				refAlnOutErrorOut.write(results->refSeqAligned_);
+				refAlnOutErrorOut.write(results->alnSeqAligned_);
+			}
+		}
 
 		for(const auto & results : bestResults){
 			bestRegionsByGenome[regionNameToGenome[results->gRegion_.genBedRecordCore().toDelimStrWithExtra()]].emplace_back(results->gRegion_.genBedRecordCore());
-
 			bestAlnResults[allAlnResultsKey][regionNameToGenome[results->gRegion_.genBedRecordCore().toDelimStrWithExtra()]].emplace_back(results);
 		}
 
@@ -1315,6 +1377,8 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 
 		}
 
+
+
 		//getting regions that were covered but not expected
 		{
 			std::unordered_map<std::string, std::map<uint32_t, uint32_t>> requiredRegionsPositions;
@@ -1374,58 +1438,111 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 			}
 		}
 		//
+		{
+			table coveredCountsTab(VecStr{"Region", "basesCovered", "totalBases", "fractionCovered"});
+			for(const auto & gene: requiredRegions){
+				uint32_t covered = 0;
+				std::vector<uint32_t> positionsNotCovered;
+				for(const auto & pos : iter::range(gene.start_, gene.end_)){
+					if(simpleCoverageCounts[gene.chrom_][pos] > 0){
+						++covered;
+					}else{
+						positionsNotCovered.emplace_back(pos);
+					}
+				}
+				coveredCountsTab.addRow(gene.uid_, covered, gene.getLen(), static_cast<double>(covered)/gene.getLen());
 
-		table coveredCountsTab(VecStr{"Region", "basesCovered", "totalBases", "fractionCovered"});
-		for(const auto & gene: requiredRegions){
-			uint32_t covered = 0;
-			std::vector<uint32_t> positionsNotCovered;
-			for(const auto & pos : iter::range(gene.start_, gene.end_)){
-				if(simpleCoverageCounts[gene.chrom_][pos] > 0){
-					++covered;
-				}else{
-					positionsNotCovered.emplace_back(pos);
+				if(positionsNotCovered.size() > 0){
+					std::vector<Bed6RecordCore> regionsNotCoveredRaw;
+					for(const auto & pos : positionsNotCovered){
+						regionsNotCoveredRaw.emplace_back(Bed6RecordCore(gene.chrom_, pos, pos + 1, gene.uid_, 1, gene.reverseSrand_? '-':'+'));
+					}
+					BedUtility::coordSort(regionsNotCoveredRaw, false);
+					std::vector<Bed6RecordCore> regionsNotCovered;
+					for(const auto & region : regionsNotCoveredRaw){
+						if(regionsNotCovered.empty()){
+							regionsNotCovered.emplace_back(region);
+						}else{
+							if(regionsNotCovered.back().chromEnd_ == region.chromStart_){
+								regionsNotCovered.back().chromEnd_ = region.chromEnd_;
+							}else{
+								regionsNotCovered.emplace_back(region);
+							}
+						}
+					}
+					for( auto & region : regionsNotCovered){
+						region.score_ = region.length();
+						region.name_ = njh::pasteAsStr(gene.uid_, ":", GenomicRegion(region).createUidFromCoords());
+					}
+					OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, gene.uid_ + "_notCoveredRegions.bed"));
+					for(const auto & region : regionsNotCovered){
+						out << region.toDelimStr() << std::endl;
+					}
 				}
 			}
-			coveredCountsTab.addRow(gene.uid_, covered, gene.getLen(), static_cast<double>(covered)/gene.getLen());
 
-			if(positionsNotCovered.size() > 0){
-				std::vector<Bed6RecordCore> regionsNotCoveredRaw;
-				for(const auto & pos : positionsNotCovered){
-					regionsNotCoveredRaw.emplace_back(Bed6RecordCore(gene.chrom_, pos, pos + 1, gene.uid_, 1, gene.reverseSrand_? '-':'+'));
-				}
-				BedUtility::coordSort(regionsNotCoveredRaw, false);
-				std::vector<Bed6RecordCore> regionsNotCovered;
-				for(const auto & region : regionsNotCoveredRaw){
-					if(regionsNotCovered.empty()){
-						regionsNotCovered.emplace_back(region);
-					}else{
-						if(regionsNotCovered.back().chromEnd_ == region.chromStart_){
-							regionsNotCovered.back().chromEnd_ = region.chromEnd_;
+
+			coveredCountsTab.addColumn(VecStr{program}, "program");
+			coveredCountsTab.addColumn(VecStr{sample}, "sample");
+			coveredCountsTab.outPutContents(
+					TableIOOpts::genTabFileOut(
+							njh::files::make_path(setUp.pars_.directoryName_,
+									"coveragedInfo.tab.txt"), true));
+		}
+
+		if(calcSpecificCoverage){
+			table specifcCoveredCountsTab(VecStr{"Region", "basesCovered", "totalBases", "fractionCovered"});
+
+			std::vector<uint32_t> positionsNotCovered;
+			for(const auto & regions : specificRegions){
+				uint32_t totalRegionBases = 0;
+				uint32_t totalCovered = 0;
+				for(const auto & reg : regions.second){
+					for(const auto & pos : iter::range(reg.start_, reg.end_)){
+						++totalRegionBases;
+						if(simpleCoverageCounts[reg.chrom_][pos] > 0){
+							++totalCovered;
 						}else{
-							regionsNotCovered.emplace_back(region);
+							positionsNotCovered.emplace_back(pos);
 						}
 					}
 				}
-				for( auto & region : regionsNotCovered){
-					region.score_ = region.length();
-					region.name_ = njh::pasteAsStr(gene.uid_, ":", GenomicRegion(region).createUidFromCoords());
+				specifcCoveredCountsTab.addRow(regions.first, totalCovered, totalRegionBases, static_cast<double>(totalCovered)/totalRegionBases);
+				if(positionsNotCovered.size() > 0){
+					std::vector<Bed6RecordCore> regionsNotCoveredRaw;
+					for(const auto & pos : positionsNotCovered){
+						regionsNotCoveredRaw.emplace_back(Bed6RecordCore(regions.second.front().chrom_, pos, pos + 1, regions.second.front().uid_, 1, regions.second.front().reverseSrand_? '-':'+'));
+					}
+					BedUtility::coordSort(regionsNotCoveredRaw, false);
+					std::vector<Bed6RecordCore> regionsNotCovered;
+					for(const auto & region : regionsNotCoveredRaw){
+						if(regionsNotCovered.empty()){
+							regionsNotCovered.emplace_back(region);
+						}else{
+							if(regionsNotCovered.back().chromEnd_ == region.chromStart_){
+								regionsNotCovered.back().chromEnd_ = region.chromEnd_;
+							}else{
+								regionsNotCovered.emplace_back(region);
+							}
+						}
+					}
+					for( auto & region : regionsNotCovered){
+						region.score_ = region.length();
+						region.name_ = njh::pasteAsStr(regions.first, ":", GenomicRegion(region).createUidFromCoords());
+					}
+					OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, regions.first + "_specificNotCoveredRegions.bed"));
+					for(const auto & region : regionsNotCovered){
+						out << region.toDelimStr() << std::endl;
+					}
 				}
-				OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, gene.uid_ + "_notCoveredRegions.bed"));
-				for(const auto & region : regionsNotCovered){
-					out << region.toDelimStr() << std::endl;
-				}
-			}
+			} //
+			specifcCoveredCountsTab.addColumn(VecStr{program}, "program");
+			specifcCoveredCountsTab.addColumn(VecStr{sample}, "sample");
+			specifcCoveredCountsTab.outPutContents(
+					TableIOOpts::genTabFileOut(
+							njh::files::make_path(setUp.pars_.directoryName_,
+									"specifcRegionsCoveragedInfo.tab.txt"), true));
 		}
-
-
-		coveredCountsTab.addColumn(VecStr{program}, "program");
-		coveredCountsTab.addColumn(VecStr{sample}, "sample");
-		coveredCountsTab.outPutContents(
-				TableIOOpts::genTabFileOut(
-						njh::files::make_path(setUp.pars_.directoryName_,
-								"coveragedInfo.tab.txt"), true));
-
-
 	}
 	return 0;
 }

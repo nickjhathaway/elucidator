@@ -95,6 +95,22 @@ std::map<uint32_t, std::vector<char>> refVariants::getVariantSnpLociMap()const{
 	return ret;
 }
 
+
+std::vector<uint32_t> refVariants::getUniqueToRefPositions() const {
+	std::set<uint32_t> positions;
+	for(const auto & v : variants_){
+		for(const auto & m : v.mismatches_){
+			positions.emplace(m.first);
+		}
+		for(const auto & d : v.deletions_){
+			for(uint32_t pos = 0; pos < d.second.gapedSequence_.size(); ++pos){
+				positions.emplace(d.first + pos);
+			}
+		}
+	}
+	return std::vector<uint32_t> {positions.begin(), positions.end()};
+}
+
 std::vector<uint32_t> refVariants::getVariantSnpLoci(VecStr names, uint32_t expand )const{
 	std::set<uint32_t> loci;
 	for(const auto & v : variants_){
