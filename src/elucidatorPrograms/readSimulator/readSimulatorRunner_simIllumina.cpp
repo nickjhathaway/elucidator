@@ -124,6 +124,8 @@ int readSimulatorRunner::shearSimIlluminaAlign(const njh::progutils::CmdArgs & i
 	bfs::path illuminaProfileDir = njh::files::make_path(elucidator_INSTALLDIR, "etc/illumina_profiles/miseq_250");
 	uint32_t outLength = 150;
 	uint32_t numThreads = 1;
+	bool markDups = false;
+	bool addRGName = false;
 	bfs::path genomeFnp;
 	std::string sampleName = "";
 	setUp.setOption(illuminaProfileDir, "--illuminaProfileDir", njh::pasteAsStr("Illumina Profile Dir, by default will simulate miseq 250 paired end, see ", illuminaProfileDir, " for examples on the input profile files"));
@@ -132,6 +134,8 @@ int readSimulatorRunner::shearSimIlluminaAlign(const njh::progutils::CmdArgs & i
 	setUp.setOption(genomeFnp, "--genomeFnp", "Genome File name to align to", true);
 
 	setUp.processReadInNames();
+	setUp.setOption(markDups, "--markDups", "Mark Duplicate Seqs");
+	setUp.setOption(addRGName, "--addRGName", "Add RG to seqs");
 	setUp.setOption(numThreads, "--numThreads", "num Threads to use");
 
 	setUp.setOption(mean, "--mean", "Mean Fragment Size");
@@ -224,16 +228,33 @@ int readSimulatorRunner::shearSimIlluminaAlign(const njh::progutils::CmdArgs & i
 	auto runAlignmentCmd_runOut = njh::sys::run({runAlignmentCmd.str()});
 	BioCmdsUtils::checkRunOutThrow(runAlignmentCmd_runOut, __PRETTY_FUNCTION__);
 
-	std::stringstream appendNameCmd;
-	appendNameCmd << "cd " << tempDir << " && elucidator appendReadGroupToName --bam " << sampleName << ".sorted.bam";
-	auto appendNameCmd_runOut = njh::sys::run({appendNameCmd.str()});
-	BioCmdsUtils::checkRunOutThrow(appendNameCmd_runOut, __PRETTY_FUNCTION__);
+	std::string outExtension = ".sorted.bam";
 
-	std::stringstream markDupsCmds;
-	markDupsCmds << "cd " << tempDir << " && elucidator runPicardMarkDups --bamFnp renamed_" << sampleName << ".sorted.bam --outDir ../bams/ --outNameStub " << sampleName << " --logDir ./";
-	auto markDupsCmds_runOut = njh::sys::run({markDupsCmds.str()});
-	BioCmdsUtils::checkRunOutThrow(markDupsCmds_runOut, __PRETTY_FUNCTION__);
+	bfs::path finalBamFnp = njh::files::make_path(tempDir, njh::pasteAsStr(sampleName, outExtension));
+	if(addRGName){
+		std::stringstream appendNameCmd;
+		appendNameCmd << "cd " << tempDir << " && elucidator appendReadGroupToName --bam " << sampleName << ".sorted.bam";
+		auto appendNameCmd_runOut = njh::sys::run({appendNameCmd.str()});
+		BioCmdsUtils::checkRunOutThrow(appendNameCmd_runOut, __PRETTY_FUNCTION__);
+		finalBamFnp = njh::files::make_path(tempDir, njh::pasteAsStr("renamed_", sampleName, outExtension));
+	}
 
+	if(markDups){
+		std::stringstream markDupsCmds;
+		markDupsCmds << "cd " << tempDir << " && elucidator runPicardMarkDups --bamFnp " << finalBamFnp.filename() << " --extraArgs READ_NAME_REGEX=null --outNameStub " << sampleName << " --logDir ./";
+		auto markDupsCmds_runOut = njh::sys::run({markDupsCmds.str()});
+		BioCmdsUtils::checkRunOutThrow(markDupsCmds_runOut, __PRETTY_FUNCTION__);
+		outExtension = ".mdups.sorted.bam";
+		finalBamFnp = njh::files::make_path(tempDir, njh::pasteAsStr(sampleName, outExtension));
+	}
+
+	//mv final bam
+	bfs::rename(finalBamFnp, njh::files::make_path(bamsDir, njh::pasteAsStr(sampleName, outExtension)));
+	//index
+	std::stringstream samtoolsIndexCmd;
+	samtoolsIndexCmd << "samtools index -@" << numThreads << " "<< njh::files::make_path(bamsDir, njh::pasteAsStr(sampleName, outExtension));;
+	auto samtoolsIndexCmd_runOut = njh::sys::run({samtoolsIndexCmd.str()});
+	BioCmdsUtils::checkRunOutThrow(samtoolsIndexCmd_runOut, __PRETTY_FUNCTION__);
 	return 0;
 }
 

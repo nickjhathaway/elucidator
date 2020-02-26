@@ -83,7 +83,7 @@ std::vector<std::pair<size_t, uint32_t>> genFragPosSizes(size_t seqLen,
 		readPositionsLens.emplace_back(readPos, seqLen - readPos);
 	}
 	//std::cout << "__LINE__: " << __LINE__ << std::endl;
-	/**@todo need to fix below, currently shearing is using the fornt and end of the input seq twice */
+	/**@todo need to fix below, currently shearing is using the front and end of the input sequence twice */
 	//forward
 	{
 		if (readPos + readLen < seqLen) {
@@ -94,6 +94,7 @@ std::vector<std::pair<size_t, uint32_t>> genFragPosSizes(size_t seqLen,
 				nextReadPos = nextReadPos + nextReadLen;
 				nextReadLen = uiNormDist();
 			}
+			//taking this out, it's adding the back end twice this way
 			readPositionsLens.emplace_back(nextReadPos, seqLen - nextReadPos);
 		}
 	}
@@ -108,9 +109,11 @@ std::vector<std::pair<size_t, uint32_t>> genFragPosSizes(size_t seqLen,
 				readPositionsLens.emplace_back(nextReadPos, nextReadLen);
 				nextReadLen = uiNormDist();
 			}
+			//taking this out, it's adding the front twice this way
 			readPositionsLens.emplace_back(0, nextReadPos);
 		}
 	}
+	removeDuplicates(readPositionsLens);
 	//std::cout << "__LINE__: " << __LINE__ << std::endl;
 	return readPositionsLens;
 }

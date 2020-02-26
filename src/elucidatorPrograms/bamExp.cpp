@@ -1044,12 +1044,17 @@ int bamExpRunner::bamMulticovBasesRough(const njh::progutils::CmdArgs & inputCom
 
 int bamExpRunner::bamToBed(const njh::progutils::CmdArgs & inputCommands){
 	bool includeUnmapped = false;
+	bool onlyPrimary = false;
+	bool appendCigarString = false;
 	seqSetUp setUp(inputCommands);
 	setUp.pars_.ioOptions_.out_.outFilename_ = "";
 	setUp.processDefaultReader(VecStr{"--bam"});
 	setUp.pars_.ioOptions_.out_.outExtention_ = ".bed";
 	setUp.pars_.ioOptions_.out_.outFileFormat_ = "bed";
 	setUp.setOption(includeUnmapped, "--includeUnmapped", "Include Unmapped");
+	setUp.setOption(onlyPrimary, "--onlyPrimary", "Only Primary");
+	setUp.setOption(appendCigarString, "--appendCigarString", "Append Cigar String");
+
 	setUp.finishSetUp(std::cout);
 
 	BamTools::BamReader bReader;
@@ -1063,10 +1068,20 @@ int bamExpRunner::bamToBed(const njh::progutils::CmdArgs & inputCommands){
 	auto refData = bReader.GetReferenceData();
 	while(bReader.GetNextAlignment(bAln)){
 		if(bAln.IsMapped()){
+			if(!bAln.IsPrimaryAlignment() && onlyPrimary){
+				continue;
+			}
+			std::string app = "";
+			if(appendCigarString){
+				app += "-";
+				for(const auto & cigar : bAln.CigarData){
+					app += njh::pasteAsStr(cigar.Type, cigar.Length);
+				}
+			}
 			out << refData[bAln.RefID].RefName
 					<< "\t" << bAln.Position
 					<< "\t" << bAln.GetEndPosition()
-					<< "\t" << bAln.Name
+					<< "\t" << bAln.Name << app
 					<< "\t" << bAln.GetEndPosition() - bAln.Position
 					<< "\t" << (bAln.IsReverseStrand() ? '-' : '+') << std::endl;
 		} else if (includeUnmapped) {

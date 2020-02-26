@@ -275,7 +275,7 @@ int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & 
 	auto refData = bReader.GetReferenceData();
 	BamTools::BamAlignment bAln;
 	uint32_t count = 0;
-	std::cout << "FileIndexPosition\tName\tPosition\tEndPosition\tQueryBasesSize\tRefId\tRefName\tMateRefID\tMatePosition\tIsMateMapped\tIsMapped\tIsPaired\tIsPrimaryAlignment\tIsFirstMate\tDuplicate" << "\n";
+	std::cout << "FileIndexPosition\tName\tPosition\tEndPosition\tQuerySize\tAlnSize\tRefId\tRefName\tMateRefID\tMatePosition\tIsMateMapped\tIsMapped\tIsPaired\tIsPrimaryAlignment\tIsFirstMate\tDuplicate\tRevComp" << "\n";
 	while(bReader.GetNextAlignment(bAln)){
 		if (njh::in(bAln.Name, names)) {
 			std::cout << count
@@ -283,6 +283,7 @@ int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & 
 					<< "\t" << bAln.Position
 					<< "\t" << bAln.GetEndPosition()
 					<< "\t" << bAln.QueryBases.size()
+					<< "\t" << bAln.GetEndPosition() - bAln.Position
 					<< "\t" << bAln.RefID
 					<< "\t" << (bAln.RefID < 0 || bAln.RefID >= refData.size() ? "*" : refData[bAln.RefID].RefName)
 					<< "\t" << (bAln.MateRefID < 0 || bAln.MateRefID >= refData.size() ? "*" : refData[bAln.MateRefID].RefName)
@@ -292,7 +293,8 @@ int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & 
 					<< "\t" << njh::boolToStr(bAln.IsPaired())
 					<< "\t" << njh::boolToStr(bAln.IsPrimaryAlignment())
 					<< "\t" << njh::boolToStr(bAln.IsFirstMate())
-				  << "\t" << njh::boolToStr(bAln.IsDuplicate())<< std::endl;
+				  << "\t" << njh::boolToStr(bAln.IsDuplicate())
+					<< "\t" << njh::boolToStr(bAln.IsReverseStrand())<< std::endl;
 		}
 		++count;
 	}
