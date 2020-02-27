@@ -65,14 +65,12 @@ int bamExpRunner::bamToFastqAlns(const njh::progutils::CmdArgs & inputCommands){
 	seqOutOpts.out_.transferOverwriteOpts(outOpts);
 	SeqOutput seqOut(seqOutOpts);
 	while(bReader.GetNextAlignment(bAln)){
-		if(!bAln.IsPrimaryAlignment() && !bAln.IsMapped()){
+		if(!bAln.IsPrimaryAlignment() || !bAln.IsMapped()){
 			continue;
 		}
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		AlignmentResults results(bAln, refData);
 		results.setRefSeq(tReader);
 		results.setAlignedObjects();
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		seqOut.openWrite(results.refSeqAligned_);
 		seqOut.openWrite(results.alnSeqAligned_);
 	}
