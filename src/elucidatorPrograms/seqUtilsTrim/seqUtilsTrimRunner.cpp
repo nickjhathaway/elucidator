@@ -66,6 +66,8 @@ seqUtilsTrimRunner::seqUtilsTrimRunner()
 			addFunc("trimToPositionsForEachName", trimToPositionsForEachName, false),
 			addFunc("breakupAtRegexPat", breakupAtRegexPat, false),
 			addFunc("trimFrontForTandemRepeat", trimFrontForTandemRepeat, false),
+			addFunc("trimEdgesForLowEntropy", trimEdgesForLowEntropy, false),
+			addFunc("leftTrimToMeanAlignSite", leftTrimToMeanAlignSite, false),
 },
                     "seqUtilsTrim") {}
 //

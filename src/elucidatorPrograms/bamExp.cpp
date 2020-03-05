@@ -81,6 +81,8 @@ bamExpRunner::bamExpRunner()
 					 addFunc("BamGetPileupForRegion", BamGetPileupForRegion, false),
 					 addFunc("MultipleBamGetPileupForRegion", MultipleBamGetPileupForRegion, false),
 					 addFunc("BamFilterAlnsOnLenAndQual", BamFilterAlnsOnLenAndQual, false),
+					 addFunc("testingBamToFastqToContigs", testingBamToFastqToContigs, false),
+					 addFunc("getUnmappedAndShortAlnsFromBam", getUnmappedAndShortAlnsFromBam, false),
           }, //
 				"bamExp") {
 }
@@ -1046,6 +1048,9 @@ int bamExpRunner::bamToBed(const njh::progutils::CmdArgs & inputCommands){
 	bool includeUnmapped = false;
 	bool onlyPrimary = false;
 	bool appendCigarString = false;
+	uint32_t maxAlnSize = std::numeric_limits<uint32_t>::max();
+	uint32_t minAlnSize = 0;
+
 	seqSetUp setUp(inputCommands);
 	setUp.pars_.ioOptions_.out_.outFilename_ = "";
 	setUp.processDefaultReader(VecStr{"--bam"});
@@ -1054,6 +1059,8 @@ int bamExpRunner::bamToBed(const njh::progutils::CmdArgs & inputCommands){
 	setUp.setOption(includeUnmapped, "--includeUnmapped", "Include Unmapped");
 	setUp.setOption(onlyPrimary, "--onlyPrimary", "Only Primary");
 	setUp.setOption(appendCigarString, "--appendCigarString", "Append Cigar String");
+	setUp.setOption(maxAlnSize, "--maxAlnSize", "maximum Alignment Size");
+	setUp.setOption(minAlnSize, "--minAlnSize", "minimum Alignment Size");
 
 	setUp.finishSetUp(std::cout);
 
@@ -1061,8 +1068,7 @@ int bamExpRunner::bamToBed(const njh::progutils::CmdArgs & inputCommands){
 	bReader.Open(setUp.pars_.ioOptions_.firstName_.string());
 	checkBamOpenThrow(bReader, setUp.pars_.ioOptions_.firstName_.string());
 
-	std::ofstream outBed;
-	std::ostream out(determineOutBuf(outBed, setUp.pars_.ioOptions_.out_));
+	OutputStream out(setUp.pars_.ioOptions_.out_);
 
 	BamTools::BamAlignment bAln;
 	auto refData = bReader.GetReferenceData();
@@ -1078,12 +1084,15 @@ int bamExpRunner::bamToBed(const njh::progutils::CmdArgs & inputCommands){
 					app += njh::pasteAsStr(cigar.Type, cigar.Length);
 				}
 			}
-			out << refData[bAln.RefID].RefName
-					<< "\t" << bAln.Position
-					<< "\t" << bAln.GetEndPosition()
-					<< "\t" << bAln.Name << app
-					<< "\t" << bAln.GetEndPosition() - bAln.Position
-					<< "\t" << (bAln.IsReverseStrand() ? '-' : '+') << std::endl;
+			auto alnSize = bAln.GetEndPosition() - bAln.Position ;
+			if(alnSize < maxAlnSize && alnSize > minAlnSize){
+				out << refData[bAln.RefID].RefName
+						<< "\t" << bAln.Position
+						<< "\t" << bAln.GetEndPosition()
+						<< "\t" << bAln.Name << app
+						<< "\t" << bAln.GetEndPosition() - bAln.Position
+						<< "\t" << (bAln.IsReverseStrand() ? '-' : '+') << std::endl;
+			}
 		} else if (includeUnmapped) {
 			out << "*"
 					<< "\t" << "*"

@@ -83,6 +83,7 @@ class bamExpRunner : public njh::progutils::ProgramRunner {
 
 
 	static int getUnmappedAlnsFromBam(const njh::progutils::CmdArgs & inputCommands);
+	static int getUnmappedAndShortAlnsFromBam(const njh::progutils::CmdArgs & inputCommands);
 
 
 	static int bamToFastqAlns(const njh::progutils::CmdArgs & inputCommands);
@@ -101,6 +102,7 @@ class bamExpRunner : public njh::progutils::ProgramRunner {
 
 	static int GetKmerCoverageForRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int testingBamToFastq(const njh::progutils::CmdArgs & inputCommands);
+	static int testingBamToFastqToContigs(const njh::progutils::CmdArgs & inputCommands);
 
 
 	static int printHeaderRefIndexes(const njh::progutils::CmdArgs & inputCommands);

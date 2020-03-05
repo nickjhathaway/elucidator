@@ -19,7 +19,9 @@
 namespace njhseq {
 
 
+
 int bamExpRunner::BamFilterAlnsOnLenAndQual(const njh::progutils::CmdArgs & inputCommands){
+	/**@todo not finished yet */
 	OutOptions outOpts(bfs::path("out"));
 	uint32_t lenCutOff = 50;
 	double qualCheckCutOff = 0.50;

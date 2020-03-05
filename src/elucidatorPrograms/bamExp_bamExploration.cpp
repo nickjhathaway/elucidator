@@ -269,7 +269,7 @@ int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & 
 	BamTools::BamReader bReader;
 	bReader.Open(setUp.pars_.ioOptions_.firstName_.string());
 	checkBamOpenThrow(bReader, setUp.pars_.ioOptions_.firstName_.string());
-	loadBamIndexThrow(bReader);
+	//loadBamIndexThrow(bReader);
 	auto refData = bReader.GetReferenceData();
 	BamTools::BamAlignment bAln;
 	uint32_t count = 0;
@@ -475,9 +475,9 @@ int bamExpRunner::getMapQualityCounts(const njh::progutils::CmdArgs & inputComma
 
 
 
-
-int bamExpRunner::testingBamToFastq(const njh::progutils::CmdArgs & inputCommands){
+int bamExpRunner::testingBamToFastqToContigs(const njh::progutils::CmdArgs & inputCommands){
 	SeqIOOptions reextractedSeqsOptsSingles;
+	BamExtractor::extractReadsFromBamToSameOrientationContigsPars bamContigsExtractPars;
 	bool keepThrownAwayRemappedUnMappedMate = false;
 	reextractedSeqsOptsSingles.out_.outFilename_  = "out";
 	seqSetUp setUp(inputCommands);
@@ -486,7 +486,9 @@ int bamExpRunner::testingBamToFastq(const njh::progutils::CmdArgs & inputCommand
 	setUp.processReadInNames({"--bam"}, true);
 	setUp.processWritingOptions(reextractedSeqsOptsSingles.out_);
 	setUp.setOption(keepThrownAwayRemappedUnMappedMate, "--keepThrownAwayRemappedUnMappedMate", "Keep Thrown Away Re-mapped Unmapped Mate");
-
+	bamContigsExtractPars.throwAwayUnmmpaedMates = !keepThrownAwayRemappedUnMappedMate;
+	setUp.setOption(bamContigsExtractPars.centerClipCutOff, "--centerClipCutOff", "Center Clip Cut Off");
+	setUp.setOption(bamContigsExtractPars.forSoftClipFilterDistanceToEdges, "--forSoftClipFilterDistanceToEdges", "For Soft Clip Filter Distance To Edges");
 	setUp.finishSetUp(std::cout);
 
 	BamExtractor bExtractor(setUp.pars_.verbose_);
@@ -494,7 +496,35 @@ int bamExpRunner::testingBamToFastq(const njh::progutils::CmdArgs & inputCommand
 
 	BamExtractor::ExtractedFilesOpts rextractedSeqsSingles;
 	reextractedSeqsOptsSingles.firstName_ = setUp.pars_.ioOptions_.firstName_;
-	rextractedSeqsSingles = bExtractor.extractReadsFromBamToSameOrientationContigs(reextractedSeqsOptsSingles, !keepThrownAwayRemappedUnMappedMate);
+	rextractedSeqsSingles = bExtractor.extractReadsFromBamToSameOrientationContigs(reextractedSeqsOptsSingles, bamContigsExtractPars);
+	rextractedSeqsSingles.log(std::cout, setUp.pars_.ioOptions_.firstName_);
+	return 0;
+}
+
+
+
+int bamExpRunner::testingBamToFastq(const njh::progutils::CmdArgs & inputCommands){
+	SeqIOOptions reextractedSeqsOptsSingles;
+	BamExtractor::extractReadsFromBamToSameOrientationContigsPars bamContigsExtractPars;
+	bool keepThrownAwayRemappedUnMappedMate = false;
+	reextractedSeqsOptsSingles.out_.outFilename_  = "out";
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.processReadInNames({"--bam"}, true);
+	setUp.processWritingOptions(reextractedSeqsOptsSingles.out_);
+	setUp.setOption(keepThrownAwayRemappedUnMappedMate, "--keepThrownAwayRemappedUnMappedMate", "Keep Thrown Away Re-mapped Unmapped Mate");
+	bamContigsExtractPars.throwAwayUnmmpaedMates = !keepThrownAwayRemappedUnMappedMate;
+	setUp.setOption(bamContigsExtractPars.centerClipCutOff, "--centerClipCutOff", "Center Clip Cut Off");
+	setUp.setOption(bamContigsExtractPars.forSoftClipFilterDistanceToEdges, "--forSoftClipFilterDistanceToEdges", "For Soft Clip Filter Distance To Edges");
+	setUp.finishSetUp(std::cout);
+
+	BamExtractor bExtractor(setUp.pars_.verbose_);
+	bExtractor.debug_ = setUp.pars_.debug_;
+
+	BamExtractor::ExtractedFilesOpts rextractedSeqsSingles;
+	reextractedSeqsOptsSingles.firstName_ = setUp.pars_.ioOptions_.firstName_;
+	rextractedSeqsSingles = bExtractor.extractReadsFromBamToSameOrientationContigs(reextractedSeqsOptsSingles, bamContigsExtractPars);
 	rextractedSeqsSingles.log(std::cout, setUp.pars_.ioOptions_.firstName_);
 
 	return 0;

@@ -126,12 +126,14 @@ int readSimulatorRunner::shearSimIlluminaAlign(const njh::progutils::CmdArgs & i
 	uint32_t numThreads = 1;
 	bool markDups = false;
 	bool addRGName = false;
+	std::string extraBwaArgs = "";
 	bfs::path genomeFnp;
 	std::string sampleName = "";
 	setUp.setOption(illuminaProfileDir, "--illuminaProfileDir", njh::pasteAsStr("Illumina Profile Dir, by default will simulate miseq 250 paired end, see ", illuminaProfileDir, " for examples on the input profile files"));
 	setUp.setOption(outLength, "--outLength", "Illumina Length to simulate", true);
 	setUp.setOption(sampleName, "--sampleName", "Sample Name to Give Bam", true);
 	setUp.setOption(genomeFnp, "--genomeFnp", "Genome File name to align to", true);
+	setUp.setOption(extraBwaArgs, "--extraBwaArgs", "Extra bwa arguments");
 
 	setUp.processReadInNames();
 	setUp.setOption(markDups, "--markDups", "Mark Duplicate Seqs");
@@ -224,7 +226,10 @@ int readSimulatorRunner::shearSimIlluminaAlign(const njh::progutils::CmdArgs & i
 	BioCmdsUtils::checkRunOutThrow(setUpTrimmingCmd_runOut, __PRETTY_FUNCTION__);
 
 	std::stringstream runAlignmentCmd;
-	runAlignmentCmd << "cd " << tempDir << " && elucidator runBwaOnAdapterReomvalOutputSinglesCombined --removeIntermediateFiles --trimStub trimmed_seqeuncedShearedSeqs --genomeFnp "<< genomeFnp << " --sampName " << sampleName <<" --numThreads " << numThreads << "";
+	runAlignmentCmd << "cd " << tempDir << " && elucidator runBwaOnAdapterReomvalOutputSinglesCombined --removeIntermediateFiles --trimStub trimmed_seqeuncedShearedSeqs --genomeFnp "<< genomeFnp << " --sampName " << sampleName <<" --numThreads " << numThreads << " ";
+	if("" != extraBwaArgs){
+		runAlignmentCmd << " --extraBwaArgs=" << "\""<< extraBwaArgs <<  "\"";
+	}
 	auto runAlignmentCmd_runOut = njh::sys::run({runAlignmentCmd.str()});
 	BioCmdsUtils::checkRunOutThrow(runAlignmentCmd_runOut, __PRETTY_FUNCTION__);
 

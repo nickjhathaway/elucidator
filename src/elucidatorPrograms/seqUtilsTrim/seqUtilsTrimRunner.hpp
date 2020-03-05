@@ -83,6 +83,12 @@ class seqUtilsTrimRunner : public njh::progutils::ProgramRunner {
 
 
   static int trimFrontForTandemRepeat(const njh::progutils::CmdArgs & inputCommands);
+
+  static int trimEdgesForLowEntropy(const njh::progutils::CmdArgs & inputCommands);
+
+	static int leftTrimToMeanAlignSite(const njh::progutils::CmdArgs & inputCommands);
+
+
   //
   //
 };
