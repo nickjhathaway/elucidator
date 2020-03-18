@@ -446,20 +446,9 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 		//       seqName               transcript   amino acid positions and amino acid
 		//std::map<std::string, std::map<std::string, MetaDataInName>> fullAATyped;
 		//seqname meta
-		struct AAInfo {
-			AAInfo(std::string transcriptName, char aa, uint32_t zeroBasedPos, std::tuple<char, char, char> codon,
-					bool knownMut) : transcriptName_(transcriptName),
-					aa_(aa), zeroBasedPos_(zeroBasedPos), codon_(codon), knownMut_(
-							knownMut) {
-			}
-			std::string transcriptName_;
-			char aa_;
-			uint32_t zeroBasedPos_;
-			std::tuple<char, char, char> codon_;
-			bool knownMut_;
-		};
+
 		std::map<std::string, MetaDataInName> fullAATyped;
-		std::map<std::string, std::vector<AAInfo>> fullAATypedWithCodonInfo;
+		std::map<std::string, std::vector<TranslatorByAlignment::AAInfo>> fullAATypedWithCodonInfo;
 		if("" != transPars.gffFnp_){
 			auto uniqueSeqInOpts = SeqIOOptions::genFastaIn(uniqueSeqsOpts.out_.outName());
 			auto variantInfoDir =  njh::files::make_path(setUp.pars_.directoryName_, "proteinVariantInfo");
@@ -583,11 +572,12 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 									throw std::runtime_error{ss.str()};
 								}
 								fullAATypedWithCodonInfo[popName].emplace_back(
-										AAInfo(varPerTrans.first, aa, loc,
+										TranslatorByAlignment::AAInfo(varPerTrans.first, aa, loc,
 												std::tie(
 														seqName.second[varPerTrans.first].cDna_.seq_[queryCDNAPos+ 0],
 														seqName.second[varPerTrans.first].cDna_.seq_[queryCDNAPos+ 1],
-														seqName.second[varPerTrans.first].cDna_.seq_[queryCDNAPos+ 2]), njh::in(loc, knownMutationsLocations)));
+														seqName.second[varPerTrans.first].cDna_.seq_[queryCDNAPos+ 2]),
+														njh::in(loc, knownMutationsLocations)));
 							}
 						}
 					}
