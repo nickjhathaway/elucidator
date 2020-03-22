@@ -187,32 +187,36 @@ std::vector<GenomicRegion> mergeRegionsStrandAware(const std::vector<GenomicRegi
 
 int genExpRunner::extractRefSeqsFromGenomes(
 		const njh::progutils::CmdArgs & inputCommands) {
-	BioCmdsUtils::LastZPars lzPars;
-	lzPars.identity = 80;
-	lzPars.coverage = 90;
+
 	MultiGenomeMapper::inputParameters genomeMappingPars;
 	bfs::path bedFile = "";
 	bfs::path outputDir = "";
 	bool keepRefAlignments = false;
 	bool overWriteDirs = false;
-	bool keepBestOnly = false;
 	bool combineByGenome = false;
-	bool extendAndTrim = false;
-	uint32_t extendAndTrimLen = 10;
+	MultiGenomeMapper::getRefSeqsWithPrimaryGenomePars extractPars;
+	extractPars.lzPars.identity = 80;
+	extractPars.lzPars.coverage = 90;
+
+	bool writeOutAllSeqsFile = false;
+
 	bfs::path gffDir = "";
 	std::string gffExtraAttributesStr = "description";
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
+	setUp.setOption(extractPars.shortNames, "--shortNames", "Short Names");
+	setUp.setOption(writeOutAllSeqsFile, "--writeOutAllSeqsFile", "Write Out All Seqs File");
+
 	setUp.setOption(combineByGenome, "--combineByGenome", "Combine and merge regions extracted and create a bed file for each genome");
-	setUp.setOption(extendAndTrim, "--extendAndTrim", "Extend the determine region and then trim back, can be helpful for when variation falls at the very ends of the sequence");
-	setUp.setOption(extendAndTrimLen, "--extendAndTrimLen", "When extending and trimming, use this length");
-	setUp.setOption(lzPars.identity, "--identity", "Identity to use for when searching with lastz");
-	setUp.setOption(lzPars.coverage, "--coverage", "Coverage to use for when searching with lastz");
+	setUp.setOption(extractPars.extendAndTrim, "--extendAndTrim", "Extend the determine region and then trim back, can be helpful for when variation falls at the very ends of the sequence");
+	setUp.setOption(extractPars.extendAndTrimLen, "--extendAndTrimLen", "When extending and trimming, use this length");
+	setUp.setOption(extractPars.lzPars.identity, "--identity", "Identity to use for when searching with lastz");
+	setUp.setOption(extractPars.lzPars.coverage, "--coverage", "Coverage to use for when searching with lastz");
 	setUp.setOption(genomeMappingPars.numThreads_, "--numThreads", "Number of CPUs to utilize");
   setUp.setOption(gffDir, "--gffDir", "A directory with a gff for the genomes in --genomeDir, should be named GENOME.gff (for GENOME.fasta)");
   setUp.setOption(gffExtraAttributesStr, "--gffExtraAttributes", "Extra attributes to add to genome that has an accompany gff");
-	setUp.setOption(keepBestOnly, "--keepBestOnly", "Keep best hits only");
+	setUp.setOption(extractPars.keepBestOnly, "--keepBestOnly", "Keep best hits only");
 	setUp.setOption(keepRefAlignments, "--keepRefAlignments", "Keep Ref Alignments");
 
 	setUp.setOption(bedFile, "--bed", "Bed file, first entry is used", true);
@@ -263,7 +267,7 @@ int genExpRunner::extractRefSeqsFromGenomes(
 	auto gapPars = gapScoringParameters(5, 1, 0, 0, 0, 0);
 	auto scoring = substituteMatrix(2, -2);
 
-	uint64_t maxAlignLen = maxlen + extendAndTrimLen * 2 + 20;
+	uint64_t maxAlignLen = maxlen + extractPars.extendAndTrimLen * 2 + 20;
 
 	std::vector<aligner> aligners;
 	for(uint32_t t = 0; t < genomeMappingPars.numThreads_; ++t){
@@ -273,9 +277,9 @@ int genExpRunner::extractRefSeqsFromGenomes(
 //	aligners[0].parts_.scoring_.printScores(std::cout);
 //  auto refSeqs = gMapper->getRefSeqsWithPrimaryGenome(region, refAlignsDir, lzPars, keepBestOnly);
 	auto extractPathway =
-			[&regionsQueue,&keepRefAlignments,&outputDir,&lzPars,&overWriteDirs,&keepBestOnly,&aligners,
-			 &extendAndTrim,&extendAndTrimLen](
-					const std::unique_ptr<MultiGenomeMapper> & gMapper, uint32_t threadNumber) {
+			[&regionsQueue,&keepRefAlignments,&outputDir,&extractPars,&overWriteDirs,&aligners,&writeOutAllSeqsFile
+			 ](
+				const std::unique_ptr<MultiGenomeMapper> & gMapper, uint32_t threadNumber) {
 				GenomicRegion region;
 				while(regionsQueue.getVal(region)) {
 					std::string rUid = region.createUidFromCoordsStrand();
@@ -293,10 +297,23 @@ int genExpRunner::extractRefSeqsFromGenomes(
 						auto refAlignsDir = njh::files::makeDir(regionDir,
 								njh::files::MkdirPar("refAlignments"));
 						auto bedsDir = njh::files::makeDir(regionDir,njh::files::MkdirPar("beds"));
-						auto refSeqs = gMapper->getRefSeqsWithPrimaryGenome(region, refAlignsDir, lzPars, keepBestOnly, extendAndTrim, extendAndTrimLen, aligners[threadNumber]);
+						auto refSeqs = gMapper->getRefSeqsWithPrimaryGenome(region,
+						refAlignsDir, extractPars, aligners[threadNumber]);
+						if(writeOutAllSeqsFile){
+							auto separatedSeqFileOpts = SeqIOOptions::genFastaOut(njh::files::make_path(regionDir, "allRefsSeparated.fasta"));
+							SeqOutput separatedWriter(separatedSeqFileOpts);
+							separatedWriter.openOut();
+							for(const auto & refSeq : refSeqs){
+								auto toks = tokenizeString(refSeq.name_, "-");//unfortuantley there's not a better way to separate so hopefully the ref genomes don't have - in their names
+								for(const auto & tok : toks){
+									separatedWriter.write(seqInfo{tok, refSeq.seq_});
+								}
+							}
+						}
 						SeqOutput::write(refSeqs,
 								SeqIOOptions::genFastaOut(
 										njh::files::make_path(regionDir, "allRefs.fasta")));
+
 						bfs::path extractionCountsFnp = njh::files::make_path(refAlignsDir, "extractionCounts.tab.txt");
 						bfs::copy_file(extractionCountsFnp,
 																njh::files::make_path(bedsDir , "extractionCounts.tab.txt" ));
@@ -368,17 +385,17 @@ int genExpRunner::extractRefSeqsFromGenomes(
 
 int genExpRunner::extractExpectedRefSeqsFromGenomes(
 		const njh::progutils::CmdArgs & inputCommands) {
-	BioCmdsUtils::LastZPars lzPars;
-	lzPars.identity = 80;
-	lzPars.coverage = 80;
+
 	MultiGenomeMapper::inputParameters genomeMappingPars;
 	bfs::path bedFile = "";
 	bfs::path outputDir = "";
 	bool keepRefAlignments = false;
 	bool overWriteDirs = false;
-	bool keepBestOnly = false;
-	bool extendAndTrim = false;
-	uint32_t extendAndTrimLen = 200;
+	MultiGenomeMapper::getRefSeqsWithPrimaryGenomePars extractPars;
+	extractPars.extendAndTrimLen = 200;
+	extractPars.lzPars.identity = 80;
+	extractPars.lzPars.coverage = 80;
+
 	bfs::path gffDir = "";
 	std::string gffExtraAttributesStr = "description";
 
@@ -386,15 +403,15 @@ int genExpRunner::extractExpectedRefSeqsFromGenomes(
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
-	setUp.setOption(extendAndTrim, "--extendAndTrim", "Extend the determine region and then trim back, can be helpful for when variation falls at the very ends of the sequence");
-	setUp.setOption(extendAndTrimLen, "--extendAndTrimLen", "When extending and trimming, use this length");
-	setUp.setOption(lzPars.identity, "--identity", "Identity to use for when searching with lastz");
-	setUp.setOption(lzPars.coverage, "--coverage", "Coverage to use for when searching with lastz");
+	setUp.setOption(extractPars.extendAndTrim, "--extendAndTrim", "Extend the determine region and then trim back, can be helpful for when variation falls at the very ends of the sequence");
+	setUp.setOption(extractPars.extendAndTrimLen, "--extendAndTrimLen", "When extending and trimming, use this length");
+	setUp.setOption(extractPars.lzPars.identity, "--identity", "Identity to use for when searching with lastz");
+	setUp.setOption(extractPars.lzPars.coverage, "--coverage", "Coverage to use for when searching with lastz");
 	setUp.setOption(genomeMappingPars.numThreads_, "--numThreads", "Number of CPUs to utilize");
   setUp.setOption(gffDir, "--gffDir", "A directory with a gff for the genomes in --genomeDir, should be named GENOME.gff (for GENOME.fasta)", true);
   setUp.setOption(descriptions, "--descriptions", "Descriptions of genes to add to expected sequences", true);
   setUp.setOption(gffExtraAttributesStr, "--gffExtraAttributes", "Extra attributes to add to genome that has an accompany gff");
-	setUp.setOption(keepBestOnly, "--keepBestOnly", "Keep best hits only");
+	setUp.setOption(extractPars.keepBestOnly, "--keepBestOnly", "Keep best hits only");
 	setUp.setOption(keepRefAlignments, "--keepRefAlignments", "Keep Ref Alignments");
 
 	setUp.setOption(bedFile, "--bed", "Bed file, first entry is used", true);
@@ -441,7 +458,7 @@ int genExpRunner::extractExpectedRefSeqsFromGenomes(
 	auto gapPars = gapScoringParameters(5, 1, 0, 0, 0, 0);
 	auto scoring = substituteMatrix(2, -2);
 
-	uint64_t maxAlignLen = maxlen + extendAndTrimLen * 2 + 20;
+	uint64_t maxAlignLen = maxlen + extractPars.extendAndTrimLen * 2 + 20;
 
 	std::vector<aligner> aligners;
 	for(uint32_t t = 0; t < genomeMappingPars.numThreads_; ++t){
@@ -451,8 +468,7 @@ int genExpRunner::extractExpectedRefSeqsFromGenomes(
 //	aligners[0].parts_.scoring_.printScores(std::cout);
 //  auto refSeqs = gMapper->getRefSeqsWithPrimaryGenome(region, refAlignsDir, lzPars, keepBestOnly);
 	auto extractPathway =
-			[&regionsQueue,&keepRefAlignments,&outputDir,&lzPars,&overWriteDirs,&keepBestOnly,&aligners,
-			 &extendAndTrim,&extendAndTrimLen](
+			[&regionsQueue,&keepRefAlignments,&outputDir,&extractPars,&overWriteDirs,&aligners](
 					const std::unique_ptr<MultiGenomeMapper> & gMapper, uint32_t threadNumber) {
 				GenomicRegion region;
 				while(regionsQueue.getVal(region)) {
@@ -471,7 +487,7 @@ int genExpRunner::extractExpectedRefSeqsFromGenomes(
 						auto refAlignsDir = njh::files::makeDir(regionDir,
 								njh::files::MkdirPar("refAlignments"));
 						auto bedsDir = njh::files::makeDir(regionDir,njh::files::MkdirPar("beds"));
-						auto refSeqs = gMapper->getRefSeqsWithPrimaryGenome(region, refAlignsDir, lzPars, keepBestOnly, extendAndTrim, extendAndTrimLen, aligners[threadNumber]);
+						auto refSeqs = gMapper->getRefSeqsWithPrimaryGenome(region, refAlignsDir, extractPars, aligners[threadNumber]);
 						SeqOutput::write(refSeqs,
 								SeqIOOptions::genFastaOut(
 										njh::files::make_path(regionDir, "allRefs.fasta")));
