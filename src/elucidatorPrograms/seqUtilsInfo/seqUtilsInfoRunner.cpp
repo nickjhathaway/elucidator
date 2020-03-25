@@ -1295,6 +1295,7 @@ int seqUtilsInfoRunner::countOtus(const njh::progutils::CmdArgs & inputCommands)
 
 
 int seqUtilsInfoRunner::quickLenInfo(const njh::progutils::CmdArgs & inputCommands) {
+	VecStr additionalColumnsData;
   seqUtilsInfoSetUp setUp(inputCommands);
   setUp.processDebug();
   setUp.processVerbose();
@@ -1302,7 +1303,7 @@ int seqUtilsInfoRunner::quickLenInfo(const njh::progutils::CmdArgs & inputComman
   outOpts.outExtention_ = ".tab.txt";
   setUp.processWritingOptions(outOpts);
   setUp.processReadInNames();
-
+  setUp.setOption(additionalColumnsData, "--additionalColumnsData", "Extra columns to add to the output table, comma separated values in the format of [COL_NAME]:[COL_VAL]");
   setUp.finishSetUp(std::cout);
 	std::vector<uint64_t> readLengths;
 	readObject read;
@@ -1318,7 +1319,18 @@ int seqUtilsInfoRunner::quickLenInfo(const njh::progutils::CmdArgs & inputComman
 	statsTable.hasHeader_ = true;
 	auto nums = getVectorOfMapValues(stats);
 	statsTable.content_.emplace_back(numVecToVecStr(nums));
-
+	statsTable.columnNames_.emplace_back("n");
+	statsTable.content_.front().emplace_back(njh::pasteAsStr(readLengths.size()));
+	for(const auto d : additionalColumnsData){
+		auto toks = tokenizeString(d, ":");
+		if(2 != toks.size()){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "could not separate additional column on :, " << d << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		statsTable.columnNames_.emplace_back(toks[0]);
+		statsTable.content_.front().emplace_back(toks[1]);
+	}
 	statsTable.outPutContents(out, "\t");
 
 //  if(plot){
