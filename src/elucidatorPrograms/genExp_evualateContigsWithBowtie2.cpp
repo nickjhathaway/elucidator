@@ -856,33 +856,37 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 
 	std::unordered_map<std::string, std::vector<GenomicRegion>> specificRegions;
 	if(calcSpecificCoverage){
-		uint64_t maxLen = 0;
-		readVec::getMaxLength(requiredRegionsSeqs, maxLen);
-		std::vector<refVariants> refVariationInfo;
-		aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
-		std::unordered_map<std::string, GenomicRegion> regionByName;
+		if(1 == requiredRegions.size()){
+			specificRegions[requiredRegions[0].uid_] = requiredRegions;
+		}else{
+			uint64_t maxLen = 0;
+			readVec::getMaxLength(requiredRegionsSeqs, maxLen);
+			std::vector<refVariants> refVariationInfo;
+			aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
+			std::unordered_map<std::string, GenomicRegion> regionByName;
 
 
-		for (const auto & refPos : iter::range(requiredRegionsSeqs.size())) {
-			regionByName[requiredRegions[refPos].uid_] = requiredRegions[refPos];
-			refVariationInfo.emplace_back(requiredRegionsSeqs[refPos]);
-		}
-		for (const auto & refPos : iter::range(requiredRegionsSeqs.size())) {
-			for (const auto & refSubPos : iter::range(requiredRegionsSeqs.size())) {
-				if (refPos == refSubPos) {
-					continue;
-				}
-				refVariationInfo[refPos].addVariant(requiredRegionsSeqs[refSubPos],
-						alignerObj, false);
+			for (const auto & refPos : iter::range(requiredRegionsSeqs.size())) {
+				regionByName[requiredRegions[refPos].uid_] = requiredRegions[refPos];
+				refVariationInfo.emplace_back(requiredRegionsSeqs[refPos]);
 			}
-		}
-		for (const auto & refPos : iter::range(requiredRegionsSeqs.size())) {
-			auto specificPositions = refVariationInfo[refPos].getUniqueToRefPositions();
-			for(const auto & pos : specificPositions){
-				auto specReg = regionByName[requiredRegions[refPos].uid_];
-				specReg.start_ = specReg.start_ + pos;
-				specReg.end_ = specReg.start_ + 1;
-				specificRegions[requiredRegions[refPos].uid_].emplace_back(specReg);
+			for (const auto & refPos : iter::range(requiredRegionsSeqs.size())) {
+				for (const auto & refSubPos : iter::range(requiredRegionsSeqs.size())) {
+					if (refPos == refSubPos) {
+						continue;
+					}
+					refVariationInfo[refPos].addVariant(requiredRegionsSeqs[refSubPos],
+							alignerObj, false);
+				}
+			}
+			for (const auto & refPos : iter::range(requiredRegionsSeqs.size())) {
+				auto specificPositions = refVariationInfo[refPos].getUniqueToRefPositions();
+				for(const auto & pos : specificPositions){
+					auto specReg = regionByName[requiredRegions[refPos].uid_];
+					specReg.start_ = specReg.start_ + pos;
+					specReg.end_ = specReg.start_ + 1;
+					specificRegions[requiredRegions[refPos].uid_].emplace_back(specReg);
+				}
 			}
 		}
 	}
@@ -1528,7 +1532,6 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 
 		if(calcSpecificCoverage){
 			table specifcCoveredCountsTab(VecStr{"Region", "basesCovered", "totalBases", "fractionCovered"});
-
 			std::vector<uint32_t> positionsNotCovered;
 			for(const auto & regions : specificRegions){
 				uint32_t totalRegionBases = 0;
@@ -1575,7 +1578,6 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 			specifcCoveredCountsTab.addColumn(VecStr{program}, "program");
 			specifcCoveredCountsTab.addColumn(VecStr{sample}, "sample");
 			specifcCoveredCountsTab.addColumn(VecStr{target}, "target");
-
 			specifcCoveredCountsTab.outPutContents(
 					TableIOOpts::genTabFileOut(
 							njh::files::make_path(setUp.pars_.directoryName_,

@@ -97,18 +97,24 @@ std::map<uint32_t, std::vector<char>> refVariants::getVariantSnpLociMap()const{
 
 
 std::vector<uint32_t> refVariants::getUniqueToRefPositions() const {
-	std::set<uint32_t> positions;
-	for(const auto & v : variants_){
-		for(const auto & m : v.mismatches_){
-			positions.emplace(m.first);
+	std::unordered_map<uint32_t, uint32_t> positions;
+	for (const auto &v : variants_) {
+		for (const auto &m : v.mismatches_) {
+			++positions[m.first];
 		}
-		for(const auto & d : v.deletions_){
-			for(uint32_t pos = 0; pos < d.second.gapedSequence_.size(); ++pos){
-				positions.emplace(d.first + pos);
+		for (const auto &d : v.deletions_) {
+			for (uint32_t pos = 0; pos < d.second.gapedSequence_.size(); ++pos) {
+				++positions[d.first + pos];
 			}
 		}
 	}
-	return std::vector<uint32_t> {positions.begin(), positions.end()};
+	std::vector<uint32_t> positionsOuts;
+	for(const auto & pos : positions){
+		if(pos.second >= variants_.size()){
+			positionsOuts.emplace_back(pos.first);
+		}
+	}
+	return positionsOuts;
 }
 
 std::vector<uint32_t> refVariants::getVariantSnpLoci(VecStr names, uint32_t expand )const{
