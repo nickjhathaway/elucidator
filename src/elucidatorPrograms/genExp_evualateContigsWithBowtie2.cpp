@@ -29,6 +29,7 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 	uint32_t numThreads = 1;
 	std::string program = "";
 	std::string sample  = "";
+	std::string target = "";
 	uint32_t lencutOffForBowtie = 200;
 	BioCmdsUtils::LastZPars lzPars;
 	lzPars.coverage = 95;
@@ -43,6 +44,7 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 	setUp.setOption(lzPars.coverage, "--coverage", "coverage for lastz");
 	setUp.setOption(lzPars.identity, "--identity", "identity for lastz");
 
+  setUp.setOption(target, "--target", "Name of the target region to output with the report", true);
   setUp.setOption(program, "--program", "Name of the program to output with the report", true);
   setUp.setOption(sample,  "--sample",  "Name of the sample to output with the report",  true);
 	setUp.setOption(lencutOffForBowtie, "--lencutOffForBowtie", "Contigs below this length will be evaulated by bowtie instead of lastz");
@@ -383,6 +385,7 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 	comparisonOut << "ReadNumber\tReadId\tBestRef\tscore\talnScore\tkDist-5\t1bIndel\t2bIndel\t>2bIndel\tlqMismatch\thqMismatch"
 			<< '\t' << "program"
 			<< '\t' << "sample"
+			<< '\t' << "target"
 			<< std::endl;
 
 
@@ -465,6 +468,7 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 					<< '\t' << results->comp_.hqMismatches_
 					<< '\t' << program
 					<< '\t' << sample
+					<< '\t' << target
 					<< std::endl;
 		}
 		++readNumber;
@@ -536,6 +540,7 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 					<< '\t' << "*"
 					<< '\t' << program
 					<< '\t' << sample
+					<< '\t' << target
 					<< std::endl;
 			/*
 			 * 		coveredCountsTab.addColumn(VecStr{program}, "program");
@@ -582,7 +587,7 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 		{
 			//write out matching contigs info
 			OutputStream matchInfo(njh::files::make_path(setUp.pars_.directoryName_, "seqsMatchingExpectedInfo.tab.txt"));
-			matchInfo << "program\tsample";
+			matchInfo << "program\tsample\target";
 			matchInfo
 					<< "\t" << "SeqsMatchingExpectedCnt"
 					<< "\t" << "SeqsMatchingExpectedFrac"
@@ -591,6 +596,7 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 					<< "\t" << "TotalSeqs" << std::endl;
 			matchInfo << program
 					<< "\t" << sample
+					<< "\t" << target
 					<< "\t" << matchingContigs.size()
 					<< "\t" << matchingContigs.size()/static_cast<double>(readNumber)
 					<< "\t" << notMatchingContigs.size()
@@ -650,6 +656,23 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 			}
 		}
 	}
+
+	{
+		//read lengths
+		auto allRLens = getVectorOfMapValues(readLengths);
+		auto stats = getStatsOnVec(allRLens);
+		table statsTable;
+		statsTable.columnNames_ = getVectorOfMapKeys(stats);
+		statsTable.hasHeader_ = true;
+		auto nums = getVectorOfMapValues(stats);
+		statsTable.content_.emplace_back(numVecToVecStr(nums));
+		addOtherVec(statsTable.columnNames_, VecStr{"n","program", "sample", "target"});
+		addOtherVec(statsTable.content_.front(), toVecStr(allRLens.size(), program, sample, target));
+		statsTable.outPutContents(
+				TableIOOpts::genTabFileOut(
+						njh::files::make_path(setUp.pars_.directoryName_,
+								"contigsLengthsInfo.tab.txt"), true));
+	}
 	return 0;
 }
 
@@ -663,6 +686,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	bfs::path idsRequired = "";
 	std::string program = "";
 	std::string sample  = "";
+	std::string target = "";
 	uint32_t lencutOffForBowtie = 200;
 	BioCmdsUtils::LastZPars lzPars;
 	lzPars.coverage = 95;
@@ -681,6 +705,8 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 
   setUp.setOption(program, "--program", "Name of the program to output with the report", true);
   setUp.setOption(sample,  "--sample",  "Name of the sample to output with the report",  true);
+  setUp.setOption(target,  "--target", "Name of the target region to output with the report", true);
+
 	setUp.setOption(lencutOffForBowtie, "--lencutOffForBowtie", "Contigs below this length will be evaulated by bowtie instead of lastz");
 
 	setUp.setOption(numThreads, "--numThreads", "number of cpus to use");
@@ -1161,6 +1187,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	comparisonOut << "ReadNumber\tReadId\tBestRef\tscore\talnScore\tkDist-5\t1bIndel\t2bIndel\t>2bIndel\tlqMismatch\thqMismatch"
 			<< '\t' << "program"
 			<< '\t' << "sample"
+			<< '\t' << "target"
 			<< std::endl;
 
 
@@ -1242,6 +1269,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 					<< '\t' << results->comp_.hqMismatches_
 					<< '\t' << program
 					<< '\t' << sample
+					<< '\t' << target
 					<< std::endl;
 		}
 		++readNumber;
@@ -1313,6 +1341,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 					<< '\t' << "*"
 					<< '\t' << program
 					<< '\t' << sample
+					<< '\t' << target
 					<< std::endl;
 			/*
 			 * 		coveredCountsTab.addColumn(VecStr{program}, "program");
@@ -1359,7 +1388,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 		{
 			//write out matching contigs info
 			OutputStream matchInfo(njh::files::make_path(setUp.pars_.directoryName_, "contigsMatchingExpectedInfo.tab.txt"));
-			matchInfo << "program\tsample";
+			matchInfo << "program\tsample\ttarget";
 			matchInfo
 					<< "\t" << "ContigsMatchingExpectedCnt"
 					<< "\t" << "ContigsMatchingExpectedFrac"
@@ -1368,6 +1397,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 					<< "\t" << "TotalContigs" << std::endl;
 			matchInfo << program
 					<< "\t" << sample
+					<< "\t" << target
 					<< "\t" << matchingContigs.size()
 					<< "\t" << matchingContigs.size()/static_cast<double>(readNumber)
 					<< "\t" << notMatchingContigs.size()
@@ -1437,6 +1467,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 				}
 			}
 		}
+
 		//
 		{
 			table coveredCountsTab(VecStr{"Region", "basesCovered", "totalBases", "fractionCovered"});
@@ -1484,11 +1515,16 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 
 			coveredCountsTab.addColumn(VecStr{program}, "program");
 			coveredCountsTab.addColumn(VecStr{sample}, "sample");
+			coveredCountsTab.addColumn(VecStr{target}, "target");
+
 			coveredCountsTab.outPutContents(
 					TableIOOpts::genTabFileOut(
 							njh::files::make_path(setUp.pars_.directoryName_,
 									"coveragedInfo.tab.txt"), true));
 		}
+
+
+
 
 		if(calcSpecificCoverage){
 			table specifcCoveredCountsTab(VecStr{"Region", "basesCovered", "totalBases", "fractionCovered"});
@@ -1538,11 +1574,30 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 			} //
 			specifcCoveredCountsTab.addColumn(VecStr{program}, "program");
 			specifcCoveredCountsTab.addColumn(VecStr{sample}, "sample");
+			specifcCoveredCountsTab.addColumn(VecStr{target}, "target");
+
 			specifcCoveredCountsTab.outPutContents(
 					TableIOOpts::genTabFileOut(
 							njh::files::make_path(setUp.pars_.directoryName_,
 									"specifcRegionsCoveragedInfo.tab.txt"), true));
 		}
+	}
+
+	{
+		//read lengths
+		auto allRLens = getVectorOfMapValues(readLengths);
+		auto stats = getStatsOnVec(allRLens);
+		table statsTable;
+		statsTable.columnNames_ = getVectorOfMapKeys(stats);
+		statsTable.hasHeader_ = true;
+		auto nums = getVectorOfMapValues(stats);
+		statsTable.content_.emplace_back(numVecToVecStr(nums));
+		addOtherVec(statsTable.columnNames_, VecStr{"n","program", "sample", "target"});
+		addOtherVec(statsTable.content_.front(), toVecStr(allRLens.size(), program, sample, target));
+		statsTable.outPutContents(
+				TableIOOpts::genTabFileOut(
+						njh::files::make_path(setUp.pars_.directoryName_,
+								"contigsLengthsInfo.tab.txt"), true));
 	}
 	return 0;
 }
