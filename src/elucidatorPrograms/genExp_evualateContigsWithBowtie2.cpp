@@ -990,9 +990,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 		}
 	};
 
-
 	njh::concurrent::runVoidFunctionThreaded(alignToGenome, numThreads);
-
 	for(const auto & genome : gMapper.genomes_){
 		bfs::path genomeDir = njh::files::make_path(setUp.pars_.directoryName_, genome.first);
 		auto bowtie2AlignedFnp = njh::files::make_path(genomeDir, "alignedSeqsBowtie2.sorted.bam");
@@ -1009,7 +1007,6 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 			bReader.Open(seqOpts.out_.outFilename_.string());
 			checkBamOpenThrow(bReader, seqOpts.out_.outFilename_.string());
 			refData = bReader.GetReferenceData();
-
 			while (bReader.GetNextAlignment(bAln)) {
 				if (bAln.IsMapped()) {
 					bAln.Name = nameKey[bAln.Name];
@@ -1026,18 +1023,22 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 			BamTools::BamReader bReader;
 			bReader.Open(seqOpts.out_.outFilename_.string());
 			checkBamOpenThrow(bReader, seqOpts.out_.outFilename_.string());
-			refData = bReader.GetReferenceData();
 
+			uint32_t lastzAlnsReadIn = 0;
 			while (bReader.GetNextAlignment(bAln)) {
+				++lastzAlnsReadIn;
+
 				if (bAln.IsMapped()) {
 					bAln.Name = nameKey[bAln.Name];
 					bamAligns[bAln.Name].emplace_back(bAln);
 					mappedReads.emplace(bAln.Name);
 				}
 			}
+			if(lastzAlnsReadIn > 0){
+				//if lastz doesn't align anyting then no samview is created so there's no header
+				refData = bReader.GetReferenceData();
+			}
 		}
-
-
 		std::set<std::string> unmappedReads;
 		for(const auto & readName : readLengths){
 			if(!njh::in(readName.first, mappedReads)){
@@ -1045,7 +1046,6 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 				++unmappedCounts[readName.first];
 			}
 		}
-
 		TwoBit::TwoBitFile twobitReader(genome.second->fnpTwoBit_);
 		std::vector<Bed6RecordCore> alignedRegions;
 		std::map<uint32_t, uint32_t> mapCounts;
@@ -1054,7 +1054,6 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 		auto regionsExtractedOpts = SeqIOOptions::genFastaOut(njh::files::make_path(genomeDir, "regions"));
 		SeqOutput extractedWriter(regionsExtractedOpts);
 		extractedWriter.openOut();
-
 		//alignment comparisons
 		OutOptions comparisonOpts(njh::files::make_path(genomeDir, "refComparisonInfo.tab.txt"));
 		OutputStream comparisonOut(comparisonOpts);
@@ -1075,7 +1074,6 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 			++mapCounts[alnForRead.size()];
 			uint32_t extractionCount = 0;
 			for (const auto & aln : alnForRead) {
-
 				auto results = std::make_shared<AlignmentResults>(aln, refData);
 				results->setRefSeq(twobitReader);
 				MetaDataInName refMeta;
@@ -1090,12 +1088,10 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 				readNamesToRefSeqs[results->refSeq_->name_].emplace_back(aln.Name);
 				kmerInfo refInfo(results->refSeq_->seq_, 5, false);
 				kmerInfo seqKInfo(results->alnSeq_->seq_, 5, false);
-
 				//results->setComparison(false);
 				results->setComparison(true);
 				writer.write(results->refSeqAligned_);
 				writer.write(results->alnSeqAligned_);
-
 				alignedRegions.emplace_back(results->gRegion_.genBedRecordCore());
 				std::string appName = "";
 				MetaDataInName rangeMeta;
