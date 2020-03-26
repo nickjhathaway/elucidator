@@ -1185,6 +1185,8 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	OutputStream comparisonOut(comparisonOpts);
 
 	comparisonOut << "ReadNumber\tReadId\tBestRef\tscore\talnScore\tkDist-5\t1bIndel\t2bIndel\t>2bIndel\tlqMismatch\thqMismatch"
+			<< '\t' << "totalErrors"
+			<< '\t' << "length"
 			<< '\t' << "program"
 			<< '\t' << "sample"
 			<< '\t' << "target"
@@ -1267,6 +1269,8 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 					<< '\t' << results->comp_.largeBaseIndel_
 					<< '\t' << results->comp_.lqMismatches_
 					<< '\t' << results->comp_.hqMismatches_
+					<< '\t' << results->comp_.distances_.getNumOfEvents(true)
+					<< '\t' << readLengths[results->bAln_.Name]
 					<< '\t' << program
 					<< '\t' << sample
 					<< '\t' << target
@@ -1330,15 +1334,17 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 			unmappedToAllGenomes.emplace_back(unmappedCount.first);
 			comparisonOut << readNumber
 					<< '\t' << unmappedCount.first
-					<< '\t' << "*"
-					<< '\t' << "*"
-					<< '\t' << "*"
-					<< '\t' << "*"
-					<< '\t' << "*"
-					<< '\t' << "*"
-					<< '\t' << "*"
-					<< '\t' << "*"
-					<< '\t' << "*"
+					<< '\t' << "NA"
+					<< '\t' << "NA"
+					<< '\t' << "NA"
+					<< '\t' << "NA"
+					<< '\t' << "NA"
+					<< '\t' << "NA"
+					<< '\t' << "NA"
+					<< '\t' << "NA"
+					<< '\t' << "NA"
+					<< '\t' << "NA"
+					<< '\t' << readLengths[unmappedCount.first]
 					<< '\t' << program
 					<< '\t' << sample
 					<< '\t' << target
