@@ -587,7 +587,7 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 		{
 			//write out matching contigs info
 			OutputStream matchInfo(njh::files::make_path(setUp.pars_.directoryName_, "seqsMatchingExpectedInfo.tab.txt"));
-			matchInfo << "program\tsample\target";
+			matchInfo << "program\tsample\ttarget";
 			matchInfo
 					<< "\t" << "SeqsMatchingExpectedCnt"
 					<< "\t" << "SeqsMatchingExpectedFrac"
