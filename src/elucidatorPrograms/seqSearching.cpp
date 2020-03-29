@@ -95,9 +95,9 @@ int seqSearchingRunner::findSimpleTandemRepeatLocations(const njh::progutils::Cm
 //			[](const std::string & k) {
 //				return std::all_of(k.begin(), k.end(),[&k](const char c) {return k.front() == c;});
 //			};
+	std::unordered_map<std::string, std::vector<motif>> altMots;
 	if(!searchAllUnits){
 		std::vector<std::string> toBeAllUnits;
-
 		for(const auto & unit : allUnits){
 			bool add = true;
 			if(unit.size() > 1){
@@ -105,6 +105,7 @@ int seqSearchingRunner::findSimpleTandemRepeatLocations(const njh::progutils::Cm
 					//check rotating if the same size
 					if(otherUnit.size() == unit.size()){
 						if(checkTwoRotatingStrings(unit, otherUnit, 0).size() > 0){
+							altMots[otherUnit].emplace_back(motif(unit));
 							add = false;
 							break;
 						}
@@ -175,6 +176,32 @@ int seqSearchingRunner::findSimpleTandemRepeatLocations(const njh::progutils::Cm
 		printVector(allUnits,"\n");
 	}
 
+	auto getMaxRepeatNumber = [](const std::string & seq, const motif & m){
+		auto locs = m.findPositionsFull(seq, 0);
+		njh::sort(locs);
+		uint32_t maxRepeatNumber = 0;
+		if(!locs.empty()){
+			uint32_t length = 1;
+			size_t start = locs.front();
+			for(const auto pos : iter::range<uint32_t>(1, locs.size())){
+				if(locs[pos] == locs[pos - 1] + m.size() ){
+					++length;
+				}else{
+					if(length > maxRepeatNumber){
+						maxRepeatNumber = length;
+					}
+					length = 1;
+					start = locs[pos];
+				}
+			}
+			if(length > maxRepeatNumber){
+				maxRepeatNumber = length;
+			}
+		}
+		return maxRepeatNumber;
+	};
+
+
 	seqInfo seq;
 	SeqInput reader(setUp.pars_.ioOptions_);
 	reader.openIn();
@@ -182,7 +209,8 @@ int seqSearchingRunner::findSimpleTandemRepeatLocations(const njh::progutils::Cm
 	std::mutex outMut;
 	while(reader.readNextRead(seq)){
 		njh::concurrent::LockableQueue<std::string> unitQueue(allUnits);
-		std::function<void()> findTandems = [&unitQueue,&seq,&lengthCutOff,&out,&outMut,&minNumRepeats,&doNotAddFlankingSeq,&addFullSeqToOuput](){
+		std::function<void()> findTandems = [&unitQueue,&seq,&lengthCutOff,&out,&outMut,&minNumRepeats,
+																				 &doNotAddFlankingSeq,&addFullSeqToOuput,&altMots,&getMaxRepeatNumber](){
 			std::string motifstr;
 			std::vector<Bed6RecordCore> repeatUnitLocs;
 			std::stringstream currentOut;
@@ -224,7 +252,21 @@ int seqSearchingRunner::findSimpleTandemRepeatLocations(const njh::progutils::Cm
 									}
 								}
 							}
-							if((outputEnd - outputStart)/mot.size() >= minNumRepeats && outputEnd - outputStart >=lengthCutOff){
+							//check to see that there is at least one alt tandem that equals the min number of required repeats
+							uint32_t repeatNumber = length;
+							if(repeatNumber < minNumRepeats && (outputEnd - outputStart)/mot.size() >= minNumRepeats && njh::in(motifstr, altMots)){
+								auto subSeq = seq.seq_.substr(outputStart, outputEnd - outputStart);
+								for(const auto & altMot : altMots.at(motifstr)){
+									auto altRepeatNumber = getMaxRepeatNumber(subSeq, altMot);
+									if(altRepeatNumber > repeatNumber){
+										repeatNumber = altRepeatNumber;
+										if(repeatNumber >=minNumRepeats){
+											break;
+										}
+									}
+								}
+							}
+							if(repeatNumber >= minNumRepeats && outputEnd - outputStart >=lengthCutOff){
 								currentOut << seq.name_
 										<< "\t" << outputStart
 										<< "\t" << outputEnd
@@ -266,7 +308,21 @@ int seqSearchingRunner::findSimpleTandemRepeatLocations(const njh::progutils::Cm
 							}
 						}
 					}
-					if((outputEnd - outputStart)/mot.size() >= minNumRepeats && outputEnd - outputStart >=lengthCutOff){
+					//check to see that there is at least one alt tandem that equals the min number of required repeats
+					uint32_t repeatNumber = length;
+					if(repeatNumber < minNumRepeats && (outputEnd - outputStart)/mot.size() >= minNumRepeats && njh::in(motifstr, altMots)){
+						auto subSeq = seq.seq_.substr(outputStart, outputEnd - outputStart);
+						for(const auto & altMot : altMots.at(motifstr)){
+							auto altRepeatNumber = getMaxRepeatNumber(subSeq, altMot);
+							if(altRepeatNumber > repeatNumber){
+								repeatNumber = altRepeatNumber;
+								if(repeatNumber >=minNumRepeats){
+									break;
+								}
+							}
+						}
+					}
+					if(repeatNumber >= minNumRepeats && outputEnd - outputStart >=lengthCutOff){
 						currentOut << seq.name_
 								<< "\t" << outputStart
 								<< "\t" << outputEnd
