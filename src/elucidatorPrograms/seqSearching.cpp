@@ -41,9 +41,107 @@ seqSearchingRunner::seqSearchingRunner()
 					 addFunc("findMotifLocations", findMotifLocations, false),
 					 addFunc("findTandemMotifLocations", findTandemMotifLocations, false),
 					 addFunc("chopAndMapAndRefineInvidual", chopAndMapAndRefineInvidual, false),
+					 addFunc("findSimpleTandemRepeatLocations", findSimpleTandemRepeatLocations, false),
            },//
           "seqSearching") {}
 
+
+
+
+int seqSearchingRunner::findSimpleTandemRepeatLocations(const njh::progutils::CmdArgs & inputCommands){
+	std::vector<char> alphabet{'A', 'G', 'C', 'T'};
+	OutOptions outOpts(bfs::path(""));
+	outOpts.outExtention_ = ".bed";
+	uint32_t minRepeatUnitSize = 1;
+	uint32_t maxRepeatUnitSize = 3;
+	uint32_t lengthCutOff = 12;
+	uint32_t minNumRepeats = 2;
+
+	uint32_t numThreads = 1;
+	seqSetUp setUp(inputCommands);
+	setUp.processDebug();
+	setUp.processVerbose();
+	setUp.setOption(numThreads, "--numThreads", "Number of CPUs to use", njh::progutils::ProgramSetUp::CheckCase::NONZERO);
+	setUp.processReadInNames(VecStr{"--fasta", "--fastagz", "--fastqgz", "--fastq"}, true);
+	setUp.setOption(lengthCutOff, "--lengthCutOff", "The minimum length to report(inclusive)");
+	setUp.setOption(minNumRepeats, "--minNumRepeats", "The minimum number of repeated units(inclusive)");
+	setUp.setOption(minRepeatUnitSize, "--minRepeatUnitSize", "Min Repeat Unit Size to search for(inclusive)");
+	setUp.setOption(maxRepeatUnitSize, "--maxRepeatUnitSize", "Max Repeat Unit Size to search for(inclusive)");
+	if(minRepeatUnitSize > maxRepeatUnitSize){
+		setUp.failed_ = true;
+		setUp.addWarning(njh::pasteAsStr("maxRepeatUnitSize: ", maxRepeatUnitSize, " can't be greater than minRepeatUnitSize: ", minRepeatUnitSize));
+	}
+	setUp.setOption(alphabet, "--alphabet", "alphabet");
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	//first create tandems that will be searched for
+	std::vector<std::string> allUnits;
+	for(uint32_t repeatUnitSize = minRepeatUnitSize; repeatUnitSize < maxRepeatUnitSize + 1; ++repeatUnitSize){
+		auto units = permuteVector(alphabet, repeatUnitSize);
+		for(const auto & unit : units){
+			allUnits.emplace_back(njh::pasteAsStr(unit));
+		}
+	}
+	if(setUp.pars_.debug_){
+		std::cout << "Searching for: " << std::endl;
+		printVector(allUnits,"\n");
+	}
+
+	seqInfo seq;
+	SeqInput reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	OutputStream out(outOpts);
+	std::mutex outMut;
+	while(reader.readNextRead(seq)){
+		njh::concurrent::LockableQueue<std::string> unitQueue(allUnits);
+		std::function<void()> findTandems = [&unitQueue,&seq,&lengthCutOff,&out,&outMut,&minNumRepeats](){
+			std::string motifstr;
+			std::vector<Bed6RecordCore> repeatUnitLocs;
+			std::stringstream currentOut;
+			while(unitQueue.getVal(motifstr)){
+				motif mot(motifstr);
+				auto locs = mot.findPositionsFull(seq.seq_, 0);
+				njh::sort(locs);
+				if(!locs.empty()){
+					uint32_t length = 1;
+					size_t start = locs.front();
+					for(const auto pos : iter::range<uint32_t>(1, locs.size())){
+						if(locs[pos] == locs[pos - 1] + mot.size() ){
+							++length;
+						} else {
+							if(length >= minNumRepeats && length * mot.size() >=lengthCutOff){
+								currentOut << seq.name_
+										<< "\t" << start
+										<< "\t" << start + mot.size() * length
+										<< "\t" << motifstr << "_x" << length
+										<< "\t" << length * mot.size()
+										<< "\t" << "+" << '\n';
+							}
+							length = 1;
+							start = locs[pos];
+						}
+					}
+					if(length >= minNumRepeats && length * mot.size() >=lengthCutOff){
+						currentOut << seq.name_
+								<< "\t" << start
+								<< "\t" << start + mot.size() * length
+								<< "\t" << motifstr << "_x" << length
+								<< "\t" << length * mot.size()
+								<< "\t" << "+" << '\n';;
+					}
+				}
+			}
+			{
+				std::lock_guard<std::mutex> lock(outMut);
+				out << currentOut.str();
+			}
+		};
+		njh::concurrent::runVoidFunctionThreaded(findTandems, numThreads);
+	}
+	return 0;
+}
 
 
 int seqSearchingRunner::findTandemMotifLocations(const njh::progutils::CmdArgs & inputCommands){

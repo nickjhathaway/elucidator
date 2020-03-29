@@ -44,6 +44,9 @@ class seqSearchingRunner : public njh::progutils::ProgramRunner {
   static int findTandemMotifLocations(const njh::progutils::CmdArgs & inputCommands);
 
 
+  static int findSimpleTandemRepeatLocations(const njh::progutils::CmdArgs & inputCommands);
+
+
 };
 
 }  // namespace njhseq

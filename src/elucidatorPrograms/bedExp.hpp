@@ -77,6 +77,7 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	static int extendToEndOfChrom(const njh::progutils::CmdArgs & inputCommands);
 	static int extendToStartOfChrom(const njh::progutils::CmdArgs & inputCommands);
 	static int centerBedRegionWithFixSize(const njh::progutils::CmdArgs & inputCommands);
+	static int reverseComplementRegion(const njh::progutils::CmdArgs & inputCommands);
 
 	//modifying aspects of the bed regions
 	static int bedToggleStrand(const njh::progutils::CmdArgs & inputCommands);

@@ -81,9 +81,71 @@ bedExpRunner::bedExpRunner()
 					 addFunc("trimDownstreamRegion", trimDownstreamRegion, false),
 					 addFunc("createWindowsInbetweenRegions", createWindowsInbetweenRegions, false),
 					 addFunc("createWindowsInRegions", createWindowsInRegions, false),
+					 addFunc("reverseComplementRegion", reverseComplementRegion, false),
            },//,,
           "bedExp") {}
 
+
+int bedExpRunner::reverseComplementRegion(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path chromLengthsTable = "";
+
+	bfs::path bedFile;
+	OutOptions outOpts;
+	outOpts.outExtention_ = ".bed";
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(bedFile, "--bed", "Bed file", true);
+	setUp.setOption(chromLengthsTable, "--chromLengthsTable", "Chromosome Lengths Table, two columns, first chrom name, second length", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	table chromTab(chromLengthsTable, "\t", false);
+
+	if(2 != chromTab.columnNames_.size()){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << chromLengthsTable << " should be a table with two columns, first chrom name, second length" << "\n";
+		throw std::runtime_error{ss.str()};
+	}
+	std::unordered_map<std::string, uint64_t> lengths;
+	for(const auto & row : chromTab.content_){
+		lengths[row[0]] = njh::StrToNumConverter::stoToNum<uint64_t>(row[1]);
+	}
+	BioDataFileIO<Bed3RecordCore> reader{IoOptions(InOptions(bedFile), outOpts)};
+	reader.openIn();
+	reader.openOut();
+	std::unordered_map<std::string, std::unordered_map<uint32_t, std::vector<uint32_t>>> alreadyTakenIds;
+	std::shared_ptr<Bed3RecordCore> b = reader.readNextRecord();
+	while(nullptr != b){
+		const auto & chromLen = njh::mapAt(lengths, b->chrom_);
+		if(njh::mapAt(lengths, b->chrom_) < b->chromStart_ || njh::mapAt(lengths, b->chrom_) < b->chromEnd_){
+			std::stringstream ss;
+			std::string name = njh::pasteAsStr(b->chrom_, "-", b->chromStart_, "-", b->chromEnd_);
+			if(b->extraFields_.size() >0){
+				name = b->extraFields_[0];
+			}
+			ss << __PRETTY_FUNCTION__ << ", error for region: " <<  name << "start: " << b->chromStart_ << " or end: " << b->chromEnd_ << " is greater than given chromosome length: " << chromLen<< "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		auto newEnd = chromLen - b->chromStart_;
+		auto newStart = chromLen - b->chromEnd_;
+		b->chromStart_ = newStart;
+		b->chromEnd_ = newEnd;
+		if(b->extraFields_.size() >= 3){
+			auto possibleStrandField = b->extraFields_[2];
+			if("-" == possibleStrandField){
+				possibleStrandField = "+";
+			}else if("+" == possibleStrandField){
+				possibleStrandField = "-";
+			}
+			b->extraFields_[2] = possibleStrandField;
+		}
+		reader.write(*b, [](const Bed3RecordCore & bed, std::ostream & out){
+			out << bed.toDelimStrWithExtra() << std::endl;
+		});
+		b = reader.readNextRecord();
+	}
+
+	return 0;
+}
 
 
 int bedExpRunner::centerBedRegionWithFixSize(const njh::progutils::CmdArgs & inputCommands) {
