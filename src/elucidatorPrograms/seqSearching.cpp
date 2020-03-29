@@ -56,7 +56,9 @@ int seqSearchingRunner::findSimpleTandemRepeatLocations(const njh::progutils::Cm
 	uint32_t maxRepeatUnitSize = 3;
 	uint32_t lengthCutOff = 12;
 	uint32_t minNumRepeats = 2;
-
+	bool searchAllUnits = false;
+	bool doNotAddFlankingSeq = false;
+	bool addFullSeqToOuput = false;
 	uint32_t numThreads = 1;
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
@@ -67,6 +69,11 @@ int seqSearchingRunner::findSimpleTandemRepeatLocations(const njh::progutils::Cm
 	setUp.setOption(minNumRepeats, "--minNumRepeats", "The minimum number of repeated units(inclusive)");
 	setUp.setOption(minRepeatUnitSize, "--minRepeatUnitSize", "Min Repeat Unit Size to search for(inclusive)");
 	setUp.setOption(maxRepeatUnitSize, "--maxRepeatUnitSize", "Max Repeat Unit Size to search for(inclusive)");
+	setUp.setOption(searchAllUnits, "--searchAllUnits", "Search All Units, by default similar tandems are collapsed e.g. searching only for AT rather than AT,TA,ATAT etc");
+	setUp.setOption(doNotAddFlankingSeq, "--doNotAddFlankingSeq", "Don't Add Flanking Seq, by default partially matching before and after sequence is added e.g. adding the precedding GCT if the unit search is AGCT for ATGCT-AGCT-AGCT-AGCT");
+	setUp.setOption(addFullSeqToOuput, "--addFullSeqToOuput", "Add Full Seq To Ouput");
+
+
 	if(minRepeatUnitSize > maxRepeatUnitSize){
 		setUp.failed_ = true;
 		setUp.addWarning(njh::pasteAsStr("maxRepeatUnitSize: ", maxRepeatUnitSize, " can't be greater than minRepeatUnitSize: ", minRepeatUnitSize));
@@ -84,6 +91,85 @@ int seqSearchingRunner::findSimpleTandemRepeatLocations(const njh::progutils::Cm
 			allUnits.emplace_back(njh::pasteAsStr(unit));
 		}
 	}
+//	auto isHomopolymer =
+//			[](const std::string & k) {
+//				return std::all_of(k.begin(), k.end(),[&k](const char c) {return k.front() == c;});
+//			};
+	if(!searchAllUnits){
+		std::vector<std::string> toBeAllUnits;
+
+		for(const auto & unit : allUnits){
+			bool add = true;
+			if(unit.size() > 1){
+				for(const auto & otherUnit : toBeAllUnits){
+					//check rotating if the same size
+					if(otherUnit.size() == unit.size()){
+						if(checkTwoRotatingStrings(unit, otherUnit, 0).size() > 0){
+							add = false;
+							break;
+						}
+					}else if(unit.size() > otherUnit.size() &&  unit.size() % otherUnit.size() == 0){
+						motif otherUnitMot(otherUnit);
+						auto locs = otherUnitMot.findPositionsFull(unit, 0);
+						if(!locs.empty()){
+							njh::sort(locs);
+							uint32_t length = 1;
+							size_t start = locs.front();
+							for(const auto pos : iter::range<uint32_t>(1, locs.size())){
+								if(locs[pos] == locs[pos - 1] + otherUnitMot.size() ){
+									++length;
+								} else {
+									length = 1;
+									start = locs[pos];
+								}
+							}
+							uint32_t outputStart = start;
+							uint32_t outputEnd = start + otherUnitMot.size() * length;
+
+							if(start > 0){
+								uint32_t walkbackPos = 0;
+								while(outputStart > 0 && walkbackPos + 1 < otherUnitMot.size()){
+									if(unit[outputStart - 1] == otherUnit[otherUnitMot.size() - walkbackPos - 1] ){
+										++walkbackPos;
+										--outputStart;
+									}else{
+										break;
+									}
+								}
+							}
+							if(outputEnd != unit.size()){
+								uint32_t walkforwardPos = 0;
+								while(outputEnd < unit.size() && walkforwardPos < otherUnit.size()){
+									if(unit[outputEnd] == otherUnit[walkforwardPos]){
+										++outputEnd;
+										++walkforwardPos;
+									}else{
+										break;
+									}
+								}
+							}
+//							if("AT" == otherUnit && "TATATA" == unit){
+//								std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//								std::cout << "outputStart: " << outputStart << std::endl;
+//								std::cout << "outputEnd:   " << outputEnd << std::endl;
+//								std::cout << "unit.size(): " << unit.size() << std::endl;
+//								exit(1);
+//							}
+							if(0 == outputStart && unit.size() == outputEnd){
+								add = false;
+								break;
+							}
+						}
+					}
+				}
+			}
+			if(add){
+				toBeAllUnits.emplace_back(unit);
+			}
+		}
+		allUnits = toBeAllUnits;
+	}
+
 	if(setUp.pars_.debug_){
 		std::cout << "Searching for: " << std::endl;
 		printVector(allUnits,"\n");
@@ -96,13 +182,14 @@ int seqSearchingRunner::findSimpleTandemRepeatLocations(const njh::progutils::Cm
 	std::mutex outMut;
 	while(reader.readNextRead(seq)){
 		njh::concurrent::LockableQueue<std::string> unitQueue(allUnits);
-		std::function<void()> findTandems = [&unitQueue,&seq,&lengthCutOff,&out,&outMut,&minNumRepeats](){
+		std::function<void()> findTandems = [&unitQueue,&seq,&lengthCutOff,&out,&outMut,&minNumRepeats,&doNotAddFlankingSeq,&addFullSeqToOuput](){
 			std::string motifstr;
 			std::vector<Bed6RecordCore> repeatUnitLocs;
 			std::stringstream currentOut;
 			while(unitQueue.getVal(motifstr)){
 				motif mot(motifstr);
-				auto locs = mot.findPositionsFull(seq.seq_, 0);
+				uint32_t currentAllowableError = 0;
+				auto locs = mot.findPositionsFull(seq.seq_, currentAllowableError);
 				njh::sort(locs);
 				if(!locs.empty()){
 					uint32_t length = 1;
@@ -111,25 +198,85 @@ int seqSearchingRunner::findSimpleTandemRepeatLocations(const njh::progutils::Cm
 						if(locs[pos] == locs[pos - 1] + mot.size() ){
 							++length;
 						} else {
-							if(length >= minNumRepeats && length * mot.size() >=lengthCutOff){
+							uint32_t outputStart = start;
+							uint32_t outputEnd = start + mot.size() * length;
+							if(!doNotAddFlankingSeq){
+								if(start > 0){
+									uint32_t walkbackPos = 0;
+									while(outputStart > 0 && walkbackPos + 1 < mot.size()){
+										if(seq.seq_[outputStart - 1] == motifstr[mot.size() - walkbackPos - 1] ){
+											++walkbackPos;
+											--outputStart;
+										}else{
+											break;
+										}
+									}
+								}
+								if(outputEnd != seq.seq_.size()){
+									uint32_t walkforwardPos = 0;
+									while(outputEnd < seq.seq_.size() && walkforwardPos < motifstr.size()){
+										if(seq.seq_[outputEnd] == motifstr[walkforwardPos]){
+											++outputEnd;
+											++walkforwardPos;
+										}else{
+											break;
+										}
+									}
+								}
+							}
+							if((outputEnd - outputStart)/mot.size() >= minNumRepeats && outputEnd - outputStart >=lengthCutOff){
 								currentOut << seq.name_
-										<< "\t" << start
-										<< "\t" << start + mot.size() * length
-										<< "\t" << motifstr << "_x" << length
-										<< "\t" << length * mot.size()
-										<< "\t" << "+" << '\n';
+										<< "\t" << outputStart
+										<< "\t" << outputEnd
+										<< "\t" << motifstr << "_x" << static_cast<double>(outputEnd - outputStart)/mot.size()
+										<< "\t" << outputEnd - outputStart
+										<< "\t" << "+";
+								if(addFullSeqToOuput){
+									currentOut << "\t" << seq.seq_.substr(outputStart, outputEnd - outputStart);
+								}
+								currentOut << '\n';
 							}
 							length = 1;
 							start = locs[pos];
 						}
 					}
-					if(length >= minNumRepeats && length * mot.size() >=lengthCutOff){
+					uint32_t outputStart = start;
+					uint32_t outputEnd = start + mot.size() * length;
+					if(!doNotAddFlankingSeq){
+						if(start > 0){
+							uint32_t walkbackPos = 0;
+							while(outputStart > 0 && walkbackPos + 1 < mot.size()){
+								if(seq.seq_[outputStart - 1] == motifstr[mot.size() - walkbackPos - 1] ){
+									++walkbackPos;
+									--outputStart;
+								}else{
+									break;
+								}
+							}
+						}
+						if(outputEnd != seq.seq_.size()){
+							uint32_t walkforwardPos = 0;
+							while(outputEnd < seq.seq_.size() && walkforwardPos < motifstr.size()){
+								if(seq.seq_[outputEnd] == motifstr[walkforwardPos]){
+									++outputEnd;
+									++walkforwardPos;
+								}else{
+									break;
+								}
+							}
+						}
+					}
+					if((outputEnd - outputStart)/mot.size() >= minNumRepeats && outputEnd - outputStart >=lengthCutOff){
 						currentOut << seq.name_
-								<< "\t" << start
-								<< "\t" << start + mot.size() * length
-								<< "\t" << motifstr << "_x" << length
-								<< "\t" << length * mot.size()
-								<< "\t" << "+" << '\n';;
+								<< "\t" << outputStart
+								<< "\t" << outputEnd
+								<< "\t" << motifstr << "_x" << static_cast<double>(outputEnd - outputStart)/mot.size()
+								<< "\t" << outputEnd - outputStart
+								<< "\t" << "+";
+						if(addFullSeqToOuput){
+							currentOut << "\t" << seq.seq_.substr(outputStart, outputEnd - outputStart);
+						}
+						currentOut << '\n';
 					}
 				}
 			}
