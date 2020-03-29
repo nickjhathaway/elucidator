@@ -96,7 +96,7 @@ int seqSearchingRunner::findTandemMotifLocations(const njh::progutils::CmdArgs &
 									<< "\t" << start
 									<< "\t" << start + mot.size() * length
 									<< "\t" << motifstr << "_x" << length
-									<< "\t" << length
+									<< "\t" << length * mot.size()
 									<< "\t" << "+" << '\n';;
 						}
 					}
@@ -114,7 +114,7 @@ int seqSearchingRunner::findTandemMotifLocations(const njh::progutils::CmdArgs &
 							<< "\t" << start
 							<< "\t" << start + mot.size() * length
 							<< "\t" << motifstr << "_x" << length
-							<< "\t" << length
+							<< "\t" << length * mot.size()
 							<< "\t" << "+" << '\n';;
 				}
 			}
@@ -140,7 +140,7 @@ int seqSearchingRunner::findTandemMotifLocations(const njh::progutils::CmdArgs &
 										<< "\t" << len(seq) - (start + mot.size() * length )
 										<< "\t" << len(seq) - start
 										<< "\t" << motifstr << "_x" << length
-										<< "\t" << length
+										<< "\t" << length * mot.size()
 										<< "\t" << "-" << '\n';;
 							}
 						}
@@ -158,7 +158,7 @@ int seqSearchingRunner::findTandemMotifLocations(const njh::progutils::CmdArgs &
 								<< "\t" << len(seq) - (start + mot.size() * length)
 								<< "\t" << len(seq) - start
 								<< "\t" << motifstr << "_x" << length
-								<< "\t" << length
+								<< "\t" << length * mot.size()
 								<< "\t" << "-" << '\n';;
 					}
 				}
