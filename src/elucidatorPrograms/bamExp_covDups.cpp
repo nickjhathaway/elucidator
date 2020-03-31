@@ -26,6 +26,8 @@ namespace njhseq {
 
 
 int bamExpRunner::bamMulticovBases(const njh::progutils::CmdArgs & inputCommands){
+	bool writeOutTemporaryCoverageFiles = false;
+	bool keepTempCovFiles = false;
 	OutOptions outOpts(bfs::path(""), ".tab.txt");
 	uint32_t numThreads = 1;
 	bfs::path bedFnp = "";
@@ -40,11 +42,12 @@ int bamExpRunner::bamMulticovBases(const njh::progutils::CmdArgs & inputCommands
 	setUp.description_ = "Get the coverage in base count for bam files for certain regions";
 	setUp.processVerbose();
 	setUp.processDebug();
+	setUp.setOption(writeOutTemporaryCoverageFiles, "--writeOutTemporaryCoverageFiles", "Write Out Temporary Coverage Files");
 	setUp.setOption(directory, "--directory", "Directory to search for bam files");
 	setUp.setOption(dontHandlePairs, "--dontHandlePairs",   "Don't Handle Paired reads, this means pairs covering the same region will count twice");
 	setUp.setOption(countDups, "--countDups",   "Count records marked duplicate");
 	setUp.setOption(mapQualityCutOff, "--mapQualityCutOff",   "Only reads that are this mapping quality and above (inclusive)");
-
+	setUp.setOption(keepTempCovFiles, "--keepTempCovFiles", "Temporary Coverage Files");
 	setUp.setOption(numThreads, "--numThreads", "Number of threads to use");
 	setUp.processWritingOptions(outOpts);
 	setUp.setOption(bedFnp, "--bedFnp", "Bed file of regions to get coverage for", true, "Input");
@@ -114,11 +117,15 @@ int bamExpRunner::bamMulticovBases(const njh::progutils::CmdArgs & inputCommands
 	std::vector<std::shared_ptr<BamFnpRegionPair>> pairs;
 	std::mutex pairsMut;
 	watch.startNewLap("Getting coverage");
+	std::vector<bfs::path> tempCovFiles;
+
 	for(const auto & bamFnp : bamFnps){
 		njhseq::concurrent::BamReaderPool bamPool(bamFnp, numThreads);
 		bamPool.openBamFile();
 		njh::concurrent::LockableQueue<GenomicRegion> regionsQueue(regions);
-		std::function<void()> getCov = [&bamFnp,&bamPool,&pairs, &pairsMut,&regionsQueue,&countDups,&mapQualityCutOff,&dontHandlePairs](){
+		uint32_t pairsStart = pairs.size();
+		std::function<void()> getCov = [&bamFnp,&bamPool,&pairs, &pairsMut,&regionsQueue,&countDups,
+																		&mapQualityCutOff,&dontHandlePairs](){
 			std::vector<std::shared_ptr<BamFnpRegionPair>> currentBamRegionsPairs;
 			GenomicRegion region;
 			auto bReader = bamPool.popReader();
@@ -177,7 +184,21 @@ int bamExpRunner::bamMulticovBases(const njh::progutils::CmdArgs & inputCommands
 				addOtherVec(pairs, currentBamRegionsPairs);
 			}
 		};
+		//get coverage for this bam file threaded over the regions
 		njh::concurrent::runVoidFunctionThreaded(getCov, numThreads);
+
+		if(writeOutTemporaryCoverageFiles){
+			auto sampOutName = njh::files::prependFileBasename(outOpts.outName(), bamFnp.filename().string() + "_");
+			tempCovFiles.emplace_back(sampOutName);
+			OutOptions sampOutOpts(sampOutName);
+			sampOutOpts.transferOverwriteOpts(outOpts);
+			OutputStream sampOut(sampOutOpts);
+			VecStr header = {"chrom", "start", "end", "name", "score", "strand", bamFnp.filename().string()};
+			sampOut << njh::conToStr(header, "\t") << std::endl;
+			for(uint32_t pos = pairsStart; pos < pairs.size(); ++pos){
+				sampOut << pairs[pos]->region_.genBedRecordCore().toDelimStr() << "\t" << pairs[pos]->coverage_ << "\n";
+			}
+		}
 	}
 
 	watch.startNewLap("Filling table");
@@ -225,6 +246,14 @@ int bamExpRunner::bamMulticovBases(const njh::progutils::CmdArgs & inputCommands
 
 	watch.startNewLap("Writing table");
 	output.outPutContents(outFile, "\t");
+
+	if(!keepTempCovFiles){
+		for(const auto & tFile : tempCovFiles){
+			if(bfs::exists(tFile)){
+				bfs::remove(tFile);
+			}
+		}
+	}
 
 	if(setUp.pars_.debug_){
 		watch.logLapTimes(std::cout, true, 6, true);
