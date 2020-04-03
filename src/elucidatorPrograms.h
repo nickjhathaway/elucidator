@@ -59,6 +59,7 @@
 #include <seqServerPrograms.h>
 #include <SeekDeepPrograms.h>
 #include <TwoBitPrograms.h>
+#include <PathWeaverPrograms.h>
 #include <njhseq/ProgramRunners.h>
 
 namespace njhseq {
@@ -82,6 +83,7 @@ elucidatorRunner::elucidatorRunner() :
 					addRing<gffExpRunner>(),   			 addRing<bedExpRunner>(),
 					addRing<geneExpRunner>(),        addRing<SeqServerRunner>(),
 					addRing<SeekDeepRunner>(),       addRing<TwoBit::TwoBitRunner>(),
+					addRing<PathWeaverRunner>(),
 					addRing<repelinRunner>(),        addRing<ampliconAnalysisRunner>(),
 					addRing<readSimulatorRunner>(),  addRing<graphicsUtilsRunner>(),
 					addRing<miscRunner>(),           addRing<printInfoRunner>(),

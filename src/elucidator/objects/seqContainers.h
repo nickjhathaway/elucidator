@@ -26,4 +26,3 @@
 #include "elucidator/objects/seqContainers/baseContainer.hpp"
 #include "elucidator/objects/seqContainers/otuContainer.hpp"
 #include "elucidator/objects/seqContainers/refMapContainer.hpp"
-#include "elucidator/objects/seqContainers/refVariants.hpp"

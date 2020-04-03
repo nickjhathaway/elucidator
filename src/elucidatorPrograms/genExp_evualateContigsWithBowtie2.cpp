@@ -13,8 +13,7 @@
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/objects/dataContainers/graphs.h"
 #include <njhseq/GenomeUtils.h>
-#include "elucidator/concurrency/LockableJsonLog.hpp"
-#include "elucidator/objects/seqContainers/refVariants.hpp"
+#include <njhseq/objects/seqContainers/refVariants.hpp>
 
 
 namespace njhseq {

@@ -31,7 +31,6 @@
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/objects/dataContainers/graphs.h"
 #include <njhseq/GenomeUtils.h>
-#include "elucidator/concurrency/LockableJsonLog.hpp"
 
 
 #include "elucidator/BioRecordsUtils/BedUtility.hpp"

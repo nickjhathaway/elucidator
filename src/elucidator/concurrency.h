@@ -25,7 +25,6 @@
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-#include "elucidator/concurrency/LockableJsonLog.hpp"
 
 
 

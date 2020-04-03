@@ -24,7 +24,7 @@
 //
 #include "pacbioExp.hpp"
 
-#include "elucidator/objects/seqContainers/refVariants.hpp"
+#include <njhseq/objects/seqContainers/refVariants.hpp>
 
 
 namespace njhseq {

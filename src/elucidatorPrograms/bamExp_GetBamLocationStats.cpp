@@ -35,7 +35,6 @@
 #include "elucidator/objects/dataContainers/graphs.h"
 #include <njhseq/GenomeUtils.h>
 
-#include "elucidator/concurrency/LockableJsonLog.hpp"
 
 
 namespace njhseq {
