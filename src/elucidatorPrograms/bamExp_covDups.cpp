@@ -36,11 +36,14 @@ int bamExpRunner::bamMulticovBases(const njh::progutils::CmdArgs & inputCommands
 	bool countDups = false;
 	uint32_t mapQualityCutOff = 20;
 	bool dontHandlePairs = false;
+	std::set<std::string> ignoreSamples{};
 	bfs::path directory = "./";
 	seqSetUp setUp(inputCommands);
 	setUp.description_ = "Get the coverage in base count for bam files for certain regions";
 	setUp.processVerbose();
 	setUp.processDebug();
+	setUp.setOption(ignoreSamples, "--ignoreSamplesFiles", "Skip these samples");
+
 	setUp.setOption(writeOutTemporaryCoverageFiles, "--writeOutTemporaryCoverageFiles", "Write Out Temporary Coverage Files");
 	setUp.setOption(directory, "--directory", "Directory to search for bam files");
 	setUp.setOption(dontHandlePairs, "--dontHandlePairs",   "Don't Handle Paired reads, this means pairs covering the same region will count twice");
@@ -61,6 +64,15 @@ int bamExpRunner::bamMulticovBases(const njh::progutils::CmdArgs & inputCommands
 	OutputStream outFile(outOpts);
 
 	auto bamFnps = njh::files::gatherFilesByPatOrNames(directory, std::regex{pat}, bams);
+	if(!ignoreSamples.empty()){
+		std::vector<bfs::path> toBeFinalBams;
+		for(const auto & bam : bamFnps){
+			if(!njh::in(bam.filename().string(), ignoreSamples)){
+				toBeFinalBams.emplace_back(bam);
+			}
+		}
+		bamFnps = toBeFinalBams;
+	}
 	if(bamFnps.empty()){
 		std::stringstream ss;
 		ss << __PRETTY_FUNCTION__ << ", error " << "no bam files found with pattern: " << pat << " in " << directory << "\n";
