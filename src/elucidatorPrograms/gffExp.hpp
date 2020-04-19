@@ -40,6 +40,7 @@ class gffExpRunner : public njh::progutils::ProgramRunner {
 	static int gffCountAttribute(const njh::progutils::CmdArgs & inputCommands);
 	static int extractGffFeature(const njh::progutils::CmdArgs & inputCommands);
 	static int gffToBed(const njh::progutils::CmdArgs & inputCommands);
+	static int gffToBedByFeature(const njh::progutils::CmdArgs & inputCommands);
 	static int gffToBedByAttribute(const njh::progutils::CmdArgs & inputCommands);
 	static int gffToBedByDescription(const njh::progutils::CmdArgs & inputCommands);
 	static int gffToBedByChrom(const njh::progutils::CmdArgs & inputCommands);

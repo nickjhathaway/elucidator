@@ -564,6 +564,7 @@ int seqSearchingRunner::findMotifLocations(const njh::progutils::CmdArgs & input
 
 
 struct ChopAndMapPars{
+	uint32_t minSize = 30;
 	uint32_t windowLength = 100;
 	uint32_t windowStep = 10;
 	uint32_t numThreads = 1;
@@ -587,16 +588,42 @@ void runChopAndMap(const ChopAndMapPars & pars){
 		reader.openIn();
 		while (reader.readNextRead(seq)) {
 			if (len(seq) < pars.windowLength ) {
-				std::cerr << "Seq: " << seq.name_ << " is too short" << std::endl;
-			} else {
-				for(auto const pos : iter::range<uint32_t>(0, len(seq) + 1 - pars.windowLength, pars.windowStep)){
-					auto fragment = seq.getSubRead(pos, pars.windowLength);
+				if(len(seq) <pars.minSize){
+					std::cerr << "Seq: " << seq.name_ << " is too short" << std::endl;
+				}else{
+					auto fragment = seq;
 					MetaDataInName fragMeta;
-					fragMeta.addMeta("start", pos);
-					fragMeta.addMeta("end", pos + pars.windowLength);
+					fragMeta.addMeta("start", 0);
+					fragMeta.addMeta("end", 0 + len(seq));
 					fragment.name_.append(fragMeta.createMetaName());
 					for(uint32_t fragCount = 0; fragCount <= pars.perFragmentCount; ++ fragCount){
 						fragWriter.write(fragment);
+					}
+				}
+			} else {
+				for(auto const pos : iter::range<uint32_t>(0, len(seq), pars.windowStep)){
+					if(pos + pars.windowLength > len(seq)){
+						auto newLength = len(seq) - pos;
+						if(newLength > pars.minSize){
+							auto fragment = seq.getSubRead(pos);
+							MetaDataInName fragMeta;
+							fragMeta.addMeta("start", pos);
+							fragMeta.addMeta("end", len(seq));
+							fragment.name_.append(fragMeta.createMetaName());
+							for(uint32_t fragCount = 0; fragCount <= pars.perFragmentCount; ++ fragCount){
+								fragWriter.write(fragment);
+							}
+						}
+						break;
+					}else{
+						auto fragment = seq.getSubRead(pos, pars.windowLength);
+						MetaDataInName fragMeta;
+						fragMeta.addMeta("start", pos);
+						fragMeta.addMeta("end", pos + pars.windowLength);
+						fragment.name_.append(fragMeta.createMetaName());
+						for(uint32_t fragCount = 0; fragCount <= pars.perFragmentCount; ++ fragCount){
+							fragWriter.write(fragment);
+						}
 					}
 				}
 			}
@@ -648,6 +675,8 @@ int seqSearchingRunner::chopAndMapAndRefineInvidual(const njh::progutils::CmdArg
 	uint32_t expandRight = 0;
 	uint32_t minLength = 0;
 	uint32_t inputMinLength = 0;
+	double entropyCutOff = 1.5;
+
 	bfs::path gff = "";
 
 	seqSetUp setUp(inputCommands);
@@ -669,6 +698,7 @@ int seqSearchingRunner::chopAndMapAndRefineInvidual(const njh::progutils::CmdArg
 	setUp.setOption(expandRight, "--expandRight", "expandRight");
 
 	setUp.setOption(minLength, "--minLength", "minLength");
+	setUp.setOption(entropyCutOff, "--entropyCutOff", "entropy Cut Off for final refined regions ");
 
 	setUp.processReadInNames(VecStr{"--fasta", "--fastq"});
 	setUp.processDirectoryOutputName(true);
@@ -747,7 +777,7 @@ int seqSearchingRunner::chopAndMapAndRefineInvidual(const njh::progutils::CmdArg
 		if(bfs::exists(genomeTwoBitFnp)){
 			auto refinedGRegions = bedPtrsToGenomicRegs(refinedRegions);
 			if("" != gff){
-				intersectBedLocsWtihGffRecordsPars interPars(gff,VecStr{"description"}, VecStr{"pseudogene", "gene"});
+				intersectBedLocsWtihGffRecordsPars interPars(gff, VecStr{"description"}, VecStr{"pseudogene", "gene"});
 				refinePars.outOpts.overWriteFile_ = true;
 				intersectBedLocsWtihGffRecords(refinedRegions, interPars);
 				OutputStream bedOut(refinePars.outOpts);
@@ -764,16 +794,30 @@ int seqSearchingRunner::chopAndMapAndRefineInvidual(const njh::progutils::CmdArg
 			}
 		}
 
-		if(0 != minLength){
+		if(0 != minLength || (entropyCutOff > 0 && bfs::exists(genomeTwoBitFnp))){
 			std::vector<GenomicRegion> filteredRefinedRegions;
+			std::shared_ptr<TwoBit::TwoBitFile> tReaderPrt;
+			if(bfs::exists(genomeTwoBitFnp)){
+				tReaderPrt = std::make_shared<TwoBit::TwoBitFile>(genomeTwoBitFnp);
+			}
 			{
 				auto bedAgain = getBed3s(refinePars.outOpts.outName());
 				OutOptions filteredOpts(njh::files::make_path(chopParsCurrent.outputDirectory, "filtered_refined_merged.bed"));
 				OutputStream filteredOut(filteredOpts);
 				for(const auto & b : bedAgain){
 					if(b->length() >= minLength){
-						filteredRefinedRegions.emplace_back(*b);
-						filteredOut << b->toDelimStrWithExtra() << std::endl;
+						bool furtherFilt = false;
+						if(nullptr != tReaderPrt &&  entropyCutOff > 0){
+							auto eSeq = GenomicRegion(*b).extractSeq(*tReaderPrt);
+							charCounter counter(eSeq.seq_);
+							if(counter.computeEntrophy() < entropyCutOff){
+								furtherFilt = true;
+							}
+						}
+						if(!furtherFilt){
+							filteredRefinedRegions.emplace_back(*b);
+							filteredOut << b->toDelimStrWithExtra() << std::endl;
+						}
 					}
 				}
 			}
@@ -801,6 +845,7 @@ int seqSearchingRunner::chopAndMapAndRefine(const njh::progutils::CmdArgs & inpu
 	uint32_t expandRight = 0;
 	uint32_t minLength = 0;
 	covPars.coverageCutOff = 5;
+	double entropyCutOff = 1.5;
 
 	bfs::path gff = "";
 
@@ -811,6 +856,7 @@ int seqSearchingRunner::chopAndMapAndRefine(const njh::progutils::CmdArgs & inpu
 	setUp.setOption(chopPars.numThreads, "--numThreads", "Number of threads to use");
 	setUp.setOption(chopPars.genomeFnp, "--genomeFnp", "Genome to map to", true);
 	setUp.setOption(gff, "--genomegff", "Genome gff file");
+	setUp.setOption(chopPars.minSize, "--minFragmentSize", "Min Fragment Size");
 
 	setUp.setOption(chopPars.perFragmentCount, "--perFragmentCount", "perFragmentCount");
 	setUp.setOption(chopPars.windowLength, "--windowLength", "windowLength");
@@ -822,6 +868,7 @@ int seqSearchingRunner::chopAndMapAndRefine(const njh::progutils::CmdArgs & inpu
 
 	setUp.setOption(covPars.coverageCutOff, "--coverageCutOff", "Coverage Cut Off");
 
+	setUp.setOption(entropyCutOff, "--entropyCutOff", "entropy Cut Off for final refined regions ");
 
 	setUp.setOption(minLength, "--minLength", "minLength");
 
@@ -908,16 +955,53 @@ int seqSearchingRunner::chopAndMapAndRefine(const njh::progutils::CmdArgs & inpu
 		}
 	}
 
-	if(0 != minLength){
+//	if(0 != minLength){
+//		std::vector<GenomicRegion> filteredRefinedRegions;
+//		{
+//			auto bedAgain = getBed3s(refinePars.outOpts.outName());
+//			OutOptions filteredOpts(njh::files::make_path(chopPars.outputDirectory, "filtered_refined_merged.bed"));
+//			OutputStream filteredOut(filteredOpts);
+//			for(const auto & b : bedAgain){
+//				if(b->length() >= minLength){
+//					filteredRefinedRegions.emplace_back(*b);
+//					filteredOut << b->toDelimStrWithExtra() << std::endl;
+//				}
+//			}
+//		}
+//		if(bfs::exists(genomeTwoBitFnp)){
+//			TwoBit::TwoBitFile tReader(genomeTwoBitFnp);
+//			auto refindedSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(chopPars.outputDirectory, "filtered_refined_merged.fasta"));
+//			SeqOutput refinedWriter(refindedSeqOpts);
+//			refinedWriter.openOut();
+//			for(const auto & reg : filteredRefinedRegions){
+//				refinedWriter.write(reg.extractSeq(tReader));
+//			}
+//		}
+//	}
+	if(0 != minLength || (entropyCutOff > 0 && bfs::exists(genomeTwoBitFnp))){
 		std::vector<GenomicRegion> filteredRefinedRegions;
+		std::shared_ptr<TwoBit::TwoBitFile> tReaderPrt;
+		if(bfs::exists(genomeTwoBitFnp)){
+			tReaderPrt = std::make_shared<TwoBit::TwoBitFile>(genomeTwoBitFnp);
+		}
 		{
 			auto bedAgain = getBed3s(refinePars.outOpts.outName());
 			OutOptions filteredOpts(njh::files::make_path(chopPars.outputDirectory, "filtered_refined_merged.bed"));
 			OutputStream filteredOut(filteredOpts);
 			for(const auto & b : bedAgain){
 				if(b->length() >= minLength){
-					filteredRefinedRegions.emplace_back(*b);
-					filteredOut << b->toDelimStrWithExtra() << std::endl;
+					bool furtherFilt = false;
+					if(nullptr != tReaderPrt &&  entropyCutOff > 0){
+						auto eSeq = GenomicRegion(*b).extractSeq(*tReaderPrt);
+						charCounter counter(eSeq.seq_);
+						if(counter.computeEntrophy() < entropyCutOff){
+							furtherFilt = true;
+						}
+					}
+					if(!furtherFilt){
+						filteredRefinedRegions.emplace_back(*b);
+						filteredOut << b->toDelimStrWithExtra() << std::endl;
+					}
 				}
 			}
 		}

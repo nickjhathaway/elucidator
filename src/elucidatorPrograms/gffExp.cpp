@@ -62,6 +62,7 @@ gffExpRunner::gffExpRunner()
 					 addFunc("aaPositionsToBed", aaPositionsToBed, false),
 					 addFunc("bedGetRegionsCompletelyInGenesInGff", bedGetRegionsCompletelyInGenesInGff, false),
 					 addFunc("gffSortInefficient", gffSortInefficient, false),
+					 addFunc("gffToBedByFeature", gffToBedByFeature, false),
            },//
           "gffExp") {}
 class AmionoAcidPositionInfo {
@@ -811,6 +812,70 @@ int gffExpRunner::gffToBed(const njh::progutils::CmdArgs & inputCommands){
 
 		outJson[gRecord->getAttr("Name")] = gRecord->toJson();
 		outFile << GenomicRegion(*gRecord).genBedRecordCore().toDelimStr() << std::endl;
+		bool end = false;
+		while ('#' == reader.inFile_->peek()) {
+			if (njh::files::nextLineBeginsWith(*reader.inFile_, "##FASTA")) {
+				end = true;
+				break;
+			}
+			njh::files::crossPlatGetline(*reader.inFile_, line);
+		}
+		if (end) {
+			break;
+		}
+		gRecord = reader.readNextRecord();
+		++count;
+	}
+	outJsonFile << outJson << std::endl;
+	return 0;
+}
+
+
+
+int gffExpRunner::gffToBedByFeature(
+		const njh::progutils::CmdArgs &inputCommands) {
+	bfs::path inputFile;
+	OutOptions outOpts(bfs::path("out"));
+	outOpts.outExtention_ = ".bed";
+	VecStr features{};
+	VecStr skipSeqIds{};
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(inputFile, "--gff", "Input gff file", true);
+	setUp.setOption(features, "--features", "features of gff to extract", true);
+	setUp.setOption(skipSeqIds, "--skipSeqIds", "seq ids (chromosomes) to skip");
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
+	reader.openIn();
+	uint32_t count = 0;
+	std::string line = "";
+	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
+	std::ofstream outFile;
+	outOpts.openFile(outFile);
+
+	OutOptions outOptsJson(outOpts.outFilename_);
+	outOptsJson.outExtention_ = ".json";
+	outOptsJson.transferOverwriteOpts(outOpts);
+	std::ofstream outJsonFile;
+	outOptsJson.openFile(outJsonFile);
+
+	Json::Value outJson;
+	while (nullptr != gRecord) {
+		if(skipSeqIds.empty() || !njh::in(gRecord->seqid_, skipSeqIds)){
+			if (njh::in(gRecord->type_, features)) {
+				outJson[gRecord->getAttr("ID")] = gRecord->toJson();
+				auto bedOut = GenomicRegion(*gRecord).genBedRecordCore();
+				std::string extraField = njh::pasteAsStr("[", "id=", gRecord->getAttr("ID"), ";");
+				if(gRecord->hasAttr("description")){
+					extraField = njh::pasteAsStr(extraField, "description=", gRecord->getAttr("description"), ";");
+				}
+				extraField += "]";
+				bedOut.extraFields_.emplace_back(extraField);
+				outFile << bedOut.toDelimStrWithExtra() << std::endl;
+			}
+		}
 		bool end = false;
 		while ('#' == reader.inFile_->peek()) {
 			if (njh::files::nextLineBeginsWith(*reader.inFile_, "##FASTA")) {
