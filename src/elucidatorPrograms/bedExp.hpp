@@ -57,6 +57,7 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 
 	//combing bed files
 	static int bedCreateSpanningRegions(const njh::progutils::CmdArgs & inputCommands);
+	static int bedRemoveOveringLappingRegions(const njh::progutils::CmdArgs & inputCommands);
 
 	//adding a field to bed file
 	static int bedAddSmartIDForPlotting(const njh::progutils::CmdArgs & inputCommands);

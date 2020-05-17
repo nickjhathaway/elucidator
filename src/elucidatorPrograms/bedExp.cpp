@@ -27,6 +27,8 @@
 
 
 #include "bedExp.hpp"
+#include <njhseq/objects/BioDataObject.h>
+
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/BioRecordsUtils/BedUtility.hpp"
 #include "elucidator/objects/counters/DNABaseCounter.hpp"
@@ -82,9 +84,97 @@ bedExpRunner::bedExpRunner()
 					 addFunc("createWindowsInbetweenRegions", createWindowsInbetweenRegions, false),
 					 addFunc("createWindowsInRegions", createWindowsInRegions, false),
 					 addFunc("reverseComplementRegion", reverseComplementRegion, false),
+					 addFunc("bedRemoveOveringLappingRegions", bedRemoveOveringLappingRegions, false),
            },//,,
           "bedExp") {}
 
+int bedExpRunner::bedRemoveOveringLappingRegions(const njh::progutils::CmdArgs & inputCommands) {
+
+	bfs::path bedFile;
+	bfs::path intersectWithBed;
+	OutOptions outOpts;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.setOption(bedFile, "--bed", "Bed file to parse", true);
+	setUp.setOption(intersectWithBed, "--intersectWithBed", "Bed file to intersect with", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	OutputStream out(outOpts);
+	auto rawIntersectingBeds = getBeds(intersectWithBed);
+	auto regions = getBeds(bedFile);
+	BedUtility::coordSort(regions, false);
+	BedUtility::coordSort(rawIntersectingBeds, false);
+	std::vector<std::shared_ptr<Bed6RecordCore>> intersectingBeds;
+	intersectingBeds.emplace_back(
+			std::make_shared<Bed6RecordCore>(*rawIntersectingBeds.front()));
+
+	for (const auto &regPos : iter::range<uint32_t>(1, rawIntersectingBeds.size())) {
+		if (intersectingBeds.back()->overlaps(*rawIntersectingBeds[regPos], 1) || (intersectingBeds.back()->chrom_ == rawIntersectingBeds[regPos]->chrom_ && intersectingBeds.back()->chromEnd_ == rawIntersectingBeds[regPos]->chromStart_) ) {
+			intersectingBeds.back()->chromEnd_ = std::max(
+					intersectingBeds.back()->chromEnd_,
+					rawIntersectingBeds[regPos]->chromEnd_);
+		} else {
+			intersectingBeds.emplace_back(
+					std::make_shared<Bed6RecordCore>(*rawIntersectingBeds[regPos]));
+		}
+	}
+	if(setUp.pars_.verbose_){
+		std::cout << "intersectingBeds.size(): " << intersectingBeds.size() << std::endl;
+	}
+
+
+	for(const auto & reg : regions){
+		std::vector<std::shared_ptr<Bed6RecordCore>> overlappingRegions;
+		for(const auto & inter : intersectingBeds){
+			if(inter->chrom_ < reg->chrom_){
+				//bother regions are sorted if we haven't reached this region's chromosome yet
+				continue;
+			}
+			if(inter->chrom_ > reg->chrom_){
+				//both regions are sorted so if we run into this we can break
+				break;
+			}
+			if(inter->chrom_ == reg->chrom_ && inter->chromStart_ >= reg->chromEnd_){
+				//both regions are sorted so if we run into this we can break
+				break;
+			}
+			if(inter->chrom_ == reg->chrom_ && inter->chromEnd_ < reg->chromStart_){
+				continue;
+			}
+			if(reg->overlaps(*inter, 1)){
+				overlappingRegions.emplace_back(inter);
+			}
+		}
+		if(overlappingRegions.empty()){
+			out << reg->toDelimStr() << "\n";
+		}else{
+			if(overlappingRegions.front()->chromStart_ > reg->chromStart_){
+				Bed6RecordCore outReg(reg->chrom_, reg->chromStart_, overlappingRegions.front()->chromStart_, "",0, reg->strand_);
+				outReg.score_ = outReg.length();
+				outReg.name_ = njh::pasteAsStr(outReg.chrom_, "-", outReg.chromStart_, "-", outReg.chromEnd_, "-", outReg.strand_ == '+' ? "for" : "rev");
+				out << outReg.toDelimStrWithExtra() << "\n";
+			}
+			if(overlappingRegions.back()->chromEnd_ < reg->chromEnd_){
+				Bed6RecordCore outReg(reg->chrom_, overlappingRegions.back()->chromEnd_, reg->chromEnd_, "",0, reg->strand_);
+				outReg.score_ = outReg.length();
+				outReg.name_ = njh::pasteAsStr(outReg.chrom_, "-", outReg.chromStart_, "-", outReg.chromEnd_, "-", outReg.strand_ == '+' ? "for" : "rev");
+				out << outReg.toDelimStrWithExtra() << "\n";
+			}
+			if(overlappingRegions.size() > 1){
+				for(uint32_t pos = 0; pos < overlappingRegions.size() -1; ++ pos){
+					if(overlappingRegions[pos]->chromEnd_ != overlappingRegions[pos + 1]->chromStart_){
+						Bed6RecordCore outReg(reg->chrom_, overlappingRegions[pos]->chromEnd_, overlappingRegions[pos + 1]->chromStart_, "",0, reg->strand_);
+						outReg.score_ = outReg.length();
+						outReg.name_ = njh::pasteAsStr(outReg.chrom_, "-", outReg.chromStart_, "-", outReg.chromEnd_, "-", outReg.strand_ == '+' ? "for" : "rev");
+						out << outReg.toDelimStrWithExtra() << "\n";
+					}
+				}
+			}
+		}
+	}
+	return 0;
+}
 
 int bedExpRunner::reverseComplementRegion(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path chromLengthsTable = "";
