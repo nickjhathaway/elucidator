@@ -14,6 +14,8 @@
 #include "bamExp.hpp"
 #include "elucidator/simulation.h"
 #include <SeekDeep/objects/IlluminaUtils/PairedReadProcessor.hpp>
+#include <PathWeaver/PathFinding/WayFindingUtils/WayFindingPreFilteringUtils.hpp>
+
 
 namespace njhseq {
 
@@ -116,6 +118,7 @@ int bamExpRunner::BamGetPileupForRegion(
 		const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFnp = "";
 	bfs::path twoBitFnp = "";
+	std::string sample = "";
 	BamCountSpecficRegionsPars countPars;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -124,6 +127,8 @@ int bamExpRunner::BamGetPileupForRegion(
 	setUp.processDirectoryOutputName(true);
 	setUp.setOption(bedFnp, "--bed", "Bed file", true);
 	setUp.setOption(twoBitFnp, "--twoBitFnp", "Two Bit file to genome that sequences were aligned to", true);
+	sample = getPossibleSampleNameFromFnp(setUp.pars_.ioOptions_.firstName_);
+	setUp.setOption(sample, "--sample", "Sample name");
 	countPars.setDefaults(setUp);
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);

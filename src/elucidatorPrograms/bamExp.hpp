@@ -59,7 +59,7 @@ class bamExpRunner : public njh::progutils::ProgramRunner {
 	static int getInsertSizeChanges(const njh::progutils::CmdArgs & inputCommands);
 	static int getMapQualityCounts(const njh::progutils::CmdArgs & inputCommands);
 
-
+	static int multiBamCoverageFinderBases(const njh::progutils::CmdArgs & inputCommands);
 	static int multiBamCoverageFinder(const njh::progutils::CmdArgs & inputCommands);
 	static int bamMultiPairStats(const njh::progutils::CmdArgs & inputCommands);
 	static int bamMulticov(const njh::progutils::CmdArgs & inputCommands);
