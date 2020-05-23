@@ -190,17 +190,26 @@ int seqUtilsInfoRunner::readLengthDistribution(const njh::progutils::CmdArgs & i
 
 int seqUtilsInfoRunner::getReadLens(
 		const njh::progutils::CmdArgs & inputCommands) {
+	VecStr addHeader;
 	OutOptions outOpts(bfs::path(""));
 	outOpts.outExtention_ = ".tsv";
 	seqSetUp setUp(inputCommands);
 	setUp.processReadInNames(true);
 	setUp.processWritingOptions(outOpts);
+	setUp.setOption(addHeader, "--addHeader", "Add this header, must be two values separated by commas");
+	if(!addHeader.empty() && 2 != addHeader.size()){
+		setUp.failed_ = true;
+		setUp.addWarning(njh::pasteAsStr("addHeader must be size 2, not ", addHeader.size()));
+	}
 	setUp.finishSetUp(std::cout);
 
 	SeqInput reader(setUp.pars_.ioOptions_);
 	reader.openIn();
 	seqInfo read;
 	OutputStream out(outOpts);
+	if(!addHeader.empty()){
+		out << njh::conToStr(addHeader, "\t") << std::endl;
+	}
 	while (reader.readNextRead(read)) {
 		out << read.name_
 				<< "\t" << len(read)
