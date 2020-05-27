@@ -304,7 +304,7 @@ int kmerExpRunner::profileSharedKmerBlocks(const njh::progutils::CmdArgs & input
 				<< "\t" << g.second.refStart_
 				<< "\t" << refStop
 				<< "\t" << njh::pasteAsStr(setUp.pars_.seqObj_.seqBase_.name_, "-", g.second.refStart_, "-", refStop )
-				<< "\t" << g.second.size_
+				<< "\t" << g.second.size_ + kLen - 1
 				<< "\t" << "+" << std::endl;
 	}
 	for (const auto &g : perfectSeqs) {
@@ -382,6 +382,7 @@ int kmerExpRunner::profileSharedKmerBlocks(const njh::progutils::CmdArgs & input
 				<< "\t" << seqs.size() - counts[pos]
 				<< "\t" << seqs.size() << std::endl;
 	}
+
 	watch.logLapTimes(std::cout, true, 6, true);
 	return 0;
 }
