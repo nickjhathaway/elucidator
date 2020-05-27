@@ -43,6 +43,7 @@ seqUtilsSplitRunner::seqUtilsSplitRunner()
 			addFunc("getSimilarSequences", getSimilarSequences, false),
 			addFunc("getSimilarSequencesByKDist", getSimilarSequencesByKDist, false),
 			addFunc("SeqSplitOnCount", SeqSplitOnCount, false),
+			addFunc("SeqSplitOnNameContainsPattern", SeqSplitOnNameContainsPattern, false),
 
 
 },
@@ -490,6 +491,59 @@ int seqUtilsSplitRunner::SeqSplitOnLenWithin(const njh::progutils::CmdArgs & inp
   }
   return 0;
 }
+
+
+
+
+int seqUtilsSplitRunner::SeqSplitOnNameContainsPattern(const njh::progutils::CmdArgs & inputCommands) {
+	defaultSplitPars dSplitPars;
+	std::string nameContainsPattern;
+  seqSetUp setUp(inputCommands);
+  setUp.processVerbose();
+  // input file info
+  setUp.processDefaultReader(true);
+
+  dSplitPars.excOpts_ = setUp.pars_.ioOptions_;
+  dSplitPars.incOpts_ = setUp.pars_.ioOptions_;
+  bfs::path bName = dSplitPars.incOpts_.out_.outFilename_;
+  if(dSplitPars.incOpts_.out_.outFilename_ == "out"){
+  	bName = njh::files::bfs::path(setUp.pars_.ioOptions_.firstName_);
+  }
+  bName.replace_extension("");
+  dSplitPars.incOpts_.out_.outFilename_ = bName.string() + "_included";
+  dSplitPars.excOpts_.out_.outFilename_ = bName.string() + "_excluded";
+
+	setUp.setOption(nameContainsPattern, "--nameContains", "Exclude if Name Contains this regex pattern", true);
+
+  setUp.finishSetUp(std::cout);
+
+  MultiSeqOutCache<seqInfo> seqOuts;
+  seqOuts.addReader("include", dSplitPars.incOpts_);
+  seqOuts.addReader("exclude", dSplitPars.excOpts_);
+
+  std::regex pat{nameContainsPattern};
+
+  SeqIO reader(setUp.pars_.ioOptions_);
+  reader.openIn();
+	seqInfo seq;
+	while (reader.readNextRead(seq)) {
+		std::smatch match;
+		std::string condition = "";
+
+		if (std::regex_match(seq.name_, pat)) {
+			condition = "exclude";
+		} else {
+			condition = "include";
+		}
+
+		seqOuts.add(condition, seq);
+	}
+  if(setUp.pars_.verbose_){
+  	setUp.logRunTime(std::cout);
+  }
+  return 0;
+}
+
 
 int seqUtilsSplitRunner::SeqSplitOnNameContains(const njh::progutils::CmdArgs & inputCommands) {
 	defaultSplitPars dSplitPars;

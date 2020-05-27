@@ -44,11 +44,47 @@ metaExpRunner::metaExpRunner()
 					 addFunc("printMetaFieldsFromSeqs", printMetaFieldsFromSeqs, false),
 					 addFunc("addMetaFieldToAll", addMetaFieldToAll, false),
 					 addFunc("renameSeqsWithMetaField", renameSeqsWithMetaField, false),
+					 addFunc("addSeqNameAsSampleMeta", addSeqNameAsSampleMeta, false),
 
            },//
           "metaExp") {}
 
 
+int metaExpRunner::addSeqNameAsSampleMeta(const njh::progutils::CmdArgs & inputCommands){
+	bool overWriteMeta = false;
+	bool addLengthMeta = false;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(addLengthMeta, "--addLengthMeta", "Add length meta field, the length of the sequence");
+	setUp.setOption(overWriteMeta, "--overWriteMeta", "Over Write Meta Fields in names");
+	setUp.processDefaultReader(true);
+	setUp.description_ = "Set sample meta field as the seq name";
+
+	setUp.finishSetUp(std::cout);
+
+
+	seqInfo seq;
+	SeqIO reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	reader.openOut();
+	while (reader.readNextRead(seq)) {
+		MetaDataInName seqMeta;
+		std::string sample = seq.name_;
+		if (MetaDataInName::nameHasMetaData(seq.name_)){
+			seqMeta = MetaDataInName(seq.name_);
+			MetaDataInName::removeMetaDataInName(sample);
+		}
+		seqMeta.addMeta("sample", sample, overWriteMeta);
+		if(addLengthMeta){
+			seqMeta.addMeta("length", len(seq), overWriteMeta);
+		}
+		seqMeta.resetMetaInName(seq.name_);
+		reader.write(seq);
+	}
+	//
+	return 0;
+}
 
 
 

@@ -35,6 +35,8 @@ class seqUtilsSplitRunner : public njh::progutils::ProgramRunner {
   static int SeqSplitOnLenBelow(const njh::progutils::CmdArgs & inputCommands);
   static int SeqSplitOnLenWithin(const njh::progutils::CmdArgs & inputCommands);
   static int SeqSplitOnNameContains(const njh::progutils::CmdArgs & inputCommands);
+  static int SeqSplitOnNameContainsPattern(const njh::progutils::CmdArgs & inputCommands);
+
   static int SeqSplitOnSeqContains(const njh::progutils::CmdArgs & inputCommands);
   static int SeqSplitOnLenAbove(const njh::progutils::CmdArgs & inputCommands);
   static int SeqSplitOnLenBetween(const njh::progutils::CmdArgs & inputCommands);

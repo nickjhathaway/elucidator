@@ -34,6 +34,7 @@ class metaExpRunner : public njh::progutils::ProgramRunner {
  public:
 	metaExpRunner();
 
+	static int addSeqNameAsSampleMeta(const njh::progutils::CmdArgs & inputCommands);
 	static int addMetaBySampleName(const njh::progutils::CmdArgs & inputCommands);
 	static int addMetaByMetaField(const njh::progutils::CmdArgs & inputCommands);
 	static int excludeSeqsFileWithNumericMetaCutOff(const njh::progutils::CmdArgs & inputCommands);
