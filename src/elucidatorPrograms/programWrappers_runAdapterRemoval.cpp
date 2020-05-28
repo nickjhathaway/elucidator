@@ -642,7 +642,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 			<< " " << genomeFnp
 			<< " " << inputPairedFirstMates
 			<< " " << inputPairedSecondMates
-			<< " 2> " << bfs::path(pairedSortedBam.filename().string() + ".bwa.log")
+			<< " 2> " << bfs::path(pairedSortedBam.string() + ".bwa.log")
 			<< " | samtools sort -@ " << numThreads << " -o " << pairedSortedBam;
 
 
