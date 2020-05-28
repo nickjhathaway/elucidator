@@ -407,7 +407,8 @@ std::vector<std::shared_ptr<Bed6RecordCore>> RunRegionRefinement(const RegionRef
 
 	njh::concurrent::runVoidFunctionThreaded(refineRegions, pars.numThreads);
 
-	for(const auto & bed : beds){
+	for(auto & bed : beds){
+		bed->name_ = bed->genUIDFromCoordsWithStrand();
 		out << bed->toDelimStrWithExtra() << std::endl;
 	}
 	return beds;

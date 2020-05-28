@@ -620,8 +620,8 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 	if(force){
 		needToRun = true;
 	}
-	bfs::path singlesSortedBam = njh::files::make_path(outputDir, singles.string() + ".sorted.bam");
-	bfs::path pairedSortedBam = njh::files::make_path(outputDir,  pairR1.string() + ".sorted.bam");
+	bfs::path singlesSortedBam = njh::files::make_path(outputDir, singles.filename().string() + ".sorted.bam");
+	bfs::path pairedSortedBam = njh::files::make_path(outputDir,  pairR1.filename().string() + ".sorted.bam");
 
 
 	std::stringstream singlesCmd;
@@ -642,7 +642,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 			<< " " << genomeFnp
 			<< " " << inputPairedFirstMates
 			<< " " << inputPairedSecondMates
-			<< " 2> " << bfs::path(pairedSortedBam.string() + ".bwa.log")
+			<< " 2> " << bfs::path(pairedSortedBam.filename().string() + ".bwa.log")
 			<< " | samtools sort -@ " << numThreads << " -o " << pairedSortedBam;
 
 
