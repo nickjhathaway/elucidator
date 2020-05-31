@@ -174,10 +174,19 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	auto filteredSinglesOpts = SeqIOOptions::genFastqOutGz(outOpts.outFilename_.string() + "_filteredOffSingles");
 	auto filteredPairedOpts = SeqIOOptions::genPairedOutGz(outOpts.outFilename_.string() + "_filteredOffPairs");
 
+	auto totalsCountsOpts = OutOptions(njh::files::make_path(outOpts.outFilename_.string() + "_totalReadCounts"), ".tab.txt");
+	auto filteredChromCountsOpts = OutOptions(njh::files::make_path(outOpts.outFilename_.string() + "_filteredByChrom"), ".tab.txt");
+
+	totalsCountsOpts.transferOverwriteOpts(outOpts);
+	filteredChromCountsOpts.transferOverwriteOpts(outOpts);
 	singlesOpts.out_.transferOverwriteOpts(outOpts);
 	pairedOpts.out_.transferOverwriteOpts(outOpts);
 	filteredSinglesOpts.out_.transferOverwriteOpts(outOpts);
 	filteredPairedOpts.out_.transferOverwriteOpts(outOpts);
+
+	OutputStream totalsCountsOut(totalsCountsOpts);
+	OutputStream filteredCountsOut(filteredChromCountsOpts);
+
 
 	SeqOutput singlesWriter(singlesOpts);
 	SeqOutput pairedWriter(pairedOpts);
@@ -207,26 +216,48 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 		ss << __PRETTY_FUNCTION__ << ", error " << "the following chromosomes were not found in the input bam file " << njh::conToStr(missing)<< "\n";
 		throw std::runtime_error{ss.str()};
 	}
+
+	struct ReadCounts{
+		uint64_t singles_ = 0;
+		uint64_t pairs_ = 0;
+	};
+
+
+	uint64_t filteredOrphans_ = 0;
+	uint64_t keptOrphans_ = 0;
+
+
+	ReadCounts input;
+	ReadCounts kept;
+
+	std::unordered_map<std::string, ReadCounts> filteredCountsByChrom;
+
 	while (bReader.GetNextAlignment(bAln)) {
 		//skip secondary alignments
 		if (!bAln.IsPrimaryAlignment()) {
 			continue;
 		}
 		if (!bAln.IsPaired()) {
+			++input.singles_;
 			if (!bAln.IsMapped()) {
+				++kept.singles_;
 				singlesWriter.openWrite(bamAlnToSeqInfo(bAln));
 			} else {
 				if (njh::in(refData[bAln.RefID].RefName, chroms)) {
 					if(getTotalSoftClippedBases(bAln)   <= allowableSoftClip){
 						filteredSinglesWriter.openWrite(bamAlnToSeqInfo(bAln));
+						++filteredCountsByChrom[refData[bAln.RefID].RefName].singles_;
 					}else{
+						++kept.singles_;
 						singlesWriter.openWrite(bamAlnToSeqInfo(bAln));
 					}
 				} else {
+					++kept.singles_;
 					singlesWriter.openWrite(bamAlnToSeqInfo(bAln));
 				}
 			}
 		} else {
+			++input.pairs_;
 			if (bAln.IsMapped() &&
 					bAln.IsMateMapped() &&
 					njh::in(refData[bAln.RefID].RefName, chroms) &&
@@ -241,12 +272,14 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 					auto search = filterAlnCache.get(bAln.Name);
 					if(getTotalSoftClippedBases(*search) <= allowableSoftClip &&
 							getTotalSoftClippedBases(bAln)   <= allowableSoftClip){
+						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "-", refData[bAln.RefID].RefName)].pairs_;
 						if (bAln.IsFirstMate()) {
 							filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
 						} else {
 							filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
 						}
 					}else{
+						++kept.pairs_;
 						if (bAln.IsFirstMate()) {
 							pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
 						} else {
@@ -265,6 +298,7 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 					continue;
 				} else {
 					auto search = alnCache.get(bAln.Name);
+					++kept.pairs_;
 					if (bAln.IsFirstMate()) {
 						pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
 					} else {
@@ -282,6 +316,7 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	if (len(alnCache) > 0) {
 		auto names = alnCache.getNames();
 		for (const auto & name : names) {
+			++keptOrphans_;
 			auto search = alnCache.get(name);
 			singlesWriter.openWrite(bamAlnToSeqInfo(*search));
 			alnCache.remove(name);
@@ -290,11 +325,66 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	if (len(filterAlnCache) > 0) {
 		auto names = filterAlnCache.getNames();
 		for (const auto & name : names) {
+			++filteredOrphans_;
 			auto search = filterAlnCache.get(name);
 			filteredSinglesWriter.openWrite(bamAlnToSeqInfo(*search));
 			filterAlnCache.remove(name);
 		}
 	}
+
+	ReadCounts filtered;
+	for(const auto & filt : filteredCountsByChrom){
+		filtered.pairs_ += filt.second.pairs_;
+		filtered.singles_ += filt.second.singles_;
+	}
+
+	/*
+	 * 	OutputStream totalsCountsOut(totalsCountsOpts);
+	OutputStream filteredCountsOut(filteredChromCountsOpts);
+	 */
+
+
+	totalsCountsOut << "condition\tcount\tfrac\ttotal" << std::endl;;
+	totalsCountsOut << "keptPairs"
+			<< "\t" << kept.pairs_
+			<< "\t" << kept.pairs_/static_cast<double>(input.pairs_)
+			<< "\t" << input.pairs_ << std::endl;
+	totalsCountsOut << "keptSingles"
+			<< "\t" << kept.singles_
+			<< "\t" << kept.singles_/static_cast<double>(input.singles_)
+			<< "\t" << input.singles_ << std::endl;
+
+	totalsCountsOut << "filteredPairs"
+			<< "\t" << filtered.pairs_
+			<< "\t" << filtered.pairs_/static_cast<double>(filtered.pairs_)
+			<< "\t" << input.pairs_ << std::endl;
+	totalsCountsOut << "filteredSingles"
+			<< "\t" << filtered.singles_
+			<< "\t" << filtered.singles_/static_cast<double>(filtered.singles_)
+			<< "\t" << input.singles_ << std::endl;
+
+	totalsCountsOut << "keptOrphans"
+			<< "\t" << keptOrphans_
+			<< "\t"
+			<< "\t" << std::endl;
+
+	totalsCountsOut << "filteredOrphans"
+			<< "\t" << filteredOrphans_
+			<< "\t"
+			<< "\t" << std::endl;
+
+	auto names = getVectorOfMapKeys(filteredCountsByChrom);
+	njh::sort(names);
+	filteredCountsOut << "chrom\tpairs\tpairsFrac\tsingles\tsinglesFrac" << std::endl;
+	for(const auto & name : names){
+		filteredCountsOut << name
+				<< "\t" << filteredCountsByChrom[name].pairs_
+				<< "\t" << filteredCountsByChrom[name].pairs_/static_cast<double>(filtered.pairs_)
+				<< "\t" << filteredCountsByChrom[name].singles_
+				<< "\t" << filteredCountsByChrom[name].singles_/static_cast<double>(filtered.singles_) << std::endl;
+
+	}
+
 	return 0;
 }
 
