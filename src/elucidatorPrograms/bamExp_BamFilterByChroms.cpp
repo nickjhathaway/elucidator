@@ -345,40 +345,47 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	 */
 
 
-	totalsCountsOut << "condition\tcount\tfrac\ttotal" << std::endl;;
-	totalsCountsOut << "keptPairs"
+	totalsCountsOut << "bam\tcondition\tcount\tfrac\ttotal" << std::endl;;
+	totalsCountsOut << bfs::basename(setUp.pars_.ioOptions_.firstName_.filename())
+			<< "\t" << "keptPairs"
 			<< "\t" << kept.pairs_
 			<< "\t" << kept.pairs_/static_cast<double>(input.pairs_)
 			<< "\t" << input.pairs_ << std::endl;
-	totalsCountsOut << "keptSingles"
+	totalsCountsOut << bfs::basename(setUp.pars_.ioOptions_.firstName_.filename())
+			<< "\t" << "keptSingles"
 			<< "\t" << kept.singles_
 			<< "\t" << kept.singles_/static_cast<double>(input.singles_)
 			<< "\t" << input.singles_ << std::endl;
 
-	totalsCountsOut << "filteredPairs"
+	totalsCountsOut << bfs::basename(setUp.pars_.ioOptions_.firstName_.filename())
+			<< "\t" << "filteredPairs"
 			<< "\t" << filtered.pairs_
 			<< "\t" << filtered.pairs_/static_cast<double>(input.pairs_)
 			<< "\t" << input.pairs_ << std::endl;
-	totalsCountsOut << "filteredSingles"
+	totalsCountsOut << bfs::basename(setUp.pars_.ioOptions_.firstName_.filename())
+			<< "\t" << "filteredSingles"
 			<< "\t" << filtered.singles_
 			<< "\t" << filtered.singles_/static_cast<double>(input.singles_)
 			<< "\t" << input.singles_ << std::endl;
 
-	totalsCountsOut << "keptOrphans"
+	totalsCountsOut << bfs::basename(setUp.pars_.ioOptions_.firstName_.filename())
+			<< "\t" << "keptOrphans"
 			<< "\t" << keptOrphans_
 			<< "\t"
 			<< "\t" << std::endl;
 
-	totalsCountsOut << "filteredOrphans"
+	totalsCountsOut << bfs::basename(setUp.pars_.ioOptions_.firstName_.filename())
+			<< "\t" << "filteredOrphans"
 			<< "\t" << filteredOrphans_
 			<< "\t"
 			<< "\t" << std::endl;
 
 	auto names = getVectorOfMapKeys(filteredCountsByChrom);
 	njh::sort(names);
-	filteredCountsOut << "chrom\tpairs\tpairsFrac\tsingles\tsinglesFrac" << std::endl;
+	filteredCountsOut << "bam\tchrom\tpairs\tpairsFrac\tsingles\tsinglesFrac" << std::endl;
 	for(const auto & name : names){
-		filteredCountsOut << name
+		filteredCountsOut << bfs::basename(setUp.pars_.ioOptions_.firstName_.filename())
+				<< "\t" << name
 				<< "\t" << filteredCountsByChrom[name].pairs_
 				<< "\t" << filteredCountsByChrom[name].pairs_/static_cast<double>(filtered.pairs_)
 				<< "\t" << filteredCountsByChrom[name].singles_
