@@ -84,7 +84,8 @@ bamExpRunner::bamExpRunner()
 					 addFunc("testingBamToFastqToContigs", testingBamToFastqToContigs, false),
 					 addFunc("getUnmappedAndShortAlnsFromBam", getUnmappedAndShortAlnsFromBam, false),
 					 addFunc("multiBamCoverageFinderBases", multiBamCoverageFinderBases, false),
-          }, //multiBamCoverageFinderBases
+					 addFunc("BamGetImproperPairsOnChroms", BamGetImproperPairsOnChroms, false),
+          }, //
 				"bamExp") {
 }
 

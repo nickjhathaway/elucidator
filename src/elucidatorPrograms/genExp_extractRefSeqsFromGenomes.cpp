@@ -72,15 +72,63 @@ int genExpRunner::bioIndexGenomes(const njh::progutils::CmdArgs & inputCommands)
 
 int genExpRunner::bioIndexGenome(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path genomeFnp = "";
+	uint32_t numThreads = 1;
+
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
   setUp.setOption(genomeFnp, "--genomeFnp", "the file name path to the genome", true);
+  setUp.setOption(numThreads, "--numThreads", "Number of Threads", njh::progutils::ProgramSetUp::CheckCase::GTEQ1);
   setUp.finishSetUp(std::cout);
 
-  BioCmdsUtils bioRunner(setUp.pars_.verbose_);
 
-  bioRunner.runAllPossibleIndexes(genomeFnp);
+  VecStr programs{};
+
+	if (njh::sys::hasSysCommand("bowtie2")) {
+		programs.emplace_back("bowtie2");
+	}else	if(setUp.pars_.verbose_){
+		std::cerr << "Couldn't find " << "bowtie2" << " skipping bowtie2 indexing" << std::endl;
+	}
+
+	if (njh::sys::hasSysCommand("bwa")) {
+		programs.emplace_back("bwa");
+	}else	if(setUp.pars_.verbose_){
+		std::cerr << "Couldn't find " << "bwa" << " skipping bwa indexing" << std::endl;
+	}
+
+	if (njh::sys::hasSysCommand("samtools")) {
+		programs.emplace_back("samtools");
+	}else	if(setUp.pars_.verbose_){
+		std::cerr << "Couldn't find " << "samtools" << " skipping samtools faidx" << std::endl;
+	}
+
+	if (njh::sys::hasSysCommand("picard")) {
+		programs.emplace_back("picard");
+	}else	if(setUp.pars_.verbose_){
+		std::cerr << "Couldn't find " << "picard" << " skipping picard CreateSequenceDictionary" << std::endl;
+	}
+	programs.emplace_back("TwoBit");
+
+	njh::concurrent::LockableQueue<std::string> programsQueue(programs);
+
+	std::function<void()> runIndex = [&programsQueue, &setUp, &genomeFnp](){
+	  BioCmdsUtils bioRunner(setUp.pars_.verbose_);
+	  std::string program = "";
+	  while(programsQueue.getVal(program)){
+	  	if("bowtie2" == program){
+	  		bioRunner.RunBowtie2Index(genomeFnp);
+	  	}else if("bwa" == program){
+	  		bioRunner.RunBwaIndex(genomeFnp);
+	  	}else if("samtools" == program){
+	  		bioRunner.RunSamtoolsFastaIndex(genomeFnp);
+	  	}else if("picard" == program){
+	  		bioRunner.RunPicardFastaSeqDict(genomeFnp);
+	  	}else if("TwoBit" == program){
+	  		bioRunner.RunFaToTwoBit(genomeFnp);
+	  	}
+	  }
+	};
+	njh::concurrent::runVoidFunctionThreaded(runIndex, numThreads);
 
 	return 0;
 }

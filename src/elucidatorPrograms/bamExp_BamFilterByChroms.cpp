@@ -46,15 +46,117 @@ uint32_t getTotalSoftClippedBases(const BamTools::BamAlignment & baln){
 	return ret;
 }
 
-int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommands){
+
+
+
+
+int bamExpRunner::BamGetImproperPairsOnChroms(const njh::progutils::CmdArgs & inputCommands){
 	std::string chromFnp = "";
 	OutOptions outOpts(bfs::path("out"));
 	uint32_t allowableSoftClip = 10;
+
+
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.setOption(allowableSoftClip, "--allowableSoftClip", "Number of bases that can be soft clipped in order to be included in the filtered off sequences, keep this zero to be more conservative in what gets filtered");
 	setUp.setOption(chromFnp, "--chroms", "chromosomes to filter", true);
+	setUp.processReadInNames({"--bam"}, true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	auto chroms = getInputValues(chromFnp, ",");
+
+	BamTools::BamReader bReader;
+	bReader.Open(setUp.pars_.ioOptions_.firstName_.string());
+	checkBamOpenThrow(bReader, setUp.pars_.ioOptions_.firstName_.string());
+
+	BamTools::BamAlignment bAln;
+
+	auto singlesOpts = SeqIOOptions::genFastqOutGz(outOpts.outFilename_.string() + "_singles");
+	auto pairedOpts = SeqIOOptions::genPairedOutGz(outOpts.outFilename_.string() + "_pairs");
+
+
+	singlesOpts.out_.transferOverwriteOpts(outOpts);
+	pairedOpts.out_.transferOverwriteOpts(outOpts);
+
+
+	SeqOutput singlesWriter(singlesOpts);
+	SeqOutput pairedWriter(pairedOpts);
+
+
+	BamAlnsCache alnCache;
+	BamAlnsCache filterAlnCache;
+
+	auto refData = bReader.GetReferenceData();
+	//check to make sure chroms contains chromosome from the input bam file
+	VecStr missing;
+	for(const auto & chrom : chroms){
+		bool found = false;
+		for(const auto & ref : refData){
+			if(ref.RefName == chrom){
+				found = true;
+				break;
+			}
+		}
+		if(!found){
+			missing.emplace_back(chrom);
+		}
+	}
+	if(!missing.empty()){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << "the following chromosomes were not found in the input bam file " << njh::conToStr(missing)<< "\n";
+		throw std::runtime_error{ss.str()};
+	}
+	while (bReader.GetNextAlignment(bAln)) {
+		//skip secondary alignments
+		if (!bAln.IsPrimaryAlignment()) {
+			continue;
+		}
+		if (bAln.IsPaired()) {
+			if (bAln.IsMapped() &&
+					bAln.IsMateMapped() &&
+					njh::in(refData[bAln.RefID].RefName, chroms) &&
+					njh::in(refData[bAln.MateRefID].RefName, chroms) &&
+					!bAln.IsProperPair()){
+				if (!filterAlnCache.has(bAln.Name)) {
+					//pair hasn't been added to cache yet so add to cache
+					//this only works if mate and first mate have the same name
+					filterAlnCache.add(bAln);
+					continue;
+				} else {
+					auto search = filterAlnCache.get(bAln.Name);
+					if(getTotalSoftClippedBases(*search) <= allowableSoftClip &&
+							getTotalSoftClippedBases(bAln)   <= allowableSoftClip){
+						if (bAln.IsFirstMate()) {
+							pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
+						} else {
+							pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
+						}
+					}
+					// now that operations have been computed, remove ther other mate found from cache
+					filterAlnCache.remove(search->Name);
+					continue;
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+
+int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommands){
+	std::string chromFnp = "";
+	OutOptions outOpts(bfs::path("out"));
+	uint32_t allowableSoftClip = 10;
+	bool requireProperPair = false;
+
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(allowableSoftClip, "--allowableSoftClip", "Number of bases that can be soft clipped in order to be included in the filtered off sequences, keep this zero to be more conservative in what gets filtered");
+	setUp.setOption(chromFnp, "--chroms", "chromosomes to filter", true);
+	setUp.setOption(requireProperPair, "--requireProperPair", "Require Proper Pair to be filtered off");
 	setUp.processReadInNames({"--bam"}, true);
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
@@ -115,7 +217,11 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 				singlesWriter.openWrite(bamAlnToSeqInfo(bAln));
 			} else {
 				if (njh::in(refData[bAln.RefID].RefName, chroms)) {
-					filteredSinglesWriter.openWrite(bamAlnToSeqInfo(bAln));
+					if(getTotalSoftClippedBases(bAln)   <= allowableSoftClip){
+						filteredSinglesWriter.openWrite(bamAlnToSeqInfo(bAln));
+					}else{
+						singlesWriter.openWrite(bamAlnToSeqInfo(bAln));
+					}
 				} else {
 					singlesWriter.openWrite(bamAlnToSeqInfo(bAln));
 				}
@@ -124,8 +230,8 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 			if (bAln.IsMapped() &&
 					bAln.IsMateMapped() &&
 					njh::in(refData[bAln.RefID].RefName, chroms) &&
-					njh::in(refData[bAln.MateRefID].RefName, chroms) ){
-
+					njh::in(refData[bAln.MateRefID].RefName, chroms) &&
+					(!requireProperPair || bAln.IsProperPair())){
 				if (!filterAlnCache.has(bAln.Name)) {
 					//pair hasn't been added to cache yet so add to cache
 					//this only works if mate and first mate have the same name

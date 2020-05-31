@@ -66,6 +66,7 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("kmerTestingGround", kmerTestingGround, false),
 					 addFunc("pairwiseComparisonOfUniqueKmers", pairwiseComparisonOfUniqueKmers, false),
 					 addFunc("getWithinGenomeUniqueKmers", getWithinGenomeUniqueKmers, false),
+					 addFunc("getUniqKmerBlocksOnGenomeAgainstRef", getUniqKmerBlocksOnGenomeAgainstRef, false),
 					 //
            },
           "kmerExp") {}
