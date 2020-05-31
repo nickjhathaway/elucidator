@@ -150,7 +150,6 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	OutOptions outOpts(bfs::path("out"));
 	uint32_t allowableSoftClip = 10;
 	bool requireProperPair = false;
-
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -272,8 +271,8 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 					auto search = filterAlnCache.get(bAln.Name);
 					if(getTotalSoftClippedBases(*search) <= allowableSoftClip &&
 							getTotalSoftClippedBases(bAln)   <= allowableSoftClip){
-						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "-", refData[bAln.RefID].RefName)].pairs_;
-						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "-", refData[bAln.RefID].RefName)].pairs_;
+						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
+						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
 						if (bAln.IsFirstMate()) {
 							filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
 						} else {

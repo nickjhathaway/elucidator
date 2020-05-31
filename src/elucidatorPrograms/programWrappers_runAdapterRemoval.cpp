@@ -575,6 +575,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path pairR2 = "";
 	bfs::path singles = "";
 
+	bfs::path logDir = "";
 	bool force = false;
 	uint32_t numThreads = 1;
 	std::string sampName = "";
@@ -589,6 +590,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 	bool r1Set = setUp.setOption(pairR1, "--pairR1", "AdapterRemoval output stub");
 	setUp.setOption(pairR2, "--pairR2", "AdapterRemoval output stub", r1Set);
 	setUp.setOption(singles, "--single", "AdapterRemoval output stub", !r1Set);
+	setUp.setOption(logDir, "logDir", "Directory to put the log files");
 
 	setUp.setOption(sampName, "--sampName", "Sample Name to give to final bam", true);
 	setUp.setOption(force, "--force", "force run even if file already exists");
@@ -625,16 +627,24 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 
 
 	std::stringstream singlesCmd;
+	auto singlesBwaLogFnp = bfs::path(singlesSortedBam.string() + ".bwa.log");
+	if("" != logDir){
+		singlesBwaLogFnp = njh::files::make_path(logDir, singlesSortedBam.filename().string() + ".bwa.log");
+	}
 	singlesCmd << "bwa mem  -M -t " << numThreads
 			<< " -R " << R"("@RG\tID:)" << bfs::basename(singles) << "" << R"(\tSM:)"
 			<< sampName << R"(")"
 			<< " "   << extraBwaArgs
 			<< " "   << genomeFnp
 			<< " "   << inputSingles
-			<< " 2> " << bfs::path(singlesSortedBam.string() + ".bwa.log")
+			<< " 2> " << singlesBwaLogFnp
 			<< " | samtools sort -@ " << numThreads << " -o " << singlesSortedBam;
 
 	std::stringstream pairedCmd;
+	auto pairedBwaLogFnp = bfs::path(pairedSortedBam.string() + ".bwa.log");
+	if("" != logDir){
+		pairedBwaLogFnp = njh::files::make_path(logDir, pairedSortedBam.filename().string() + ".bwa.log");
+	}
 	pairedCmd << "bwa mem  -M -t " << numThreads
 			<< " -R " << R"("@RG\tID:)" << bfs::basename(pairR1) << "" << R"(\tSM:)"
 			<< sampName << R"(")"
@@ -642,7 +652,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 			<< " " << genomeFnp
 			<< " " << inputPairedFirstMates
 			<< " " << inputPairedSecondMates
-			<< " 2> " << bfs::path(pairedSortedBam.string() + ".bwa.log")
+			<< " 2> " << pairedBwaLogFnp
 			<< " | samtools sort -@ " << numThreads << " -o " << pairedSortedBam;
 
 
@@ -655,7 +665,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 			<< " && samtools index " << outputFnp;
 
 	if(needToRun){
-		bfs::path logFnp = njh::files::make_path(outputDir, "alignTrimoOutputs_" + sampName + "_" + njh::getCurrentDate() + "_log.json");
+		bfs::path logFnp = njh::files::make_path("" == logDir ? outputDir: logDir, "alignTrimoOutputs_" + sampName + "_" + njh::getCurrentDate() + "_log.json");
 		logFnp = njh::files::findNonexitantFile(logFnp);
 		OutOptions logOpts(logFnp);
 		std::ofstream logFile;
