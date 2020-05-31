@@ -590,7 +590,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 	bool r1Set = setUp.setOption(pairR1, "--pairR1", "AdapterRemoval output stub");
 	setUp.setOption(pairR2, "--pairR2", "AdapterRemoval output stub", r1Set);
 	setUp.setOption(singles, "--single", "AdapterRemoval output stub", !r1Set);
-	setUp.setOption(logDir, "logDir", "Directory to put the log files");
+	setUp.setOption(logDir, "--logDir", "Directory to put the log files");
 
 	setUp.setOption(sampName, "--sampName", "Sample Name to give to final bam", true);
 	setUp.setOption(force, "--force", "force run even if file already exists");
