@@ -640,7 +640,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 			<< " "   << inputSingles
 			<< " 2> " << singlesBwaLogFnp;
 	if(useSambamba){
-		singlesCmd << " | sambamba sort -t " << numThreads << " -o " << singlesSortedBam;
+		singlesCmd << " | sambamba view -S /dev/stdin -o /dev/stdout -f bam | sambamba sort -t " << numThreads << " -o " << singlesSortedBam << " /dev/stdin";
 	}else{
 		singlesCmd << " | samtools sort -@ " << numThreads << " -o " << singlesSortedBam;
 	}
@@ -659,8 +659,8 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 			<< " " << inputPairedSecondMates
 			<< " 2> " << pairedBwaLogFnp;
 	if (useSambamba) {
-		pairedCmd << " | sambamba sort -t " << numThreads << " -o "
-				<< pairedSortedBam;
+		pairedCmd << " | sambamba view -S /dev/stdin -o /dev/stdout -f bam | sambamba sort -t " << numThreads << " -o " << pairedSortedBam << " /dev/stdin";
+
 	} else {
 		pairedCmd << " | samtools sort -@ " << numThreads << " -o "
 				<< pairedSortedBam;
