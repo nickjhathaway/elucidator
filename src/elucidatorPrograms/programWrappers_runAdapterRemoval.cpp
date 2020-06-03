@@ -671,9 +671,8 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 	if (useSambamba) {
 		bamtoolsMergeAndIndexCmd << "sambamba merge " << outputFnp << " " << pairedSortedBam;
 		if(bfs::exists(inputSingles)){
-			bamtoolsMergeAndIndexCmd <<  singlesSortedBam;
+			bamtoolsMergeAndIndexCmd <<  " " << singlesSortedBam;
 		}
-		bamtoolsMergeAndIndexCmd	<< " && sambamba index " << outputFnp;
 	}else{
 		bamtoolsMergeAndIndexCmd << "bamtools merge " << " -in " << pairedSortedBam;
 		if(bfs::exists(inputSingles)){
@@ -705,16 +704,16 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 			BioCmdsUtils::checkRunOutThrow(bamtoolsMergeAndIndexRunOutput, __PRETTY_FUNCTION__);
 			runOutputs["bamtools-merge-index"] = bamtoolsMergeAndIndexRunOutput;
 		}else{
-			std::stringstream ss;
-			if (useSambamba) {
-				ss << "sambamba index " << outputFnp;
-			}else{
-				ss << "samtools index " << outputFnp;
-			}
 			bfs::rename(pairedSortedBam, outputFnp);
-			auto indexRunOutput = njh::sys::run({ss.str()});
-			BioCmdsUtils::checkRunOutThrow(indexRunOutput, __PRETTY_FUNCTION__);
-			runOutputs["index"] = indexRunOutput;
+			if(useSambamba){
+				bfs::rename(pairedSortedBam.string() + ".bai", outputFnp + ".bai");
+			}else{
+				std::stringstream ss;
+				ss << "samtools index " << outputFnp;
+				auto indexRunOutput = njh::sys::run({ss.str()});
+				BioCmdsUtils::checkRunOutThrow(indexRunOutput, __PRETTY_FUNCTION__);
+				runOutputs["index"] = indexRunOutput;
+			}
 		}
 		logFile << njh::json::toJson(runOutputs) << std::endl;
 		if(removeIntermediateFiles){
