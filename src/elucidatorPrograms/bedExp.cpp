@@ -85,7 +85,10 @@ bedExpRunner::bedExpRunner()
 					 addFunc("createWindowsInRegions", createWindowsInRegions, false),
 					 addFunc("reverseComplementRegion", reverseComplementRegion, false),
 					 addFunc("bedRemoveOveringLappingRegions", bedRemoveOveringLappingRegions, false),
-           },//,,
+					 addFunc("bedFilterRegionsCompletelyInOther", bedFilterRegionsCompletelyInOther, false),
+					 addFunc("differentSubRegionCombos", differentSubRegionCombos, false),
+
+           },//
           "bedExp") {}
 
 int bedExpRunner::bedRemoveOveringLappingRegions(const njh::progutils::CmdArgs & inputCommands) {
@@ -240,10 +243,12 @@ int bedExpRunner::reverseComplementRegion(const njh::progutils::CmdArgs & inputC
 
 int bedExpRunner::centerBedRegionWithFixSize(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile;
+	bool skipOutOfRangeRegions = false;
 	OutOptions outOpts(bfs::path(""), ".bed");
 	uint32_t windowSize = 25;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
+	setUp.setOption(skipOutOfRangeRegions, "--skipOutOfRangeRegions", "skip Out Of Range Regions (e.g. start=5 with windowsize = 100");
 
 	setUp.setOption(windowSize, "--windowSize", "Window Size", true);
 	setUp.setOption(bedFile, "--bed", "Bed file to parse", true);
@@ -262,14 +267,28 @@ int bedExpRunner::centerBedRegionWithFixSize(const njh::progutils::CmdArgs & inp
 		if(reg.length() > windowSize - 2){
 			std::stringstream ss;
 			ss << __PRETTY_FUNCTION__ << ", error " << reg.toDelimStr() << " size is longer than desired window size"<< "\n";
-			throw std::runtime_error{ss.str()};
+			if(skipOutOfRangeRegions){
+				if(setUp.pars_.verbose_){
+					std::cerr << ss.str();
+					continue;
+				}
+			}else{
+				throw std::runtime_error{ss.str()};
+			}
 		}
 		uint32_t left = (windowSize - reg.length())/2;
 		uint32_t right = windowSize - reg.length() - left;
 		if(left > reg.chromStart_){
 			std::stringstream ss;
 			ss << __PRETTY_FUNCTION__ << ", error " << "can't extend region " <<reg.toDelimStr() << " to left by " << left << "\n";
-			throw std::runtime_error{ss.str()};
+			if(skipOutOfRangeRegions){
+				if(setUp.pars_.verbose_){
+					std::cerr << ss.str();
+					continue;
+				}
+			}else{
+				throw std::runtime_error{ss.str()};
+			}
 		}
 		auto oldLength = reg.length();
 
@@ -1744,7 +1763,7 @@ int bedExpRunner::splitBedFile(const njh::progutils::CmdArgs & inputCommands) {
 		for(const auto & region : regions){
 			if (region.getLen() < windowSize) {
 				out
-						<< GenomicRegion("", region.chrom_, region.start_, region.end_,
+						<< GenomicRegion(region.uid_, region.chrom_, region.start_, region.end_,
 								region.reverseSrand_).genBedRecordCore().toDelimStr()
 						<< std::endl;
 			} else {

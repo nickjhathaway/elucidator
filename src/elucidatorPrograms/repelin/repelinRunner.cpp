@@ -653,23 +653,32 @@ int repelinRunner::TandemRepeatFinderOutputToBed(const njh::progutils::CmdArgs &
 
 
 int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
-
+	SimpleTRFinderLocsPars pars;
+	pars.maxRepeatUnitSize = 6;
 	uint32_t match{2};
 	uint32_t mismatch{7};
 	uint32_t delta{7};
 	uint32_t PM{80};
 	uint32_t PI{10};
-	uint32_t Minscore{24};
+	uint32_t Minscore{24}; //with a match of 2 and a min score of 24, the smallest repeat size would be 12bps
 	uint32_t MaxPeriod{1000};
+
+	bool supplement = false;
 
   seqSetUp setUp(inputCommands);
 
   setUp.processVerbose();
+  setUp.setOption(supplement, "--supplement", "supplement TRF output with simple repeat determination which can sometimes be missed by TRF");
   setUp.processReadInNames({"--fasta", "--fastq", "--fastagz", "--fastqgz"});
   setUp.processDirectoryOutputName(true);
+  if(supplement){
+  	pars.setDefaultOpts(setUp);
+  }
   setUp.finishSetUp();
 
   setUp.startARunLog(setUp.pars_.directoryName_);
+  pars.outOpts = OutOptions(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr("repeats", pars.minRepeatUnitSize, "-", pars.maxRepeatUnitSize, ".bed")));
+
   njh::sys::requireExternalProgramThrow("trf");
 	{
 		SeqInput reader(setUp.pars_.ioOptions_);
@@ -712,35 +721,85 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
 			<< "." << Minscore
 			<< "." << MaxPeriod << ".dat";
 
-  bfs::path repeatFilename = njh::files::make_path(setUp.pars_.directoryName_, repeatFnpStream.str());
 
   OutOptions outOpts{njh::files::make_path(setUp.pars_.directoryName_, "repeats.bed")};
-
-  OutputStream outFile(outOpts);
-	BioDataFileIO<TandemRepeatFinderRecord> reader{IoOptions(InOptions(repeatFilename))};
-	reader.openIn();
-	std::string currentSeqName = "";
-	std::string line = "";
-	while (njh::files::crossPlatGetline(*reader.inFile_, line)) {
-		if (njh::beginsWith(line, "Sequence")) {
-			auto toks = njh::tokenizeString(line, "whitespace");
-			if (toks.size() < 2) {
-				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", error in processing line " << line
-						<< ", was expecting at least two values separated by white sapce but found "
-						<< toks.size() << " instead " << "\n";
-				throw std::runtime_error { ss.str() };
+	{
+	  bfs::path repeatFilename = njh::files::make_path(setUp.pars_.directoryName_, repeatFnpStream.str());
+	  OutputStream outFile(outOpts);
+		BioDataFileIO<TandemRepeatFinderRecord> reader{IoOptions(InOptions(repeatFilename))};
+		reader.openIn();
+		std::string currentSeqName = "";
+		std::string line = "";
+		while (njh::files::crossPlatGetline(*reader.inFile_, line)) {
+			if (njh::beginsWith(line, "Sequence")) {
+				auto toks = njh::tokenizeString(line, "whitespace");
+				if (toks.size() < 2) {
+					std::stringstream ss;
+					ss << __PRETTY_FUNCTION__ << ", error in processing line " << line
+							<< ", was expecting at least two values separated by white sapce but found "
+							<< toks.size() << " instead " << "\n";
+					throw std::runtime_error { ss.str() };
+				}
+				currentSeqName = toks[1];
 			}
-			currentSeqName = toks[1];
+			//skip lines that don't start with a digit or is a blank line, it seems to be the only indicator that the file is on a data line, this format is stupid
+			if("" == line || allWhiteSpaceStr(line) || !::isdigit(line.front())){
+				continue;
+			}
+			std::shared_ptr<TandemRepeatFinderRecord> record = std::make_shared<TandemRepeatFinderRecord>(line);
+			record->setSeqName(currentSeqName);
+			outFile << GenomicRegion(*record).genBedRecordCore().toDelimStr() << std::endl;
 		}
-		//skip lines that don't start with a digit or is a blank line, it seems to be the only indicator that the file is on a data line, this format is stupid
-		if("" == line || allWhiteSpaceStr(line) || !::isdigit(line.front())){
-			continue;
-		}
-		std::shared_ptr<TandemRepeatFinderRecord> record = std::make_shared<TandemRepeatFinderRecord>(line);
-		record->setSeqName(currentSeqName);
-		outFile << GenomicRegion(*record).genBedRecordCore().toDelimStr() << std::endl;
 	}
+
+	if(supplement){
+		runSimpleTRFinderLocsPars(setUp.pars_.ioOptions_, pars);
+		//combine
+
+		std::vector<Bed6RecordCore> combinedRepeats;
+		{
+			BioDataFileIO<Bed6RecordCore> trfRepeatsReader{IoOptions(InOptions(outOpts.outFilename_))};
+			trfRepeatsReader.openIn();
+			Bed6RecordCore rec;
+			while(trfRepeatsReader.readNextRecord(rec)){
+				bool found = false;
+				for(const auto & other : combinedRepeats){
+					if(other.sameRegion(rec) && other.name_ == rec.name_){
+						found = true;
+						break;
+					}
+				}
+				if(!found){
+					combinedRepeats.emplace_back(rec);
+				}
+			}
+		}
+		{
+			BioDataFileIO<Bed6RecordCore> strRepeatsReader{IoOptions(InOptions(pars.outOpts.outFilename_))};
+			strRepeatsReader.openIn();
+			Bed6RecordCore rec;
+			while(strRepeatsReader.readNextRecord(rec)){
+				bool found = false;
+				for(const auto & other : combinedRepeats){
+					if(other.sameRegion(rec) && other.name_ == rec.name_){
+						found = true;
+						break;
+					}
+				}
+				if(!found){
+					combinedRepeats.emplace_back(rec);
+				}
+			}
+		}
+
+		BedUtility::coordSort(combinedRepeats);
+
+		OutputStream combinedOut(njh::files::make_path(setUp.pars_.directoryName_, "combined.bed"));
+		for(const auto & reg : combinedRepeats){
+			combinedOut << reg.toDelimStr() << std::endl;
+		}
+	}
+
   return 0;
 }
 

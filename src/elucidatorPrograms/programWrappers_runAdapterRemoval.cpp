@@ -574,7 +574,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path pairR1 = "";
 	bfs::path pairR2 = "";
 	bfs::path singles = "";
-
+	bool useSambamba = false;
 	bfs::path logDir = "";
 	bool force = false;
 	uint32_t numThreads = 1;
@@ -591,6 +591,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 	setUp.setOption(pairR2, "--pairR2", "AdapterRemoval output stub", r1Set);
 	setUp.setOption(singles, "--single", "AdapterRemoval output stub", !r1Set);
 	setUp.setOption(logDir, "--logDir", "Directory to put the log files");
+	setUp.setOption(useSambamba, "--useSambamba", "use  Sambamba");
 
 	setUp.setOption(sampName, "--sampName", "Sample Name to give to final bam", true);
 	setUp.setOption(force, "--force", "force run even if file already exists");
@@ -637,8 +638,12 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 			<< " "   << extraBwaArgs
 			<< " "   << genomeFnp
 			<< " "   << inputSingles
-			<< " 2> " << singlesBwaLogFnp
-			<< " | samtools sort -@ " << numThreads << " -o " << singlesSortedBam;
+			<< " 2> " << singlesBwaLogFnp;
+	if(useSambamba){
+		singlesCmd << " | sambamba sort -t " << numThreads << " -o " << singlesSortedBam;
+	}else{
+		singlesCmd << " | samtools sort -@ " << numThreads << " -o " << singlesSortedBam;
+	}
 
 	std::stringstream pairedCmd;
 	auto pairedBwaLogFnp = bfs::path(pairedSortedBam.string() + ".bwa.log");
@@ -652,17 +657,32 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 			<< " " << genomeFnp
 			<< " " << inputPairedFirstMates
 			<< " " << inputPairedSecondMates
-			<< " 2> " << pairedBwaLogFnp
-			<< " | samtools sort -@ " << numThreads << " -o " << pairedSortedBam;
+			<< " 2> " << pairedBwaLogFnp;
+	if (useSambamba) {
+		pairedCmd << " | sambamba sort -t " << numThreads << " -o "
+				<< pairedSortedBam;
+	} else {
+		pairedCmd << " | samtools sort -@ " << numThreads << " -o "
+				<< pairedSortedBam;
+	}
 
 
 	std::stringstream bamtoolsMergeAndIndexCmd;
-	bamtoolsMergeAndIndexCmd << "bamtools merge " << " -in " << pairedSortedBam;
-	if(bfs::exists(inputSingles)){
-		bamtoolsMergeAndIndexCmd << " -in " <<  singlesSortedBam;
+	if (useSambamba) {
+		bamtoolsMergeAndIndexCmd << "sambamba merge " << outputFnp << " " << pairedSortedBam;
+		if(bfs::exists(inputSingles)){
+			bamtoolsMergeAndIndexCmd <<  singlesSortedBam;
+		}
+		bamtoolsMergeAndIndexCmd	<< " && sambamba index " << outputFnp;
+	}else{
+		bamtoolsMergeAndIndexCmd << "bamtools merge " << " -in " << pairedSortedBam;
+		if(bfs::exists(inputSingles)){
+			bamtoolsMergeAndIndexCmd << " -in " <<  singlesSortedBam;
+		}
+		bamtoolsMergeAndIndexCmd << " -out " << outputFnp
+				<< " && samtools index " << outputFnp;
 	}
-	bamtoolsMergeAndIndexCmd << " -out " << outputFnp
-			<< " && samtools index " << outputFnp;
+
 
 	if(needToRun){
 		bfs::path logFnp = njh::files::make_path("" == logDir ? outputDir: logDir, "alignTrimoOutputs_" + sampName + "_" + njh::getCurrentDate() + "_log.json");
@@ -686,7 +706,11 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 			runOutputs["bamtools-merge-index"] = bamtoolsMergeAndIndexRunOutput;
 		}else{
 			std::stringstream ss;
-			ss << "samtools index " << outputFnp;
+			if (useSambamba) {
+				ss << "sambamba index " << outputFnp;
+			}else{
+				ss << "samtools index " << outputFnp;
+			}
 			bfs::rename(pairedSortedBam, outputFnp);
 			auto indexRunOutput = njh::sys::run({ss.str()});
 			BioCmdsUtils::checkRunOutThrow(indexRunOutput, __PRETTY_FUNCTION__);
