@@ -706,7 +706,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 		}else{
 			bfs::rename(pairedSortedBam, outputFnp);
 			if(useSambamba){
-				bfs::rename(pairedSortedBam.string() + ".bai", outputFnp + ".bai");
+				bfs::rename(pairedSortedBam.string() + ".bai", outputFnp.string() + ".bai");
 			}else{
 				std::stringstream ss;
 				ss << "samtools index " << outputFnp;
