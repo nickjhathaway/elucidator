@@ -127,6 +127,13 @@ class bamExpRunner : public njh::progutils::ProgramRunner {
 	static int BamFilterAlnsOnLenAndQual(const njh::progutils::CmdArgs & inputCommands);
 
 
+
+	static int BamGetPairedReadInfoForRegions(const njh::progutils::CmdArgs & inputCommands);
+
+	static int BamGetImproperPairCounts(const njh::progutils::CmdArgs & inputCommands);
+
+
+
 };
 
 } /* namespace njhseq */

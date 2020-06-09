@@ -37,6 +37,60 @@ namespace njhseq {
 
 
 
+
+int bamExpRunner::BamGetImproperPairCounts(const njh::progutils::CmdArgs & inputCommands){
+	bfs::path bedFile = "";
+	OutOptions outOpts(bfs::path(""), ".tab.txt");
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.setOption(bedFile, "--bed", "Bed file");
+	setUp.processReadInNames({"--bam"}, true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	BamTools::BamReader bReader;
+	bReader.Open(setUp.pars_.ioOptions_.firstName_.string());
+	checkBamOpenThrow(bReader, setUp.pars_.ioOptions_.firstName_.string());
+	loadBamIndexThrow(bReader);
+	BamTools::BamAlignment bAln;
+
+	if("" != bedFile){
+		auto regions = bedPtrsToGenomicRegs(getBeds(bedFile));
+		setBamFileRegionThrow(bReader, regions.front());
+	}
+	auto refData = bReader.GetReferenceData();
+	OutputStream out(outOpts);
+
+	//key1=isPaired, key2=isMapped, key3=isMateMapped, key4=ProperPair, value = count
+	std::unordered_map<bool, std::unordered_map<bool, std::unordered_map<bool, std::unordered_map<bool, uint64_t>>>> pairedMappedMateMappedProperCounts;
+	while(bReader.GetNextAlignment(bAln)){
+		if(!bAln.IsPrimaryAlignment()){
+			continue;
+		}
+		++pairedMappedMateMappedProperCounts[bAln.IsPaired()][bAln.IsMapped()][bAln.IsMateMapped()][bAln.IsProperPair()];
+	}
+
+	out << "isPaired\tisMapped\tisMateMapped\tisProperPair\tcount" << std::endl;
+	for(const auto & paired : pairedMappedMateMappedProperCounts){
+		for(const auto & mapped : paired.second){
+			for(const auto & mateMapped : mapped.second){
+				for(const auto & properPair : mateMapped.second){
+					out << njh::boolToStr(paired.first)
+					<< "\t" << njh::boolToStr(mapped.first)
+					<< "\t" << njh::boolToStr(mateMapped.first)
+					<< "\t" << njh::boolToStr(properPair.first)
+					<< "\t" << properPair.second << std::endl;
+				}
+			}
+		}
+	}
+
+
+	return 0;
+}
+
+
+
 int bamExpRunner::bamToFastqAlns(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path bedFile = "";
 	OutOptions outOpts(bfs::path(""));
@@ -273,10 +327,11 @@ int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & 
 	auto refData = bReader.GetReferenceData();
 	BamTools::BamAlignment bAln;
 	uint32_t count = 0;
-	std::cout << "FileIndexPosition\tName\tPosition\tEndPosition\tQuerySize\tAlnSize\tRefId\tRefName\tMateRefID\tMatePosition\tIsMateMapped\tIsMapped\tIsPaired\tIsPrimaryAlignment\tIsFirstMate\tDuplicate\tRevComp" << "\n";
+	OutputStream out(outOpts);
+	out << "FileIndexPosition\tName\tPosition\tEndPosition\tQuerySize\tAlnSize\tRefId\tRefName\tMateRefID\tMatePosition\tIsMateMapped\tIsMapped\tIsPaired\tIsPrimaryAlignment\tIsFirstMate\tDuplicate\tRevComp\tProperPair" << "\n";
 	while(bReader.GetNextAlignment(bAln)){
 		if (njh::in(bAln.Name, names)) {
-			std::cout << count
+			out << count
 					<< "\t" << bAln.Name
 					<< "\t" << bAln.Position
 					<< "\t" << bAln.GetEndPosition()
@@ -292,7 +347,8 @@ int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & 
 					<< "\t" << njh::boolToStr(bAln.IsPrimaryAlignment())
 					<< "\t" << njh::boolToStr(bAln.IsFirstMate())
 				  << "\t" << njh::boolToStr(bAln.IsDuplicate())
-					<< "\t" << njh::boolToStr(bAln.IsReverseStrand())<< std::endl;
+					<< "\t" << njh::boolToStr(bAln.IsReverseStrand())
+					<< "\t" << njh::boolToStr(bAln.IsProperPair())<< std::endl;
 		}
 		++count;
 	}
