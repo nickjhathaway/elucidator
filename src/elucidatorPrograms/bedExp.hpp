@@ -55,6 +55,8 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	static int getLastRegionPerChrom(const njh::progutils::CmdArgs & inputCommands);
 	static int fillInRegionsByBestScore(const njh::progutils::CmdArgs & inputCommands);
 	static int bedFilterRegionsCompletelyInOther(const njh::progutils::CmdArgs & inputCommands);
+	static int bedFilterRegionsStartingOrEndingInOther(const njh::progutils::CmdArgs & inputCommands);
+	static int bedKeepRegionsStartingOrEndingInOther(const njh::progutils::CmdArgs & inputCommands);
 
 
 	//combing bed files

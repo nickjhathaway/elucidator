@@ -171,7 +171,7 @@ int bamExpRunner::BamGetPileupForRegion(
 
 	auto counts = BamCountSpecficRegions(inputRegions, regionSeqs, setUp.pars_.ioOptions_.firstName_, countPars);
 	OutputStream outCounts(njh::files::make_path(setUp.pars_.directoryName_, "seqCounts.tab.txt.gz"));
-	outCounts << "region\trefSeq\tseq\tcount" << std::endl;
+	outCounts << "region\trefSeq\tseq\tcount\tsample" << std::endl;
 	for(const auto & region : inputRegions){
 		std::set<std::string> subCounts;
 		njh::addVecToSet(getVectorOfMapKeys(counts[region.uid_]), subCounts);
@@ -185,6 +185,7 @@ int bamExpRunner::BamGetPileupForRegion(
 					<< "\t" << inputRegionSeqs[region.uid_].seq_
 					<< "\t" << seq
 					<< "\t" << counts[region.uid_][seq]
+					<< "\t" << sample
 					<< std::endl;
 		}
 	}

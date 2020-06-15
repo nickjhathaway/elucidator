@@ -87,6 +87,8 @@ bedExpRunner::bedExpRunner()
 					 addFunc("bedRemoveOveringLappingRegions", bedRemoveOveringLappingRegions, false),
 					 addFunc("bedFilterRegionsCompletelyInOther", bedFilterRegionsCompletelyInOther, false),
 					 addFunc("differentSubRegionCombos", differentSubRegionCombos, false),
+					 addFunc("bedFilterRegionsStartingOrEndingInOther", bedFilterRegionsStartingOrEndingInOther, false),
+					 addFunc("bedKeepRegionsStartingOrEndingInOther", bedKeepRegionsStartingOrEndingInOther, false),
 
            },//
           "bedExp") {}
