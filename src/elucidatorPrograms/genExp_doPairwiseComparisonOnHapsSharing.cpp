@@ -423,7 +423,7 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 	}
 
 	std::function<void()> compSamps = [&pFactor,&byHapsTarShared,&byAllHaps,&targetsEncodeBySamp,&progpar,
-																		 &totalHaps,&hapsEncodeBySamp,&setUp,&tarNamesVec,
+																		 &totalHaps,&hapsEncodeBySamp,&setUp,&tarNamesVec,&byTarget,
 																		 &numberOfHapsPerTarget,&tarStart,
 																		 &avgJacard](){
 		PairwisePairFactory::PairwisePairVec pairVec;
@@ -439,11 +439,14 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 				{
 					uint32_t totalSet = 0;
 					uint32_t totalShared = 0;
+					uint32_t totalTarsWithDataForBoth = 0;
+					uint32_t totalTarsWithAtLeastOneHapShared = 0;
 					std::vector<double> jacardsByTarget;
 					for(const auto tpos : iter::range(tarNamesVec.size())){
 						uint8_t tarRes = targetsEncodeBySamp[pair.col_][tpos] + targetsEncodeBySamp[pair.row_][tpos];
 						//should be 2 if both samples have this target
 						if(2 == tarRes){
+							++totalTarsWithDataForBoth;
 							uint32_t totalSetForTar = 0;
 							uint32_t totalSharedForTar = 0;
 							for(const auto & hapPos : iter::range(numberOfHapsPerTarget[tpos])){
@@ -460,6 +463,10 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 									++totalSetForTar;
 								}
 							}
+							if(totalSharedForTar > 0){
+								//at least one haplotype is shared between samps
+								++totalTarsWithAtLeastOneHapShared;
+							}
 							jacardsByTarget.emplace_back(totalSharedForTar/static_cast<double>(totalSetForTar));
 						}
 					}
@@ -467,7 +474,8 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 					byHapsTarShared[pair.col_][pair.row_] = totalShared/static_cast<double>(totalSet);
 					avgJacard[pair.row_][pair.col_] = vectorMean(jacardsByTarget);
 					avgJacard[pair.col_][pair.row_] = vectorMean(jacardsByTarget);
-
+					byTarget[pair.row_][pair.col_] = totalTarsWithAtLeastOneHapShared/static_cast<double>(totalTarsWithDataForBoth);
+					byTarget[pair.col_][pair.row_] = totalTarsWithAtLeastOneHapShared/static_cast<double>(totalTarsWithDataForBoth);
 				}
 				//for all
 				{
@@ -485,15 +493,6 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 					byAllHaps[pair.row_][pair.col_] = totalShared/static_cast<double>(totalSet);
 					byAllHaps[pair.col_][pair.row_] = totalShared/static_cast<double>(totalSet);
 				}
-
-//				auto compRes = pop.samples_[sampNames[pair.row_]].compToOtherSamp(pop.samples_[sampNames[pair.col_]]);
-//				byTarget[pair.row_][pair.col_] = compRes.percTargetsWithAtLeastOneHap();
-//				byHap[pair.row_][pair.col_] = compRes.jacardByHaps();
-//				avgJacard[pair.row_][pair.col_] = compRes.avgJacard();
-//
-//				byTarget[pair.col_][pair.row_] = compRes.percTargetsWithAtLeastOneHap();
-//				byHap[pair.col_][pair.row_] = compRes.jacardByHaps();
-//				avgJacard[pair.col_][pair.row_] = compRes.avgJacard();
 			}
 		}
 	};
@@ -504,16 +503,16 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 
 
 	OutputStream outSampNamesOut(njh::files::make_path(setUp.pars_.directoryName_, "sampleNames.tab.txt"));
-//	OutputStream byTargetOut(njh::files::make_path(setUp.pars_.directoryName_, "percOfTarSharingAtLeastOneHap.tab.txt.gz"));
+	OutputStream byTargetOut(njh::files::make_path(setUp.pars_.directoryName_, "percOfTarSharingAtLeastOneHap.tab.txt.gz"));
 	OutputStream byHapOut(njh::files::make_path(setUp.pars_.directoryName_, "jacardByAllHap.tab.txt.gz"));
 	OutputStream byHapTarSharedOut(njh::files::make_path(setUp.pars_.directoryName_, "jacardByHapsTarShared.tab.txt.gz"));
 
 	OutputStream avgHapOut(njh::files::make_path(setUp.pars_.directoryName_, "avgJacardPerTarget.tab.txt.gz"));
 
 	outSampNamesOut << njh::conToStr(sampNames, "\n") << std::endl;
-//	for(const auto & it : byTarget){
-//		byTargetOut << njh::conToStr(it, "\t") << std::endl;
-//	}
+	for(const auto & it : byTarget){
+		byTargetOut << njh::conToStr(it, "\t") << std::endl;
+	}
 	for(const auto & ih : byHapsTarShared){
 		byHapTarSharedOut << njh::conToStr(ih, "\t") << std::endl;
 	}
