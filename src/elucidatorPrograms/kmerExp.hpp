@@ -32,6 +32,9 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
  public:
 	kmerExpRunner();
 
+	static int findPositionsOfUniqueKmersInEachOther(const njh::progutils::CmdArgs & inputCommands);
+
+
 
 	static int convertKmerSearchToBinaryMatrix(const njh::progutils::CmdArgs & inputCommands);
 	static int kmerSearch(const njh::progutils::CmdArgs & inputCommands);

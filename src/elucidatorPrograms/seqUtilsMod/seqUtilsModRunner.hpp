@@ -39,6 +39,8 @@ class seqUtilsModRunner : public njh::progutils::ProgramRunner {
 
 
   static int sortReads(const njh::progutils::CmdArgs & inputCommands);
+	static int sortReadsByEntropy(const njh::progutils::CmdArgs & inputCommands);
+	static int sortReadsByKmerEntropy(const njh::progutils::CmdArgs & inputCommands);
   static int renameIDs(const njh::progutils::CmdArgs & inputCommands);
 
   static int increaseQualityScores(const njh::progutils::CmdArgs & inputCommands);

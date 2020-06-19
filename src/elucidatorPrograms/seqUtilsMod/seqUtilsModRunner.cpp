@@ -28,29 +28,86 @@ namespace njhseq {
 
 seqUtilsModRunner::seqUtilsModRunner()
     : njh::progutils::ProgramRunner({
-	addFunc("removeLowQualityBases", removeLowQualityBases, false),
-  addFunc("translate", translate, false),
-	addFunc("guessAProteinFromSeq", guessAProteinFromSeq, false),
-  addFunc("revCompSeq", revCompSeq, false),
-  addFunc("renameIDs", renameIDs, false),
-  addFunc("sortReads", sortReads, false),
-  addFunc("appendReads", appendReads, false),
-  addFunc("prependReads", prependReads, false),
-	addFunc("reOrientReads", reOrientReads, false),
-  addFunc("collapseToUnique", collapseToUnique, false),
-	addFunc("dereplicate", dereplicate, false),
-  addFunc("prependNames", prependNames, false),
-	addFunc("appendNames", appendNames, false),
-	addFunc("changeLetterCase", changeLetterCase, false),
-	addFunc("invertLetterCase", inverseLetterCase, false),
-	addFunc("collapseToUniqueWithinMetaField", collapseToUniqueWithInMetaField, false),
-	 addFunc("expandOutCollapsedToUnique", expandOutCollapsedToUnique, false),
-	 addFunc("increaseQualityScores", increaseQualityScores, false),
+		addFunc("removeLowQualityBases", removeLowQualityBases, false),
+		addFunc("translate", translate, false),
+		addFunc("guessAProteinFromSeq", guessAProteinFromSeq, false),
+		addFunc("revCompSeq", revCompSeq, false),
+		addFunc("renameIDs", renameIDs, false),
+		addFunc("sortReads", sortReads, false),
+		addFunc("appendReads", appendReads, false),
+		addFunc("prependReads", prependReads, false),
+		addFunc("reOrientReads", reOrientReads, false),
+		addFunc("collapseToUnique", collapseToUnique, false),
+		addFunc("dereplicate", dereplicate, false),
+		addFunc("prependNames", prependNames, false),
+		addFunc("appendNames", appendNames, false),
+		addFunc("changeLetterCase", changeLetterCase, false),
+		addFunc("invertLetterCase", inverseLetterCase, false),
+		addFunc("collapseToUniqueWithinMetaField", collapseToUniqueWithInMetaField, false),
+		addFunc("expandOutCollapsedToUnique", expandOutCollapsedToUnique, false),
+		addFunc("increaseQualityScores", increaseQualityScores, false),
+		addFunc("sortReadsByEntropy", sortReadsByEntropy, false),
+		addFunc("sortReadsByKmerEntropy", sortReadsByKmerEntropy, false),
 
 
 },//
                     "seqUtilsMod") {}
+int seqUtilsModRunner::sortReadsByKmerEntropy(const njh::progutils::CmdArgs & inputCommands) {
+	bool mark = false;
+	uint32_t kLen = 2;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.processDefaultReader(true);
+	setUp.setOption(kLen, "--klen", "kmer length");
+	setUp.setOption(mark, "--mark", "Add entropy to name");
+	setUp.finishSetUp(std::cout);
 
+	SeqInput reader(setUp.pars_.ioOptions_);
+	auto inputSeqs = reader.readAllReads<seqInfo>();
+	std::vector<seqWithKmerInfo> seqs;
+	for(const auto & seq : inputSeqs){
+		seqs.emplace_back(seqWithKmerInfo(seq, kLen, false));
+	}
+	if(mark){
+		for(auto & seq : seqs){
+			seq.seqBase_.name_.append(njh::pasteAsStr("[entropy=", seq.kInfo_.computeKmerEntropy(), "]"));
+		}
+	}
+	njh::sort(seqs, []( const seqWithKmerInfo & seq1,  const seqWithKmerInfo & seq2){
+		return seq1.kInfo_.computeKmerEntropy() < seq2.kInfo_.computeKmerEntropy();
+	});
+
+	SeqOutput::write(seqs, setUp.pars_.ioOptions_);
+
+	return 0;
+}
+
+int seqUtilsModRunner::sortReadsByEntropy(const njh::progutils::CmdArgs & inputCommands) {
+	bool mark = false;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.processDefaultReader(true);
+	setUp.setOption(mark, "--mark", "Add entropy to name");
+	setUp.finishSetUp(std::cout);
+
+	SeqInput reader(setUp.pars_.ioOptions_);
+	auto seqs = reader.readAllReads<readObject>();
+	readVec::allSetLetterCount(seqs);
+	if(mark){
+		for(auto & seq : seqs){
+			seq.seqBase_.name_.append(njh::pasteAsStr("[entropy=", seq.counter_.computeEntrophy(), "]"));
+		}
+	}
+	njh::sort(seqs, []( readObject & seq1,  readObject & seq2){
+		return seq1.counter_.computeEntrophy() < seq2.counter_.computeEntrophy();
+	});
+
+	SeqOutput::write(seqs, setUp.pars_.ioOptions_);
+
+	return 0;
+}
 
 int seqUtilsModRunner::increaseQualityScores(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t qualIncrease = 1;

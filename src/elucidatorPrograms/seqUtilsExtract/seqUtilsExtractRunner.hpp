@@ -37,6 +37,8 @@ class seqUtilsExtractRunner : public njh::progutils::ProgramRunner {
 
   static int extractByMIDs(const njh::progutils::CmdArgs & inputCommands);
 
+  //extractByName
+	static int extractByName(const njh::progutils::CmdArgs & inputCommands);
 
   static int extractSameSeqs(const njh::progutils::CmdArgs & inputCommands);
   static int extractBySeq(const njh::progutils::CmdArgs & inputCommands);

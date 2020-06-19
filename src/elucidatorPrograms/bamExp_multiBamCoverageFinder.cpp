@@ -30,6 +30,7 @@ int bamExpRunner::multiBamCoverageFinder(const njh::progutils::CmdArgs & inputCo
 	setUp.processWritingOptions(covPars.outOpts);
 	setUp.setOption(covPars.pat, "--pat", "Pattern in current directory to get coverage for");
 	setUp.setOption(covPars.bams, "--bams", "Either a file with the name of a bam file on each line or a comma separated value of bam file paths");
+	setUp.setOption(covPars.chromsToSkip, "--chromsToSkip", "Skip these chromosomes");
 
 	setUp.finishSetUp(std::cout);
 
@@ -45,7 +46,6 @@ int bamExpRunner::multiBamCoverageFinderBases(const njh::progutils::CmdArgs & in
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
-	setUp.setOption(covPars.byBases, "--byBases", "Output coverage in bases rather than reads");
 	setUp.setOption(covPars.regionBatchSize, "--regionBatchSize", "Region Batch Size");
 	setUp.setOption(covPars.coverageCutOff, "--coverageCutOff", "Coverage Cut Off to include region in output");
 	setUp.setOption(covPars.window, "--window", "window size for sliding window");
@@ -54,8 +54,10 @@ int bamExpRunner::multiBamCoverageFinderBases(const njh::progutils::CmdArgs & in
 	setUp.processWritingOptions(covPars.outOpts);
 	setUp.setOption(covPars.pat, "--pat", "Pattern in current directory to get coverage for");
 	setUp.setOption(covPars.bams, "--bams", "Either a file with the name of a bam file on each line or a comma separated value of bam file paths");
+	setUp.setOption(covPars.chromsToSkip, "--chromsToSkip", "Skip these chromosomes");
 
 	setUp.finishSetUp(std::cout);
+
 
 
 	RunCoverageFinderMulti(covPars);

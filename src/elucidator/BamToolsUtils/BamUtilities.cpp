@@ -137,7 +137,13 @@ void RunCoverageFinderMulti(const RunCoverageFinderMultiPars & pars){
 	/**@todo should do a check that all bam fnps have the same ref data*/
 	GenomeRegionSlider slider(bReaderForRefData.GetReferenceData(), pars.window, pars.step);
 
-	auto refData = bReaderForRefData.GetReferenceData();
+	auto refDataRaw = bReaderForRefData.GetReferenceData();
+	BamTools::RefVector refData;
+	for(const auto & refDatum : refDataRaw){
+		if(!njh::in(refDatum.RefName, pars.chromsToSkip)){
+			refData.emplace_back(refDatum);
+		}
+	}
 	std::function<void()> getCov = [&slider,&bamFnps,&outMut,&out,&refData, &pars](){
 		std::vector<GenomicRegion> regions;
 		while(slider.getRegions(regions, pars.regionBatchSize)){
@@ -300,7 +306,13 @@ void RunCoverageFinderSingle(const RunCoverageFinderSinglePars & pars){
 	BamTools::RefVector refData;
 	{
 		auto bReader = bPool.popReader();
-		refData = bReader->GetReferenceData();
+		BamTools::RefVector refDataRaw = bReader->GetReferenceData();
+		;
+		for(const auto & refDatum : refDataRaw){
+			if(!njh::in(refDatum.RefName, pars.chromsToSkip)){
+				refData.emplace_back(refDatum);
+			}
+		}
 	}
 	GenomeRegionSlider slider(refData, pars.window, pars.step);
 	std::function<void()> getCovForBam = [&slider,&bamFnp,

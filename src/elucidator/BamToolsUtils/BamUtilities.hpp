@@ -40,7 +40,7 @@ struct RunCoverageFinderMultiPars{
 	uint32_t coverageCutOff = 1;
 	uint32_t regionBatchSize = 10;
 	bool byBases = false;
-
+	std::unordered_set<std::string> chromsToSkip;
 
 
 };
@@ -57,6 +57,7 @@ struct RunCoverageFinderSinglePars{
 	uint32_t coverageCutOff = 1;
 	uint32_t regionBatchSize = 100;
 	bool byBases = false;
+	std::unordered_set<std::string> chromsToSkip;
 
 
 

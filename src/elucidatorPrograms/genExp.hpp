@@ -38,7 +38,6 @@ class genExpRunner : public njh::progutils::ProgramRunner {
 
 
 	static int muscle(const njh::progutils::CmdArgs & inputCommands);
-	static int extractByName(const njh::progutils::CmdArgs & inputCommands);
 
 	static int createReadConsensus(const njh::progutils::CmdArgs & inputCommands);
 	static int createReadConsensusRandomPicking(const njh::progutils::CmdArgs & inputCommands);
