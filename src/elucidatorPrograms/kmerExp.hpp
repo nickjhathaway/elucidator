@@ -98,6 +98,10 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 
 	static int getUniqKmerBlocksOnGenomeAgainstRef(const njh::progutils::CmdArgs & inputCommands);
 
+
+	static int kmerCompareTwoSetsOfContigs(const njh::progutils::CmdArgs & inputCommands);
+
+
 };
 } /* namespace njhseq */
 
