@@ -69,5 +69,10 @@ class seqUtilsInfoRunner : public njh::progutils::ProgramRunner {
   static int readLengthDistribution(const njh::progutils::CmdArgs & inputCommands);
 
 
+  static int getSlidingEntropy(const njh::progutils::CmdArgs & inputCommands);
+
+
+
+
 };
 } // namespace njhseq

@@ -128,6 +128,11 @@ class genExpRunner : public njh::progutils::ProgramRunner {
 	static int doPairwiseComparisonOnHapsSharingDev(const njh::progutils::CmdArgs & inputCommands);
 
 
+
+	static int reOrientCirculateGenomeToRef(const njh::progutils::CmdArgs & inputCommands);
+
+
+
 };
 } /* namespace njhseq */
 

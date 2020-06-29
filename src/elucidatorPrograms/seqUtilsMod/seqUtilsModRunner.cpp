@@ -59,6 +59,9 @@ int seqUtilsModRunner::sortReadsByKmerEntropy(const njh::progutils::CmdArgs & in
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.processDefaultReader(true);
+  if (setUp.pars_.ioOptions_.out_.outFilename_ == "out") {
+  	setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(njh::files::removeExtension(setUp.pars_.ioOptions_.firstName_), "sorted_");
+  }
 	setUp.setOption(kLen, "--klen", "kmer length");
 	setUp.setOption(mark, "--mark", "Add entropy to name");
 	setUp.finishSetUp(std::cout);
@@ -89,6 +92,9 @@ int seqUtilsModRunner::sortReadsByEntropy(const njh::progutils::CmdArgs & inputC
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.processDefaultReader(true);
+  if (setUp.pars_.ioOptions_.out_.outFilename_ == "out") {
+  	setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(njh::files::removeExtension(setUp.pars_.ioOptions_.firstName_), "sorted_");
+  }
 	setUp.setOption(mark, "--mark", "Add entropy to name");
 	setUp.finishSetUp(std::cout);
 

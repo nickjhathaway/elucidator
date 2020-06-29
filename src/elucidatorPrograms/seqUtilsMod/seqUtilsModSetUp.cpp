@@ -52,7 +52,7 @@ void seqUtilsModSetUp::setUpSortReads(std::string& sortBy, bool& decending) {
   // input file info
   processDefaultReader(true);
   if (pars_.ioOptions_.out_.outFilename_ == "out") {
-  	pars_.ioOptions_.out_.outFilename_ = "sorted_" + njh::files::removeExtension(pars_.ioOptions_.firstName_);
+  	pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(njh::files::removeExtension(pars_.ioOptions_.firstName_), "sorted_");
   }
   setOption(sortBy, "--sortBy", "Sort by Option");
   bool ascending = false;
@@ -89,9 +89,9 @@ void seqUtilsModSetUp::setUpRenameIDs(std::string& stub, std::string& sortBy,
 
   // input file info
   processDefaultReader(true);
-	if (pars_.ioOptions_.out_.outFilename_ == "out") {
-		pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(pars_.ioOptions_.firstName_, "renamed_").string();
-	}
+  if (pars_.ioOptions_.out_.outFilename_ == "out") {
+  	pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(njh::files::removeExtension(pars_.ioOptions_.firstName_), "renamed_");
+  }
   setOption(stub, "-name", "NewStubName");
   setOption(sortBy, "-sortBy", "SortOption");
   setOption(keepChimeraFlag, "-keepChimeraFlag", "KeepChimeraFlag");
@@ -115,7 +115,7 @@ void seqUtilsModSetUp::setUpComplementSeq(std::string &seqType) {
     	processSeq(true);
   } else {
     if (pars_.ioOptions_.out_.outFilename_ == "out") {
-    	pars_.ioOptions_.out_.outFilename_ = "C_" + njh::files::removeExtension(pars_.ioOptions_.firstName_);
+    	pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(njh::files::removeExtension(pars_.ioOptions_.firstName_), "revComp_");
     }
   }
 

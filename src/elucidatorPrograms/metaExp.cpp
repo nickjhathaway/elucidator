@@ -97,6 +97,9 @@ int metaExpRunner::renameSeqsWithMetaField(const njh::progutils::CmdArgs & input
 	setUp.setOption(sep, "--sep", "Separator between meta fields if using multiple");
 	setUp.setOption(metaFields, "--metaFields", "Meta fields within name to use", true);
 	setUp.processDefaultReader(true);
+  if (setUp.pars_.ioOptions_.out_.outFilename_ == "out") {
+  	setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(njh::files::removeExtension(setUp.pars_.ioOptions_.firstName_), "renamed_");
+  }
 	setUp.finishSetUp(std::cout);
 	seqInfo seq;
 	SeqIO reader(setUp.pars_.ioOptions_);

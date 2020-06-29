@@ -95,6 +95,7 @@ genExpRunner::genExpRunner()
 					 addFunc("extractExpectedRefSeqsFromGenomes", extractExpectedRefSeqsFromGenomes, false),
 					 addFunc("doPairwiseComparisonOnHapsSharing", doPairwiseComparisonOnHapsSharing, false),
 					 addFunc("doPairwiseComparisonOnHapsSharingDev", doPairwiseComparisonOnHapsSharingDev, false),
+					 addFunc("reOrientCirculateGenomeToRef", reOrientCirculateGenomeToRef, false),
 
            },//
           "genExp") {}
