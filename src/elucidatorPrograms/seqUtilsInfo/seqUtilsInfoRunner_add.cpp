@@ -887,7 +887,7 @@ int seqUtilsInfoRunner::oldQuickHaplotypeInformationAndVariants(const njh::progu
 			lengthPoly = true;
 		}
 		readVec::allSetFractionByTotalCount(clusters);
-		DiversityMeasures divMeasures  = getGeneralMeasuresOfDiversity(clusters);
+		PopGenCalculator::DiversityMeasures divMeasures  = PopGenCalculator::getGeneralMeasuresOfDiversity(clusters);
 		//PairwisePairFactory pFacIfTotal(totalInput);
 		out << identifier
 				<< "\t" << totalInput
@@ -1026,7 +1026,7 @@ int seqUtilsInfoRunner::oldQuickHaplotypeInformationAndVariants(const njh::progu
 
 			double he = 1 - sumOfSquares;
 			heForFields[field.first] = he;
-			auto divMeasures = getGeneralMeasuresOfDiversity(*field.second);
+			auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversity(*field.second);
 			out << identifier
 					<< "\t" << field.first
 					<< "\t" << seqCount
@@ -1165,7 +1165,7 @@ int seqUtilsInfoRunner::oldQuickHaplotypeInformationAndVariants(const njh::progu
 								<<"\t"<<"ChaoB"
 								<<"\t"<<"JostDChaoEst" << std::endl;
 
-		auto pairwiseMeasurements = getPairwisePopDiff(uniqueSeqsByMeta);
+		auto pairwiseMeasurements = PopGenCalculator::getPairwisePopDiff(uniqueSeqsByMeta);
 		for(const auto & field1 : pairwiseMeasurements){
 			for(const auto & field2 : field1.second){
 				uint32_t total1 = 0;
@@ -1216,8 +1216,8 @@ int seqUtilsInfoRunner::oldQuickHaplotypeInformationAndVariants(const njh::progu
 				<<"\t"<<"ChaoB"
 				<<"\t"<<"JostDChaoEst" << std::endl;
 
-		PopDifferentiationMeasures temp;
-		auto diffMeasures = getOverallPopDiff(uniqueSeqsByMeta);
+		//PopDifferentiationMeasures temp;
+		auto diffMeasures = PopGenCalculator::getOverallPopDiffForSeqs(uniqueSeqsByMeta);
 
 		popDiffOut << identifier
 
@@ -1453,7 +1453,7 @@ int seqUtilsInfoRunner::quickHaplotypeInformation(const njh::progutils::CmdArgs 
 		readLens[len(cIter.seqBase_)]+= cIter.seqBase_.cnt_;
 	}
 	readVec::allSetFractionByTotalCount(ans);
-	auto divMeasures = getGeneralMeasuresOfDiversity(ans);
+	auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversity(ans);
 
 	//double he = 1 - sumOfSquares;
 	out << identifier

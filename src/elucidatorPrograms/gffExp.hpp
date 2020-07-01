@@ -50,6 +50,7 @@ class gffExpRunner : public njh::progutils::ProgramRunner {
 	static int gffToJsonByID(const njh::progutils::CmdArgs & inputCommands);
 
 	static int gffSortInefficient(const njh::progutils::CmdArgs & inputCommands);
+	static int roughGffConversionToOther(const njh::progutils::CmdArgs & inputCommands);
 
 
 	static int extractGffRecordWithChildren(const njh::progutils::CmdArgs & inputCommands);
@@ -70,6 +71,8 @@ class gffExpRunner : public njh::progutils::ProgramRunner {
 
 
 	static int aaPositionsToBed(const njh::progutils::CmdArgs & inputCommands);
+
+	static int appendGff(const njh::progutils::CmdArgs & inputCommands);
 
 };
 } /* namespace njhseq */

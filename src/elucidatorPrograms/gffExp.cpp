@@ -63,6 +63,8 @@ gffExpRunner::gffExpRunner()
 					 addFunc("bedGetRegionsCompletelyInGenesInGff", bedGetRegionsCompletelyInGenesInGff, false),
 					 addFunc("gffSortInefficient", gffSortInefficient, false),
 					 addFunc("gffToBedByFeature", gffToBedByFeature, false),
+					 addFunc("roughGffConversionToOther", roughGffConversionToOther, false),
+					 addFunc("appendGff", appendGff, false),
            },//
           "gffExp") {}
 class AmionoAcidPositionInfo {

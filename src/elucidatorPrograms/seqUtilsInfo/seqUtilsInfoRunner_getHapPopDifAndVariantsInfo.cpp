@@ -786,7 +786,7 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 			lengthPoly = true;
 		}
 		readVec::allSetFractionByTotalCount(clusters);
-		DiversityMeasures divMeasures  = getGeneralMeasuresOfDiversity(clusters);
+		PopGenCalculator::DiversityMeasures divMeasures  = PopGenCalculator::getGeneralMeasuresOfDiversity(clusters);
 		//PairwisePairFactory pFacIfTotal(totalInput);
 		out << identifier
 				<< "\t" << totalInput
@@ -925,7 +925,7 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 
 			double he = 1 - sumOfSquares;
 			heForFields[field.first] = he;
-			auto divMeasures = getGeneralMeasuresOfDiversity(*field.second);
+			auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversity(*field.second);
 			out << identifier
 					<< "\t" << field.first
 					<< "\t" << seqCount
@@ -1042,6 +1042,8 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 				}
 			}
 		}
+
+
 		OutputStream pairwiseDiffsOut(njh::files::make_path(setUp.pars_.directoryName_, "pairwisePopDiffMeasures.tab.txt"));
 		pairwiseDiffsOut << "identifier"
 				<< "\t" << popMeta << "1"
@@ -1064,7 +1066,7 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 								<<"\t"<<"ChaoB"
 								<<"\t"<<"JostDChaoEst" << std::endl;
 
-		auto pairwiseMeasurements = getPairwisePopDiff(uniqueSeqsByMeta);
+		auto pairwiseMeasurements = PopGenCalculator::getPairwisePopDiff(uniqueSeqsByMeta);
 		for(const auto & field1 : pairwiseMeasurements){
 			for(const auto & field2 : field1.second){
 				uint32_t total1 = 0;
@@ -1115,8 +1117,8 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 				<<"\t"<<"ChaoB"
 				<<"\t"<<"JostDChaoEst" << std::endl;
 
-		PopDifferentiationMeasures temp;
-		auto diffMeasures = getOverallPopDiff(uniqueSeqsByMeta);
+		//PopGenCalculator::PopDifferentiationMeasures temp;
+		auto diffMeasures = PopGenCalculator::getOverallPopDiffForSeqs(uniqueSeqsByMeta);
 
 		popDiffOut << identifier
 
