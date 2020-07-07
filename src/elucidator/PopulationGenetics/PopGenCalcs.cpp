@@ -36,6 +36,7 @@ PopGenCalculator::PopDifferentiationMeasures PopGenCalculator::getOverallPopDiff
 	}
 	PopDifferentiationMeasures ret;
 
+	uint32_t popK = hapsForPopulations.size();
 
 	std::unordered_map<std::string, uint32_t> subPopSizes;
 	std::unordered_set<uint32_t> allHapSeqs;
@@ -59,24 +60,29 @@ PopGenCalculator::PopDifferentiationMeasures PopGenCalculator::getOverallPopDiff
 	}
 	uint32_t maxHapId = *std::max_element(allHapSeqs.begin(), allHapSeqs.end());
 	//this only works if population identifier is set in a logical way e.g. ids with ranging from 0 to haplotype count
-	std::vector<PopHapInfo> totalPopulationHaps;
+	std::vector<PopHapInfo> acrossPopulationsHaps;
 	for(const auto pos : iter::range(maxHapId + 1)){
-		totalPopulationHaps.emplace_back(PopHapInfo(pos, 0));
+		acrossPopulationsHaps.emplace_back(PopHapInfo(pos, 0));
 	}
 	for(auto & hapsForPopulation : hapsForPopulations){
 		for(const auto & hap : hapsForPopulation.second){
-			totalPopulationHaps[hap.popUid_].count_ += hap.count_;
+			acrossPopulationsHaps[hap.popUid_].count_ += hap.count_;
 		}
 	}
-	PopHapInfo::setProb(totalPopulationHaps);
+	PopHapInfo::setProb(acrossPopulationsHaps);
 
-
+	std::unordered_map<uint32_t, double> parametricProbsPerHap;
+	for (const auto &popUid : allHapSeqs) {
+		for (auto &freqWithPop : freqsForPopForHapSeq) {
+			parametricProbsPerHap[popUid] += freqWithPop.second[popUid]/popK;
+		}
+	}
 	//informativeness for assignment
 	{
 
 		for(const auto & popUid : allHapSeqs){
 
-			double firstTerm = -totalPopulationHaps[popUid].prob_ * log(totalPopulationHaps[popUid].prob_);
+			double firstTerm = -parametricProbsPerHap[popUid] * log(parametricProbsPerHap[popUid]);
 			double secondTerm = 0;
 			for( auto & freqWithPop : freqsForPopForHapSeq){
 				if(freqWithPop.second[popUid] > 0){
@@ -91,7 +97,7 @@ PopGenCalculator::PopDifferentiationMeasures PopGenCalculator::getOverallPopDiff
 		for(const auto & pop : freqsForPopForHapSeq){
 			for(const auto & hap : pop.second){
 				if(hap.second > 0){
-					ret.informativenessForAssignPerPopulation_[pop.first] += hap.second/hapsForPopulations.size() * log(hap.second/totalPopulationHaps[hap.first].prob_);
+					ret.informativenessForAssignPerPopulation_[pop.first] += hap.second/hapsForPopulations.size() * log(hap.second/parametricProbsPerHap[hap.first]);
 				}
 			}
 		}
