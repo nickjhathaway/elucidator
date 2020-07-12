@@ -22,6 +22,7 @@ int kmerExpRunner::getUniqKmerBlocksOnGenomeAgainstRef(const njh::progutils::Cmd
 	bfs::path refGenome = "";
 	bfs::path compGenome = "";
 	uint32_t numThreads = 1;
+	bool trimNameAtWhiteSpace = false;
 	OutOptions outOpts(bfs::path("out.bed"));
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -32,6 +33,8 @@ int kmerExpRunner::getUniqKmerBlocksOnGenomeAgainstRef(const njh::progutils::Cmd
 	setUp.setOption(refGenome, "--refGenome", "refGenome", true);
 	setUp.setOption(compGenome, "--compGenome", "compGenome", true);
 
+	setUp.setOption(trimNameAtWhiteSpace, "--trimNameAtWhiteSpace", "Trim Name At White Space");
+
 
 
 	setUp.finishSetUp(std::cout);
@@ -40,6 +43,7 @@ int kmerExpRunner::getUniqKmerBlocksOnGenomeAgainstRef(const njh::progutils::Cmd
 
 	auto compGenomeOpts = SeqIOOptions(compGenome, SeqIOOptions::getInFormatFromFnp(compGenome));
 	auto refGenomeOpts = SeqIOOptions(refGenome, SeqIOOptions::getInFormatFromFnp(refGenome));
+	compGenomeOpts.includeWhiteSpaceInName_ = !trimNameAtWhiteSpace;
 
 
 	std::unordered_set<std::string> refKmers;
