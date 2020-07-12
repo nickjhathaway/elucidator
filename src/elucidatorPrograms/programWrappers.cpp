@@ -680,10 +680,15 @@ int programWrapperRunner::runLastz(const njh::progutils::CmdArgs & inputCommands
 int programWrapperRunner::sraIsPairedEnd(const njh::progutils::CmdArgs & inputCommands){
 	std::string fastqDumpCmd = "fastq-dump";
 	bfs::path sraFnp = "";
+	std::string extraArgs = "";
+
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
+
 	setUp.setOption(fastqDumpCmd, "--fastqDumpCmd", "fastq Dump Cmd");
+	setUp.setOption(extraArgs, "--extraArgs", "Extra Arguments to give to " + fastqDumpCmd);
+
 	setUp.setOption(sraFnp, "--sraFnp", "Filename path to SRA file", true);
 	setUp.finishSetUp(std::cout);
 
@@ -694,7 +699,7 @@ int programWrapperRunner::sraIsPairedEnd(const njh::progutils::CmdArgs & inputCo
 	}
 
 	std::stringstream cmd;
-	cmd <<  fastqDumpCmd << " --log-level 0 -X 1 -Z --split-spot " << sraFnp;
+	cmd <<  fastqDumpCmd << " --log-level 0 -X 1 -Z --split-spot " << extraArgs << "  " << sraFnp;
 	auto cmdOutput = njh::sys::run({cmd.str()});
 	BioCmdsUtils::checkRunOutThrow(cmdOutput, __PRETTY_FUNCTION__);
 	//njh::sys::run trim end white space so have to add one;
@@ -715,13 +720,18 @@ int programWrapperRunner::sraIsPairedEnd(const njh::progutils::CmdArgs & inputCo
 }
 
 int programWrapperRunner::sraFastqDump(const njh::progutils::CmdArgs & inputCommands){
+
 	std::string fastqDumpCmd = "fastq-dump";
+
 	bfs::path sraFnp = "";
 	BioCmdsUtils::FastqDumpPars sraPars;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.setOption(fastqDumpCmd, "--fastqDumpCmd", "fastq Dump Cmd");
+	setUp.setOption(sraPars.extraSraOptions_, "--extraSraOptions_", "extra " + fastqDumpCmd + " Options");
+	setUp.setOption(sraPars.numThreads_, "--numThreads", "number of threads to use");
+
 	setUp.setOption(sraPars.outputDir_, "--outputDir", "Output directory");
 	setUp.setOption(sraPars.exportBarCode_, "--exportBarCode", "export Bar Code file if present");
 	setUp.setOption(sraPars.gzip_, "--gzip", "Make output gzip compressed");
