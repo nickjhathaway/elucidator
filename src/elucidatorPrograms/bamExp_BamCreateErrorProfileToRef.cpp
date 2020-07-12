@@ -14,6 +14,10 @@
 namespace njhseq {
 
 
+
+
+
+
 int bamExpRunner::BamCreateErrorProfileToRef(
 		const njh::progutils::CmdArgs & inputCommands) {
 	ReAlignedSeq::genRealignmentPars ralnPars;

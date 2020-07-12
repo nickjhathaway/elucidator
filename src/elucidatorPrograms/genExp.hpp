@@ -131,6 +131,7 @@ class genExpRunner : public njh::progutils::ProgramRunner {
 
 	static int reOrientCirculateGenomeToRef(const njh::progutils::CmdArgs & inputCommands);
 
+	static int profileErrorsReadsToReferenceSeq(const njh::progutils::CmdArgs & inputCommands);
 
 
 };
