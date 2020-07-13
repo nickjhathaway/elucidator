@@ -44,6 +44,7 @@ class programWrapperRunner : public njh::progutils::ProgramRunner {
 	static int sraIsPairedEnd(const njh::progutils::CmdArgs & inputCommands);
 
 	static int sraFastqDump(const njh::progutils::CmdArgs & inputCommands);
+	static int sraFasterqDump(const njh::progutils::CmdArgs & inputCommands);
 
 	static int runTrimmomatic(const njh::progutils::CmdArgs & inputCommands);
 	static int runBwaOnTrimmomaticOutputPE(const njh::progutils::CmdArgs & inputCommands);

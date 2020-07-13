@@ -63,6 +63,7 @@ programWrapperRunner::programWrapperRunner()
 					 addFunc("processAdaptorRemovalLog", processAdaptorRemovalLog, false),
 						addFunc("runDada2", runDada2, false),
 						addFunc("runDada2SingleSamplePaired", runDada2SingleSamplePaired, false),
+						addFunc("sraFasterqDump", sraFasterqDump, false),
            },//
           "programWrapper") {}
 int programWrapperRunner::generatingPrime3TemplatesBasedOnMALN(const njh::progutils::CmdArgs & inputCommands) {
@@ -729,8 +730,7 @@ int programWrapperRunner::sraFastqDump(const njh::progutils::CmdArgs & inputComm
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.setOption(fastqDumpCmd, "--fastqDumpCmd", "fastq Dump Cmd");
-	setUp.setOption(sraPars.extraSraOptions_, "--extraSraOptions_", "extra " + fastqDumpCmd + " Options");
-	setUp.setOption(sraPars.numThreads_, "--numThreads", "number of threads to use");
+	setUp.setOption(sraPars.extraSraOptions_, "--extraSraOptions", "extra " + fastqDumpCmd + " Options");
 
 	setUp.setOption(sraPars.outputDir_, "--outputDir", "Output directory");
 	setUp.setOption(sraPars.exportBarCode_, "--exportBarCode", "export Bar Code file if present");
@@ -740,7 +740,44 @@ int programWrapperRunner::sraFastqDump(const njh::progutils::CmdArgs & inputComm
 	setUp.finishSetUp(std::cout);
 
 	BioCmdsUtils bioRunner(setUp.pars_.verbose_);
+	bioRunner.fastqDumpCmd_ = fastqDumpCmd;
 	auto results = bioRunner.runFastqDump(sraPars);
+	if (setUp.pars_.verbose_) {
+		std::cout << njh::json::toJson(results) << std::endl;
+	}
+	return 0;
+}
+
+int programWrapperRunner::sraFasterqDump(const njh::progutils::CmdArgs & inputCommands){
+
+	std::string fasterqDumpCmd = "fasterq-dump";
+
+	bfs::path sraFnp = "";
+	uint32_t writeWaitTime = 1;
+
+	BioCmdsUtils::FasterqDumpPars sraPars;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(fasterqDumpCmd, "--fastqDumpCmd", "fastq Dump Cmd");
+	setUp.setOption(sraPars.extraSraOptions_, "--extraSraOptions", "extra " + fasterqDumpCmd + " Options");
+	setUp.setOption(sraPars.numThreads_, "--numThreads", "number of threads to use");
+	setUp.setOption(sraPars.tempDir_, "--tempDir", "Output directory");
+
+	setUp.setOption(writeWaitTime, "--writeWaitTime", "write Wait Time");
+	sraPars.writeWaitTime = std::chrono::milliseconds(writeWaitTime);
+	setUp.setOption(sraPars.writeCacheSize, "--writeCacheSize", "write Cache Size");
+	setUp.setOption(sraPars.readSubCacheSize_, "--readSubCacheSize", "read Sub Cache Size");
+
+
+	setUp.setOption(sraPars.outputDir_, "--outputDir", "Output directory");
+	setUp.setOption(sraPars.force_, "--force", "Even if the output files exist and appear to be up to date, extract again");
+	setUp.setOption(sraPars.sraFnp_, "--sraFnp", "Filename path to SRA file", true);
+	setUp.finishSetUp(std::cout);
+	BioCmdsUtils bioRunner(setUp.pars_.verbose_);
+	bioRunner.fasterqDumpCmd_ = fasterqDumpCmd;
+
+	auto results = bioRunner.runFasterqDump(sraPars);
 	if (setUp.pars_.verbose_) {
 		std::cout << njh::json::toJson(results) << std::endl;
 	}
