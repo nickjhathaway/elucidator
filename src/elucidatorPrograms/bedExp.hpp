@@ -43,6 +43,9 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	static int getGCContentOfRegion(const njh::progutils::CmdArgs & inputCommands);
 	static int getLongestHomopolymerLengthInRegion(const njh::progutils::CmdArgs & inputCommands);
 
+	static int getAverageDistanceToOtherRegions(const njh::progutils::CmdArgs & inputCommands);
+	static int getDistanceToClostestRegion(const njh::progutils::CmdArgs & inputCommands);
+
 
 	//filtering of bed files
 	static int getCloseBedRegions(const njh::progutils::CmdArgs & inputCommands);

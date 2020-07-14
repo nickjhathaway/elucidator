@@ -89,6 +89,8 @@ bedExpRunner::bedExpRunner()
 					 addFunc("differentSubRegionCombos", differentSubRegionCombos, false),
 					 addFunc("bedFilterRegionsStartingOrEndingInOther", bedFilterRegionsStartingOrEndingInOther, false),
 					 addFunc("bedKeepRegionsStartingOrEndingInOther", bedKeepRegionsStartingOrEndingInOther, false),
+					 addFunc("getAverageDistanceToOtherRegions", getAverageDistanceToOtherRegions, false),
+					 addFunc("getDistanceToClostestRegion", getDistanceToClostestRegion, false),
 
            },//
           "bedExp") {}
