@@ -1306,6 +1306,7 @@ int seqUtilsInfoRunner::countOtus(const njh::progutils::CmdArgs & inputCommands)
 
 int seqUtilsInfoRunner::quickLenInfo(const njh::progutils::CmdArgs & inputCommands) {
 	VecStr additionalColumnsData;
+	uint32_t testNumber = std::numeric_limits<uint32_t>::max();
   seqUtilsInfoSetUp setUp(inputCommands);
   setUp.processDebug();
   setUp.processVerbose();
@@ -1313,6 +1314,7 @@ int seqUtilsInfoRunner::quickLenInfo(const njh::progutils::CmdArgs & inputComman
   outOpts.outExtention_ = ".tab.txt";
   setUp.processWritingOptions(outOpts);
   setUp.processReadInNames();
+  setUp.setOption(testNumber, "--testNumber", "testNumber");
   setUp.setOption(additionalColumnsData, "--additionalColumnsData", "Extra columns to add to the output table, comma separated values in the format of [COL_NAME]:[COL_VAL]");
   setUp.finishSetUp(std::cout);
 	std::vector<uint64_t> readLengths;
@@ -1320,8 +1322,13 @@ int seqUtilsInfoRunner::quickLenInfo(const njh::progutils::CmdArgs & inputComman
 	SeqIO reader(setUp.pars_.ioOptions_);
 	reader.openIn();
 	OutputStream out(outOpts);
+	uint32_t readCount = 0;
 	while (reader.readNextRead(read)) {
 		readLengths.emplace_back(len(read));
+		++readCount;
+		if(readCount > testNumber){
+			break;
+		}
 	}
 	auto stats = getStatsOnVec(readLengths);
 	table statsTable;

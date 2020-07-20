@@ -126,6 +126,11 @@ int pairProcessingRunner::detectPossiblePrimers(
 	uint32_t consensusCountCutOff = 5;
 	uint32_t frontCheck = 7;
 	uint32_t minOverlap = 10;
+
+	uint32_t minOverhangLen = 5;
+
+	double entropyCutOff = 0.80;
+
 	double errorAllowed = 0.01;
 	uint32_t hardMismatchCutOff = 10;
 	uint32_t checkAmount = 100;
@@ -157,6 +162,11 @@ int pairProcessingRunner::detectPossiblePrimers(
 	setUp.setOption(outPrimerLengthMax, "--outPrimerLengthMax","Output Primer Maximum length to output");
 	setUp.setOption(hardMismatchCutOff, "--hardMismatchCutOff", "Hard Mismatch Cut Off, also don't allow this many mismatches");
 	setUp.setOption(minOverlap, "--minOverlap", "Minimum overlap");
+	setUp.setOption(minOverhangLen, "--minOverhangLen", "min Overhang Len");
+	setUp.setOption(entropyCutOff, "--entropyCutOff", "Entropy of the overhang Cut Off");
+
+
+
 	setUp.setOption(errorAllowed, "--errorAllowed", "Percent Error Allowed, between 0 and 1");
 	if(errorAllowed > 1 || errorAllowed < 0){
 		setUp.failed_ = true;
@@ -254,6 +264,7 @@ int pairProcessingRunner::detectPossiblePrimers(
 			};
 
 
+
 	uint32_t totalAligned = 0;
 	while(reader.readNextRead(seq)){
 		++total;
@@ -318,17 +329,13 @@ int pairProcessingRunner::detectPossiblePrimers(
 			}else if((PairedReadProcessor::AlignOverlapEnd::NOOVERHANG == frontCase || PairedReadProcessor::AlignOverlapEnd::R2OVERHANG == frontCase) &&
 					     (PairedReadProcessor::AlignOverlapEnd::NOOVERHANG == backCase  || PairedReadProcessor::AlignOverlapEnd::R1OVERHANG == backCase)){
 				//read through situation, R2 end overlaps R1 beg, overhang is likely illumina adaptor/primer
-				uint32_t r1Start =
-						alignerObj.alignObjectA_.seqBase_.seq_.find_first_not_of('-');
-				uint32_t r2End =
-						alignerObj.alignObjectB_.seqBase_.seq_.find_last_not_of('-') + 1;
+				uint32_t r1Start =alignerObj.alignObjectA_.seqBase_.seq_.find_first_not_of('-');
+				uint32_t r2End =alignerObj.alignObjectB_.seqBase_.seq_.find_last_not_of('-') + 1;
 				auto firstBase = *(alignerObj.alignObjectA_.seqBase_.seq_.begin() + r1Start);
 				DNABaseCounter overlapCounter;
-				overlapCounter.increaseWithRange(alignerObj.alignObjectA_.seqBase_.seq_.begin() + r1Start,
-						alignerObj.alignObjectA_.seqBase_.seq_.begin() + r2End);
-				//skip if the overhang is low complexity
-				if(std::all_of(alignerObj.alignObjectA_.seqBase_.seq_.begin() + r1Start,
-						alignerObj.alignObjectA_.seqBase_.seq_.begin() + r2End,[&firstBase](const char c) {return firstBase == c;}) ||
+				overlapCounter.increaseWithRange(alignerObj.alignObjectA_.seqBase_.seq_.begin() + r1Start, alignerObj.alignObjectA_.seqBase_.seq_.begin() + r2End);
+				//skip if the overlap alignment is low complexity
+				if(std::all_of(alignerObj.alignObjectA_.seqBase_.seq_.begin() + r1Start,alignerObj.alignObjectA_.seqBase_.seq_.begin() + r2End,[&firstBase](const char c) {return firstBase == c;}) ||
 						(1.0 - overlapCounter.calcGcContent()) <= 0.05 ||
 						overlapCounter.calcGcContent() <= 0.05) {
 					++overlapFail;
@@ -337,6 +344,19 @@ int pairProcessingRunner::detectPossiblePrimers(
 				//write out overhangs
 				seqInfo back = alignerObj.alignObjectB_.seqBase_.getSubRead(0, r1Start);
 				seqInfo front = alignerObj.alignObjectA_.seqBase_.getSubRead(r2End);
+				//skip
+				if(len(back) <minOverhangLen || len(front) < minOverhangLen){
+					++overhangFail;
+					continue;
+				}
+				DNABaseCounter backCounter;
+				backCounter.increase(back.seq_);
+				DNABaseCounter frontCounter;
+				frontCounter.increase(front.seq_);
+				if(backCounter.computeEntrophyBasedOffAlph(4) < entropyCutOff || frontCounter.computeEntrophyBasedOffAlph(4) < entropyCutOff){
+					++overhangFail;
+					continue;
+				}
 				back.reverseComplementRead(false, true);
 				std::shared_ptr<PairedRead> overhang = std::make_shared<PairedRead>(front, back);
 				overhangsWriter.openWrite(overhang);

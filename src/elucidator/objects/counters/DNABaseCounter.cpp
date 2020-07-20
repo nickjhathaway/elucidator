@@ -168,6 +168,51 @@ double DNABaseCounter::calcGcContent()const{
 int DNABaseCounter::getGcDifference()const{
 	return (bases_['G'] + bases_['g']) - (bases_['C']+ bases_['c']);
 }
+
+
+// compute entropy
+double DNABaseCounter::computeEntrophy(uint8_t base)const{
+	double total = getTotalCount();
+	double sum = 0;
+	for (const auto c : alphabet_) {
+		if (0 != bases_[c]/total) {
+			if (1 == bases_[c]/total) {
+				return 0;
+			}
+			sum += (bases_[c]/total) * std::log(bases_[c]/total)/std::log(base);
+		}
+	}
+	return (-1 * sum);
+}
+
+double DNABaseCounter::computeEntrophyBasedOffAlph(uint8_t minBase) const {
+	uint8_t alphSize = 0;
+	double total  = 0;
+	for (const auto base : bases_.bases()) {
+		if (bases_[base] > 0) {
+			++alphSize;
+			total += bases_[base];
+		}
+	}
+	if(1 == alphSize){
+		return 0;
+	}
+	uint8_t base = std::max(minBase, alphSize);
+	double sum = 0;
+	for (const auto c : alphabet_) {
+		if (0 != bases_[c]/total) {
+			sum += (bases_[c]/total) * std::log(bases_[c]/total)/std::log(base);
+		}
+	}
+	return (-1 * sum);
+}
+
+
+
+
+
+
+
 // compute entropy
 double DNABaseCounter::computeEntrophy()const{
 	double total = getTotalCount();

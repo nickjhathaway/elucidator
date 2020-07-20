@@ -22,7 +22,7 @@
 //
     
 #include "seqUtilsModRunner.hpp"
-    
+#include "elucidator/objects/counters/DNABaseCounter.hpp"
     
 namespace njhseq {
 
@@ -88,6 +88,7 @@ int seqUtilsModRunner::sortReadsByKmerEntropy(const njh::progutils::CmdArgs & in
 
 int seqUtilsModRunner::sortReadsByEntropy(const njh::progutils::CmdArgs & inputCommands) {
 	bool mark = false;
+	uint8_t minBase = 4;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -95,19 +96,35 @@ int seqUtilsModRunner::sortReadsByEntropy(const njh::progutils::CmdArgs & inputC
   if (setUp.pars_.ioOptions_.out_.outFilename_ == "out") {
   	setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(njh::files::removeExtension(setUp.pars_.ioOptions_.firstName_), "sorted_");
   }
+
+	setUp.setOption(minBase, "--minBase", "Min Base");
 	setUp.setOption(mark, "--mark", "Add entropy to name");
 	setUp.finishSetUp(std::cout);
 
 	SeqInput reader(setUp.pars_.ioOptions_);
-	auto seqs = reader.readAllReads<readObject>();
-	readVec::allSetLetterCount(seqs);
+	reader.openIn();
+	struct SeqInfoWithCountEntropy {
+		SeqInfoWithCountEntropy(const seqInfo & seq, uint8_t minBase):seqBase_(seq){
+			DNABaseCounter counter;
+			counter.increase(seqBase_.seq_);
+			entropy_ = counter.computeEntrophyBasedOffAlph(minBase);
+		}
+		seqInfo seqBase_;
+		double entropy_;
+	};
+
+	std::vector<SeqInfoWithCountEntropy> seqs;
+	seqInfo seq;
+	while(reader.readNextRead(seq)){
+		seqs.emplace_back(seq, minBase);
+	}
 	if(mark){
 		for(auto & seq : seqs){
-			seq.seqBase_.name_.append(njh::pasteAsStr("[entropy=", seq.counter_.computeEntrophy(), "]"));
+			seq.seqBase_.name_.append(njh::pasteAsStr("[entropy=", seq.entropy_, "]"));
 		}
 	}
-	njh::sort(seqs, []( readObject & seq1,  readObject & seq2){
-		return seq1.counter_.computeEntrophy() < seq2.counter_.computeEntrophy();
+	njh::sort(seqs, []( SeqInfoWithCountEntropy & seq1,  SeqInfoWithCountEntropy & seq2){
+		return seq1.entropy_ < seq2.entropy_;
 	});
 
 	SeqOutput::write(seqs, setUp.pars_.ioOptions_);

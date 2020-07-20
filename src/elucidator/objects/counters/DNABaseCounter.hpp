@@ -130,6 +130,8 @@ public:
 	int32_t getGcDifference() const;
 	// compute entropy
 	double computeEntrophy() const;
+	double computeEntrophy(uint8_t base) const;
+	double computeEntrophyBasedOffAlph(uint8_t minBase) const;
 
 	char getDegenativeBase() const;
 	// output data
