@@ -356,6 +356,8 @@ public:
 	std::vector<std::vector<uint8_t>> hapsEncodeBySamp_; //! each row is a sample, each column is hap, 0 for not present, 1 for present
 	std::vector<std::vector<uint8_t>> targetsEncodeBySamp_; //! each row is a sample, each column is a target, 0 if sample has no data for target, 1 for has data
 
+	std::vector<double> hapsProbs_;
+
 	uint64_t totalHaps_{0};
 
 	bool encodeKeysSet_{false};
@@ -404,6 +406,22 @@ public:
 	}
 
 
+	void calcHapProbs(){
+		hapsProbs_ = std::vector<double>(totalHaps_, 0);
+		for(uint32_t tarPos : iter::range(tarStart_.size())){
+			std::vector<uint32_t> hapCounts(numberOfHapsPerTarget_[tarPos], 0);
+			uint32_t totalHaps = 0;
+			for(const auto hapPos : iter::range(numberOfHapsPerTarget_[tarPos])){
+				for(const auto sampPos : iter::range(hapsEncodeBySamp_.size())){
+					hapCounts[hapPos] += hapsEncodeBySamp_[sampPos][tarStart_[tarPos] + hapPos];
+					totalHaps += hapsEncodeBySamp_[sampPos][tarStart_[tarPos] + hapPos];
+				}
+			}
+			for(const auto hapPos : iter::range(numberOfHapsPerTarget_[tarPos])){
+				hapsProbs_[tarStart_[tarPos] + hapPos] = hapCounts[hapPos]/static_cast<double>(totalHaps);
+			}
+		}
+	}
 
 
 	void addMeta(const bfs::path & metaFnp){
@@ -485,6 +503,10 @@ public:
 			avgJacard = std::vector<std::vector<double>> (numOfSamps, std::vector<double>(numOfSamps));
 			byTarget = std::vector<std::vector<double>> (numOfSamps, std::vector<double>(numOfSamps));
 
+			byHapsTarSharedWeighted = std::vector<std::vector<double>> (numOfSamps, std::vector<double>(numOfSamps));
+			avgJacardWeighted = std::vector<std::vector<double>> (numOfSamps, std::vector<double>(numOfSamps));
+
+
 			for(uint32_t pos = 0; pos < numOfSamps; ++pos){
 				//set diagonal
 				byHapsTarShared[pos][pos] = 1;
@@ -492,13 +514,18 @@ public:
 
 				avgJacard[pos][pos] = 1;
 				byTarget[pos][pos] = 1;
+
+				byHapsTarSharedWeighted[pos][pos] = 1;
+				avgJacardWeighted[pos][pos] = 1;
 			}
 
 		}
 		std::vector<std::vector<double>> byAllHaps; //! jacard index by all input haplotpes
 		std::vector<std::vector<double>> byHapsTarShared;//! jacard index for haplotypes for targets where both samples have data
+		std::vector<std::vector<double>> byHapsTarSharedWeighted;//! jacard index for haplotypes for targets where both samples have data
 
 		std::vector<std::vector<double>> avgJacard; //! averaged jacard distance for shared targets
+		std::vector<std::vector<double>> avgJacardWeighted; //! averaged jacard distance for shared targets weighted by
 		std::vector<std::vector<double>> byTarget; //! fraction of targets that have at least shared haplotype between samples
 
 	};
@@ -530,9 +557,13 @@ public:
 					{
 						uint32_t totalSet = 0;
 						uint32_t totalShared = 0;
+						double totalSetWeighted = 0;
+						double totalSharedWeighted = 0;
 						uint32_t totalTarsWithDataForBoth = 0;
 						uint32_t totalTarsWithAtLeastOneHapShared = 0;
 						std::vector<double> jacardsByTarget;
+						std::vector<double> jacardsByTargetWeighted;
+
 						for(const auto tpos : iter::range(tarNamesVec_.size())){
 							uint8_t tarRes = targetsEncodeBySamp_[pair.col_][tpos] + targetsEncodeBySamp_[pair.row_][tpos];
 							//should be 2 if both samples have this target
@@ -540,6 +571,8 @@ public:
 								++totalTarsWithDataForBoth;
 								uint32_t totalSetForTar = 0;
 								uint32_t totalSharedForTar = 0;
+								double totalWeightedSetForTar = 0;
+								double totalWeightedSharedForTar = 0;
 								for(const auto & hapPos : iter::range(numberOfHapsPerTarget_[tpos])){
 									//position in the encoded vector should be the target start ranged over the possible haplotypes for that target
 									uint8_t res = hapsEncodeBySamp_[pair.col_][tarStart_[tpos] + hapPos] + hapsEncodeBySamp_[pair.row_][tarStart_[tpos] + hapPos];
@@ -547,11 +580,15 @@ public:
 									if(2 == res) {
 										++totalShared;
 										++totalSharedForTar;
+										totalWeightedSharedForTar += (1.01 - hapsProbs_[tarStart_[tpos] + hapPos]);
+										totalSharedWeighted += (1.01 - hapsProbs_[tarStart_[tpos] + hapPos]);
 									}
 									//if results is either 1 or 2 then at least one of them has this hap
 									if(res > 0) {
 										++totalSet;
 										++totalSetForTar;
+										totalSetWeighted += (1.01 - hapsProbs_[tarStart_[tpos] + hapPos]);
+										totalWeightedSetForTar += (1.01 - hapsProbs_[tarStart_[tpos] + hapPos]);
 									}
 								}
 								if(totalSharedForTar > 0){
@@ -559,12 +596,19 @@ public:
 									++totalTarsWithAtLeastOneHapShared;
 								}
 								jacardsByTarget.emplace_back(totalSharedForTar/static_cast<double>(totalSetForTar));
+								jacardsByTargetWeighted.emplace_back(totalWeightedSharedForTar/(totalWeightedSetForTar));
 							}
 						}
 						ret.byHapsTarShared[pair.row_][pair.col_] = totalShared/static_cast<double>(totalSet);
 						ret.byHapsTarShared[pair.col_][pair.row_] = totalShared/static_cast<double>(totalSet);
-						ret.avgJacard[pair.row_][pair.col_] = vectorMean(jacardsByTarget);
-						ret.avgJacard[pair.col_][pair.row_] = vectorMean(jacardsByTarget);
+						ret.byHapsTarSharedWeighted[pair.row_][pair.col_] = totalSharedWeighted/(totalSetWeighted);
+						ret.byHapsTarSharedWeighted[pair.col_][pair.row_] = totalSharedWeighted/(totalSetWeighted);
+						auto meanJacard = vectorMean(jacardsByTarget);;
+						auto meanJacardWeighted = vectorMean(jacardsByTargetWeighted);;
+						ret.avgJacard[pair.row_][pair.col_] = meanJacard;
+						ret.avgJacard[pair.col_][pair.row_] = meanJacard;
+						ret.avgJacardWeighted[pair.row_][pair.col_] = meanJacardWeighted;
+						ret.avgJacardWeighted[pair.col_][pair.row_] = meanJacardWeighted;
 						ret.byTarget[pair.row_][pair.col_] = totalTarsWithAtLeastOneHapShared/static_cast<double>(totalTarsWithDataForBoth);
 						ret.byTarget[pair.col_][pair.row_] = totalTarsWithAtLeastOneHapShared/static_cast<double>(totalTarsWithDataForBoth);
 					}
@@ -839,6 +883,7 @@ int genExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::CmdArg
 
 	OutputStream avgHapOut(njh::files::make_path(setUp.pars_.directoryName_, "avgJacardPerTarget.tab.txt.gz"));
 
+
 	outSampNamesOut << njh::conToStr(sampNames, "\n") << std::endl;
 	for(const auto & it : byTarget){
 		byTargetOut << njh::conToStr(it, "\t") << std::endl;
@@ -852,6 +897,7 @@ int genExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::CmdArg
 	for(const auto & ih : avgJacard){
 		avgHapOut << njh::conToStr(ih, "\t") << std::endl;
 	}
+
 	return 0;
 }
 
@@ -886,7 +932,8 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 			haps.meta_->checkForFieldsThrow(metaFieldsToCalcPopDiffs);
 		}
 	}
-
+	setUp.timer_.startNewLap("get hap probabilities");
+	haps.calcHapProbs();
 	setUp.timer_.startNewLap("get index measures");
 	auto indexRes = haps.genIndexMeasures(numThreads, setUp.pars_.verbose_);
 
@@ -894,8 +941,12 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 	OutputStream byTargetOut(njh::files::make_path(setUp.pars_.directoryName_, "percOfTarSharingAtLeastOneHap.tab.txt.gz"));
 	OutputStream byHapOut(njh::files::make_path(setUp.pars_.directoryName_, "jacardByAllHap.tab.txt.gz"));
 	OutputStream byHapTarSharedOut(njh::files::make_path(setUp.pars_.directoryName_, "jacardByHapsTarShared.tab.txt.gz"));
-
 	OutputStream avgHapOut(njh::files::make_path(setUp.pars_.directoryName_, "avgJacardPerTarget.tab.txt.gz"));
+
+	OutputStream byHapTarSharedWeightedOut(njh::files::make_path(setUp.pars_.directoryName_, "jacardByHapsTarSharedWeighted.tab.txt.gz"));
+	OutputStream avgHapWeightedOut(njh::files::make_path(setUp.pars_.directoryName_, "avgJacardPerTargetWeighted.tab.txt.gz"));
+
+
 
 	outSampNamesOut << njh::conToStr(haps.sampNames_, "\n") << std::endl;
 	for(const auto & it : indexRes.byTarget){
@@ -909,6 +960,12 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 	}
 	for(const auto & ih : indexRes.avgJacard){
 		avgHapOut << njh::conToStr(ih, "\t") << std::endl;
+	}
+	for(const auto & ih : indexRes.byHapsTarSharedWeighted){
+		byHapTarSharedWeightedOut << njh::conToStr(ih, "\t") << std::endl;
+	}
+	for(const auto & ih : indexRes.avgJacardWeighted){
+		avgHapWeightedOut << njh::conToStr(ih, "\t") << std::endl;
 	}
 
 	{
