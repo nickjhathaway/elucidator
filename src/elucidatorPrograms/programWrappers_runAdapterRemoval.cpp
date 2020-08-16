@@ -690,20 +690,24 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 		std::ofstream logFile;
 		logOpts.openFile(logFile);
 		std::unordered_map<std::string, njh::sys::RunOutput> runOutputs;
+
 		if(bfs::exists(inputSingles)){
 			auto singlesRunOutput = njh::sys::run({singlesCmd.str()});
 			BioCmdsUtils::checkRunOutThrow(singlesRunOutput, __PRETTY_FUNCTION__);
 			runOutputs["bwa-singles"] = singlesRunOutput;
 		}
+		if(bfs::exists(inputPairedFirstMates)){
+			auto pairedRunOutput = njh::sys::run({pairedCmd.str()});
+			BioCmdsUtils::checkRunOutThrow(pairedRunOutput, __PRETTY_FUNCTION__);
+			runOutputs["bwa-paired"] = pairedRunOutput;
+		}
 
-		auto pairedRunOutput = njh::sys::run({pairedCmd.str()});
-		BioCmdsUtils::checkRunOutThrow(pairedRunOutput, __PRETTY_FUNCTION__);
-		runOutputs["bwa-paired"] = pairedRunOutput;
-		if(bfs::exists(singlesSortedBam) ){
+
+		if(bfs::exists(singlesSortedBam) && bfs::exists(pairedSortedBam)){
 			auto bamtoolsMergeAndIndexRunOutput = njh::sys::run({bamtoolsMergeAndIndexCmd.str()});
 			BioCmdsUtils::checkRunOutThrow(bamtoolsMergeAndIndexRunOutput, __PRETTY_FUNCTION__);
 			runOutputs["bamtools-merge-index"] = bamtoolsMergeAndIndexRunOutput;
-		}else{
+		}else if(!bfs::exists(singlesSortedBam) && bfs::exists(pairedSortedBam)){
 			bfs::rename(pairedSortedBam, outputFnp);
 			if(useSambamba){
 				bfs::rename(pairedSortedBam.string() + ".bai", outputFnp.string() + ".bai");
@@ -714,10 +718,21 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 				BioCmdsUtils::checkRunOutThrow(indexRunOutput, __PRETTY_FUNCTION__);
 				runOutputs["index"] = indexRunOutput;
 			}
+		}else if(bfs::exists(singlesSortedBam) && !bfs::exists(pairedSortedBam)){
+			bfs::rename(singlesSortedBam, outputFnp);
+			if(useSambamba){
+				bfs::rename(singlesSortedBam.string() + ".bai", outputFnp.string() + ".bai");
+			}else{
+				std::stringstream ss;
+				ss << "samtools index " << outputFnp;
+				auto indexRunOutput = njh::sys::run({ss.str()});
+				BioCmdsUtils::checkRunOutThrow(indexRunOutput, __PRETTY_FUNCTION__);
+				runOutputs["index"] = indexRunOutput;
+			}
 		}
 		logFile << njh::json::toJson(runOutputs) << std::endl;
 		if(removeIntermediateFiles){
-			if(bfs::exists(singlesSortedBam)){
+			if(bfs::exists(singlesSortedBam) && bfs::exists(pairedSortedBam)){
 				bfs::remove(pairedSortedBam);
 				bfs::remove(singlesSortedBam);
 			}
