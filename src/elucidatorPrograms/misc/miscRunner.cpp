@@ -60,8 +60,8 @@ miscRunner::miscRunner()
                      addFunc("hangman", hangman, true),
                      addFunc("aminoAcidQuiz", aminoAcidQuiz, false),
                      addFunc("getSharedLines", getSharedLines, false),
-										addFunc("genInputForEstimateS", genInputForEstimateS, false),
-										addFunc("getHighestHapFrac", getHighestHapFrac, false),
+										 addFunc("genInputForEstimateS", genInputForEstimateS, false),
+										 addFunc("getHighestHapFrac", getHighestHapFrac, false),
 
 
 
@@ -79,10 +79,15 @@ miscRunner::miscRunner()
 										 addFunc("printSeqsColored", printSeqsColored, false),
 										 addFunc("renameDownloadedGenome", renameDownloadedGenome, false),
 
+
+										 addFunc("createSharedPathwaysFromReads", createSharedPathwaysFromReads, false),
+										 addFunc("createSharedPathwaysFromContigs", createSharedPathwaysFromContigs, false),
+										 addFunc("createSharedPathwaysFromRefSeqs", createSharedPathwaysFromRefSeqs, false),
 										 },//
                     "misc") {}
 
 
+//,,
 
 
 int miscRunner::printSeqsColored(const njh::progutils::CmdArgs & inputCommands){

@@ -27,6 +27,8 @@ int bedExpRunner::differentSubRegionCombos(const njh::progutils::CmdArgs & input
 	uint32_t subRegionSize = 20;
 	bool includeFromFront  = false;
 	bool includeFromBack   = false;
+	bool justToNextRegion = false;
+
 	OutOptions outOpts;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -40,6 +42,10 @@ int bedExpRunner::differentSubRegionCombos(const njh::progutils::CmdArgs & input
 	setUp.setOption(subRegionSize,    "--subRegionSize", "Sub Region Size");
 	setUp.setOption(includeFromFront, "--includeFromFront", "include From Front");
 	setUp.setOption(includeFromBack,  "--includeFromBack", "include From Back");
+	setUp.setOption(justToNextRegion,  "--onlyAdjacentRegions", "Instead of making every possible regions, do just between adjacent regions");
+
+
+
 
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
@@ -50,7 +56,7 @@ int bedExpRunner::differentSubRegionCombos(const njh::progutils::CmdArgs & input
 	std::vector<std::shared_ptr<Bed6RecordCore>> regions;
 	regions.emplace_back(std::make_shared<Bed6RecordCore>(*regionsRaw.front()));
 
-	for (const auto &regPos : iter::range<uint32_t>(1, regionsRaw.size())) {
+	for (const auto regPos : iter::range<uint32_t>(1, regionsRaw.size())) {
 		if (regions.back()->overlaps(*regionsRaw[regPos], 1) || (regions.back()->chrom_ == regionsRaw[regPos]->chrom_ && regions.back()->chromEnd_ == regionsRaw[regPos]->chromStart_) ) {
 			regions.back()->chromEnd_ = std::max(
 					regions.back()->chromEnd_,
@@ -96,8 +102,8 @@ int bedExpRunner::differentSubRegionCombos(const njh::progutils::CmdArgs & input
 
 	for(auto & byChrom : regionsByChrom){
 		if(byChrom.second.size() > 1){
-			for(const auto & pos : iter::range(byChrom.second.size() -1 )){
-				for(const auto & downStreamPos : iter::range(pos + 1, byChrom.second.size())){
+			for(const auto  pos : iter::range(byChrom.second.size() -1 )){
+				for(const auto  downStreamPos : iter::range(pos + 1, byChrom.second.size())){
 					Bed6RecordCore startReg = *byChrom.second[pos];
 					Bed6RecordCore endReg   = *byChrom.second[downStreamPos];
 					if(startReg.length() > subRegionSize){
@@ -112,6 +118,9 @@ int bedExpRunner::differentSubRegionCombos(const njh::progutils::CmdArgs & input
 					outRegion.score_ = outRegion.length();
 					if(outRegion.length() >= minLen && outRegion.length() <= maxLen){
 						out << outRegion.toDelimStr() << std::endl;
+					}
+					if(justToNextRegion){
+						break;
 					}
 				}
 			}
