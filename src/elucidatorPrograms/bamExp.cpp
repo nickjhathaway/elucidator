@@ -131,7 +131,7 @@ int bamExpRunner::printHeaderRefIndexes(
 	if (header) {
 		out << "Index\tRefName\tRefLength" << std::endl;
 	}
-	for (const auto & pos : iter::range(refData.size())) {
+	for (const auto pos : iter::range(refData.size())) {
 		out << pos << "\t" << refData[pos].RefName << "\t" << refData[pos].RefLength
 				<< std::endl;
 	}
@@ -591,7 +591,7 @@ int bamExpRunner::bamMulticov(const njh::progutils::CmdArgs & inputCommands){
 	for(const auto & reg : regions){
 		auto regAsBed = reg.genBedRecordCore();
 		auto toks = tokenizeString(regAsBed.toDelimStr(), "\t");
-		for(const auto & col : iter::range(toks.size())){
+		for(const auto col : iter::range(toks.size())){
 			output.content_[regRowCount][col] = toks[col];
 		}
 		regUidToRowPos[reg.createUidFromCoords()] = regRowCount;
@@ -783,7 +783,7 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 	for(const auto & reg : regions){
 		auto regAsBed = reg.genBedRecordCore();
 		auto toks = tokenizeString(regAsBed.toDelimStr(), "\t");
-		for(const auto & col : iter::range(toks.size())){
+		for(const auto col : iter::range(toks.size())){
 			outputProperPairs.content_[regRowCount][col] = toks[col];
 		}
 		regUidToRowPos[reg.createUidFromCoords()] = regRowCount;
@@ -796,7 +796,7 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 	for(const auto & reg : regions){
 		auto regAsBed = reg.genBedRecordCore();
 		auto toks = tokenizeString(regAsBed.toDelimStr(), "\t");
-		for(const auto & col : iter::range(toks.size())){
+		for(const auto col : iter::range(toks.size())){
 			outputTotalPairs.content_[regRowCount][col] = toks[col];
 		}
 		++regRowCount;
@@ -808,7 +808,7 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 	for(const auto & reg : regions){
 		auto regAsBed = reg.genBedRecordCore();
 		auto toks = tokenizeString(regAsBed.toDelimStr(), "\t");
-		for(const auto & col : iter::range(toks.size())){
+		for(const auto col : iter::range(toks.size())){
 			outputMateUnmappedPairs.content_[regRowCount][col] = toks[col];
 		}
 		++regRowCount;
@@ -820,7 +820,7 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 	for(const auto & reg : regions){
 		auto regAsBed = reg.genBedRecordCore();
 		auto toks = tokenizeString(regAsBed.toDelimStr(), "\t");
-		for(const auto & col : iter::range(toks.size())){
+		for(const auto col : iter::range(toks.size())){
 			outputDiscordantPairs.content_[regRowCount][col] = toks[col];
 		}
 		++regRowCount;
@@ -1000,7 +1000,7 @@ int bamExpRunner::bamMulticovBasesRough(const njh::progutils::CmdArgs & inputCom
 	for(const auto & reg : regions){
 		auto regAsBed = reg.genBedRecordCore();
 		auto toks = tokenizeString(regAsBed.toDelimStr(), "\t");
-		for(const auto & col : iter::range(toks.size())){
+		for(const auto col : iter::range(toks.size())){
 			output.content_[regRowCount][col] = toks[col];
 		}
 		regUidToRowPos[reg.createUidFromCoords()] = regRowCount;
@@ -1140,7 +1140,7 @@ int bamExpRunner::mergeBedRegionFromBam(const njh::progutils::CmdArgs & inputCom
 		out << regionsFor.front().genBedRecordCore().toDelimStr() << std::endl;
 	}else if(regionsFor.size() > 1){
 		GenomicRegion currentRegion = regionsFor.front();
-		for(const auto & pos : iter::range<uint32_t>(1, regionsFor.size()) ){
+		for(const auto pos : iter::range<uint32_t>(1, regionsFor.size()) ){
 			if(currentRegion.overlaps(regionsFor[pos])){
 				currentRegion.start_ = std::min(currentRegion.start_, regionsFor[pos].start_);
 				currentRegion.end_ = std::max(currentRegion.end_, regionsFor[pos].end_);
@@ -1157,7 +1157,7 @@ int bamExpRunner::mergeBedRegionFromBam(const njh::progutils::CmdArgs & inputCom
 		out << regionsRev.front().genBedRecordCore().toDelimStr() << std::endl;
 	}else if(regionsRev.size() > 1){
 		GenomicRegion currentRegion = regionsRev.front();
-		for(const auto & pos : iter::range<uint32_t>(1, regionsRev.size()) ){
+		for(const auto pos : iter::range<uint32_t>(1, regionsRev.size()) ){
 			if(currentRegion.overlaps(regionsRev[pos])){
 				currentRegion.start_ = std::min(currentRegion.start_, regionsRev[pos].start_);
 				currentRegion.end_ = std::max(currentRegion.end_, regionsRev[pos].end_);
@@ -1500,7 +1500,7 @@ table processBaseCounts(const std::string & filename,
 	auto firstLine = njh::files::getFirstLine(filename);
 	auto toks = tokenizeString(firstLine, "\t");
 	std::unordered_map<std::string, uint32_t> colNamePos;
-	for(const auto & tokPos : iter::range(toks.size())){
+	for(const auto tokPos : iter::range(toks.size())){
 		colNamePos[toks[tokPos]] = tokPos;
 	}
 	table outTab(toks);

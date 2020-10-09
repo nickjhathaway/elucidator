@@ -234,7 +234,7 @@ int bamExpRunner::bamMulticovBases(const njh::progutils::CmdArgs & inputCommands
 	for(const auto & reg : regions){
 		auto regAsBed = reg.genBedRecordCore();
 		auto toks = tokenizeString(regAsBed.toDelimStr(), "\t");
-		for(const auto & col : iter::range(toks.size())){
+		for(const auto col : iter::range(toks.size())){
 			output.content_[regRowCount][col] = toks[col];
 		}
 		regUidToRowPos[reg.createUidFromCoords()] = regRowCount;
@@ -413,7 +413,7 @@ int bamExpRunner::bamDupCounts(const njh::progutils::CmdArgs & inputCommands){
 	for(const auto & reg : regions){
 		auto regAsBed = reg.genBedRecordCore();
 		auto toks = tokenizeString(regAsBed.toDelimStr(), "\t");
-		for(const auto & col : iter::range(toks.size())){
+		for(const auto col : iter::range(toks.size())){
 			outputDubs.content_[regRowCount][col] = toks[col];
 			outputTotal.content_[regRowCount][col] = toks[col];
 		}

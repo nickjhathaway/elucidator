@@ -70,15 +70,15 @@ std::vector<std::vector<double>> getKmerAccerDistance(
 				std::cout << "\tCalculating Distances Time: " << watch.totalTimeFormatted(0) << std::endl;
 			}
 		}
-		for (const auto & rowPos : iter::range(distanceMaps[kmerStart].size())) {
+		for (const auto rowPos : iter::range(distanceMaps[kmerStart].size())) {
 			std::vector<double> temp;
 			for (uint32_t i = 0; i < distanceMaps[kmerStart][rowPos].size(); ++i) {
 				temp.emplace_back(0.00);
 			}
 			distances.emplace_back(temp);
 		}
-		for (const auto & rowPos : iter::range(distances.size())) {
-			for (const auto & colPos : iter::range(distances[rowPos].size())) {
+		for (const auto rowPos : iter::range(distances.size())) {
+			for (const auto colPos : iter::range(distances[rowPos].size())) {
 				std::vector<double> differences;
 				for (uint32_t k = kmerStart; k < kmerStop; ++k) {
 					differences.emplace_back(
@@ -117,8 +117,8 @@ std::vector<std::vector<double>> getKmerAccerDistance(
 			}
 		}
 		distances = distanceMaps[kmerStart];
-		for (const auto & rowPos : iter::range(distances.size())) {
-			for (const auto & colPos : iter::range(distances[rowPos].size())) {
+		for (const auto rowPos : iter::range(distances.size())) {
+			for (const auto colPos : iter::range(distances[rowPos].size())) {
 				std::vector<double> differences;
 				for (uint32_t k = kmerStart; k < kmerStop; ++k) {
 					differences.emplace_back(
@@ -178,8 +178,8 @@ readDistGraph<double> genKmerAccerDistGraphWithDbSmartBuild(
 		}
 	}
 	std::vector<std::vector<double>> distances = distanceMaps[2];
-	for (const auto & rowPos : iter::range(distances.size())) {
-		for (const auto & colPos : iter::range(distances[rowPos].size())) {
+	for (const auto rowPos : iter::range(distances.size())) {
+		for (const auto colPos : iter::range(distances[rowPos].size())) {
 			/*double res = std::abs(
 					distanceMaps[2][rowPos][colPos]
 							- distanceMaps[3][rowPos][colPos] );*/
@@ -192,7 +192,7 @@ readDistGraph<double> genKmerAccerDistGraphWithDbSmartBuild(
 			}
 		}
 	}
-	for(const auto & k : iter::range<uint32_t>(4,kmerStop + 1)){
+	for(const auto k : iter::range<uint32_t>(4,kmerStop + 1)){
 		if(verbose){
 			std::cout << "K: " << k << std::endl;
 			std::cout << "\tIndexing Kmers" << std::endl;
@@ -206,8 +206,8 @@ readDistGraph<double> genKmerAccerDistGraphWithDbSmartBuild(
 		}
 		watch.reset();
 		if(k > 5){
-			for (const auto & rowPos : iter::range(distances.size())) {
-				for (const auto & colPos : iter::range(distances[rowPos].size())) {
+			for (const auto rowPos : iter::range(distances.size())) {
+				for (const auto colPos : iter::range(distances[rowPos].size())) {
 					std::vector<double> differences;
 					for (uint32_t k = 2; k < kmerStop; ++k) {
 						/*differences.emplace_back(
@@ -231,9 +231,9 @@ readDistGraph<double> genKmerAccerDistGraphWithDbSmartBuild(
 		}
 		std::vector<std::vector<double>> currentKDists;
 		std::vector<std::pair<uint32_t, uint32_t>> indices;
-	  for(const auto & pos : iter::range(reads.size())){
+	  for(const auto pos : iter::range(reads.size())){
 	  	currentKDists.emplace_back(std::vector<double>(pos));
-	  	for(const auto & secondPos : iter::range(pos)){
+	  	for(const auto secondPos : iter::range(pos)){
 	  		if(std::numeric_limits<double>::max() != distances[pos][secondPos]){
 	  			indices.emplace_back(pos, secondPos);
 	  		}
@@ -245,7 +245,7 @@ readDistGraph<double> genKmerAccerDistGraphWithDbSmartBuild(
 	  	std::vector<std::thread> threads;
 	  	uint32_t step = std::round(indices.size()/static_cast<double>(numThreads));
 	  	std::vector<std::vector<std::pair<uint32_t, uint32_t>>> indsSplit;
-	  	for(const auto & tNum : iter::range(numThreads - 1)){
+	  	for(const auto tNum : iter::range(numThreads - 1)){
 	  		std::vector<std::pair<uint32_t, uint32_t>> temp {indices.begin() + tNum * step,
 	  			indices.begin() + (tNum + 1)*step};
 	  		indsSplit.emplace_back(temp);
@@ -253,7 +253,7 @@ readDistGraph<double> genKmerAccerDistGraphWithDbSmartBuild(
 	  	std::vector<std::pair<uint32_t, uint32_t>> temp {indices.begin() + (numThreads - 1) * step,
 	  	  			indices.end()};
 	  	indsSplit.emplace_back(temp);
-	  	for(const auto & tNum : iter::range(numThreads)){
+	  	for(const auto tNum : iter::range(numThreads)){
 	  		threads.push_back(std::thread(paritialDis<std::unique_ptr<seqWithKmerInfo>,double>, std::cref(reads),
 	    			indsSplit[tNum], std::ref(currentKDists), disFun));
 	  	}
@@ -270,8 +270,8 @@ readDistGraph<double> genKmerAccerDistGraphWithDbSmartBuild(
 
 
 	readDistGraph<double> distanceGraph(reads);
-	for (const auto & rowPos : iter::range(distances.size())) {
-		for (const auto & colPos : iter::range(distances[rowPos].size())) {
+	for (const auto rowPos : iter::range(distances.size())) {
+		for (const auto colPos : iter::range(distances[rowPos].size())) {
 			std::vector<double> differences;
 			for (uint32_t k = 2; k < kmerStop; ++k) {
 				/*differences.emplace_back(
@@ -387,8 +387,8 @@ readDistGraph<double> genKmerAccerDistGraphWithDb(
 	auto kDists = getKmerAccerDistance(reads,
 				kmerStart, kmerStop, numThreads, useKmerNum, verbose);
 	readDistGraph<double> distanceGraph(reads);
-  for(const auto & pos : iter::range(kDists.size())){
-  	for(const auto & subPos : iter::range<uint64_t>(kDists[pos].size())){
+  for(const auto pos : iter::range(kDists.size())){
+  	for(const auto subPos : iter::range<uint64_t>(kDists[pos].size())){
 			if (kDists[pos][subPos] <= pars.eps_) {
 				distanceGraph.addEdge(reads[pos]->seqBase_.name_,
 						reads[subPos]->seqBase_.name_, kDists[pos][subPos]);

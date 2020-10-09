@@ -83,9 +83,9 @@ int readSimulatorRunner::createFractionAbundanceFile(const njh::progutils::CmdAr
 
   //sum up the abundances
   std::vector<double> refSums{0};
-  for(const auto & colPos : iter::range<uint64_t>(1,abundTab.columnNames_.size())){
+  for(const auto colPos : iter::range<uint64_t>(1,abundTab.columnNames_.size())){
   	uint32_t sum = 0;
-  	for(const auto & rowPos : iter::range(abundTab.content_.size())){
+  	for(const auto rowPos : iter::range(abundTab.content_.size())){
   		sum+= estd::stou(abundTab.content_[rowPos][colPos]);
   	}
   	refSums.emplace_back(sum);
@@ -95,7 +95,7 @@ int readSimulatorRunner::createFractionAbundanceFile(const njh::progutils::CmdAr
   table outTab(concatVecs(VecStr{"ref"}, barcodeNames));
   for(const auto & row : abundTab.content_){
   	VecStr rowOut{row.front()};
-  	for(const auto & colPos : iter::range<uint64_t>(1,abundTab.columnNames_.size())){
+  	for(const auto colPos : iter::range<uint64_t>(1,abundTab.columnNames_.size())){
   		rowOut.emplace_back(estd::to_string(estd::stou(row[colPos])/refSums[colPos]));
   	}
   	outTab.content_.emplace_back(rowOut);
@@ -208,7 +208,7 @@ int readSimulatorRunner::createRandomSequenceMixtures(const njh::progutils::CmdA
 	idFile << "gene\tforwardPrimer\treversePrimer" << std::endl;
 	idFile << simName << "\t" << forward << "\t" <<  reverseComp << std::endl;
 	idFile << "id\tbarcode" << std::endl;
-	for (const auto & barPos : iter::range(libNum * 2)) {
+	for (const auto barPos : iter::range(libNum * 2)) {
 		if (barPos % 2 == 0) {
 			directoryNamesFile << "dualReps\t" << inReads[barPos].seqBase_.name_
 					<< njh::replaceString(inReads[barPos + 1].seqBase_.name_, "MID", "")
@@ -236,7 +236,7 @@ int readSimulatorRunner::createRandomSequenceMixtures(const njh::progutils::CmdA
 	singleRepIdFile << "gene\tforwardPrimer\treversePrimer" << std::endl;
 	singleRepIdFile << simName << "\t" << forward << "\t" <<  reverseComp << std::endl;
 	singleRepIdFile << "id\tbarcode" << std::endl;
-	for(const auto & barPos : iter::range(libNum)){
+	for(const auto barPos : iter::range(libNum)){
 		singleRepDirectoryNamesFile << "singleReps\t" << inReads[barPos].seqBase_.name_
 				<< "\t" << inReads[barPos].seqBase_.name_ << "\n";
 		inReads[barPos].seqBase_.outPutSeq(singleRepBarcodesOutFile);
@@ -274,7 +274,7 @@ int readSimulatorRunner::chimeraSim(const njh::progutils::CmdArgs & inputCommand
 	if(seq2.size() > maxLength){
 		maxLength = seq2.size();
 	}
-	for(const auto & pos : iter::range(maxLength - kLength)){
+	for(const auto pos : iter::range(maxLength - kLength)){
 		if(std::equal(seq1.begin() + pos, seq1.begin() + pos + kLength, seq2.begin() + pos)){
 			positions.emplace_back(pos);
 		}

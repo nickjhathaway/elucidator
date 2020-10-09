@@ -119,10 +119,10 @@ int seqUtilsTrimRunner::trimWithMuscleToRefInStreaks(const njh::progutils::CmdAr
 		uint32_t streakCount = 0;
 		std::cout << "StreakNumber\tstart\tend\tlength\tseqSpanningToNextStreak\tseqSpanningToNextStreakPerc" << "\n";
 		if(streaks.size() > 1){
-			for(const auto & streakPos : iter::range(streaks.size() - 1)){
+			for(const auto streakPos : iter::range(streaks.size() - 1)){
 				const auto & streak = streaks[streakPos];
 				uint32_t toNextStreakCount = 0;
-				for (const auto & pos : iter::range(refSeqs.size(), allSeqs.size())) {
+				for (const auto pos : iter::range(refSeqs.size(), allSeqs.size())) {
 					if (allStartsStop[pos].start_ < streak.end_
 							&& allStartsStop[pos].stop_ >= streaks[streakPos + 1].start_) {
 						++toNextStreakCount;
@@ -190,7 +190,7 @@ void trimSeqsToMultiAlnRef(std::vector<INPUTSEQ> & inputSeqs,
 			pars.streakLenCutOff);
 
 	std::cout << "ref\tstart\tstop" << std::endl;
-	for(const auto & refPositionsPos : iter::range(refStartsStop.size())){
+	for(const auto refPositionsPos : iter::range(refStartsStop.size())){
 		std::cout << getSeqBase(refSeqs[refPositionsPos]).name_
 				<< "\t" << refStartsStop[refPositionsPos].start_
 				<< "\t" << refStartsStop[refPositionsPos].stop_

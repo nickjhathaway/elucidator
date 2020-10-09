@@ -245,7 +245,7 @@ int simulatorRunner::randomStrings(const njh::progutils::CmdArgs & inputCommands
   		readVec::getMaxLength(inReads, maxLen);
   		counts = std::vector<charCounter>(maxLen);
   		for(const auto & read : iden){
-  			for(const auto & pos : iter::range(read.seqBase_.seq_.size())){
+  			for(const auto pos : iter::range(read.seqBase_.seq_.size())){
   				counts[pos].increaseCountOfBase(read.seqBase_.seq_[pos], read.seqBase_.cnt_);
   			}
   		}
@@ -281,7 +281,7 @@ int simulatorRunner::randomStrings(const njh::progutils::CmdArgs & inputCommands
     //counter.outPutACGTFractionInfo(std::cout);
     randoms = simulation::randStrs(stringLength, counter, gen, stringNumber);
   } else {
-    for (const auto& i : iter::range<uint32_t>(0, stringLength)) {
+    for (const auto i : iter::range<uint32_t>(0, stringLength)) {
     	charCounter testCounter =
     			charCounter(std::vector<char>{'A', 'G', 'T', 'C'});
       testCounter.chars_['A'] = 1 + i;

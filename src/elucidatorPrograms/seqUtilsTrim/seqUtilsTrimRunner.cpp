@@ -142,7 +142,7 @@ int seqUtilsTrimRunner::trimToSimilarSeq(const njh::progutils::CmdArgs & inputCo
   	}
   	uint32_t startPos = pars.maxLength - pars.windowLength;
   	uint32_t stopPos = std::min<uint32_t>(len(seq) - pars.kmerLength + 1, pars.maxLength + pars.windowLength + 1);
-  	for(const auto & pos : iter::range(startPos, stopPos)){
+  	for(const auto pos : iter::range(startPos, stopPos)){
   		profile.add(seq.seq_.substr(pos, pars.kmerLength), false);
   	}
   }
@@ -163,7 +163,7 @@ int seqUtilsTrimRunner::trimToSimilarSeq(const njh::progutils::CmdArgs & inputCo
   	uint32_t stopPos = std::min<uint32_t>(len(seq) - pars.kmerLength + 1, pars.maxLength + pars.windowLength + 1);
   	double bestProb = 0;
   	std::vector<uint32_t> bestPos;
-  	for(const auto & pos : iter::range(startPos, stopPos)){
+  	for(const auto pos : iter::range(startPos, stopPos)){
   		auto currentProb = roundDecPlaces(profile.getProbabilityOfKmer(seq.seq_.substr(pos, pars.kmerLength)), 10);
   		if(currentProb == bestProb){
   			bestProb = currentProb;
@@ -595,7 +595,7 @@ int seqUtilsTrimRunner::trimToMostProbableSharedKmer(const njh::progutils::CmdAr
   readVec::handelLowerCaseBases(inReads, setUp.pars_.ioOptions_.lowerCaseBases_);
   probabilityProfile profile(pars.kmerLength);
 
-  for(const auto & readPos : iter::range(len(inReads))){
+  for(const auto readPos : iter::range(len(inReads))){
   	auto & read = inReads[readPos];
   	//first turn off short sequences if they are too short and then continue on
   	if(len(read) < pars.windowLength ){
@@ -604,7 +604,7 @@ int seqUtilsTrimRunner::trimToMostProbableSharedKmer(const njh::progutils::CmdAr
   	}
   	uint32_t startPos = len(read) - pars.windowLength;
   	uint32_t stopPos = len(read) - pars.kmerLength + 1;
-  	for(const auto & pos : iter::range(startPos, stopPos)){
+  	for(const auto pos : iter::range(startPos, stopPos)){
   		profile.add(read.seqBase_.seq_.substr(pos, pars.kmerLength), false);
   	}
   }
@@ -626,7 +626,7 @@ int seqUtilsTrimRunner::trimToMostProbableSharedKmer(const njh::progutils::CmdAr
 		uint32_t stopPos = len(read) - pars.kmerLength + 1;
   	double bestProb = 0;
   	std::vector<uint32_t> bestPos;
-  	for(const auto & pos : iter::range(startPos, stopPos)){
+  	for(const auto pos : iter::range(startPos, stopPos)){
   		auto currentProb = roundDecPlaces(profile.getProbabilityOfKmer(read.seqBase_.seq_.substr(pos, pars.kmerLength)), pars.precision);
   		if(currentProb == bestProb){
   			bestProb = currentProb;
@@ -712,7 +712,7 @@ int seqUtilsTrimRunner::trimFromMostProbableSharedKmer(const njh::progutils::Cmd
 	auto inReads = reader.readAllReads<readObject>();
   readVec::handelLowerCaseBases(inReads, setUp.pars_.ioOptions_.lowerCaseBases_);
   probabilityProfile profile(pars.kmerLength);
-  for(const auto & readPos : iter::range(len(inReads))){
+  for(const auto readPos : iter::range(len(inReads))){
   	auto & read = inReads[readPos];
   	//first turn off short sequences if they are too short and then continue on
   	if(len(read) < pars.windowLength ){
@@ -721,7 +721,7 @@ int seqUtilsTrimRunner::trimFromMostProbableSharedKmer(const njh::progutils::Cmd
   	}
   	uint32_t startPos = 0;
   	uint32_t stopPos = pars.windowLength - pars.kmerLength + 1;
-  	for(const auto & pos : iter::range(startPos, stopPos)){
+  	for(const auto pos : iter::range(startPos, stopPos)){
   		profile.add(read.seqBase_.seq_.substr(pos, pars.kmerLength), false);
   	}
   }
@@ -743,7 +743,7 @@ int seqUtilsTrimRunner::trimFromMostProbableSharedKmer(const njh::progutils::Cmd
   	uint32_t stopPos = pars.windowLength - pars.kmerLength + 1;
   	double bestProb = 0;
   	std::vector<uint32_t> bestPos;
-  	for(const auto & pos : iter::range(startPos, stopPos)){
+  	for(const auto pos : iter::range(startPos, stopPos)){
   		auto currentProb = roundDecPlaces(profile.getProbabilityOfKmer(read.seqBase_.seq_.substr(pos, pars.kmerLength)), pars.precision);
   		//auto currentProb = profile.getProbabilityOfKmer(read.seqBase_.seq_.substr(pos, pars.kmerLength));
   		if(setUp.pars_.debug_){

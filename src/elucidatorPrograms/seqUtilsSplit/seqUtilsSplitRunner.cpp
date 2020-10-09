@@ -109,7 +109,7 @@ int seqUtilsSplitRunner::getSimilarSequences(const njh::progutils::CmdArgs & inp
   readVec::allSetLetterCount(inReads);
   setUp.pars_.seqObj_.setLetterCount();
 
-  for (const auto & readPos : iter::range(len(inReads))) {
+  for (const auto readPos : iter::range(len(inReads))) {
     ++counter;
     if (counter % 50 == 0) {
       std::cout << "On " << counter << " of " << inReads.size() << std::endl;
@@ -142,7 +142,7 @@ int seqUtilsSplitRunner::getSimilarSequences(const njh::progutils::CmdArgs & inp
   }
   counter = 0;
   if(checkComplement){
-    for (const auto & readPos : iter::range(len(dissimilar))) {
+    for (const auto readPos : iter::range(len(dissimilar))) {
     	auto & read = dissimilar[readPos];
     	read.seqBase_.reverseComplementRead(true);
     	read.setLetterCount();

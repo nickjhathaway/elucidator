@@ -18,7 +18,6 @@ namespace njhseq {
 
 
 
-
 int miscRunner::createSharedPathwaysFromReads(const njh::progutils::CmdArgs & inputCommands){
 
 	std::vector<std::string> contigFnps;
@@ -113,8 +112,8 @@ int miscRunner::createSharedPathwaysFromReads(const njh::progutils::CmdArgs & in
 					MetaDataInName meta(readName);
 					sampNames.emplace_back(meta.getMeta("sample"));
 				}
-				for(const auto & pos1 : iter::range(sampNames.size())){
-					for(const auto & pos2 : iter::range(sampNames.size())){
+				for(const auto pos1 : iter::range(sampNames.size())){
+					for(const auto pos2 : iter::range(sampNames.size())){
 						if(pos1 != pos2 && sampNames[pos1] == sampNames[pos2]){
 							continue;
 						}
@@ -252,8 +251,8 @@ int miscRunner::createSharedPathwaysFromContigs(const njh::progutils::CmdArgs & 
 					MetaDataInName meta(readName);
 					sampNames.emplace_back(meta.getMeta("sample"));
 				}
-				for(const auto & pos1 : iter::range(sampNames.size())){
-					for(const auto & pos2 : iter::range(sampNames.size())){
+				for(const auto pos1 : iter::range(sampNames.size())){
+					for(const auto pos2 : iter::range(sampNames.size())){
 						if(pos1 != pos2 && sampNames[pos1] == sampNames[pos2]){
 							continue;
 						}
@@ -769,8 +768,8 @@ int miscRunner::createSharedPathwaysFromRefSeqs(const njh::progutils::CmdArgs & 
 					MetaDataInName meta(readName);
 					sampNames.emplace_back(meta.getMeta("sample"));
 				}
-				for(const auto & pos1 : iter::range(sampNames.size())){
-					for(const auto & pos2 : iter::range(sampNames.size())){
+				for(const auto pos1 : iter::range(sampNames.size())){
+					for(const auto pos2 : iter::range(sampNames.size())){
 						if(pos1 != pos2 && sampNames[pos1] == sampNames[pos2]){
 							continue;
 						}

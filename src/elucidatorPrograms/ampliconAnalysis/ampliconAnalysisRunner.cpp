@@ -124,7 +124,7 @@ int ampliconAnalysisRunner::greedyCluster(const njh::progutils::CmdArgs & inputC
 			uint64_t bestPosition = std::numeric_limits<uint64_t>::max();
 			double bestScore = std::numeric_limits<double>::lowest();
 
-			for(const auto & searchPos : iter::range(clusters.size())){
+			for(const auto searchPos : iter::range(clusters.size())){
 				if(readPos == searchPos){
 					break;
 				}

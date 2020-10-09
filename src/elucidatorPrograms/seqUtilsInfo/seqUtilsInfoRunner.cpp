@@ -87,7 +87,7 @@ int seqUtilsInfoRunner::multipleAlnProteinToPcaInput(const njh::progutils::CmdAr
 	if(inReads.size() < 2){
 		return 0;
 	}
-	for (const auto & pos : iter::range(inReads.size() - 1)) {
+	for (const auto pos : iter::range(inReads.size() - 1)) {
 		if (len(inReads[pos].seqBase_)
 				!= len(inReads[pos + 1].seqBase_)) {
 			std::stringstream ss;
@@ -103,7 +103,7 @@ int seqUtilsInfoRunner::multipleAlnProteinToPcaInput(const njh::progutils::CmdAr
 
 	std::vector<charCounter> counters(len(inReads.front().seqBase_));
 	for(const auto & read : inReads){
-		for(const auto & pos : iter::range(len(read))){
+		for(const auto pos : iter::range(len(read))){
 			counters[pos].increaseCountOfBase(read.seqBase_.seq_[pos]);
 		}
 	}
@@ -664,7 +664,7 @@ int seqUtilsInfoRunner::profileQualityScores(const njh::progutils::CmdArgs & inp
 	  uint32_t currentPos = 0;
 	  while ((qualityWindowLength + currentPos) < read.seqBase_.qual_.size()) {
 	    uint32_t sum = 0;
-	    for (const auto & qPos : iter::range(currentPos, currentPos + qualityWindowLength)) {
+	    for (const auto qPos : iter::range(currentPos, currentPos + qualityWindowLength)) {
 	      sum += read.seqBase_.qual_[qPos];
 	    }
 	    qualWindowCounts[sum]+=::round(read.seqBase_.cnt_);
@@ -1338,7 +1338,7 @@ int seqUtilsInfoRunner::quickLenInfo(const njh::progutils::CmdArgs & inputComman
 	statsTable.content_.emplace_back(numVecToVecStr(nums));
 	statsTable.columnNames_.emplace_back("n");
 	statsTable.content_.front().emplace_back(njh::pasteAsStr(readLengths.size()));
-	for(const auto d : additionalColumnsData){
+	for(const auto & d : additionalColumnsData){
 		auto toks = tokenizeString(d, ":");
 		if(2 != toks.size()){
 			std::stringstream ss;
@@ -1407,14 +1407,14 @@ int seqUtilsInfoRunner::quickMismatchDist(const njh::progutils::CmdArgs & inputC
   openTextFile(distFile,
   		bfs::basename(setUp.pars_.ioOptions_.firstName_) + "_distFile.txt",
                ".txt", true, false);
-  for (const auto &pos : iter::range(inReads.size())) {
+  for (const auto pos : iter::range(inReads.size())) {
     distFile << " \t" << inReads[pos].seqBase_.name_;
   }
   distFile << std::endl;
-  for (const auto &pos : iter::range(inReads.size())) {
+  for (const auto pos : iter::range(inReads.size())) {
     std::cout << pos << ":" << inReads.size() << std::endl;
     distFile << inReads[pos].seqBase_.name_;
-    for (const auto &secondPos : iter::range(inReads.size())) {
+    for (const auto secondPos : iter::range(inReads.size())) {
       alignerObj.alignCache(inReads[pos], inReads[secondPos],
                           setUp.pars_.local_);
       alignerObj.profileAlignment(inReads[pos], inReads[secondPos],
@@ -1496,7 +1496,7 @@ Json::Value toJsonMismatchGraph(readDistGraph<uint32_t> & graph,uint32_t groupCu
   		satStart, satStop,
   		groups.size());
 
-	for(const auto & pos : iter::range(groups.size())){
+	for(const auto pos : iter::range(groups.size())){
 		groupColors[groups[pos]] = gColors[pos];
 	}
 
@@ -1538,7 +1538,7 @@ Json::Value toJsonMismatchGraph(readDistGraph<uint32_t> & graph,uint32_t groupCu
 				std::string lastName = graph.nodes_[graph.nameToNodePos_[e->nodeToNode_.begin()->first]]->name_;
 				auto lColors = getColsBetweenExcludeClosest(groupColors[graph.nodes_[graph.nameToNodePos_[e->nodeToNode_.begin()->first]]->group_],
 						groupColors[e->nodeToNode_.begin()->second.lock()->group_], e->dist_ + 1);
-				for(const auto & mis : iter::range(e->dist_)){
+				for(const auto mis : iter::range(e->dist_)){
 					std::string newName = graph.nodes_[graph.nameToNodePos_[e->nodeToNode_.begin()->first]]->name_
 							+ estd::to_string(mis) + e->nodeToNode_.begin()->second.lock()->name_;
 					nameToNewPos[newName] = pos;

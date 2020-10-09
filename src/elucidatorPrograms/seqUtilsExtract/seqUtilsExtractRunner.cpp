@@ -252,7 +252,7 @@ int seqUtilsExtractRunner::greedyKmerCluster(const njh::progutils::CmdArgs & inp
 			[&](const kmerCluster & kClus1, const kmerCluster & kClus2) {
 				return kClus1.reads_.size() > kClus2.reads_.size();});
 
-	for (const auto & pos : iter::range(kClusters.size())) {
+	for (const auto pos : iter::range(kClusters.size())) {
 		auto outOpts = SeqIOOptions::genFastqOut(setUp.pars_.directoryName_
 						+ estd::to_string(leftPadNumStr(pos, kClusters.size())));
 		kClusters[pos].writeInfo(outOpts);
@@ -300,7 +300,7 @@ int seqUtilsExtractRunner::binOnNucComp(const njh::progutils::CmdArgs & inputCom
   	std::string smallDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("smallClusters")).string();
   	TableIOOpts outInfoOpts(OutOptions(setUp.pars_.directoryName_ + "compInfo", ".tab.txt"), "\t", outInfo.hasHeader_);
   	outInfo.outPutContents(outInfoOpts)	;
-  	for(const auto & compPos : iter::range(comps.size())){
+  	for(const auto compPos : iter::range(comps.size())){
   		std::vector<readObject> currentClusterReads = comps[compPos].getReads(inReads);
   		if(currentClusterReads.size() <= smallClusterSize){
     		SeqOutput::write(currentClusterReads, setUp.pars_.directoryName_ + leftPadNumStr(compPos, comps.size()),
@@ -347,7 +347,7 @@ int seqUtilsExtractRunner::binOnNucCompFaster(const njh::progutils::CmdArgs & in
 
   	std::string smallDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("smallClusters")).string();
   	outInfo.outPutContents(TableIOOpts(OutOptions(setUp.pars_.directoryName_ + "compClusInfo.tab.txt",".txt"), "\t", outInfo.hasHeader_));
-  	for(const auto & compPos : iter::range(comps.size())){
+  	for(const auto compPos : iter::range(comps.size())){
   		std::vector<readObject> currentClusterReads = comps[compPos].getReads<readObject>(setUp.pars_.ioOptions_);
   		if(currentClusterReads.size() <= smallClusterSize){
     		SeqOutput::write(currentClusterReads, smallDir + leftPadNumStr(compPos, comps.size()),

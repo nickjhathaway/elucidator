@@ -36,7 +36,7 @@ void randomFileCreator::randomFile(uint32_t lenStart, uint32_t lenStop,
 		uint32_t numOfSeqs, bool processed, uint32_t bottomAmount,
 		uint32_t topAmount, bool fastq, std::ostream& out) {
 	if (fastq) {
-		for (const auto & pos : iter::range(numOfSeqs)) {
+		for (const auto pos : iter::range(numOfSeqs)) {
 			auto len = rgen_.unifRand(lenStart, lenStop);
 			seqInfo info("Seq." + njh::leftPadNumStr(pos, numOfSeqs),
 					simulation::randStr(len, counter_, rgen_),
@@ -48,7 +48,7 @@ void randomFileCreator::randomFile(uint32_t lenStart, uint32_t lenStop,
 			info.outPutFastq(out);
 		}
 	} else {
-		for (const auto & pos : iter::range(numOfSeqs)) {
+		for (const auto pos : iter::range(numOfSeqs)) {
 			auto len = rgen_.unifRand(lenStart, lenStop);
 			seqInfo info("Seq." + njh::leftPadNumStr(pos, numOfSeqs),
 					simulation::randStr(len, counter_, rgen_));

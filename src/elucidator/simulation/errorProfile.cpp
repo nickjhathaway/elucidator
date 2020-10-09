@@ -108,7 +108,7 @@ void mismatchProfile::mutateSeqInPlace(std::string &seq, njh::randomGenerator &g
                                     const std::vector<char> &mutateTo,
                                     const std::vector<double> &likelihood) {
   std::vector<double> rands = gen.unifRandVector(likelihood.size());
-  for (const auto &i : iter::range(rands.size())) {
+  for (const auto i : iter::range(rands.size())) {
     if (rands[i] <= likelihood[i]) {
       mutateInPlace(seq[i], gen, mutateTo);
     }
@@ -127,7 +127,7 @@ void mismatchProfile::mutateSeqInPlaceSameErrorRate(
     std::string &seq, njh::randomGenerator &gen, const std::vector<char> &mutateTo,
     double errorRate) {
   std::vector<double> rands = gen.unifRandVector(seq.size());
-  for (const auto &i : iter::range(rands.size())) {
+  for (const auto i : iter::range(rands.size())) {
     if (rands[i] <= errorRate) {
       mutateInPlace(seq[i], gen, mutateTo);
     }

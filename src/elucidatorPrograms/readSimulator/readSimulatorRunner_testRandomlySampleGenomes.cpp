@@ -92,7 +92,7 @@ int readSimulatorRunner::simRandomlySampleGenomes(
 	}
 	OutputStream out(outOpts);
 	out << "TotalGenomes\tsim\texp\tobs" << std::endl;
-	for(const auto & sim : iter::range(sims)){
+	for(const auto sim : iter::range(sims)){
 		for(const auto & gCount : totalGenomesCounts){
 			for(const auto & maf : minorAlleleFreqs){
 				seqInfo major{"major"};

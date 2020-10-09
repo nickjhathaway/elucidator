@@ -43,7 +43,7 @@ class randomFileCreator {
   		const std::vector<uint32_t>& alphabetCounts, uint32_t qualStart,
                     uint32_t qualStop)
       : counter_(alphabet), qualStart_(qualStart), qualStop_(qualStop) {
-  	for(const auto & pos : iter::range(alphabet.size())){
+  	for(const auto pos : iter::range(alphabet.size())){
   		counter_.increaseCountOfBase(alphabet[pos],alphabetCounts[pos]);
   	}
   	counter_.setFractions();

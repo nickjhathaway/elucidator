@@ -48,7 +48,7 @@ int bedExpRunner::roughSmoothingForBedCoverage(const njh::progutils::CmdArgs & i
 				njh::StrToNumConverter::stoToNum<uint32_t>(row[2]), "-" == row[5]));
 	}
 	std::unordered_map<std::string, uint32_t> sampToColPos;
-	for(const auto & colPos : iter::range<uint32_t>(6,inTable.nCol())){
+	for(const auto colPos : iter::range<uint32_t>(6,inTable.nCol())){
 		coverageBySample[inTable.columnNames_[colPos]] = vecStrToVecNum<double>(inTable.getColumn(colPos));
 		sampToColPos[inTable.columnNames_[colPos]] = colPos;
 	}
@@ -78,7 +78,7 @@ int bedExpRunner::roughSmoothingForBedCoverage(const njh::progutils::CmdArgs & i
 			//		std::cout << "\r" << pos << "/" << regions.size();
 			//		std::cout.flush();
 					std::vector<uint32_t> otherRegions;
-					for(const auto & otherPos : iter::range(regions.size())){
+					for(const auto otherPos : iter::range(regions.size())){
 						if(regions[otherPos].chrom_ == regions[pos].chrom_){
 							if(regions[otherPos].distBetweenRegions(regions[pos]) <= within){
 								otherRegions.emplace_back(otherPos);
@@ -96,13 +96,13 @@ int bedExpRunner::roughSmoothingForBedCoverage(const njh::progutils::CmdArgs & i
 			//			std::cout << "\tdist: " << distBetweenRegions(regions[otherPos], regions[pos]) << std::endl;
 			//		}
 					std::vector<std::vector<uint32_t>> windows;
-					for(const auto & posInOthers : iter::range(otherRegions.size())){
+					for(const auto posInOthers : iter::range(otherRegions.size())){
 						uint32_t positionInRegions = otherRegions[posInOthers];
 						if(positionInRegions > pos){
 							break;
 						}
 						std::vector<uint32_t> window{positionInRegions};
-						for(const auto & selectPos : iter::range(posInOthers + 1, otherRegions.size())){
+						for(const auto selectPos : iter::range(posInOthers + 1, otherRegions.size())){
 							uint32_t nextRegion_positionInRegions = otherRegions[selectPos];
 							auto dist = regions[positionInRegions].distBetweenRegions(regions[nextRegion_positionInRegions]);
 							if(dist <=within){
@@ -115,7 +115,7 @@ int bedExpRunner::roughSmoothingForBedCoverage(const njh::progutils::CmdArgs & i
 						windows.emplace_back(window);
 					}
 					std::unordered_map<std::string, std::vector<WindowCovStat>> statsPerWindowPerSamp;
-					for(const auto & windowNumber : iter::range(windows.size())){
+					for(const auto windowNumber : iter::range(windows.size())){
 			//			std::cout << "window: " << windowNumber << ", size: " << windows[windowNumber].size()
 			//					<< ", diff between front and back: "
 			//					<< distBetweenRegions(regions[windows[windowNumber].front()], regions[windows[windowNumber].back()])<< std::endl;
@@ -132,7 +132,7 @@ int bedExpRunner::roughSmoothingForBedCoverage(const njh::progutils::CmdArgs & i
 			//			}
 						//coverageBySample
 
-						for (const auto samp : samples) {
+						for (const auto & samp : samples) {
 							std::vector<double> covs;
 			//				std::cout << samp << ":";
 							for (const auto & windowPos : windows[windowNumber]) {

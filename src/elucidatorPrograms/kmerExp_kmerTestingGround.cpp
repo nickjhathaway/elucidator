@@ -392,7 +392,7 @@ int kmerExpRunner::kmerTestingGround(const njh::progutils::CmdArgs & inputComman
 			while(refNameQueue.getVal(recName)){
 				std::string refSeq;
 				refReader[recName]->getSequence(refSeq);
-				for (const auto & pos : iter::range(refSeq.size() - klen + 1)) {
+				for (const auto pos : iter::range(refSeq.size() - klen + 1)) {
 					auto sub = refSeq.substr(pos, klen);
 					for (auto & seq : blocksByRefRecord.at(recName)) {
 						auto search = seq->kInfo_->kmers_.find(sub);
@@ -449,7 +449,7 @@ int kmerExpRunner::kmerTestingGround(const njh::progutils::CmdArgs & inputComman
 				std::vector<uint32_t> counts(refSeq.size(), 0);
 				for(const auto & g : blocksByRefRecord.at(recName)){
 					for(const auto & k : g->kComps_){
-						for(const auto & pos : iter::range(k.second.refStart_, k.second.size_ + k.second.refStart_)){
+						for(const auto pos : iter::range(k.second.refStart_, k.second.size_ + k.second.refStart_)){
 							++counts[pos];
 						}
 					}
@@ -465,7 +465,7 @@ int kmerExpRunner::kmerTestingGround(const njh::progutils::CmdArgs & inputComman
 				}
 				for(const auto & seq : blocksByRefRecord.at(recName)){
 					for(const auto & k : seq->kComps_){
-						for(const auto & pos : iter::range(k.second.size_)){
+						for(const auto pos : iter::range(k.second.size_)){
 							if(counts[k.second.refStart_ + pos] == blocksByRefRecord.at(recName).size()){
 								perfectSeqs.at(seq->seqBase_->name_)->addComp(k.second.refStart_ + pos,k.second.start_ + pos);
 							}

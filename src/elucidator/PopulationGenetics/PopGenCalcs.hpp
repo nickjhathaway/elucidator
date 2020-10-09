@@ -334,8 +334,8 @@ public:
 				hapsForPopulations[pop.first].emplace_back(PopHapInfo(seqToPopUID[getSeqBase(hap).seq_], getSeqBase(hap).cnt_));
 			}
 		}
-		for(const auto & keyPos : iter::range(keys.size())){
-			for(const auto & secondKeyPos : iter::range(keyPos)){
+		for(const auto keyPos : iter::range(keys.size())){
+			for(const auto secondKeyPos : iter::range(keyPos)){
 	//			std::unordered_map<std::string, std::shared_ptr<std::vector<T>>> currentPair;
 	//			currentPair[keys[keyPos]] = popSeqs.at(keys[keyPos]);
 	//			currentPair[keys[secondKeyPos]] = popSeqs.at(keys[secondKeyPos]);
@@ -360,8 +360,8 @@ public:
 				std::unordered_map<std::string, PopDifferentiationMeasures>> ret;
 		auto keys = getVectorOfMapKeys(hapsForPopulations);
 		njh::sort(keys);
-		for(const auto & keyPos : iter::range(keys.size())){
-			for(const auto & secondKeyPos : iter::range(keyPos)){
+		for(const auto keyPos : iter::range(keys.size())){
+			for(const auto secondKeyPos : iter::range(keyPos)){
 				auto popMeasures = getPopDiff(
 						keys[keyPos],       hapsForPopulations.at(keys[keyPos]),
 						keys[secondKeyPos], hapsForPopulations.at(keys[secondKeyPos])

@@ -434,7 +434,7 @@ void increaseCountsForAlnSlimForOverlapPairs(const BamTools::BamAlignment & firs
 	}
 	//now handle overlap counts
 
-	for(const auto & pos : iter::range(minOverlapPos, maxOverlapPos + 1)){
+	for(const auto pos : iter::range(minOverlapPos, maxOverlapPos + 1)){
 		if (njh::in(pos, firstOverLapBaseCounts)
 				&& njh::in(pos, secondOverLapBaseCounts)) {
 			switch (firstOverLapBaseCounts[pos].type_) {
@@ -1064,7 +1064,7 @@ int bamCountingExpRunner::gatherBaseCoverageOnSampleOnLoc(const njh::progutils::
 		refLensByName[refInfo.RefName] = refInfo.RefLength;
 	}
 	std::map<std::string, uint32_t> refIdByName;
-	for(const auto & refInfoPos : iter::range(refInfos.size())){
+	for(const auto refInfoPos : iter::range(refInfos.size())){
 		refIdByName[refInfos[refInfoPos].RefName] = refInfoPos;
 	}
 
@@ -1106,7 +1106,7 @@ int bamCountingExpRunner::gatherBaseCoverageOnSampleOnLoc(const njh::progutils::
 				auto rPosLast = reg.start_;
 				bool haveSought = false;
 				std::vector<uint32_t> baseCoverages;
-				for(const auto & rPos : iter::range(reg.start_, reg.end_)){
+				for(const auto rPos : iter::range(reg.start_, reg.end_)){
 					if (njh::in(rPos, index)) {
 						if(rPosLast + 1 != rPos || !haveSought) {
 							bgzReader.seek(index[rPos]);
@@ -1200,7 +1200,7 @@ int bamCountingExpRunner::gatherVariantsOnSampleOnLoc(const njh::progutils::CmdA
 		refLensByName[refInfo.RefName] = refInfo.RefLength;
 	}
 	std::map<std::string, uint32_t> refIdByName;
-	for(const auto & refInfoPos : iter::range(refInfos.size())){
+	for(const auto refInfoPos : iter::range(refInfos.size())){
 		refIdByName[refInfos[refInfoPos].RefName] = refInfoPos;
 	}
 	VariantGatherer varGetter(refInfos, fracCutOff, depthCutOff, strandBiasCutOff);
@@ -1253,7 +1253,7 @@ int bamCountingExpRunner::gatherVariantsOnSampleOnLoc(const njh::progutils::CmdA
 				}
 				auto rPosLast = reg.start_;
 				bool haveSought = false;
-				for(const auto & rPos : iter::range(reg.start_, reg.end_)){
+				for(const auto rPos : iter::range(reg.start_, reg.end_)){
 					if (njh::in(rPos, index)) {
 						if(rPosLast + 1 != rPos || !haveSought) {
 							bgzReader.seek(index[rPos]);
@@ -1357,7 +1357,7 @@ int bamCountingExpRunner::gatherLocOnSample(const njh::progutils::CmdArgs & inpu
 		refLensByName[refInfo.RefName] = refInfo.RefLength;
 	}
 	std::map<std::string, uint32_t> refIdByName;
-	for(const auto & refInfoPos : iter::range(refInfos.size())){
+	for(const auto refInfoPos : iter::range(refInfos.size())){
 		refIdByName[refInfos[refInfoPos].RefName] = refInfoPos;
 	}
 
@@ -1407,7 +1407,7 @@ int bamCountingExpRunner::gatherLocOnSample(const njh::progutils::CmdArgs & inpu
 				}
 				auto rPosLast = reg.start_;
 				bool haveSought = false;
-				for(const auto & rPos : iter::range(reg.start_, reg.end_)){
+				for(const auto rPos : iter::range(reg.start_, reg.end_)){
 					if (njh::in(rPos, index)) {
 						if(rPosLast + 1 != rPos || !haveSought) {
 							bgzReader.seek(index[rPos]);
@@ -1458,7 +1458,7 @@ int bamCountingExpRunner::gatherLocOnSample(const njh::progutils::CmdArgs & inpu
 			if(addFiller){
 				twoBitfile[chrom.first]->getSequence(genomicSeq);
 				for(const auto & reg : chrom.second){
-					for(const auto & rPos : iter::range(reg.start_, reg.end_)){
+					for(const auto rPos : iter::range(reg.start_, reg.end_)){
 						std::vector<uint32_t> d(SlimCounterPos::NumOfElements);
 						std::fill(d.begin() + 2, d.end(), 0);
 						d[0] = refIdByName[reg.chrom_];

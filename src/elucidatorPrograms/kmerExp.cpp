@@ -196,8 +196,8 @@ int kmerExpRunner::kmerRevVsForDist(const njh::progutils::CmdArgs & inputCommand
 				return std::pair<double,double> {dist.second, distRev.second};
 			};
 	auto distances = getDistance(reads, numThreads, disFun);
-	for (const auto & pos : iter::range(reads.size())) {
-		for (const auto & subPos : iter::range(pos)) {
+	for (const auto pos : iter::range(reads.size())) {
+		for (const auto subPos : iter::range(pos)) {
 			std::cout << distances[pos][subPos].first << ","
 					<< distances[pos][subPos].second << " ";
 		}
@@ -321,7 +321,7 @@ int kmerExpRunner::randomSampleKmerCompare(const njh::progutils::CmdArgs & input
 			std::unordered_map<uint32_t, std::vector<comparison>> comps;
 			while(posQueue.getVal(pos)){
 				std::vector<comparison> r2Comps;
-				for(const auto & r2Pos : iter::range(r2.size())){
+				for(const auto r2Pos : iter::range(r2.size())){
 					aligners.at(threadId)->alignCache(getSeqBase(r2[r2Pos]),getSeqBase(r1[pos]), false);
 					aligners.at(threadId)->profilePrimerAlignment(r2[r2Pos], getSeqBase(r1[pos]));
 					r2Comps.emplace_back(aligners.at(threadId)->comp_);
@@ -357,7 +357,7 @@ int kmerExpRunner::randomSampleKmerCompare(const njh::progutils::CmdArgs & input
 			std::unordered_map<uint32_t, std::vector<double>> comps;
 			while(posQueue.getVal(pos)){
 				std::vector<double> r2Comps;
-				for(const auto & r2Pos : iter::range(r2.size())){
+				for(const auto r2Pos : iter::range(r2.size())){
 					auto dist = r1[pos]->compareKmers(getRef(r2[r2Pos]));
 					r2Comps.emplace_back(dist.second);
 				}
@@ -366,7 +366,7 @@ int kmerExpRunner::randomSampleKmerCompare(const njh::progutils::CmdArgs & input
 			{
 				std::lock_guard<std::mutex> lock(distTabMut);
 				for(const auto & comp : comps){
-					for(const auto & compPos : iter::range(comp.second.size())){
+					for(const auto compPos : iter::range(comp.second.size())){
 						distTab.addRow(r1[comp.first]->seqBase_.name_,
 																			r2[compPos]->seqBase_.name_, k,
 																			comp.second[compPos],
@@ -483,8 +483,8 @@ int kmerExpRunner::pidVsKmers(const njh::progutils::CmdArgs & inputCommands) {
 	for (uint32_t k = kmerStart; k < kmerStop + 1; ++k) {
 		allSetKmers(reads, k, false);
 		auto kDists = getDistance(reads, numThreads, disFun);
-		for (const auto & rowPos : iter::range(reads.size())) {
-			for (const auto & colPos : iter::range(rowPos)) {
+		for (const auto rowPos : iter::range(reads.size())) {
+			for (const auto colPos : iter::range(rowPos)) {
 				distTab.addRow(reads[rowPos]->seqBase_.name_,
 						reads[colPos]->seqBase_.name_, k, kDists[rowPos][colPos],
 						distances[rowPos][colPos].distances_.eventBasedIdentity_);
@@ -534,7 +534,7 @@ int kmerExpRunner::scoveViaKmers(const njh::progutils::CmdArgs & inputCommands) 
 	std::vector<int32_t> scores;
 	kDists.reserve(refReads.size());
 	scores.reserve(refReads.size());
-  for(const auto & readPos : iter::range(reads.size())){
+  for(const auto readPos : iter::range(reads.size())){
   	if(readPos%10 == 0){
   		std::cout << "on " << readPos << " of " << reads.size() << "\r";
   		std::cout.flush();
@@ -551,7 +551,7 @@ int kmerExpRunner::scoveViaKmers(const njh::progutils::CmdArgs & inputCommands) 
   	auto maxKDist = vectorMaximum(kDists);
   	auto maxScore = vectorMaximum(scores);
   	std::string outColor = "";
-  	for(const auto & pos : iter::range(refReads.size())){
+  	for(const auto pos : iter::range(refReads.size())){
   		if(kDists[pos] == maxKDist && scores[pos] == maxScore){
   			outColor = "#14B814";
   		}else if (kDists[pos] != maxKDist && scores[pos] == maxScore){
@@ -652,7 +652,7 @@ int kmerExpRunner::scaningKmerDist(const njh::progutils::CmdArgs & inputCommands
 	for (const auto & read : reads) {
 		auto scanDist = read->slideCompareKmers(*seq, windowSize, windowStepSize);
 		double averageDist = 0;
-		for (const auto & distPos : iter::range(scanDist.size())) {
+		for (const auto distPos : iter::range(scanDist.size())) {
 			averageDist += scanDist[distPos].second;
 		}
 		averageDist /= scanDist.size();
@@ -697,8 +697,8 @@ int kmerExpRunner::kDistVsNucDist(const njh::progutils::CmdArgs & inputCommands)
   auto distances = getDistance(reads, numThreads, disFun);
   std::ofstream outInfoFile("nucVsNucDist_" + bfs::basename(setUp.pars_.ioOptions_.firstName_));
   outInfoFile << "read1\tread2\tnucDist\tDist\n";
-  for(const auto & pos : iter::range(distances.size())){
-  	for(const auto & secondPos : iter::range(pos)){
+  for(const auto pos : iter::range(distances.size())){
+  	for(const auto secondPos : iter::range(pos)){
   		outInfoFile<< reads[pos].seqBase_.name_
   				<< "\t" << reads[secondPos].seqBase_.name_
   				<< "\t" << distances[pos][secondPos].first
@@ -742,13 +742,13 @@ int kmerExpRunner::clostestKmerDist(const njh::progutils::CmdArgs & inputCommand
   }
   allSetKmers(reads, setUp.pars_.colOpts_.kmerOpts_.kLength_, false);
   std::vector<std::unique_ptr<seqWithKmerInfo>> rejectReads;
-  for(const auto & readPos : iter::range(reads.size())){
+  for(const auto readPos : iter::range(reads.size())){
   	if(readPos % 50 == 0){
   		std::cout << "Currently on " << readPos << " of " << reads.size() << "\n";
   	}
   	std::pair<uint32_t, double> best = {0,0};
   	uint32_t bestIndex = std::numeric_limits<uint32_t>::max();
-  	for(const auto & refPos : iter::range(refSeqs.size())){
+  	for(const auto refPos : iter::range(refSeqs.size())){
   		auto current = refSeqs[refPos].refSeq_->compareKmers(*reads[readPos]);
   		if(current.second > best.second){
   			best = current;
@@ -887,13 +887,13 @@ int kmerExpRunner::profileKmerAccerlation(const njh::progutils::CmdArgs & inputC
   		return name.substr(0, name.find("."));
   	}
   };
-  for(const auto & k : iter::range<uint32_t>(2, setUp.pars_.colOpts_.kmerOpts_.kLength_ + 1)){
+  for(const auto k : iter::range<uint32_t>(2, setUp.pars_.colOpts_.kmerOpts_.kLength_ + 1)){
   	std::cout << "Currently on Kmer Length " << k << '\r';
   	std::cout.flush();
   	allSetKmers(reads, k,false);
   	auto distances = getDistance(reads, numThreads, disFun);
-  	for(const auto & pos : iter::range(distances.size())){
-  		for(const auto & subPos : iter::range(distances[pos].size())){
+  	for(const auto pos : iter::range(distances.size())){
+  		for(const auto subPos : iter::range(distances[pos].size())){
   			auto seq1Name = reads[pos]->seqBase_.name_;
   			auto seq2Name = reads[subPos]->seqBase_.name_;
   			auto seq1Group = processGroup(seq1Name);
@@ -1017,7 +1017,7 @@ int kmerExpRunner::getKmerDist(const njh::progutils::CmdArgs & inputCommands){
   }
   OutputStream outFile(outOpts);
   outFile << "seq\tref\tkLen\tkDist\tkShared\n";
-  for(const auto & k : iter::range<uint32_t>(kLenStart, kLenStop + 1, kLenStep)){
+  for(const auto k : iter::range<uint32_t>(kLenStart, kLenStop + 1, kLenStep)){
   	if(setUp.pars_.verbose_){
   		std::cerr << "Currently on Kmer Length " << k << '\r';
   		std::cerr.flush();
@@ -1075,8 +1075,8 @@ int kmerExpRunner::readingDistanceCheck(const njh::progutils::CmdArgs & inputCom
   }
   std::vector<std::vector<double>> inDist = readDistanceMatrix(inFile);
   bool match = true;
-  for(const auto & i : iter::range(inDist.size())){
-  	for(const auto & j : iter::range(inDist[i].size())){
+  for(const auto i : iter::range(inDist.size())){
+  	for(const auto j : iter::range(inDist[i].size())){
   		if(roundDecPlaces(inDist[i][j], 4) != roundDecPlaces(distances[i][j], 4)){
   			std::cout << "inDist: " << inDist[i][j] << ":" << roundDecPlaces(inDist[i][j], 4)  << std::endl;
   			std::cout << "outDist: " << distances[i][j] << ":" << roundDecPlaces(distances[i][j], 4)  << std::endl;

@@ -113,7 +113,7 @@ int seqSearchingRunner::findTandemMotifLocations(const njh::progutils::CmdArgs &
 				} else {
 					if(length >= repeatCutOff){
 						uint32_t numOfErrors = 0;
-						for(const auto & seqPos : iter::range(start, start + mot.size() * length, mot.size())){
+						for(const auto seqPos : iter::range(start, start + mot.size() * length, mot.size())){
 							numOfErrors += mot.size() - mot.scoreMotif(seq.seq_.begin() + seqPos, seq.seq_.begin() + seqPos + mot.size());
 						}
 						if(numOfErrors <= maxAllowableErrors){
@@ -131,7 +131,7 @@ int seqSearchingRunner::findTandemMotifLocations(const njh::progutils::CmdArgs &
 			}
 			if(length >= repeatCutOff){
 				uint32_t numOfErrors = 0;
-				for(const auto & seqPos : iter::range(start, start + mot.size() * length, mot.size())){
+				for(const auto seqPos : iter::range(start, start + mot.size() * length, mot.size())){
 					numOfErrors += mot.size() - mot.scoreMotif(seq.seq_.begin() + seqPos, seq.seq_.begin() + seqPos + mot.size());
 				}
 				if(numOfErrors <= maxAllowableErrors){
@@ -157,7 +157,7 @@ int seqSearchingRunner::findTandemMotifLocations(const njh::progutils::CmdArgs &
 					}else{
 						if(length >= repeatCutOff){
 							uint32_t numOfErrors = 0;
-							for(const auto & seqPos : iter::range(start, start + mot.size() * length, mot.size())){
+							for(const auto seqPos : iter::range(start, start + mot.size() * length, mot.size())){
 								numOfErrors += mot.size() - mot.scoreMotif(seq.seq_.begin() + seqPos, seq.seq_.begin() + seqPos + mot.size());
 							}
 							if(numOfErrors <= maxAllowableErrors){
@@ -175,7 +175,7 @@ int seqSearchingRunner::findTandemMotifLocations(const njh::progutils::CmdArgs &
 				}
 				if(length >= repeatCutOff){
 					uint32_t numOfErrors = 0;
-					for(const auto & seqPos : iter::range(start, start + mot.size() * length, mot.size())){
+					for(const auto seqPos : iter::range(start, start + mot.size() * length, mot.size())){
 						numOfErrors += mot.size() - mot.scoreMotif(seq.seq_.begin() + seqPos, seq.seq_.begin() + seqPos + mot.size());
 					}
 					if(numOfErrors <= maxAllowableErrors){
@@ -432,7 +432,7 @@ int seqSearchingRunner::chopAndMapAndRefineInvidual(const njh::progutils::CmdArg
 		{
 			OutputStream mergedCoverageOut(mergedCoverageOpts);
 			Bed3RecordCore currentRegion = *beds.front();
-			for(const auto & regPos : iter::range<uint32_t>(1, beds.size())){
+			for(const auto regPos : iter::range<uint32_t>(1, beds.size())){
 				if(currentRegion.chrom_ == beds[regPos]->chrom_ && currentRegion.overlaps(*beds[regPos], 1)){
 					currentRegion.chromEnd_ = std::max(currentRegion.chromEnd_, beds[regPos]->chromEnd_);
 				}else{
@@ -591,7 +591,7 @@ int seqSearchingRunner::chopAndMapAndRefine(const njh::progutils::CmdArgs & inpu
 	{
 		OutputStream mergedCoverageOut(mergedCoverageOpts);
 		Bed3RecordCore currentRegion = *beds.front();
-		for(const auto & regPos : iter::range<uint32_t>(1, beds.size())){
+		for(const auto regPos : iter::range<uint32_t>(1, beds.size())){
 			if(currentRegion.chrom_ == beds[regPos]->chrom_ && currentRegion.overlaps(*beds[regPos], 1)){
 				currentRegion.chromEnd_ = std::max(currentRegion.chromEnd_, beds[regPos]->chromEnd_);
 			}else{

@@ -225,7 +225,7 @@ int seqUtilsModRunner::guessAProteinFromSeq(
 			std::shared_ptr<readVecTrimmer::BreakUpRes> longest;
 			uint32_t frameWithLongest = std::numeric_limits<uint32_t>::max();
 			uint32_t lengthOfLongestFrame = std::numeric_limits<uint32_t>::max();
-			for (const auto & start : iter::range(3)) {
+			for (const auto start : iter::range(3)) {
 				auto prot = seq.translateRet(false, false, start);
 				auto possibleSubSeqs = readVecTrimmer::breakUpSeqOnPat(prot, pFinder);
 				for (const auto & possible : possibleSubSeqs) {

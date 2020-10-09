@@ -45,7 +45,7 @@ int seqUtilsConverterRunner::plasmoDBTxtToFasta(const njh::progutils::CmdArgs & 
 
   std::unordered_map<std::string, std::string> seqs;
   for(const auto & row : inTab.content_){
-  	for(const auto & colPos : iter::range(len(row))){
+  	for(const auto colPos : iter::range(len(row))){
   		if(colPos <=1){
   			continue;
   		}

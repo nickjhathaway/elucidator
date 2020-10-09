@@ -51,7 +51,7 @@ public:
 
 		void addSegment(Segment newSeg){
 			//check to make sure there's no overlap
-			for(const auto seg : segs_){
+			for(const auto & seg : segs_){
 				if(newSeg.doesSegsOverLapInA(seg)){
 					std::stringstream ss;
 					ss << __PRETTY_FUNCTION__ << ", error " << "adding segment,"
@@ -460,7 +460,7 @@ std::vector<PCRSimulator::SeqGenomeCnt> PCRSimulator::randomlySampleGenomes(
 		ss << "\n";
 		throw std::runtime_error{ss.str()};
 	}
-	for(const auto & seqPos : iter::range(seqs.size())){
+	for(const auto seqPos : iter::range(seqs.size())){
 
 //		std::cout << "seqs[seqPos].frac_: " << seqs[seqPos].frac_ << std::endl;
 //		std::cout << "seqs[seqPos].cnt_: " << seqs[seqPos].cnt_ << std::endl;

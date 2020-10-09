@@ -52,7 +52,7 @@ std::multimap<double, std::string, std::less<double>> createLikelihood(
 	double countsSum = vectorSum(counts);
 
   std::multimap<double, std::string, std::less<double>> likelihoods;
-  for (const auto &pos : iter::range(letters.size())) {
+  for (const auto pos : iter::range(letters.size())) {
     likelihoods.emplace(counts[pos]/countsSum, std::string(1, letters[pos]));
   }
   return likelihoods;

@@ -307,7 +307,7 @@ int genExpRunner::printMlnStreaks(const njh::progutils::CmdArgs & inputCommands)
 				<< std::endl;
 	} else {
 		auto names = readVec::getNames(seqs);
-		for(const auto & streakPos : iter::range(streaks.size())){
+		for(const auto streakPos : iter::range(streaks.size())){
 			const auto & streak = streaks[streakPos];
 			for(const auto namePos : iter::range(names.size())){
 				auto seqStart =  getRealPosForAlnPos(seqs[namePos].seq_, streak.start_);
@@ -464,7 +464,7 @@ int genExpRunner::findOutliersWithMuscleToRefs(const njh::progutils::CmdArgs & i
 			}
 		}
 
-		for (const auto & alnSeqPos : iter::range(refSeqs.size(), allSeqs.size())) {
+		for (const auto alnSeqPos : iter::range(refSeqs.size(), allSeqs.size())) {
 			uint32_t spanningSpots = 0;
 			uint32_t nonZeroSpanningSpots = 0;
 			double score = 0;

@@ -230,7 +230,7 @@ int kmerExpRunner::profileSharedKmerBlocks(const njh::progutils::CmdArgs & input
 	perfectSeqs = seqs;
 	nearPerfectSeqs = seqs;
 	watch.startNewLap("Search All");
-	for (const auto & pos : iter::range(setUp.pars_.seqObj_.seqBase_.seq_.size() - kLen + 1)) {
+	for (const auto pos : iter::range(setUp.pars_.seqObj_.seqBase_.seq_.size() - kLen + 1)) {
 		auto sub = setUp.pars_.seqObj_.seqBase_.seq_.substr(pos, kLen);
 		for (auto & seq : seqs) {
 			auto search = seq.second.kInfo_->kmers_.find(sub);
@@ -268,7 +268,7 @@ int kmerExpRunner::profileSharedKmerBlocks(const njh::progutils::CmdArgs & input
 	std::vector<uint32_t> counts(len(setUp.pars_.seqObj_), 0);
 	for(const auto & g : seqs){
 		for(const auto & k : g.second.kComps_){
-			for(const auto & pos : iter::range(k.second.refStart_, k.second.size_ + k.second.refStart_)){
+			for(const auto pos : iter::range(k.second.refStart_, k.second.size_ + k.second.refStart_)){
 				++counts[pos];
 			}
 		}
@@ -276,7 +276,7 @@ int kmerExpRunner::profileSharedKmerBlocks(const njh::progutils::CmdArgs & input
 	watch.startNewLap("Determine Shared Kmers Between All");
 	for(const auto & seq : seqs){
 		for(const auto & k : seq.second.kComps_){
-			for(const auto & pos : iter::range(k.second.size_)){
+			for(const auto pos : iter::range(k.second.size_)){
 				if(counts[k.second.refStart_ + pos] == seqs.size()){
 					perfectSeqs.at(seq.first).addComp(k.second.refStart_ + pos,k.second.start_ + pos);
 				}

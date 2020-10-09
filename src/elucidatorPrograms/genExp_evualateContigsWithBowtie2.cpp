@@ -865,12 +865,12 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 			std::unordered_map<std::string, GenomicRegion> regionByName;
 
 
-			for (const auto & refPos : iter::range(requiredRegionsSeqs.size())) {
+			for (const auto refPos : iter::range(requiredRegionsSeqs.size())) {
 				regionByName[requiredRegions[refPos].uid_] = requiredRegions[refPos];
 				refVariationInfo.emplace_back(requiredRegionsSeqs[refPos]);
 			}
-			for (const auto & refPos : iter::range(requiredRegionsSeqs.size())) {
-				for (const auto & refSubPos : iter::range(requiredRegionsSeqs.size())) {
+			for (const auto refPos : iter::range(requiredRegionsSeqs.size())) {
+				for (const auto refSubPos : iter::range(requiredRegionsSeqs.size())) {
 					if (refPos == refSubPos) {
 						continue;
 					}
@@ -878,7 +878,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 							alignerObj, false);
 				}
 			}
-			for (const auto & refPos : iter::range(requiredRegionsSeqs.size())) {
+			for (const auto refPos : iter::range(requiredRegionsSeqs.size())) {
 				auto specificPositions = refVariationInfo[refPos].getUniqueToRefPositions();
 				for(const auto & pos : specificPositions){
 					auto specReg = regionByName[requiredRegions[refPos].uid_];
@@ -1479,7 +1479,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 			for(const auto & gene: requiredRegions){
 				uint32_t covered = 0;
 				std::vector<uint32_t> positionsNotCovered;
-				for(const auto & pos : iter::range(gene.start_, gene.end_)){
+				for(const auto pos : iter::range(gene.start_, gene.end_)){
 					if(simpleCoverageCounts[gene.chrom_][pos] > 0){
 						++covered;
 					}else{
@@ -1538,7 +1538,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 				uint32_t totalRegionBases = 0;
 				uint32_t totalCovered = 0;
 				for(const auto & reg : regions.second){
-					for(const auto & pos : iter::range(reg.start_, reg.end_)){
+					for(const auto pos : iter::range(reg.start_, reg.end_)){
 						++totalRegionBases;
 						if(simpleCoverageCounts[reg.chrom_][pos] > 0){
 							++totalCovered;

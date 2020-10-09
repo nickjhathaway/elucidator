@@ -45,7 +45,7 @@ class rabitPopulationImmortal {
     out << "Month: " << 1 << ", #RabitPairs: " << getNumberOfRabitPairs()
         << ", #newBorns: " << numberOfNewBornRabitsPairs
         << ", #mature: " << numberOfMatureRabitPairs << std::endl;
-    for (const auto& i : iter::range(1, numberOfMonths)) {
+    for (const auto i : iter::range(1, numberOfMonths)) {
       oneMonthPasses();
       out << "Month: " << i + 1 << ", #RabitPairs: " << getNumberOfRabitPairs()
           << ", #newBorns: " << numberOfNewBornRabitsPairs
@@ -89,7 +89,7 @@ class rabitPopulationMortal {
 
     out << "Month: " << 1 << ", #RabitPairs: " << getNumberOfRabitPairs()
         << ", #newBorns: " << population[0] << std::endl;
-    for (const auto& i : iter::range(1, numberOfMonths)) {
+    for (const auto i : iter::range(1, numberOfMonths)) {
       oneMonthPasses();
       out << "Month: " << i + 1 << ", #RabitPairs: " << getNumberOfRabitPairs()
           << ", #newBorns: " << population[0] << std::endl;

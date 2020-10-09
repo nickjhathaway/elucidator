@@ -110,7 +110,7 @@ int seqUtilsRunner::createConsensus(const njh::progutils::CmdArgs & inputCommand
 		  	std::ofstream outDisFile;
 		  	openTextFile(outDisFile, "outDis", ".fasta", true, false);
 		  	//uint32_t seqNum = 0;
-		  	for(const auto & pos : iter::range(len(mainCluster.reads_))){
+		  	for(const auto pos : iter::range(len(mainCluster.reads_))){
 		  		outDisFile << ">" << mainCluster.reads_[pos]->seqBase_.name_ << std::endl;
 		  		outDisFile << ">" << mainCluster.reads_[pos]->seqBase_.name_ +"_ref" << std::endl;
 		  	}
@@ -153,7 +153,7 @@ int seqUtilsRunner::createDegenerativeStr(const njh::progutils::CmdArgs & inputC
 	reader.openIn();
 	auto inReads = reader.readAllReads<readObject>();
   uint32_t minLen = std::numeric_limits<uint32_t>::max();
-  for(const auto & readPos : iter::range(len(inReads))){
+  for(const auto readPos : iter::range(len(inReads))){
   	if(inReads[readPos].seqBase_.seq_.length() < minLen){
   		minLen = len(inReads[readPos].seqBase_.seq_);
   	}
@@ -161,7 +161,7 @@ int seqUtilsRunner::createDegenerativeStr(const njh::progutils::CmdArgs & inputC
 
   readVecTrimmer::trimToMaxLength(inReads, minLen);
   VecStr dnaStrings;
-  for(const auto & readPos : iter::range(len(inReads))){
+  for(const auto readPos : iter::range(len(inReads))){
   	dnaStrings.emplace_back(inReads[readPos].seqBase_.seq_);
   }
   std::string ans = seqUtil::createDegenerativeString(dnaStrings);
@@ -355,7 +355,7 @@ std::vector<uint32_t> compareToRef(const seqInfo & input,
 		bool eventBased){
   double bestScore = std::numeric_limits<double>::lowest();
   std::vector<uint32_t> bestMatches;
-  for (const auto& refPos : iter::range(inputRefs.size())) {
+  for (const auto refPos : iter::range(inputRefs.size())) {
   	const auto & ref = inputRefs[refPos];
     if (input.name_ == ref.name_) {
       continue;
@@ -466,7 +466,7 @@ bool checkPossibleChiByRefsForMapCount(const READ & read,
 	uint32_t inflectionPoint = UINT32_MAX;
 	uint32_t inflectionPointPar1 = UINT32_MAX;
 	uint32_t inflectionPointPar2 = UINT32_MAX;
-	for(const auto & refPos : iter::range(len(refSeqs))){
+	for(const auto refPos : iter::range(len(refSeqs))){
 		auto & ref = refSeqs[refPos];
 		alignerObj.alignCache(ref.seqBase_, read.seqBase_, false);
 		alignerObj.profilePrimerAlignment(ref.seqBase_, read.seqBase_);
@@ -477,7 +477,7 @@ bool checkPossibleChiByRefsForMapCount(const READ & read,
 		}
 	}
 	//std::cout << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
-	for(const auto & refPos : iter::range(len(refSeqs))){
+	for(const auto refPos : iter::range(len(refSeqs))){
 
 		auto & ref = refSeqs[refPos];
 		alignerObj.alignCache(ref.seqBase_, read.seqBase_, false);
@@ -515,7 +515,7 @@ bool checkPossibleChiByRefsForMapCount(const READ & read,
 //			std::cout << "pass back:  " << njh::colorBool(passBack) << std::endl;
 
 			if(passFront){
-				for(const auto & secondRefPos : iter::range(refPos + 1, len(refSeqs))){
+				for(const auto secondRefPos : iter::range(refPos + 1, len(refSeqs))){
 					auto & secondRef = refSeqs[secondRefPos];
 					if(ref.seqBase_.name_ == secondRef.seqBase_.name_){
 						continue;
@@ -558,7 +558,7 @@ bool checkPossibleChiByRefsForMapCount(const READ & read,
 				break;
 			}
 			if(passBack){
-				for(const auto & secondRefPos : iter::range(refPos + 1,len(refSeqs))){
+				for(const auto secondRefPos : iter::range(refPos + 1,len(refSeqs))){
 					auto & secondRef = refSeqs[secondRefPos];
 					if(ref.seqBase_.name_ == secondRef.seqBase_.name_){
 						continue;
@@ -705,7 +705,7 @@ int seqUtilsRunner::mapCount(const njh::progutils::CmdArgs & inputCommands) {
 
   }else{
 
-    for (const auto & readPos : iter::range(reads.size())) {
+    for (const auto readPos : iter::range(reads.size())) {
     	auto & read = reads[readPos];
       std::vector<size_t> bestRefs;
       std::unordered_map<std::string, std::map<uint32_t, mismatch>>
@@ -727,7 +727,7 @@ int seqUtilsRunner::mapCount(const njh::progutils::CmdArgs & inputCommands) {
 					continue;
 				}
 			}
-      for (const auto &refReadPos : iter::range(refContainers.size())) {
+      for (const auto refReadPos : iter::range(refContainers.size())) {
       	auto & refRead = refContainers[refReadPos];
         alignerObj.alignCache(refRead.seqBase_, read.seqBase_, setUp.pars_.local_);
         double currentScore = std::numeric_limits<double>::lowest();
@@ -767,7 +767,7 @@ int seqUtilsRunner::mapCount(const njh::progutils::CmdArgs & inputCommands) {
 			++count;
 			double bestScore = 0.00;
 			std::vector<size_t> bestRefs;
-			for (const auto &refReadPos : iter::range(refContainers.size())) {
+			for (const auto refReadPos : iter::range(refContainers.size())) {
 				auto & refRead = refContainers[refReadPos];
 				alignerObj.alignCache(refRead.seqBase_, read.seqBase_, setUp.pars_.local_);
 				double currentScore = std::numeric_limits<double>::lowest();

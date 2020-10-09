@@ -466,7 +466,7 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 			SeqInput popReader(uniqueSeqInOpts);
 			auto popSeqs = popReader.readAllReads<seqInfo>();
 			std::unordered_map<std::string, uint32_t> popSeqsPosition;
-			for(const auto & popPos : iter::range(popSeqs.size())){
+			for(const auto popPos : iter::range(popSeqs.size())){
 				popSeqsPosition[popSeqs[popPos].name_] = popPos;
 			}
 			OutputStream popBedLocs(njh::files::make_path(variantInfoDir, "uniqueSeqs.bed"));

@@ -65,7 +65,7 @@ int kmerExpRunner::convertKmerSearchToBinaryMatrix(const njh::progutils::CmdArgs
 	std::unordered_map<std::string, uint32_t> seqIndex;
 	{
 		uint32_t pos = 0;
-		for(const auto name : inputSeqNames){
+		for(const auto & name : inputSeqNames){
 			seqIndex[name] = pos;
 			++pos;
 		}
@@ -132,7 +132,7 @@ int kmerExpRunner::kmerSearch(const njh::progutils::CmdArgs & inputCommands){
 		genomeInfos[chromName] = std::make_unique<kmerInfo>(seq.seq_, kLen, !noReverse);
 	}
 	watch.startNewLap("Forward search");
-	for (const auto & seqPos : iter::range<size_t>(0,
+	for (const auto seqPos : iter::range<size_t>(0,
 			len(setUp.pars_.seqObj_) - kLen + 1)) {
 		auto currentK = setUp.pars_.seqObj_.seqBase_.seq_.substr(seqPos, kLen);
 		if(setUp.pars_.verbose_){
@@ -148,7 +148,7 @@ int kmerExpRunner::kmerSearch(const njh::progutils::CmdArgs & inputCommands){
 	}
 	if(!noReverse){
 		setUp.pars_.seqObj_.seqBase_.reverseComplementRead(false, true);
-		for (const auto & seqPos : iter::range<size_t>(0,
+		for (const auto seqPos : iter::range<size_t>(0,
 				len(setUp.pars_.seqObj_) - kLen + 1)) {
 			auto currentK = setUp.pars_.seqObj_.seqBase_.seq_.substr(seqPos, kLen);
 			if(setUp.pars_.verbose_){
@@ -233,7 +233,7 @@ int kmerExpRunner::microsatsKmerSearch(const njh::progutils::CmdArgs & inputComm
 				bool growing = false;
 				size_t startPos = std::numeric_limits<size_t>::max();
 				uint32_t repeatNumber = 1;
-				for(const auto & pos : iter::range(k.second.positions_.size() - 1)){
+				for(const auto pos : iter::range(k.second.positions_.size() - 1)){
 					if( (k.second.positions_[pos + 1] - k.second.positions_[pos]) == kLen){
 						++repeatNumber;
 						if (!growing) {

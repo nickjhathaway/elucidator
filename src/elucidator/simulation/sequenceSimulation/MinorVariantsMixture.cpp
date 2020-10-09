@@ -395,7 +395,7 @@ void MinorVariantsMixture::createAbundancesForMixtures(
 			auto spAbToks = tokenizeString(abTok, ":");
 			if (spAbToks.size() == numOfVars()) {
 				double totalAbundance = 0;
-				for (const auto & spAbTokPos : iter::range(spAbToks.size())) {
+				for (const auto spAbTokPos : iter::range(spAbToks.size())) {
 					const auto & spAbTok = spAbToks[spAbTokPos];
 					if (isDoubleStr(spAbTok)) {
 						auto abund = njh::lexical_cast<double>(spAbTok);

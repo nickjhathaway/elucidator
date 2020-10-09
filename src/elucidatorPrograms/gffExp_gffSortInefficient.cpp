@@ -176,7 +176,7 @@ int gffExpRunner::gffSortInefficient(const njh::progutils::CmdArgs & inputComman
 		}
 	};
 	uint32_t nodeGroup = 0;
-	for(const auto & nodePos : iter::range(gffNodes.size())){
+	for(const auto nodePos : iter::range(gffNodes.size())){
 		if(std::numeric_limits<uint32_t>::max() == gffNodes[nodePos].group_){
 			std::stack<uint32_t> nodesToSpreadTo;
 			setGroupAndSpread(nodesToSpreadTo, nodePos, nodeGroup);
@@ -192,7 +192,7 @@ int gffExpRunner::gffSortInefficient(const njh::progutils::CmdArgs & inputComman
 
 	std::vector<GffNodeGroup> groups;
 	std::unordered_map<uint32_t, std::vector<uint32_t>> groupPositions;
-	for(const auto & pos : iter::range(gffNodes.size())){
+	for(const auto pos : iter::range(gffNodes.size())){
 		groupPositions[gffNodes[pos].group_].emplace_back(pos);
 	}
 

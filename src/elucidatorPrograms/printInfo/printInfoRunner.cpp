@@ -40,7 +40,7 @@ int printInfoRunner::printFastqAscII(const njh::progutils::CmdArgs & inputComman
 	setUp.setOption(illuminaOffset, "--illumina", "Use illumina offset");
 	setUp.finishSetUp(std::cout);
 	table outTable{VecStr{"Char", "Qual"}};
-	for(const auto & pos : iter::range(93)){
+	for(const auto pos : iter::range(93)){
 		if(illuminaOffset){
 			outTable.content_.emplace_back(toVecStr(static_cast<char>(pos + IlluminaQualOffset), pos));
 		}else{
@@ -69,7 +69,7 @@ int printInfoRunner::printAminoAcidInfo(const njh::progutils::CmdArgs & inputCom
 	VecStr lines = streamToVecStr(infoStream);
 
 	VecStr classificationVec = outInfo.getColumn("classification");
-	for(const auto & pos : iter::range(len(outInfo.content_) +1)){
+	for(const auto pos : iter::range(len(outInfo.content_) +1)){
 		if(pos > 0 && colorOutput){
 			njh::color currentColor = njh::color(aminoAcidInfo::infos::aaClassColorCode.at(classificationVec[pos -1]));
 					std::cout <<
@@ -87,8 +87,8 @@ int printInfoRunner::printDegen(const njh::progutils::CmdArgs & inputCommands) {
 	setUp.finishSetUp(std::cout);
 	substituteMatrix mat = substituteMatrix::createDegenScoreMatrix(1, 0);
 	std::unordered_map<char, std::vector<char>> acceptable;
-	for (const auto & pos : iter::range(len(mat.mat_))) {
-		for (const auto & subPos : iter::range(len(mat.mat_[pos]))) {
+	for (const auto pos : iter::range(len(mat.mat_))) {
+		for (const auto subPos : iter::range(len(mat.mat_[pos]))) {
 			if (pos == subPos) {
 				continue;
 			}

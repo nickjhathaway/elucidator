@@ -36,7 +36,7 @@ cluster getConsensusForSeqs(std::vector<T> & reads, aligner & alignerObj,
 	cluster mainCluster(getSeqBase(*reads.begin()));
 	if(reads.size() > 1){
 		std::vector<cluster> inClusters;
-		for(const auto & readPos : iter::range<uint64_t>(1,reads.size())){
+		for(const auto readPos : iter::range<uint64_t>(1,reads.size())){
 			inClusters.emplace_back(cluster(getSeqBase(reads[readPos])));
 		}
 		for(const auto & clus : inClusters){

@@ -23,7 +23,7 @@ std::vector<GenomicRegion> mergeAndSort(std::vector<T> & beds) {
 	std::vector<GenomicRegion> ret;
 	if (beds.size() > 1) {
 		ret.emplace_back(GenomicRegion(getRef(beds.front())));
-		for (const auto & regPos : iter::range<uint32_t>(1, beds.size())) {
+		for (const auto regPos : iter::range<uint32_t>(1, beds.size())) {
 			//merge if they overlap or start where the last region starts
 			if (ret.back().overlaps(getRef(beds[regPos])) || ret.back().end_ == getRef(beds[regPos]).chromStart_) {
 				ret.back().end_ = getRef(beds[regPos]).chromEnd_;

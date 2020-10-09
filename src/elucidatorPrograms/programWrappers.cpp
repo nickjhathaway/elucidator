@@ -118,7 +118,7 @@ int programWrapperRunner::generatingPrime3TemplatesBasedOnMALN(const njh::progut
 	auto unalignedSeqs = seqs;
 	readVec::removeGapsFromReads(unalignedSeqs);
 	if (streaks.size() > 1) {
-		for (const auto & seqPos : iter::range(seqs.size())) {
+		for (const auto seqPos : iter::range(seqs.size())) {
 			OutputStream outprimer3Template(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, seqs[seqPos].name_ + "_primer3_template.txt")));
 			outprimer3Template << "SEQUENCE_ID=" << seqs[seqPos].name_ << std::endl;// ideel-barcode-chr8-1100058_S0_Sub0_ext,CHR8:1099906-1100208
 			outprimer3Template << "SEQUENCE_TEMPLATE=" << unalignedSeqs[seqPos].seq_ << std::endl;
@@ -127,7 +127,7 @@ int programWrapperRunner::generatingPrime3TemplatesBasedOnMALN(const njh::progut
 //SEQUENCE_TEMPLATE=TGTGATTTATGTAATAATCCTATAAGTCCGTTATGTTATGTGTATGAATGTAACATATGTGATAATTTTGCTTTGTGTAAGAAATGTTATAAAAAAAATAAGCATGAACACAATTTAAAAAAAATATTAGTACCCAGACATTGCATACCGCCACAGGATTATCAAAATGAAGAATTGATAGCAAAAGATGGACAAATTAATAATAATAATAATAATAATAATAATAATAATAATAATAATAATATATATGATAATAATTTAATGGAATACCTAGAAAATGATTCAAGTGCATATGAAGATCTG
 //SEQUENCE_TARGET=
 //SEQUENCE_EXCLUDED_REGION=38,1 59,1 116,1 149,18 197,31"
-			for (const auto & streakPos : iter::range<uint32_t>(0, streaks.size() - 1)) {
+			for (const auto streakPos : iter::range<uint32_t>(0, streaks.size() - 1)) {
 				auto start = getRealPosForAlnPos(seqs[seqPos].seq_,
 						streaks[streakPos].end_);
 				auto end = getRealPosForAlnPos(seqs[seqPos].seq_,

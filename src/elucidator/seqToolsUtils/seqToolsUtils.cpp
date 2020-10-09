@@ -145,7 +145,7 @@ std::multimap<int, std::string> getProteinFragmentSpectrum(
   std::multimap<int, std::string, std::less<int>> ans;
   ans.insert({0, ""});
   VecStr fragments = getAllCycloProteinFragments(protein);
-  for (const auto frag : fragments) {
+  for (const auto & frag : fragments) {
     ans.insert({seqUtil::calculateWeightOfProteinInt(frag), frag});
   }
   return ans;
@@ -634,8 +634,8 @@ std::map<int, int> getConvolutionWeights(std::vector<int> experimentalSpectrum,
                                          int upperBound) {
   std::sort(experimentalSpectrum.begin(), experimentalSpectrum.end());
   std::map<int, int, std::greater<int>> countsOfDifferences;
-  for (const auto& i : iter::range(experimentalSpectrum.size())) {
-    for (const auto& j : iter::range(i + 1, experimentalSpectrum.size())) {
+  for (const auto i : iter::range(experimentalSpectrum.size())) {
+    for (const auto j : iter::range(i + 1, experimentalSpectrum.size())) {
       int currentDifference = experimentalSpectrum[j] - experimentalSpectrum[i];
       if (currentDifference >= lowerBound && currentDifference <= upperBound) {
         ++countsOfDifferences[currentDifference];
@@ -729,7 +729,7 @@ std::vector<double> likelihoodForBaseQ(
     const std::vector<uint32_t>& qual,
     std::unordered_map<double, double>& likelihoods) {
   std::vector<double> ans;
-  for (const auto& i : iter::range(qual.size())) {
+  for (const auto i : iter::range(qual.size())) {
     ans.emplace_back(likelihoods.at(qual[i]));
   }
   return ans;
@@ -738,7 +738,7 @@ std::vector<double> likelihoodForMeanQ(
     const std::vector<uint32_t>& qual, uint32_t qWindowSize,
     std::unordered_map<double, double>& likelihoods) {
   std::vector<double> ans;
-  for (const auto& i : iter::range(qual.size())) {
+  for (const auto i : iter::range(qual.size())) {
     double currentMean = vectorMean(getWindowQuals(qual, qWindowSize, i));
     ans.emplace_back(likelihoods.at(roundDecPlaces(currentMean, 2)));
   }
@@ -748,7 +748,7 @@ std::vector<double> likelihoodForMedianQ(
     const std::vector<uint32_t>& qual, uint32_t qWindowSize,
     std::unordered_map<double, double>& likelihoods) {
   std::vector<double> ans;
-  for (const auto& i : iter::range(qual.size())) {
+  for (const auto i : iter::range(qual.size())) {
     double currentMedian = vectorMedianCopy(getWindowQuals(qual, qWindowSize, i));
     ans.emplace_back(likelihoods.at(roundDecPlaces(currentMedian, 2)));
   }
@@ -758,7 +758,7 @@ std::vector<double> likelihoodForMinQ(
     const std::vector<uint32_t>& qual, uint32_t qWindowSize,
     std::unordered_map<double, double>& likelihoods) {
   std::vector<double> ans;
-  for (const auto& i : iter::range(qual.size())) {
+  for (const auto i : iter::range(qual.size())) {
     double currentMin = vectorMinimum(getWindowQuals(qual, qWindowSize, i));
     ans.emplace_back(likelihoods.at(roundDecPlaces(currentMin, 2)));
   }
@@ -816,11 +816,11 @@ void simpleCollapseQueryCov(std::vector<cluster> & consensusReads, aligner & ali
 		kinfos.emplace_back(kmerInfo(seq.seqBase_.seq_, klenComp, false));
 	}
 	//first do a comparison of no errors to collapse almost identical clusters
-	for (const auto & firstPos : iter::range(consensusReads.size())) {
+	for (const auto firstPos : iter::range(consensusReads.size())) {
 		if (consensusReads[firstPos].remove) {
 			continue;
 		}
-		for (const auto & secondPos : iter::range(firstPos + 1,
+		for (const auto secondPos : iter::range(firstPos + 1,
 				consensusReads.size())) {
 			if (consensusReads[secondPos].remove) {
 				continue;
@@ -858,7 +858,7 @@ void simpleCollapseQueryCov(std::vector<cluster> & consensusReads, aligner & ali
 		if (consensusReads[firstPos].remove) {
 			continue;
 		}
-		for (const auto & secondPos : iter::range(firstPos)) {
+		for (const auto secondPos : iter::range(firstPos)) {
 			if (consensusReads[secondPos].remove) {
 				continue;
 			}
@@ -892,7 +892,7 @@ void simpleCollapseQueryCov(std::vector<cluster> & consensusReads, aligner & ali
 		clusterVec::allCalculateConsensus(consensusReads, alignerObj, true);
 		readVec::allUpdateName(consensusReads);
 		changed = false;
-		for(const auto & seqPos : iter::range(consensusReads.size())){
+		for(const auto seqPos : iter::range(consensusReads.size())){
 			if(oldSeqs[seqPos] != consensusReads[seqPos].seqBase_.seq_){
 				changed = true;
 				break;
@@ -922,12 +922,12 @@ void simpleCollapse(std::vector<cluster> & consensusReads, aligner & alignerObj,
 		kinfos.emplace_back(kmerInfo(seq.seqBase_.seq_, klenComp, false));
 	}
 	//first do a comparison of no errors to collapse almost identical clusters
-	for (const auto & firstPos : iter::range(consensusReads.size())) {
+	for (const auto firstPos : iter::range(consensusReads.size())) {
 
 		if (consensusReads[firstPos].remove) {
 			continue;
 		}
-		for (const auto & secondPos : iter::range(firstPos + 1,
+		for (const auto secondPos : iter::range(firstPos + 1,
 				consensusReads.size())) {
 			bool print = false;
 			if("AS2-S0-Sub0-mip0MID7G8-5ng-rep1.fastq.07_t1308.3" == consensusReads[firstPos].seqBase_.name_ && "AS2-S0-Sub0-mip0MID7G8-5ng-rep1.fastq.08_t41.3333" == consensusReads[secondPos].seqBase_.name_){
@@ -973,7 +973,7 @@ void simpleCollapse(std::vector<cluster> & consensusReads, aligner & alignerObj,
 		if (consensusReads[firstPos].remove) {
 			continue;
 		}
-		for (const auto & secondPos : iter::range(firstPos)) {
+		for (const auto secondPos : iter::range(firstPos)) {
 			if (consensusReads[secondPos].remove) {
 				continue;
 			}
@@ -1018,7 +1018,7 @@ void simpleCollapse(std::vector<cluster> & consensusReads, aligner & alignerObj,
 		clusterVec::allCalculateConsensus(consensusReads, alignerObj, true);
 		readVec::allUpdateName(consensusReads);
 		changed = false;
-		for(const auto & seqPos : iter::range(consensusReads.size())){
+		for(const auto seqPos : iter::range(consensusReads.size())){
 			if(oldSeqs[seqPos] != consensusReads[seqPos].seqBase_.seq_){
 				changed = true;
 				break;

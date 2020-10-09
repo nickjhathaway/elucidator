@@ -83,7 +83,7 @@ std::string randStrMap(
   std::string ans = "";
   ans.reserve(allLikelihoods.size());
   std::vector<double> randos = gen.unifRandVector(allLikelihoods.size());
-  for (const auto &i : iter::range(allLikelihoods.size())) {
+  for (const auto i : iter::range(allLikelihoods.size())) {
     double sum = 0;
     for (const auto &likelihood : allLikelihoods[i]) {
       sum += likelihood.first;
@@ -207,7 +207,7 @@ VecStr randStrsRandLenMap(
   for (const auto &len : randomLengths) {
     randomString.clear();
     std::vector<double> randos = gen.unifRandVector(len);
-    for (const auto &i : iter::range<uint32_t>(0, len)) {
+    for (const auto i : iter::range<uint32_t>(0, len)) {
       double sum = 0;
       for (const auto &likelihood : allLikelihoods[i]) {
         sum += likelihood.first;
@@ -252,7 +252,7 @@ VecStr randStrsRandLenRandPosMap(
     randomString.clear();
     std::vector<double> randos = gen.unifRandVector(leng);
     uint32_t pos = 0;
-    for (const auto &i : iter::range<uint32_t>(start, leng + start)) {
+    for (const auto i : iter::range<uint32_t>(start, leng + start)) {
       double sum = 0;
       for (const auto &likelihood : allLikelihoods[i]) {
         sum += likelihood.first;

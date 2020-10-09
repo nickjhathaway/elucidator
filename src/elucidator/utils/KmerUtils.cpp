@@ -50,9 +50,9 @@ void writeDistanceMatrix(std::ostream & out,
 		const std::vector<std::vector<double>> & distances,
 		const VecStr & names) {
 	printVector(names, "\t", out);
-	for (const auto & rowPos : iter::range(distances.size())) {
+	for (const auto rowPos : iter::range(distances.size())) {
 		out << names[rowPos];
-		for (const auto & colPos : iter::range(distances.size())){
+		for (const auto colPos : iter::range(distances.size())){
 			if(rowPos > colPos){
 				out << "\t" << distances[rowPos][colPos];
 			}else if (rowPos == colPos){

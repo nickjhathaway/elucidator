@@ -161,7 +161,7 @@ public:
 		location_str_ = firstLineToks[2];
 		if(lines.size() > 1){
 			//process lines
-			for(const auto & pos : iter::range<uint32_t>(1, lines.size())){
+			for(const auto pos : iter::range<uint32_t>(1, lines.size())){
 				if(lines[pos].size() < 3){
 					std::stringstream ss;
 					ss << __PRETTY_FUNCTION__ << ", qualifier lines should be greater than 3 characters: " << lines[pos] << "\n";
@@ -176,7 +176,7 @@ public:
 				lines[pos] = lines[pos].substr(firstNonSpace);
 			}
 			VecStr trueLines;
-			for(const auto & pos : iter::range<uint32_t>(1, lines.size())){
+			for(const auto pos : iter::range<uint32_t>(1, lines.size())){
 				if(lines[pos].front() == '/'){
 					trueLines.emplace_back(lines[pos]);
 				}else{
@@ -344,7 +344,7 @@ int fileFormatExpRunner::parsePf3kEmblFilesToGff3(const njh::progutils::CmdArgs 
 							return rec1.start_ < rec2.start_;
 						});
 						if(chromRecs.size() > 1){
-							for(const auto & pos : iter::range<uint32_t>(1, chromRecs.size())){
+							for(const auto pos : iter::range<uint32_t>(1, chromRecs.size())){
 								if(chromRecs[pos-1].end_ >= chromRecs[pos].start_){
 									std::stringstream ss;
 									ss << __PRETTY_FUNCTION__ << " positions shouldn't be overlapping : " << "chromRecs[pos-1].end_: " << chromRecs[pos-1].end_ <<
@@ -428,7 +428,7 @@ int fileFormatExpRunner::parsePf3kEmblFilesToGff3(const njh::progutils::CmdArgs 
 							}
 						}
 						if(positions.size() > 1){
-							for(const auto & pos : iter::range<uint32_t>(1, positions.size())){
+							for(const auto pos : iter::range<uint32_t>(1, positions.size())){
 								if(positions[pos-1].end_ >= positions[pos].start_){
 //									std::stringstream ss;
 //									ss << __PRETTY_FUNCTION__ << " positions shouldn't be overlapping : " << "positions[pos-1].end_: " << positions[pos-1].end_ <<

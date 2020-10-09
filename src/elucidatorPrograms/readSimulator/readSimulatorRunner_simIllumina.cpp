@@ -102,7 +102,7 @@ int readSimulatorRunner::shearSequences(const njh::progutils::CmdArgs & inputCom
 		for (uint32_t i = 0; i < readNumber; ++i) {
 			auto readPositionsLens = sim::genFragPosSizes(len(seq), uiNormDist, gen);
 			auto fragments = sim::genFragments(seq.seq_, readPositionsLens);
-			for(const auto & fragPos : iter::range(fragments.size())){
+			for(const auto fragPos : iter::range(fragments.size())){
 				if(readPositionsLens[fragPos].second >= minLen){
 					seqInfo fragInfo(
 							njh::pasteAsStr(seq.name_, "_id", i ,"_pos" ,readPositionsLens[fragPos].first ,"_size" ,readPositionsLens[fragPos].second),
@@ -177,7 +177,7 @@ int readSimulatorRunner::shearSimIlluminaAlign(const njh::progutils::CmdArgs & i
 			for (uint32_t i = 0; i < readNumber; ++i) {
 				auto readPositionsLens = sim::genFragPosSizes(len(seq), uiNormDist, gen);
 				auto fragments = sim::genFragments(seq.seq_, readPositionsLens);
-				for(const auto & fragPos : iter::range(fragments.size())){
+				for(const auto fragPos : iter::range(fragments.size())){
 					if(readPositionsLens[fragPos].second >= minLen){
 						seqInfo fragInfo(
 								njh::pasteAsStr(seq.name_, "_id", i ,"_pos" ,readPositionsLens[fragPos].first ,"_size" ,readPositionsLens[fragPos].second),

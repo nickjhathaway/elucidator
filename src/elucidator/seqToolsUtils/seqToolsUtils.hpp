@@ -159,8 +159,8 @@ std::vector<GenomicRegion> getOverlapingRegions(
 
 	//slim down regions being found completely each other, give preference to which ever region covers more
 	std::vector<size_t> toBeRemoved;
-	for(const auto & pos : iter::range(trimRegions.size())){
-		for(const auto & pos2 : iter::range(pos + 1,trimRegions.size())){
+	for(const auto pos : iter::range(trimRegions.size())){
+		for(const auto pos2 : iter::range(pos + 1,trimRegions.size())){
 			if(!njh::in(pos, toBeRemoved) && !njh::in(pos2, toBeRemoved)){
 				const auto olen = trimRegions[pos].getOverlapLen(trimRegions[pos2]);
 				//if one of the length equals the overlap length, then one region is completely within the other, pick the one that covers more bits;

@@ -265,7 +265,7 @@ uint64_t runPcr(uint64_t intErrorRate, uint32_t numThreads, uint32_t pcrRounds,
 							}
 						};
 				std::unordered_map<uint32_t, std::vector<uint32_t>> mutantVecs;
-				for (const auto & mutNamePos : iter::range(mutants.size())) {
+				for (const auto mutNamePos : iter::range(mutants.size())) {
 					mutantVecs[mutNamePos % numThreads].emplace_back(mutNamePos);
 				}
 				std::vector<std::thread> threads;

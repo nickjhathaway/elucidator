@@ -193,7 +193,7 @@ int genExpRunner::mapReads(const njh::progutils::CmdArgs & inputCommands) {
 		}
 		double bestScore = std::numeric_limits<double>::lowest();
 		uint32_t bestRefPos = std::numeric_limits<uint32_t>::max();
-		for (const auto & refSeqPos : iter::range(refSeqs.size())) {
+		for (const auto refSeqPos : iter::range(refSeqs.size())) {
 			const auto & refSeq = refSeqs[refSeqPos];
 			alignerObj.alignCache(refSeq, read, false);
 			alignerObj.profileAlignment(refSeq, read, false, true, false);
@@ -310,7 +310,7 @@ int genExpRunner::trimToMostProbableKmer(const njh::progutils::CmdArgs & inputCo
   readVec::handelLowerCaseBases(inReads, setUp.pars_.ioOptions_.lowerCaseBases_);
   probabilityProfile profile(kmerLength);
 
-  for(const auto & readPos : iter::range(len(inReads))){
+  for(const auto readPos : iter::range(len(inReads))){
   	auto & read = inReads[readPos];
   	//first turn off short sequences if they are too short and then continue on
   	if(len(read) < trimLength ){
@@ -319,7 +319,7 @@ int genExpRunner::trimToMostProbableKmer(const njh::progutils::CmdArgs & inputCo
   	}
   	uint32_t startPos = trimLength - windowLength;
   	uint32_t stopPos = std::min<uint32_t>(len(read) - kmerLength + 1, trimLength + windowLength + 1);
-  	for(const auto & pos : iter::range(startPos, stopPos)){
+  	for(const auto pos : iter::range(startPos, stopPos)){
   		profile.add(read.seqBase_.seq_.substr(pos, kmerLength), false);
   	}
   }
@@ -338,7 +338,7 @@ int genExpRunner::trimToMostProbableKmer(const njh::progutils::CmdArgs & inputCo
   	uint32_t stopPos = std::min<uint32_t>(len(read) - kmerLength + 1, trimLength + windowLength + 1);
   	double bestProb = 0;
   	std::vector<uint32_t> bestPos;
-  	for(const auto & pos : iter::range(startPos, stopPos)){
+  	for(const auto pos : iter::range(startPos, stopPos)){
   		auto currentProb = roundDecPlaces(profile.getProbabilityOfKmer(read.seqBase_.seq_.substr(pos, kmerLength)), 10);
   		if(currentProb == bestProb){
   			bestProb = currentProb;
@@ -395,7 +395,7 @@ int genExpRunner::trimFromMostProbableKmer(const njh::progutils::CmdArgs & input
   readVec::handelLowerCaseBases(inReads, setUp.pars_.ioOptions_.lowerCaseBases_);
   probabilityProfile profile(kmerLength);
 
-  for(const auto & readPos : iter::range(len(inReads))){
+  for(const auto readPos : iter::range(len(inReads))){
   	auto & read = inReads[readPos];
   	//first turn off short sequences if they are too short and then continue on
   	if(len(read) < windowLength ){
@@ -405,7 +405,7 @@ int genExpRunner::trimFromMostProbableKmer(const njh::progutils::CmdArgs & input
 
   	uint32_t startPos = 0;
   	uint32_t stopPos = windowLength - kmerLength + 1;
-  	for(const auto & pos : iter::range(startPos, stopPos)){
+  	for(const auto pos : iter::range(startPos, stopPos)){
   		profile.add(read.seqBase_.seq_.substr(pos, kmerLength), false);
   	}
   }
@@ -424,7 +424,7 @@ int genExpRunner::trimFromMostProbableKmer(const njh::progutils::CmdArgs & input
   	uint32_t stopPos = windowLength - kmerLength + 1;
   	double bestProb = 0;
   	std::vector<uint32_t> bestPos;
-  	for(const auto & pos : iter::range(startPos, stopPos)){
+  	for(const auto pos : iter::range(startPos, stopPos)){
   		auto currentProb = roundDecPlaces(profile.getProbabilityOfKmer(read.seqBase_.seq_.substr(pos, kmerLength)), 10);
   		if(currentProb == bestProb){
   			bestProb = currentProb;
@@ -480,8 +480,8 @@ int genExpRunner::getMismatchDistances(const njh::progutils::CmdArgs & inputComm
 	aligner alignerObj(maxSize, setUp.pars_.gapInfo_, setUp.pars_.scoring_, setUp.pars_.colOpts_.alignOpts_.countEndGaps_);
 	alignerObj.processAlnInfoInput(setUp.pars_.alnInfoDirName_);
 	std::vector<uint32_t> mismatches;
-	for(const auto & firstPos : iter::range(inReads.size())){
-		for(const auto & secondPos : iter::range(firstPos)){
+	for(const auto firstPos : iter::range(inReads.size())){
+		for(const auto secondPos : iter::range(firstPos)){
 			std::cout << firstPos << ":" << secondPos << std::endl;
 			alignerObj.alignCache(inReads[firstPos], inReads[secondPos], setUp.pars_.local_);
 			alignerObj.profilePrimerAlignment(inReads[firstPos], inReads[secondPos]);
@@ -606,7 +606,7 @@ int genExpRunner::evenOutCompReads(const njh::progutils::CmdArgs & inputCommands
 
 	std::vector<uint32_t> compPositions;
 	std::vector<uint32_t> forPositons;
-	for(const auto & readPos : iter::range(inReads.size())){
+	for(const auto readPos : iter::range(inReads.size())){
 		if(njh::containsSubString(inReads[readPos].seqBase_.name_, "Comp")){
 			compPositions.emplace_back(readPos);
 		}else{
@@ -878,13 +878,13 @@ int genExpRunner::getSnpInfo(const njh::progutils::CmdArgs & inputCommands) {
 	table outExampleTab { VecStr { "ref", "read", "pos", "base", "otherRef" } };
 	//std::unordered_map<std::string, std::vector<uint64_t>> readMatchingRefs;
 	std::unordered_map<std::string, std::vector<std::string>> readMatchingRefs;
-	for (const auto & readPos : iter::range(testinReads.size())) {
+	for (const auto readPos : iter::range(testinReads.size())) {
 		const auto & read = testinReads[readPos];
 		std::cout << read.seqBase_.name_ << " " << readPos << ":" << testinReads.size() << std::endl;;
 		//std::cout.flush();
 		//std::vector<uint32_t> matchingRefs;
 		std::vector<std::string> matchingRefs;
-		for (const auto & refPos : iter::range(refReads.size())) {
+		for (const auto refPos : iter::range(refReads.size())) {
 			const auto & ref = refReads[refPos];
 			alignerObj.alignCache(ref, read, false);
 			alignerObj.profilePrimerAlignment(ref, read);
@@ -956,7 +956,7 @@ int genExpRunner::findVariableSites(const njh::progutils::CmdArgs & inputCommand
 	auto inReads = reader.readAllReads<readObject>();
   uint32_t seqLength = len(inReads.front().seqBase_.seq_);
   std::vector<charCounter> counters(seqLength, charCounter());
-  for(const auto & pos : iter::range(seqLength)){
+  for(const auto pos : iter::range(seqLength)){
   	for(const auto & read : inReads){
     	counters[pos].increaseCountOfBase(read.seqBase_.seq_[pos]);
   	}
@@ -965,7 +965,7 @@ int genExpRunner::findVariableSites(const njh::progutils::CmdArgs & inputCommand
 	njh::for_each(inReads,
 			[&](const readObject & read) {allCounter.increaseCountByString(read.seqBase_.seq_, read.seqBase_.cnt_);});
 	if (ignoreNs) {
-    for(const auto & pos : iter::range(seqLength)){
+    for(const auto pos : iter::range(seqLength)){
     	counters[pos].chars_['N'] = 0;
     	counters[pos].chars_['n'] = 0;
     }
@@ -973,7 +973,7 @@ int genExpRunner::findVariableSites(const njh::progutils::CmdArgs & inputCommand
     allCounter.chars_['n'] = 0;
   }
   if(ignoreGaps){
-    for(const auto & pos : iter::range(seqLength)){
+    for(const auto pos : iter::range(seqLength)){
     	counters[pos].chars_['-'] = 0;
     	counters[pos].chars_['-'] = 0;
     }
@@ -983,7 +983,7 @@ int genExpRunner::findVariableSites(const njh::progutils::CmdArgs & inputCommand
   allCounter.resetAlphabet(false);
   {
   	table outInfo(VecStr{toVecStr("pos", allCounter.alphabet_)});
-    for(const auto & pos : iter::range(seqLength)){
+    for(const auto pos : iter::range(seqLength)){
     	counters[pos].resetAlphabet(false);
     	if(counters[pos].alphabet_.size() > 1){
       	VecStr currentRow;
@@ -1021,7 +1021,7 @@ int genExpRunner::findVariableSites(const njh::progutils::CmdArgs & inputCommand
   if(false){
     std::stringstream tempStream;
     tempStream << "pos\tbase\tbaseFrac" << std::endl;
-    for(const auto & pos : iter::range(seqLength)){
+    for(const auto pos : iter::range(seqLength)){
     	counters[pos].resetAlphabet(false);
     	if(counters[pos].alphabet_.size() > 1){
     		counters[pos].setFractions(allCounter.alphabet_);
@@ -1065,7 +1065,7 @@ seqInfo calculateConsensusToCurrent(const readObject & read,
 	// create a map in case of insertions
 	std::map<uint32_t, std::map<uint32_t, charCounter>> insertions;
 	std::map<int32_t, charCounter> beginningGap;
-	for (const auto & readPos : iter::range(reads.size())) {
+	for (const auto readPos : iter::range(reads.size())) {
 		alignerObj.alignCache(read, reads[readPos], false);
 		// the offset for the insertions
 		uint32_t offSet = 0;
@@ -1235,7 +1235,7 @@ int genExpRunner::createReadConsensusRandomPicking(const njh::progutils::CmdArgs
 		std::vector<baseCluster> inClusters;
 		readObject firstRead;
 		auto ranCon = gen.unifRand<uint64_t>(0, inReads.size());
-		for(const auto & readPos : iter::range<uint32_t>(inReads.size())){
+		for(const auto readPos : iter::range<uint32_t>(inReads.size())){
 			if(readPos == ranCon){
 				inClusters.emplace_back(baseCluster(inReads[readPos].seqBase_));
 			}else{
@@ -1271,7 +1271,7 @@ namespace njhseq {
 std::vector<readObject> seqMapCountsToSeqs(const std::map<std::string, uint32_t> & counts, const std::string & name){
 	std::vector<readObject> ret;
 	ret.reserve(counts.size());
-	for(const auto & cEnum : iter::enumerate(counts)){
+	for(const auto cEnum : iter::enumerate(counts)){
 		ret.emplace_back(seqInfo(name + "." + estd::to_string(cEnum.index), cEnum.element.first));
 		ret.back().seqBase_.cnt_ = cEnum.element.second;
 		ret.back().updateName();

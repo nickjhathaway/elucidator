@@ -166,7 +166,7 @@ int repelinRunner::parseRepeatMaskerOutputForElement(const njh::progutils::CmdAr
   	std::cout << "Parsing elements for elements containing: " << elementName << std::endl;
   }
   std::unordered_map<uint32_t, std::vector<RepeatMaskerRecord>> ret;
-	for (const auto & regionEn : iter::enumerate(elements)) {
+	for (const auto regionEn : iter::enumerate(elements)) {
 		if (setUp.pars_.verbose_ && regionEn.index % 1000 == 0) {
 			std::cout << "\r" << "On " << regionEn.index << " of " << elements.size() ;
 			std::cout.flush();
@@ -233,7 +233,7 @@ int repelinRunner::parseRMForElementWithoutIntervening(const njh::progutils::Cmd
   std::cout << std::endl;
   std::cout << "Parsing elements for elements containing: " << elementName << std::endl;
   std::unordered_map<uint32_t, std::vector<std::shared_ptr<RepeatMaskerRecord>>> ret;
-  for(const auto & regionEn : iter::enumerate(elements)){
+  for(const auto regionEn : iter::enumerate(elements)){
   	if(regionEn.index % 100  == 0){
   		std::cout << "On " << regionEn.index << " of " << elements.size()<< "\r";
   		std::cout.flush();
@@ -273,7 +273,7 @@ int repelinRunner::parseRMForElementWithoutIntervening(const njh::progutils::Cmd
   	}
 		std::unordered_map<uint32_t,
 				std::vector<std::shared_ptr<RepeatMaskerRecord>>>inBetween;
-		for (const auto & pos : iter::range(minPos, maxPos)) {
+		for (const auto pos : iter::range(minPos, maxPos)) {
 			auto search = elementsByPositions[region.front()->nameOfQuery_].find(pos);
 			if (search != elementsByPositions[region.front()->nameOfQuery_].end()
 					&& search->second->regionSegment_ != region.front()->regionSegment_) {

@@ -136,7 +136,7 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 		    double currentKmerCutOff = kmerCutOff;
 		    bool run = true;
 		    while(run){
-			    for (const auto& refPos : iter::range(refSeqs.size())) {
+			    for (const auto refPos : iter::range(refSeqs.size())) {
 			      const auto & ref = refSeqs[refPos];
 						if (!dontSkipSameName && ref->seqBase_.name_ == input->seqBase_.name_) {
 							if(1 == refSeqs.size()) {

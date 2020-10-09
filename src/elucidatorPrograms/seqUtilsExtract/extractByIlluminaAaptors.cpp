@@ -459,7 +459,7 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 						determinedSample = fwdBestSample.front();
 					} else {
 						VecStr pairs;
-						for(const auto fwdBest : fwdBestSample){
+						for(const auto & fwdBest : fwdBestSample){
 							for(const auto & revBest : revBestSample){
 								if(revBest  == fwdBest){
 									pairs.emplace_back(fwdBest);

@@ -96,7 +96,7 @@ int pacbioExpRunner::getRoundsForPacbioIDs(const njh::progutils::CmdArgs & input
 	auto keys = getVectorOfMapKeys(roundCounts);
 	njh::sort(keys);
 	outFile << "id\trounds\n";
-	for(const auto key : keys){
+	for(const auto & key : keys){
 		auto idKeys = getVectorOfMapKeys(roundCounts[key]);
 		njh::sort(idKeys);
 		for(const auto & idKey : idKeys){
@@ -162,8 +162,8 @@ int pacbioExpRunner::testVariantCalling(const njh::progutils::CmdArgs & inputCom
 			setUp.pars_.colOpts_.alignOpts_.countEndGaps_);
 	alignerObj.processAlnInfoInput(setUp.pars_.alnInfoDirName_);
 
-	for (const auto & readPos : iter::range(inReads.size())) {
-		for (const auto & subReadPos : iter::range(inReads.size())) {
+	for (const auto readPos : iter::range(inReads.size())) {
+		for (const auto subReadPos : iter::range(inReads.size())) {
 			if (readPos == subReadPos) {
 				continue;
 			}
@@ -230,7 +230,7 @@ int pacbioExpRunner::checkCssReadsToRaw(const njh::progutils::CmdArgs & inputCom
 
 	std::unordered_map<uint64_t, uint32_t> nameCounts;
 	std::unordered_map<uint64_t, std::vector<uint64_t>> readNamesPositions;
-	for (const auto & readEnum : iter::enumerate(inReads)) {
+	for (const auto readEnum : iter::enumerate(inReads)) {
 		++nameCounts[getPacbioGroupNumber(readEnum.element.seqBase_.name_)];
 		readNamesPositions[getPacbioGroupNumber(readEnum.element.seqBase_.name_)].emplace_back(
 				readEnum.index);
@@ -289,7 +289,7 @@ int pacbioExpRunner::indexErrorsRawToCcsProcessed(const njh::progutils::CmdArgs 
 	readVec::getMaxLength(inReads, maxSize);
 	std::unordered_map<uint64_t, uint32_t> nameCounts;
 	std::unordered_map<uint64_t, std::vector<uint64_t>> readNamesPositions;
-	for (const auto & readEnum : iter::enumerate(inReads)) {
+	for (const auto readEnum : iter::enumerate(inReads)) {
 		++nameCounts[getPacbioGroupNumber(readEnum.element.seqBase_.name_)];
 		readNamesPositions[getPacbioGroupNumber(readEnum.element.seqBase_.name_)].emplace_back(
 				readEnum.index);
@@ -306,7 +306,7 @@ int pacbioExpRunner::indexErrorsRawToCcsProcessed(const njh::progutils::CmdArgs 
 	}
 	readVec::getMaxLength(ccsinReads, maxSize);
 	std::unordered_map<std::string, uint64_t> ccsReadPositions;
-	for(const auto & readPos : iter::range(ccsinReads.size())){
+	for(const auto readPos : iter::range(ccsinReads.size())){
 		ccsReadPositions[ccsinReads[readPos].seqBase_.name_] = readPos;
 	}
 
@@ -357,7 +357,7 @@ int pacbioExpRunner::indexErrorsRawToCcsProcessed(const njh::progutils::CmdArgs 
 		std::ofstream outAlnNoInsertsFile;
 		openTextFile(outAlnNoInsertsFile, njh::files::make_path(alnNoInsertsDir,  ccsRead.seqBase_.name_).string(), ".fastq", false, false);
 		ccsRead.seqBase_.outPutFastq(outAlnNoInsertsFile);
-		for (const auto & subReadPos : iter::range(currentGroupReads.size())) {
+		for (const auto subReadPos : iter::range(currentGroupReads.size())) {
 			const auto & subRead = currentGroupReads[subReadPos];
 			alignerObj.alignCache(ccsRead, subRead, false);
 			std::vector<uint32_t> alnPositons(len(alignerObj.alignObjectA_));
@@ -442,7 +442,7 @@ int pacbioExpRunner::indexErrorsRawToCcs(const njh::progutils::CmdArgs & inputCo
 	readVec::getMaxLength(inReads, maxSize);
 	std::unordered_map<uint64_t, uint32_t> nameCounts;
 	std::unordered_map<uint64_t, std::vector<uint64_t>> readNamesPositions;
-	for (const auto & readEnum : iter::enumerate(inReads)) {
+	for (const auto readEnum : iter::enumerate(inReads)) {
 		++nameCounts[getPacbioGroupNumber(readEnum.element.seqBase_.name_)];
 		readNamesPositions[getPacbioGroupNumber(readEnum.element.seqBase_.name_)].emplace_back(
 				readEnum.index);
@@ -473,7 +473,7 @@ int pacbioExpRunner::indexErrorsRawToCcs(const njh::progutils::CmdArgs & inputCo
 	}
 	readVec::getMaxLength(ccsinReads, maxSize);
 	std::unordered_map<std::string, uint64_t> ccsReadPositions;
-	for(const auto & readPos : iter::range(ccsinReads.size())){
+	for(const auto readPos : iter::range(ccsinReads.size())){
 		ccsReadPositions[ccsinReads[readPos].seqBase_.name_] = readPos;
 	}
 
@@ -535,7 +535,7 @@ int pacbioExpRunner::indexErrorsRawToCcs(const njh::progutils::CmdArgs & inputCo
 		std::ofstream consensusBaseCountFile;
 		openTextFile(consensusBaseCountFile, njh::files::make_path(consensusBaseCountsdir, estd::to_string(groupNum)).string(), ".tab.txt", false, false);
 		std::vector<charCounter> counters(len(ccsRead.seqBase_));
-		for (const auto & subReadPos : iter::range(currentGroupReads.size())) {
+		for (const auto subReadPos : iter::range(currentGroupReads.size())) {
 			const auto & subRead = currentGroupReads[subReadPos];
 			alignerObj.alignCache(ccsRead, subRead, false);
 			std::vector<uint32_t> alnPositons(len(alignerObj.alignObjectA_));
@@ -548,14 +548,14 @@ int pacbioExpRunner::indexErrorsRawToCcs(const njh::progutils::CmdArgs & inputCo
 					alnB.removeBase(pos);
 				}
 			}
-			for(const auto & pos : iter::range(len(alnB))){
+			for(const auto pos : iter::range(len(alnB))){
 				if(alnB.seq_[pos] != '-'){
 					++basePerPosCounts[pos];
 				}
 			}
 			//alnA.outPutFastq(outAlnNoInsertsFile);
 			alnB.outPutFastq(outAlnNoInsertsFile);
-			for(const auto & cPos : iter::range(len(alnB))){
+			for(const auto cPos : iter::range(len(alnB))){
 				counters[cPos].increaseCountOfBase(alnB.seq_[cPos]);
 			}
 			alignerObj.alignObjectA_.seqBase_.outPutFastq(outAlnFile);
@@ -580,7 +580,7 @@ int pacbioExpRunner::indexErrorsRawToCcs(const njh::progutils::CmdArgs & inputCo
 						[](double res,const seqWithKmerInfo & seq) {return res + seq.seqBase_.cnt_;});
 		alignerObj.alignCache(setUp.pars_.seqObj_, ccsRead, false);
 		consensusBaseCountFile << "refPos\tccsPos\tgroupNum\ttotalReads\ttotalBases\tA\tC\tG\tT\n";
-		for (const auto & cPos : iter::range(counters.size())) {
+		for (const auto cPos : iter::range(counters.size())) {
 			auto ccsAlnPos = alignerObj.getAlignPosForSeqBPos(cPos);
 			auto refPos = alignerObj.getSeqPosForAlnAPos(ccsAlnPos);
 			counters[cPos].alphabet_ = {'A', 'C', 'G', 'T'};
@@ -675,7 +675,7 @@ int pacbioExpRunner::createCssFromRawPacbio(const njh::progutils::CmdArgs & inpu
 
 	std::unordered_map<uint64_t, uint32_t> nameCounts;
 	std::unordered_map<uint64_t, std::vector<uint64_t>> readNamesPositions;
-	for(const auto & readEnum : iter::enumerate(inReads)){
+	for(const auto readEnum : iter::enumerate(inReads)){
 		++nameCounts[getPacbioGroupNumber(readEnum.element.seqBase_.name_)];
 		readNamesPositions[getPacbioGroupNumber(readEnum.element.seqBase_.name_)].emplace_back(readEnum.index);
 	}
@@ -703,7 +703,7 @@ int pacbioExpRunner::createCssFromRawPacbio(const njh::progutils::CmdArgs & inpu
 	openTextFile(outFile,setUp.pars_.directoryName_ + setUp.pars_.ioOptions_.out_.outFilename_.string(), ".fastq", setUp.pars_.ioOptions_.out_);
 	openTextFile(outFileTest,setUp.pars_.directoryName_ + setUp.pars_.ioOptions_.out_.outFilename_.string() + "_test", ".fastq", setUp.pars_.ioOptions_.out_);
 
-	for(const auto positions : readNamesPositions){
+	for(const auto & positions : readNamesPositions){
 		if(nameCounts[positions.first] > 2){
 			auto paddedSizeName = leftPadNumStr(nameCounts[positions.first], estd::stou(outTab.content_.back()[0]));
 			auto dirName = setUp.pars_.directoryName_ + paddedSizeName + "/";
@@ -764,11 +764,11 @@ int pacbioExpRunner::testCssConsensusBuilding(const njh::progutils::CmdArgs & in
   auto distances = getDistance(reads, numThreads, disFun);
 
   njhUndirWeightedGraph<double, uint32_t> distGraph;
-  for(const auto & pos : iter::range(reads.size())){
+  for(const auto pos : iter::range(reads.size())){
   	distGraph.addNode(reads[pos]->seqBase_.name_, pos);
   }
-  for(const auto & pos : iter::range(distances.size())){
-  	for(const auto & subPos : iter::range<uint64_t>(distances[pos].size())){
+  for(const auto pos : iter::range(distances.size())){
+  	for(const auto subPos : iter::range<uint64_t>(distances[pos].size())){
   		distGraph.addEdge(inReads[pos].seqBase_.name_,
   				inReads[subPos].seqBase_.name_, distances[pos][subPos]);
   	}
@@ -784,7 +784,7 @@ int pacbioExpRunner::testCssConsensusBuilding(const njh::progutils::CmdArgs & in
   outFile
       << "ReadNumber\tReadId\tReadFraction\tBestRef\tavgDist\tscore\t1bIndel\t2bI"
          "ndel\t>2bIndel\tlqMismatch\thqMismatch" << std::endl;
-  for (const auto& inputPos : iter::range(reads.size())) {
+  for (const auto inputPos : iter::range(reads.size())) {
   	const auto & input = reads[inputPos];
     if ((counter + 1) % 5 == 0 && setUp.pars_.verbose_) {
       std::cout << "Currently on read " << counter + 1 << " out of "
@@ -792,7 +792,7 @@ int pacbioExpRunner::testCssConsensusBuilding(const njh::progutils::CmdArgs & in
     }
     double bestScore = std::numeric_limits<double>::lowest();
     std::vector<uint64_t> bestRead;
-    for (const auto& refPos : iter::range(refReads.size())) {
+    for (const auto refPos : iter::range(refReads.size())) {
     	const auto & ref = refReads[refPos];
       if (input->seqBase_.name_ == ref->seqBase_.name_) {
         continue;
@@ -903,7 +903,7 @@ int pacbioExpRunner::profilePacbioReads(const njh::progutils::CmdArgs & inputCom
 
 	std::unordered_map<uint32_t, std::unordered_map<char, VecStr>> mismatches;
 
-	for (const auto & readPos : iter::range(reads.size())) {
+	for (const auto readPos : iter::range(reads.size())) {
 		if(readPos %100 == 0){
 			std::cout << "On " << readPos << " of " << reads.size() << "\r";
 			std::cout.flush();
@@ -975,7 +975,7 @@ int pacbioExpRunner::profilePacbioReads(const njh::progutils::CmdArgs & inputCom
 	misTab.sortTable("refPos", false);
 	misTab.outPutContents(TableIOOpts(OutOptions(setUp.pars_.directoryName_ + "mismatches", ".tab.txt"), "\t", misTab.hasHeader_));
 	std::unordered_map<std::string, readsWithSnps> erroneousReads;
-	for (const auto & readPos : iter::range(reads.size())) {
+	for (const auto readPos : iter::range(reads.size())) {
 		const auto & read = reads[readPos];
 		alignerObj.alignCache(*refRead, *read, false);
 		//count gaps and mismatches and get identity
@@ -1027,7 +1027,7 @@ int pacbioExpRunner::profilePacbioReads(const njh::progutils::CmdArgs & inputCom
 	openTextFile(kDistFile, setUp.pars_.directoryName_ + "kDistances.tab.txt", ".tab.txt", false, false);
 
 	kDistFile << "ref\trefLen\tseq\tseqLen\teventBasedIdentity\tklen\tkShared\tkDist\n";
-	for(const auto & k : iter::range(kStart,kStop + 1)){
+	for(const auto k : iter::range(kStart,kStop + 1)){
 		std::cout << "On k length of " << k << " of " << kStop << "\r";
 		std::cout.flush();
 		refRead->setKmers(k, false);

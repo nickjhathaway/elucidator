@@ -50,7 +50,7 @@ int genExpRunner::countBasesPerPosition(const njh::progutils::CmdArgs & inputCom
 	}
 	out << "position\tbase\tcount\tfraction\tmeanReadLengthRounded" << std::endl;
 	uint32_t meanLen = std::round(vectorMean(lens));
-	for(const auto & countPos : iter::range(countsPerPosition.size())){
+	for(const auto countPos : iter::range(countsPerPosition.size())){
 		const auto & count = countsPerPosition[countPos];
 
 		for(const auto base : masterAlphabet){

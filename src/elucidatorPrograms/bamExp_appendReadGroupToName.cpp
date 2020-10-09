@@ -90,7 +90,7 @@ int bamExpRunner::BamRenameRefHeader(const njh::progutils::CmdArgs & inputComman
 			throw std::runtime_error{ss.str()};
 		}
 		bool sameRefDataOrder = true;
-		for(const auto & pos : iter::range(otherRefData.size())){
+		for(const auto pos : iter::range(otherRefData.size())){
 			//just need to check names as the above check should make sure the rest (length etc is the same)
 			if(currentRefData[pos].RefName != otherRefData[pos].RefName){
 				sameRefDataOrder = false;

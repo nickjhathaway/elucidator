@@ -479,7 +479,7 @@ public:
 
 		{
 			uint32_t pos = 0;
-			for(const auto & tarPos : iter::range(tarNamesVec_.size())){
+			for(const auto tarPos : iter::range(tarNamesVec_.size())){
 				tarStart_[tarPos] = pos;
 				pos += numberOfHapsPerTarget_[tarPos];
 			}
@@ -547,7 +547,7 @@ public:
 																			 &verbose](){
 			PairwisePairFactory::PairwisePairVec pairVec;
 			while(pFactor.setNextPairs(pairVec, 100)){
-				for(const auto & pairPos : iter::range(pairVec.pairs_.size())){
+				for(const auto pairPos : iter::range(pairVec.pairs_.size())){
 					const auto & pair = pairVec.pairs_[pairPos];
 					if(verbose){
 						progpar.outputProgAdd(std::cout, 1, true);
@@ -573,7 +573,7 @@ public:
 								uint32_t totalSharedForTar = 0;
 								double totalWeightedSetForTar = 0;
 								double totalWeightedSharedForTar = 0;
-								for(const auto & hapPos : iter::range(numberOfHapsPerTarget_[tpos])){
+								for(const auto hapPos : iter::range(numberOfHapsPerTarget_[tpos])){
 									//position in the encoded vector should be the target start ranged over the possible haplotypes for that target
 									uint8_t res = hapsEncodeBySamp_[pair.col_][tarStart_[tpos] + hapPos] + hapsEncodeBySamp_[pair.row_][tarStart_[tpos] + hapPos];
 									//if res is 2 then haps are shared
@@ -731,7 +731,7 @@ int genExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::CmdArg
 
 	{
 		uint32_t pos = 0;
-		for(const auto & tarPos : iter::range(tarNamesVec.size())){
+		for(const auto tarPos : iter::range(tarNamesVec.size())){
 			tarStart[tarPos] = pos;
 			pos += numberOfHapsPerTarget[tarPos];
 		}
@@ -803,7 +803,7 @@ int genExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::CmdArg
 																		 &avgJacard](){
 		PairwisePairFactory::PairwisePairVec pairVec;
 		while(pFactor.setNextPairs(pairVec, 100)){
-			for(const auto & pairPos : iter::range(pairVec.pairs_.size())){
+			for(const auto pairPos : iter::range(pairVec.pairs_.size())){
 				const auto & pair = pairVec.pairs_[pairPos];
 				if(setUp.pars_.verbose_){
 					progpar.outputProgAdd(std::cout, 1, true);
@@ -823,7 +823,7 @@ int genExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::CmdArg
 							++totalTarsWithDataForBoth;
 							uint32_t totalSetForTar = 0;
 							uint32_t totalSharedForTar = 0;
-							for(const auto & hapPos : iter::range(numberOfHapsPerTarget[tpos])){
+							for(const auto hapPos : iter::range(numberOfHapsPerTarget[tpos])){
 								//position in the encoded vector should be the target start ranged over the possible haplotypes for that target
 								uint8_t res = hapsEncodeBySamp[pair.col_][tarStart[tpos] + hapPos] + hapsEncodeBySamp[pair.row_][tarStart[tpos] + hapPos];
 								//if res is 2 then haps are shared

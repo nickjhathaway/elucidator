@@ -116,7 +116,7 @@ int bedExpRunner::bedRemoveOveringLappingRegions(const njh::progutils::CmdArgs &
 	intersectingBeds.emplace_back(
 			std::make_shared<Bed6RecordCore>(*rawIntersectingBeds.front()));
 
-	for (const auto &regPos : iter::range<uint32_t>(1, rawIntersectingBeds.size())) {
+	for (const auto regPos : iter::range<uint32_t>(1, rawIntersectingBeds.size())) {
 		if (intersectingBeds.back()->overlaps(*rawIntersectingBeds[regPos], 1) || (intersectingBeds.back()->chrom_ == rawIntersectingBeds[regPos]->chrom_ && intersectingBeds.back()->chromEnd_ == rawIntersectingBeds[regPos]->chromStart_) ) {
 			intersectingBeds.back()->chromEnd_ = std::max(
 					intersectingBeds.back()->chromEnd_,
@@ -1560,7 +1560,7 @@ int bedExpRunner::getLongestHomopolymerLengthInRegion(const njh::progutils::CmdA
 			uint32_t longestHomopolymerPos = 0;
 			char longestHomopolymerBase = ' ';
 			uint32_t seqPos = 0;
-			for(const auto & homPos : iter::range(seqObj.condensedSeqCount.size())){
+			for(const auto homPos : iter::range(seqObj.condensedSeqCount.size())){
 				if(seqObj.condensedSeqCount[homPos] > longestHomopolymerLen){
 					longestHomopolymerLen = seqObj.condensedSeqCount[homPos];
 					longestHomopolymerBase = seqObj.condensedSeq[homPos];
@@ -1671,7 +1671,7 @@ int bedExpRunner::separateOutRecordsInBedFile(const njh::progutils::CmdArgs & in
 	auto beds = getBeds(bedFile.string());
 	auto regions = bedPtrsToGenomicRegs(beds);
 	std::unique_ptr<OutputStream> keyOut;
-	for(const auto & regPos : iter::range(regions.size())){
+	for(const auto regPos : iter::range(regions.size())){
 		const auto & reg = regions[regPos];
 		auto bRec = reg.genBedRecordCore();
 		OutOptions currentOpts(njh::files::make_path(outputDir,bRec.name_ + ".bed"));
