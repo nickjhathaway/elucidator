@@ -10,7 +10,7 @@
 #include "genExp.hpp"
 #include <njhseq/IO/SeqIO/SeqIO.hpp>
 
-#include <njhseq/objects/seqObjects/clusters/cluster.hpp>
+#include <njhseq/objects/seqObjects/Clusters/cluster.hpp>
 #include <njhseq/readVectorManipulation/readVectorHelpers/readVecSorter.hpp>
 
 
