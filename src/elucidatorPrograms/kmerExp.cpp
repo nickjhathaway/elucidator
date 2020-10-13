@@ -29,6 +29,8 @@
 #include "elucidator/simulation.h"
 #include "elucidator/objects/seqObjects/seqKmers.h"
 
+#include <njhseq/objects/seqObjects/seqKmers.h>
+
 
 namespace njhseq {
 kmerExpRunner::kmerExpRunner()

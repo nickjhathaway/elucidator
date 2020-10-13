@@ -28,39 +28,11 @@
 #include "elucidator/common.h"
 #include "elucidator/objects/seqContainers/baseContainer.hpp"
 
+#include <njhseq/objects/seqContainers/refMapContainer.hpp>
+
 namespace njhseq {
 
-template <typename T>
-class refMapContainer : public baseContainer<T> {
 
- public:
-  // Constructors
-  refMapContainer() : baseContainer<T>() {}
-  refMapContainer(const seqInfo& seqBase) : baseContainer<T>(seqBase) {
-    initialize();
-  }
-  refMapContainer(const seqInfo& seqBase, const std::vector<T>& reads)
-      : baseContainer<T>(seqBase, reads) {
-    initialize();
-  }
-
-  void initialize() {
-    // no reads mapped yet so initialize counts to zero
-    this->seqBase_.cnt_ = 0;
-    this->seqBase_.frac_ = 0;
-  }
-  // members
-
-  // functions
-  template<typename READS, typename REFS>
-  static std::vector<refMapContainer> createContainers(const std::vector<REFS> & reads){
-  	std::vector<refMapContainer> refContainers;
-  	for(const auto & read : reads){
-  		refContainers.emplace_back(read.seqBase_);
-  	}
-  	return refContainers;
-  }
-};
 
 }  // namespace njhseq
 

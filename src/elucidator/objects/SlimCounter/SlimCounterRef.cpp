@@ -24,6 +24,10 @@
 //
 
 #include "SlimCounterRef.hpp"
+
+#include <njhseq/utils/utils.hpp>
+
+
 namespace njhseq {
 
 SlimCounterRef::SlimCounterRef(const uint32_t & refId, bfs::path outputFile) :

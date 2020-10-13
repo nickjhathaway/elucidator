@@ -27,6 +27,9 @@
 
 #include "elucidator/common.h"
 
+#include <njhseq/objects/kmer/kmer.hpp>
+
+
 namespace njhseq {
 
 class expSeqUtil {

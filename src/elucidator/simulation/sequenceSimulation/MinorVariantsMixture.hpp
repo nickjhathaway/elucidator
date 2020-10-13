@@ -23,8 +23,9 @@
 // You should have received a copy of the GNU General Public License
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
-#include <njhcpp/simulation/randomGenerator.hpp>
 #include "elucidator/common.h"
+#include <njhcpp/simulation/randomGenerator.hpp>
+#include <njhseq/objects/seqObjects/BaseObjects/seqInfo.hpp>
 
 
 namespace njhseq {

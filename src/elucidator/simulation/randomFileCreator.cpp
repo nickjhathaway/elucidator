@@ -25,6 +25,7 @@
 //
 #include "randomFileCreator.hpp"
 #include "elucidator/simulation/randomStrGen.hpp"
+#include <njhseq/objects/seqObjects/BaseObjects/seqInfo.hpp>
 
 namespace njhseq {
 

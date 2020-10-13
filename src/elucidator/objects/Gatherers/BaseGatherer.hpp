@@ -26,6 +26,9 @@
 #include <TwoBit.h>
 #include "elucidator/common.h"
 
+#include <api/BamReader.h>
+
+
 namespace njhseq {
 
 class BaseGatherer {

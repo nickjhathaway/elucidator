@@ -24,8 +24,10 @@
 
     
 #include "seqUtilsTrimRunner.hpp"
-    
-    
+#include <njhseq/IO/SeqIO/SeqIO.hpp>
+#include <njhseq/readVectorManipulation/readVectorHelpers/readVecTrimmer.hpp>
+
+
 namespace njhseq {
 
 seqUtilsTrimRunner::seqUtilsTrimRunner()

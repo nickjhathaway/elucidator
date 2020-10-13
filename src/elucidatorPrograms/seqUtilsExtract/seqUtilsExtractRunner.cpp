@@ -22,8 +22,17 @@
 //
     
 #include "seqUtilsExtractRunner.hpp"
-    
-    
+#include <njhseq/IO/SeqIO.h>
+#include <njhseq/objects/helperObjects/motif.hpp>
+#include <njhseq/readVectorManipulation/readVectorHelpers/readVecSorter.hpp>
+#include <njhseq/objects/seqObjects/seqKmers.h>
+#include <njhseq/objects/helperObjects/nucCompCluster.hpp>
+#include <njhseq/alignment/aligner/aligner.hpp>
+#include <njhseq/readVectorManipulation/readVectorHelpers/readVecExtractor.hpp>
+
+#include <njhseq/seqToolsUtils/determinators.h>
+
+
 namespace njhseq {
 
 seqUtilsExtractRunner::seqUtilsExtractRunner()

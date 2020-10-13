@@ -24,6 +24,9 @@
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
 #include "KmerVecUtils.hpp"
+#include <njhseq/objects/seqObjects/seqKmers.h>
+
+
 
 
 

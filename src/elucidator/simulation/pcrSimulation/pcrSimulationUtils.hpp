@@ -24,6 +24,11 @@
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
 #include "elucidator/common.h"
+#include <njhseq/objects/seqObjects/BaseObjects/seqInfo.hpp>
+
+
+
+
 namespace njhseq {
 
 struct PCRAmountPars {

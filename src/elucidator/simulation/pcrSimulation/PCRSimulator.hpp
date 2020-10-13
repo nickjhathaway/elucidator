@@ -9,6 +9,7 @@
 
 
 #include "elucidator/common.h"
+#include <njhseq/objects/seqObjects/BaseObjects/seqInfo.hpp>
 
 
 namespace njhseq {

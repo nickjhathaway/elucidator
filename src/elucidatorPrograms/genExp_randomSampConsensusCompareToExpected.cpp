@@ -8,7 +8,10 @@
 
 
 #include "genExp.hpp"
+#include <njhseq/IO/SeqIO/SeqIO.hpp>
 
+#include <njhseq/objects/seqObjects/clusters/cluster.hpp>
+#include <njhseq/readVectorManipulation/readVectorHelpers/readVecSorter.hpp>
 
 
 namespace njhseq {

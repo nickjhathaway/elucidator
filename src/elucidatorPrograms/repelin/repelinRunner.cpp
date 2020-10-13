@@ -27,6 +27,9 @@
 #include <seqServer.h>
 #include "elucidator/objects/BioDataObject.h"
 
+#include <njhseq.h>
+
+
 
 namespace njhseq {
 namespace bfs = boost::filesystem;

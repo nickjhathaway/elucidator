@@ -25,6 +25,11 @@
 #include "clusteringExp.hpp"
 
 
+#include <njhseq/programUtils/seqSetUp.hpp>
+#include <njhseq/objects/seqObjects/Paired.h>
+#include <njhseq/objects/collapseObjects.h>
+#include <njhseq/objects/seqObjects/Clusters.h>
+
 namespace njhseq {
 clusteringExpRunner::clusteringExpRunner()
     : njh::progutils::ProgramRunner(

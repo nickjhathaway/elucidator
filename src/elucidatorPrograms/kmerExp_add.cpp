@@ -33,7 +33,7 @@
 #include "elucidator/objects/MiscUtility/GenomeSeqSearch.hpp"
 #include "elucidator/objects/BioDataObject.h"
 
-
+#include <njhseq/helpers.h>
 
 namespace njhseq {
 

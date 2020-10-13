@@ -22,6 +22,8 @@
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
 #include "errorProfile.hpp"
+#include <njhseq/utils.h>
+
 
 namespace njhseq {
 namespace simulation {

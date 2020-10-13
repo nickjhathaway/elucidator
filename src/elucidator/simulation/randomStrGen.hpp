@@ -24,6 +24,9 @@
 //
 #include "elucidator/common.h"
 #include "elucidator/simulation/simulationCommon.hpp"
+
+#include <njhseq/utils.h>
+
 namespace njhseq {
 
 

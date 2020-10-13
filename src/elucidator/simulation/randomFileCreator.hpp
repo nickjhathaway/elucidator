@@ -28,6 +28,8 @@
 #include "elucidator/common.h"
 #include "elucidator/simulation/simulationCommon.hpp"
 
+#include <njhseq/objects/counters.h>
+
 namespace njhseq {
 
 class randomFileCreator {

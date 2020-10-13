@@ -26,6 +26,8 @@
 
 
 #include "parsingFileExp.hpp"
+#include <njhseq/objects/BioDataObject/BioDataFileIO.hpp>
+#include <njhseq/objects/BioDataObject/BLASTHitTabular.hpp>
 
 
 namespace njhseq {

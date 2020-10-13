@@ -23,7 +23,8 @@
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-#include <njhseq.h>
+#include <njhseq/common.h>
+#include <njhseq/programUtils/seqSetUp.hpp>
 
 
 namespace njhseq {
@@ -41,6 +42,8 @@ class seqUtilsSplitRunner : public njh::progutils::ProgramRunner {
   static int SeqSplitOnLenAbove(const njh::progutils::CmdArgs & inputCommands);
   static int SeqSplitOnLenBetween(const njh::progutils::CmdArgs & inputCommands);
   static int SeqSplitOnQualityWindow(const njh::progutils::CmdArgs & inputCommands);
+  static int SeqSplitOnQualityCheck(const njh::progutils::CmdArgs & inputCommands);
+
   static int SeqSplitOnNucelotideComp(const njh::progutils::CmdArgs & inputCommands);
   static int SeqSplitOnCount(const njh::progutils::CmdArgs & inputCommands);
 

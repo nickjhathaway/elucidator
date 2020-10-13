@@ -32,6 +32,7 @@
 #include "elucidator/BamToolsUtils.h"
 #include <njhseq/GenomeUtils.h>
 #include <njhseq/objects/BioDataObject.h>
+#include <njhseq/programUtils/seqSetUp.hpp>
 
 
 namespace njhseq {

@@ -25,6 +25,9 @@
 //
 
 #include "elucidator/common.h"
+#include <njhseq/objects/seqObjects/seqKmers/seqWithKmerInfo.hpp>
+#include <njhseq/objects/dataContainers/graphs/readDistGraph.hpp>
+#include <njhseq/alignment/aligner/aligner.hpp>
 
 
 namespace njhseq {

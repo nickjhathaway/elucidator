@@ -28,7 +28,7 @@
 #include "BamUtilities.hpp"
 #include <njhseq/concurrency/pools/BamReaderPool.hpp>
 #include <njhseq/objects/BioDataObject.h>
-
+#include <njhseq/readVectorManipulation/readVectorHelpers/readVecTrimmer.hpp>
 
 namespace njhseq {
 

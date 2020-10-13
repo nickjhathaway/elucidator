@@ -11,6 +11,8 @@
 #include "kmerExp.hpp"
 #include "elucidator/utils/KmerUtils.hpp"
 #include "elucidator/objects/seqObjects/seqKmers.h"
+#include <njhseq/IO/SeqIO/SeqIO.hpp>
+
 
 namespace njhseq {
 

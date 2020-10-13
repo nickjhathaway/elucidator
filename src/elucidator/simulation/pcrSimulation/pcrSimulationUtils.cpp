@@ -24,7 +24,7 @@
 //
 #include "pcrSimulationUtils.hpp"
 
-
+#include <njhseq/IO.h>
 
 namespace njhseq {
 namespace sim {
@@ -320,12 +320,12 @@ std::pair<uint64_t,uint64_t> sampleReadsWithReplacement(const std::string & name
 							if(seqCount.first != seq) {
 								std::lock_guard<std::mutex> fileLock(seqFileLock);
 								++mutatedOut;
-								sequenceOutFile << ">" << name << "_mut." << leftPadNumStr<uint64_t>(mutatedOut, finalPerfectAmountDbl) << std::endl;
+								sequenceOutFile << ">" << name << "_mut." << njh::leftPadNumStr<uint64_t>(mutatedOut, finalPerfectAmountDbl) << std::endl;
 								sequenceOutFile << seqCount.first << std::endl;
 							} else {
 								std::lock_guard<std::mutex> fileLock(seqFileLock);
 								++nonMutatedOut;
-								sequenceOutFile << ">" << name << "_seq." << leftPadNumStr<uint64_t>(nonMutatedOut, finalPerfectAmountDbl) << std::endl;
+								sequenceOutFile << ">" << name << "_seq." << njh::leftPadNumStr<uint64_t>(nonMutatedOut, finalPerfectAmountDbl) << std::endl;
 								sequenceOutFile << seqCount.first << std::endl;
 							}
 							break;
@@ -385,13 +385,13 @@ std::pair<uint64_t,uint64_t> sampleReadsWithoutReplacement(const std::string & n
 					if (seqCount.first != seq) {
 						++mutatedOut;
 						sequenceOutFile << ">" << name << "_mut."
-								<< leftPadNumStr<uint64_t>(mutatedOut, finalReadAmount)
+								<< njh::leftPadNumStr<uint64_t>(mutatedOut, finalReadAmount)
 								<< std::endl;
 						sequenceOutFile << seqCount.first << std::endl;
 					} else {
 						++nonMutatedOut;
 						sequenceOutFile << ">" << name << "_seq."
-								<< leftPadNumStr<uint64_t>(nonMutatedOut, finalReadAmount)
+								<< njh::leftPadNumStr<uint64_t>(nonMutatedOut, finalReadAmount)
 								<< std::endl;
 						sequenceOutFile << seqCount.first << std::endl;
 					}
@@ -456,14 +456,14 @@ std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> sampleReadsWithou
 							++mutatedOut;
 							++ret[seqCounts.first].second;
 							sequenceOutFile << ">" << seqCounts.first << "_mut."
-									<< leftPadNumStr<uint64_t>(mutatedOut, finalReadAmount)
+									<< njh::leftPadNumStr<uint64_t>(mutatedOut, finalReadAmount)
 									<< std::endl;
 							sequenceOutFile << seqCount.first << std::endl;
 						} else {
 							++nonMutatedOut;
 							++ret[seqCounts.first].first;
 							sequenceOutFile << ">" << seqCounts.first << "_seq."
-									<< leftPadNumStr<uint64_t>(nonMutatedOut, finalReadAmount)
+									<< njh::leftPadNumStr<uint64_t>(nonMutatedOut, finalReadAmount)
 									<< std::endl;
 							sequenceOutFile << seqCount.first << std::endl;
 						}
@@ -595,18 +595,18 @@ std::unordered_map<std::string, std::pair<uint64_t, uint64_t>> sampleReadsWithou
 
 					if (finalSeq != seqs.at(namesSeqs.first)) {
 						nameMeta.addMeta("mutated", true);
-						nameMeta.addMeta("idNum", leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].second, finalReadAmount));
+						nameMeta.addMeta("idNum", njh::leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].second, finalReadAmount));
 						++mutInfo[namesSeqs.first].second;
 //						nameStream << ">" << namesSeqs.first << "_mut."
-//						<< leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].second, finalReadAmount)
+//						<< njh::leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].second, finalReadAmount)
 //						<< "_" << threadNumber;
 					} else {
 						++mutInfo[namesSeqs.first].first;
 						nameMeta.addMeta("mutated", false);
-						nameMeta.addMeta("idNum", leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].first, finalReadAmount));
+						nameMeta.addMeta("idNum", njh::leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].first, finalReadAmount));
 
 //						nameStream << ">" << namesSeqs.first << "_seq."
-//						<< leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].first, finalReadAmount)
+//						<< njh::leftPadNumStr<uint64_t>(mutInfo[namesSeqs.first].first, finalReadAmount)
 //						<< "_" << threadNumber;
 					}
 //					outputs.emplace_back(std::make_pair(nameStream.str(), finalSeq));
@@ -731,12 +731,12 @@ std::pair<uint64_t, uint64_t> sampleReadsWithoutReplacementFinishPCR(
 					if (finalSeq != seq) {
 						++mutInfo.second;
 						nameStream << ">" << seq.substr(0,8)<< "_mut."
-						<< leftPadNumStr<uint64_t>(mutInfo.second, finalReadAmount)
+						<< njh::leftPadNumStr<uint64_t>(mutInfo.second, finalReadAmount)
 						<< "_" << threadNumber;
 					} else {
 						++mutInfo.first;
 						nameStream << ">" << seq.substr(0,8) << "_seq."
-						<< leftPadNumStr<uint64_t>(mutInfo.first, finalReadAmount)
+						<< njh::leftPadNumStr<uint64_t>(mutInfo.first, finalReadAmount)
 						<< "_" << threadNumber;
 					}
 					outputs.emplace_back(std::make_pair(nameStream.str(), finalSeq));

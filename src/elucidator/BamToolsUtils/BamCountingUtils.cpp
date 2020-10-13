@@ -27,6 +27,7 @@
 
 #include "BamCountingUtils.hpp"
 #include <njhseq/BamToolsUtils/BamToolsUtils.hpp>
+#include <njhseq/seqToolsUtils/seqToolsUtils.hpp>
 
 
 namespace njhseq {

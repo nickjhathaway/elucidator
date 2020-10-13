@@ -25,4 +25,4 @@
 
 //own libraries
 #include <njhcpp.h>
-#include <njhseq.h>
+#include <njhseq/common.h>

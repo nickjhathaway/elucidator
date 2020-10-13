@@ -25,6 +25,10 @@
 //
 #include "elucidator/common.h"
 
+
+#include <njhseq/alignment/alignerUtils/substituteMatrix.hpp>
+
+
 namespace njhseq {
 
 /**@brief Class to hold counts for letters, by default upper case A to lowercase z

@@ -21,6 +21,10 @@
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
 #include "mutator.hpp"
+
+#include <njhseq/utils.h>
+
+
 namespace njhseq {
 
 VecStr mutator::getSingleMutations(const std::string &originalSeq, bool sort) {

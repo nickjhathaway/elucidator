@@ -26,6 +26,9 @@
 
 #include <njhseq/objects/seqContainers/refVariants.hpp>
 
+#include <njhseq/IO/SeqIO/SeqIO.hpp>
+#include <njhseq/objects/seqObjects/seqKmers.h>
+
 
 namespace njhseq {
 pacbioExpRunner::pacbioExpRunner()

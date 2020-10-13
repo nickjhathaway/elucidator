@@ -25,6 +25,10 @@
 //
 #include "elucidator/common.h"
 
+#include <njhseq/objects/kmer.h>
+
+#include <njhseq/objects/seqObjects/seqKmers/seqWithKmerInfo.hpp>
+
 namespace njhseq {
 
 std::vector<std::unique_ptr<seqWithKmerInfo>> createKmerReadVec(

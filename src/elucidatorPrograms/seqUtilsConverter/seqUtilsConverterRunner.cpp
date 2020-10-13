@@ -21,7 +21,7 @@
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
 #include "seqUtilsConverterRunner.hpp"
-    
+#include <njhseq/IO/SeqIO/SeqIO.hpp>
     
 namespace njhseq {
 

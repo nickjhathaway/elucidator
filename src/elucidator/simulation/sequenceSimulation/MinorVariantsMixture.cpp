@@ -24,7 +24,8 @@
 //
 #include "MinorVariantsMixture.hpp"
 #include "elucidator/simulation/randomStrGen.hpp"
-
+#include <njhseq/readVectorManipulation/readVectorHelpers.h>
+#include <njhseq/IO/SeqIO.h>
 
 namespace njhseq {
 
@@ -86,7 +87,7 @@ void MinorVariantsMixture::addVariants(const std::vector<std::set<size_t>> & mut
 			varMutations.emplace(pos, mutChar);
 			minorVar[pos] = mutChar;
 		}
-		std::string varname = varNameStub + "." + leftPadNumStr<uint32_t>(varNum, mutPositions.size() - 1);
+		std::string varname = varNameStub + "." + njh::leftPadNumStr<uint32_t>(varNum, mutPositions.size() - 1);
 		variants_.emplace_back(std::make_shared<seqInfo>(varname, minorVar));
 		variantsMutations_[varname] = varMutations;
 		++varNum;

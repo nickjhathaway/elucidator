@@ -27,6 +27,9 @@
 
 #include "elucidator/common.h"
 #include <njhseq/objects/BioDataObject/GenomicRegion.hpp>
+#include <njhseq/alignment/aligner/aligner.hpp>
+#include <njhseq/objects/helperObjects/probabilityProfile.hpp>
+#include <njhseq/objects/seqObjects/Clusters/cluster.hpp>
 
 #include <TwoBit.h>
 

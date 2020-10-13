@@ -24,6 +24,7 @@
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
 #include "elucidator/common.h"
+#include <njhseq/objects/seqObjects/BaseObjects/seqInfo.hpp>
 
 namespace njhseq {
 
@@ -277,7 +278,7 @@ public:
 				seqCounts[getSeqBase(hap).seq_] += getSeqBase(hap).cnt_;
 			}
 		}
-		auto seqs = getVectorOfMapKeys(seqCounts);
+		auto seqs = njh::getVecOfMapKeys(seqCounts);
 		njh::sort(seqs,[&seqCounts](const std::string & seq1, const std::string & seq2){
 			return seqCounts[seq1] > seqCounts[seq2];
 		});
@@ -310,7 +311,7 @@ public:
 		std::unordered_map<std::string,
 				std::unordered_map<std::string, PopDifferentiationMeasures>> ret;
 
-		auto keys = getVectorOfMapKeys(popSeqs);
+		auto keys = njh::getVecOfMapKeys(popSeqs);
 		njh::sort(keys);
 		std::unordered_map<std::string, uint32_t> seqCounts;
 		for(const auto & pop : popSeqs){
@@ -318,7 +319,7 @@ public:
 				seqCounts[getSeqBase(hap).seq_] += getSeqBase(hap).cnt_;
 			}
 		}
-		auto seqs = getVectorOfMapKeys(seqCounts);
+		auto seqs = njh::getVecOfMapKeys(seqCounts);
 		njh::sort(seqs,[&seqCounts](const std::string & seq1, const std::string & seq2){
 			return seqCounts[seq1] > seqCounts[seq2];
 		});
@@ -358,7 +359,7 @@ public:
 		}
 		std::unordered_map<std::string,
 				std::unordered_map<std::string, PopDifferentiationMeasures>> ret;
-		auto keys = getVectorOfMapKeys(hapsForPopulations);
+		auto keys = njh::getVecOfMapKeys(hapsForPopulations);
 		njh::sort(keys);
 		for(const auto keyPos : iter::range(keys.size())){
 			for(const auto secondKeyPos : iter::range(keyPos)){

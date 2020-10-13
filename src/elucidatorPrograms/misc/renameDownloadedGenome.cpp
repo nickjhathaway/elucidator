@@ -6,7 +6,9 @@
  */
 
 #include "miscRunner.hpp"
-
+#include <njhseq/IO/SeqIO/SeqIO.hpp>
+#include <njhseq/objects/BioDataObject/BioDataFileIO.hpp>
+#include <njhseq/objects/BioDataObject/GFFCore.hpp>
 
 namespace njhseq {
 

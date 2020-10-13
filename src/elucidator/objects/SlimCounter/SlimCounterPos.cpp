@@ -26,6 +26,10 @@
 //
 #include "SlimCounterPos.hpp"
 
+
+#include <njhseq/utils/vectorUtils.hpp>
+
+
 namespace njhseq {
 
 SlimCounterPos::SlimCounterPos(){

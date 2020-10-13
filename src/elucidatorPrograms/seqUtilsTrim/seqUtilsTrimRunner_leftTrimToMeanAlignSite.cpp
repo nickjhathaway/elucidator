@@ -7,7 +7,8 @@
 
 
 #include "seqUtilsTrimRunner.hpp"
-
+#include <njhseq/IO/SeqIO/SeqIO.hpp>
+#include <njhseq/alignment/aligner/aligner.hpp>
 
 namespace njhseq {
 

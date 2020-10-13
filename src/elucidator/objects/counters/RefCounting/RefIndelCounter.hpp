@@ -24,6 +24,10 @@
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
 #include "elucidator/common.h"
+
+#include <njhseq/objects/counters/strCounterMap.hpp>
+
+
 namespace njhseq {
 
 class RefIndelCounter {

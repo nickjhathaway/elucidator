@@ -24,7 +24,8 @@
 //
 
 #include "metaExp.hpp"
-
+#include <njhseq/IO/SeqIO.h>
+#include <njhseq/objects/Meta.h>
 
 
 namespace njhseq {

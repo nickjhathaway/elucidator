@@ -31,6 +31,9 @@
 #include "elucidator/utils/KmerUtils.hpp"
 #include "elucidator/objects/dataContainers.h"
 
+
+#include <njhseq/objects/Meta.h>
+
 namespace njhseq {
 
 

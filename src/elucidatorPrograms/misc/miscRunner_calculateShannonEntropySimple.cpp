@@ -27,6 +27,9 @@
 #include "elucidator/simulation.h"
 #include "elucidator/BamToolsUtils.h"
 
+#include <njhseq/system/Muscler.hpp>
+
+
 
 namespace njhseq {
 

@@ -28,6 +28,7 @@
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/BamToolsUtils.h"
 
+#include <njhseq/system.h>
 
 
 namespace njhseq {

@@ -26,6 +26,7 @@
 //
 
 #include <njhseq/BamToolsUtils/BamCountExtractStats.hpp>
+#include <njhseq/concurrency/pools.h>
 
 #include "elucidator/common.h"
 #include "elucidator/objects/counters/RefCounting.h"

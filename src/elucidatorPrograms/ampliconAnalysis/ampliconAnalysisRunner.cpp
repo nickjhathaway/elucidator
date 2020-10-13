@@ -2,6 +2,14 @@
 #include "elucidator/objects/dataContainers.h"
 #include "elucidator/objects/seqObjects/seqKmers.h"
 #include "elucidator/objects/seqContainers/refMapContainer.hpp"
+
+#include <njhseq/IO/SeqIO/SeqIO.hpp>
+#include <njhseq/objects/seqObjects/Clusters/clusterUtils.hpp>
+#include <njhseq/objects/seqObjects/Clusters/cluster.hpp>
+#include <njhseq/helpers/profiler.hpp>
+#include <njhseq/helpers/clusterCollapser.hpp>
+#include <njhseq/objects/collapseObjects/collapser.hpp>
+
 // elucidator - A library for analyzing sequence data
 // Copyright (C) 2012-2018 Nicholas Hathaway <nicholas.hathaway@umassmed.edu>,
 //

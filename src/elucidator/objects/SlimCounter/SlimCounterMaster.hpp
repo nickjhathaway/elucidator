@@ -27,6 +27,7 @@
 
 #include "elucidator/common.h"
 #include "elucidator/objects/SlimCounter/SlimCounterRef.hpp"
+#include <api/BamReader.h>
 
 namespace njhseq {
 class SlimCounterMaster {

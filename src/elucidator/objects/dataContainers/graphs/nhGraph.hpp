@@ -26,6 +26,11 @@
 
 #include "elucidator/common.h"
 
+
+#include <njhseq/alignment/aligner.h>
+#include <njhseq/objects/seqObjects/readObject.hpp>
+
+
 namespace njhseq {
 
 class nhGraph {

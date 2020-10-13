@@ -10,6 +10,9 @@
 
 #include "seqUtilsExtractRunner.hpp"
 
+#include <njhseq/IO/SeqIO.h>
+#include <njhseq/alignment/aligner/aligner.hpp>
+
 namespace njhseq {
 
 

@@ -25,6 +25,11 @@
 #include "readSimulatorRunner.hpp"
 #include "elucidator/simulation.h"
 #include <SeekDeep/objects/TarAmpSetupUtils/PrimersAndMids.hpp>
+
+
+#include <njhseq/objects/BioDataObject.h>
+
+
 namespace njhseq {
 
 

@@ -28,6 +28,8 @@
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/objects/counters/DNABaseCounter.hpp"
 #include <SeekDeep/objects/IlluminaUtils/PairedReadProcessor.hpp>
+#include <njhseq/objects/helperObjects/motif.hpp>
+#include <njhseq/readVectorManipulation/readVectorHelpers/readVecTrimmer.hpp>
 
 
 namespace njhseq {

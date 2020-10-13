@@ -33,7 +33,7 @@
 #include "elucidator/BioRecordsUtils/BedUtility.hpp"
 #include "elucidator/PopulationGenetics.h"
 #include <njhseq/objects/Gene/GenomicAminoAcidPositionTyper.hpp>
-
+#include <njhseq.h>
 
 namespace njhseq {
 

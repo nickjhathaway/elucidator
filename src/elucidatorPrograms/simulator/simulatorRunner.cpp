@@ -25,7 +25,7 @@
 #include "simulatorRunner.hpp"
 #include "elucidator/simulation.h"
 #include "elucidator/seqToolsUtils/seqToolsUtils.hpp"
-
+#include <njhseq/helpers/clusterCollapser.hpp>
 
 
 namespace njhseq {

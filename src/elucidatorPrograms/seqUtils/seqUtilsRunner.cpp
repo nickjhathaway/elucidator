@@ -4,6 +4,13 @@
 #include "elucidator/objects/seqContainers.h"
 #include "elucidator/BamToolsUtils.h"
 
+#include <njhseq/objects/seqObjects/Clusters.h>
+
+#include <njhseq/IO/SeqIO/SeqIO.hpp>
+#include <njhseq/readVectorManipulation/readVectorHelpers.h>
+#include <njhseq/helpers.h>
+#include <njhseq/concurrency.h>
+
 // elucidator - A library for analyzing sequence data
 // Copyright (C) 2012-2018 Nicholas Hathaway <nicholas.hathaway@umassmed.edu>,
 //

@@ -24,62 +24,13 @@
 //
 #include "elucidator/common.h"
 
+#include <njhseq/objects/seqObjects/BaseObjects/seqInfo.hpp>
+#include <njhseq/IO/SeqIO/SeqOutput.hpp>
+#include <njhseq/objects/seqContainers/baseContainer.hpp>
+
+
+
 namespace njhseq {
-
-template <typename T>
-class baseContainer {
-
- public:
-  // contructors
-	baseContainer() :
-			seqBase_(seqInfo()) {
-	}
-
-	baseContainer(const seqInfo& seqBase) :
-			seqBase_(seqBase) {
-	}
-
-	baseContainer(const seqInfo& seqBase, const std::vector<T>& reads) :
-			seqBase_(seqBase), reads_(reads) {
-	}
-
-	//copy constructor
-	baseContainer(const baseContainer & other) :
-			seqBase_(other.seqBase_), reads_(other.reads_) {
-	}
-
-	//move constructor
-	baseContainer(baseContainer && other) :
-			seqBase_(other.seqBase_), reads_(std::move(other.reads_)) {
-	}
-
-  // members
-  seqInfo seqBase_;
-  std::vector<T> reads_;
-  std::mutex mut_;
-  // functions
-  // adding reads
-	template<typename READ>
-	void addRead(READ&& read) {
-		std::lock_guard<std::mutex> lock(mut_);
-		seqBase_.cnt_ += getSeqBase(read).cnt_;
-		seqBase_.frac_ += getSeqBase(read).frac_;
-		reads_.emplace_back(std::forward<READ>(read));
-	}
-
-	virtual void writeReads(SeqOutput & writer, bool writeBase) {
-		std::lock_guard<std::mutex> lock(mut_);
-		if (writeBase) {
-			writer.openWrite(seqBase_);
-		}
-		for (const auto & read : reads_) {
-			writer.openWrite(read);
-		}
-	}
-
-	virtual ~baseContainer() {
-	}
-};
 
 }  // namespace njhseq
 

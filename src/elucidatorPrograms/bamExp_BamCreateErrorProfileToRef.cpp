@@ -9,7 +9,7 @@
 
 #include "bamExp.hpp"
 #include "elucidator/simulation.h"
-
+#include <njhseq/objects/BioDataObject/reading.hpp>
 
 namespace njhseq {
 

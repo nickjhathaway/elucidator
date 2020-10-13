@@ -29,7 +29,7 @@
 
 #include "expSeqUtil.hpp"
 #include "elucidator/simulation/mutator.hpp"
-
+#include <njhseq/helpers/seqUtil.hpp>
 
 namespace njhseq {
 

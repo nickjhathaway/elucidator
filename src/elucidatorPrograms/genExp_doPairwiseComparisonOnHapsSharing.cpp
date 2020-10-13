@@ -30,10 +30,11 @@
 #include "elucidator/BamToolsUtils.h"
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/objects/dataContainers/graphs.h"
-#include <njhseq/GenomeUtils.h>
+
 #include "elucidator/PopulationGenetics.h"
-
-
+#include <njhseq/GenomeUtils.h>
+#include <njhseq/objects/dataContainers/tables/TableReader.hpp>
+#include <njhseq/concurrency/PairwisePairFactory.hpp>
 
 namespace njhseq {
 

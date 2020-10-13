@@ -27,6 +27,7 @@
 
 #include <njhseq/BamToolsUtils.h>
 #include <SeekDeep/objects/IlluminaUtils/PairedReadProcessor.hpp>
+#include <njhseq/programUtils/seqSetUp.hpp>
 
 namespace njhseq {
 

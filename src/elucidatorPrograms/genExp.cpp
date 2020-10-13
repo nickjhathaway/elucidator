@@ -32,7 +32,8 @@
 #include "elucidator/objects/BioDataObject.h"
 #include <njhseq/GenomeUtils.h>
 
-
+#include <njhseq/objects/seqObjects/Clusters.h>
+#include <njhseq/objects/dataContainers/tables/TableReader.hpp>
 
 #include <TwoBit.h>
 

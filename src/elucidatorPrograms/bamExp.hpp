@@ -28,7 +28,9 @@
 
 
 #include <njhcpp/progutils.h>
-#include <njhseq.h>
+#include <njhseq/common.h>
+#include <njhseq/programUtils/seqSetUp.hpp>
+
 
 namespace njhseq {
 

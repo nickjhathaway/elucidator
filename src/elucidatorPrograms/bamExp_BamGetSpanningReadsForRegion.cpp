@@ -15,7 +15,7 @@
 #include "elucidator/simulation.h"
 #include <SeekDeep/objects/IlluminaUtils/PairedReadProcessor.hpp>
 #include <PathWeaver/PathFinding/WayFindingUtils/WayFindingPreFilteringUtils.hpp>
-
+#include <njhseq/objects/BioDataObject/BioRecordsUtils/BedUtility.hpp>
 
 namespace njhseq {
 

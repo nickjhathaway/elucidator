@@ -24,6 +24,8 @@
 //
 
 #include "KmerUtils.hpp"
+#include <njhseq/IO/SeqIO/SeqInput.hpp>
+
 
 namespace njhseq {
 

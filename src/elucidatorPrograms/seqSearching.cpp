@@ -28,6 +28,9 @@
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/BamToolsUtils/BamUtilities.hpp"
 #include "elucidator/BioRecordsUtils/BedUtility.hpp"
+#include <njhseq/seqToolsUtils/tandemRepeatUtils.hpp>
+#include <njhseq/IO/SeqIO/SeqIO.hpp>
+#include <njhseq/system.h>
 
 namespace njhseq {
 

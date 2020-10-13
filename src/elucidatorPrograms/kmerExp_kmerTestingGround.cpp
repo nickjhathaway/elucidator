@@ -13,6 +13,12 @@
 #include "elucidator/objects/seqObjects/seqKmers.h"
 
 #include <njhseq/concurrency/AllByAllPairFactory.hpp>
+#include <njhseq/concurrency/PairwisePairFactory.hpp>
+
+#include <njhseq/GenomeUtils/GenomeMapping/MultiGenomeMapper.hpp>
+#include <njhseq/IO/SeqIO/SeqIO.hpp>
+
+
 
 namespace njhseq {
 

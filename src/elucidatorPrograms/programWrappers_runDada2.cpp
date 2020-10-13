@@ -8,6 +8,7 @@
 
 #include "programWrappers.hpp"
 
+#include <njhseq/seqToolsUtils.h>
 
 namespace njhseq {
 

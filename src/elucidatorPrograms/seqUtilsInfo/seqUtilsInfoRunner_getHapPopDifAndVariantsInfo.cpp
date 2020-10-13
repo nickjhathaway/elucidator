@@ -18,6 +18,11 @@
 #include "elucidator/PopulationGenetics.h"
 #include <njhseq/objects/Gene/GenomicAminoAcidPositionTyper.hpp>
 
+#include <njhseq/objects/Gene/TranslatorByAlignment.hpp>
+
+
+#include <njhseq.h>
+
 
 
 namespace njhseq {

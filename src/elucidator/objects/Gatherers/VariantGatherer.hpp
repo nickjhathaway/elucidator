@@ -31,6 +31,12 @@
 #include "elucidator/objects/Gatherers/BaseGatherer.hpp"
 #include "elucidator/objects/SlimCounter/SlimCounterPos.hpp"
 
+
+#include <njhseq/objects/dataContainers/tables/table.hpp>
+
+
+
+
 namespace njhseq {
 
 class VariantGatherer : public BaseGatherer{

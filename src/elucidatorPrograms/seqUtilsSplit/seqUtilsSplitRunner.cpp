@@ -23,7 +23,7 @@
 //
     
 #include "seqUtilsSplitRunner.hpp"
-    
+#include <njhseq.h>
     
 namespace njhseq {
 
@@ -39,11 +39,13 @@ seqUtilsSplitRunner::seqUtilsSplitRunner()
   		addFunc("SeqSplitOnLenAbove", SeqSplitOnLenAbove, false),
   		addFunc("SeqSplitOnLenBetween", SeqSplitOnLenBetween, false),
   		addFunc("SeqSplitOnQualityWindow", SeqSplitOnQualityWindow, false),
+  		addFunc("SeqSplitOnQualityCheck", SeqSplitOnQualityCheck, false),
   		addFunc("SeqSplitOnNucelotideComp", SeqSplitOnNucelotideComp, false),
 			addFunc("getSimilarSequences", getSimilarSequences, false),
 			addFunc("getSimilarSequencesByKDist", getSimilarSequencesByKDist, false),
 			addFunc("SeqSplitOnCount", SeqSplitOnCount, false),
 			addFunc("SeqSplitOnNameContainsPattern", SeqSplitOnNameContainsPattern, false),
+			addFunc("SeqSplitOnQualityCheck", SeqSplitOnQualityCheck, false),
 
 
 },
@@ -732,6 +734,46 @@ int seqUtilsSplitRunner::SeqSplitOnQualityWindow(const njh::progutils::CmdArgs &
   }
   return 0;
 }
+
+
+
+int seqUtilsSplitRunner::SeqSplitOnQualityCheck(const njh::progutils::CmdArgs & inputCommands) {
+	defaultSplitPars dSplitPars;
+
+  seqSetUp setUp(inputCommands);
+  defaultSplitSetUpOptions(setUp, dSplitPars);
+  double qualCheckCutOff = .90;
+  uint32_t qualCheck = 30;
+  setUp.setOption(qualCheckCutOff, "--qualCheckCutOff", "the fraction of the bases that have to be above the --qualCheck flag, ranges 0-1", true );
+  setUp.setOption(qualCheck, "--qualCheck", "Quality score Check to count", true);
+
+  setUp.finishSetUp(std::cout);
+
+  MultiSeqOutCache<seqInfo> seqOuts;
+  seqOuts.addReader("include", dSplitPars.incOpts_);
+  seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  auto checker = std::make_unique<const ReadCheckerQualCheck>( qualCheck,qualCheckCutOff , dSplitPars.mark_);
+
+  SeqIO reader(setUp.pars_.ioOptions_);
+  reader.openIn();
+  seqInfo seq;
+  while(reader.readNextRead(seq)){
+  	checker->checkRead(seq);
+    std::string condition = "";
+    if(seq.on_){
+    	condition = "include";
+    }else{
+    	condition = "exclude";
+    }
+    seqOuts.add(condition, seq);
+  }
+
+  if(setUp.pars_.verbose_){
+  	setUp.logRunTime(std::cout);
+  }
+  return 0;
+}
+
 
 int seqUtilsSplitRunner::SeqSplitOnNucelotideComp(const njh::progutils::CmdArgs & inputCommands) {
 	defaultSplitPars dSplitPars;

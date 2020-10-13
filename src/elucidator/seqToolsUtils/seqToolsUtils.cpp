@@ -19,7 +19,10 @@
 //
 
 #include "seqToolsUtils.hpp"
-
+#include <njhseq/objects/seqObjects/seqKmers.h>
+#include <njhseq/objects/kmer/kmerCalculator.hpp>
+#include <njhseq/readVectorManipulation/readVectorHelpers/readVecSorter.hpp>
+#include <njhseq/objects/seqObjects/Clusters.h>
 
 namespace njhseq {
 
@@ -918,7 +921,7 @@ void simpleCollapse(std::vector<cluster> & consensusReads, aligner & alignerObj,
 	double kdistCutOff = .95;
 	std::vector<kmerInfo> kinfos;
 	for(const auto & seq : consensusReads){
-		std::cout << seq.seqBase_.name_ << std::endl;
+		//std::cout << seq.seqBase_.name_ << std::endl;
 		kinfos.emplace_back(kmerInfo(seq.seqBase_.seq_, klenComp, false));
 	}
 	//first do a comparison of no errors to collapse almost identical clusters
@@ -930,9 +933,9 @@ void simpleCollapse(std::vector<cluster> & consensusReads, aligner & alignerObj,
 		for (const auto secondPos : iter::range(firstPos + 1,
 				consensusReads.size())) {
 			bool print = false;
-			if("AS2-S0-Sub0-mip0MID7G8-5ng-rep1.fastq.07_t1308.3" == consensusReads[firstPos].seqBase_.name_ && "AS2-S0-Sub0-mip0MID7G8-5ng-rep1.fastq.08_t41.3333" == consensusReads[secondPos].seqBase_.name_){
-				print = true;
-			}
+//			if("AS2-S0-Sub0-mip0MID7G8-5ng-rep1.fastq.07_t1308.3" == consensusReads[firstPos].seqBase_.name_ && "AS2-S0-Sub0-mip0MID7G8-5ng-rep1.fastq.08_t41.3333" == consensusReads[secondPos].seqBase_.name_){
+//				print = true;
+//			}
 			if (consensusReads[secondPos].remove) {
 				continue;
 			}

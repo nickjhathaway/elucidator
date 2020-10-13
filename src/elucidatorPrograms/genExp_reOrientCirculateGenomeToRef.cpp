@@ -9,6 +9,8 @@
 
 
 #include "genExp.hpp"
+#include <njhseq/readVectorManipulation/readVectorHelpers/readVecTrimmer.hpp>
+#include <njhseq/IO/SeqIO/SeqIO.hpp>
 
 
 namespace njhseq {

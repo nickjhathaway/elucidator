@@ -32,7 +32,10 @@
 #include "elucidator/BioRecordsUtils/BedUtility.hpp"
 #include "elucidator/PopulationGenetics.h"
 #include <njhseq/objects/Gene/GenomicAminoAcidPositionTyper.hpp>
-
+#include <njhseq/IO/SeqIO/SeqIO.hpp>
+#include <njhseq/objects/seqObjects/Clusters.h>
+#include <njhseq/BamToolsUtils.h>
+#include <njhseq/concurrency/pools/BamReaderPool.hpp>
 
 namespace njhseq {
 

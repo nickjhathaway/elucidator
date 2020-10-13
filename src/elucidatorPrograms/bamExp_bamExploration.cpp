@@ -30,7 +30,7 @@
 
 #include "elucidator/BamToolsUtils.h"
 #include <njhseq/objects/BioDataObject.h>
-
+#include <njhseq/GenomeUtils/GenomeExtraction/ParsingAlignmentInfo/AlignmentResults.hpp>
 
 namespace njhseq {
 

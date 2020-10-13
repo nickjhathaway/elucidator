@@ -9,6 +9,8 @@
 
 #include "elucidator/common.h"
 #include <njhseq/alignment/alignerUtils/comparison.hpp>
+#include <njhseq/objects/seqObjects/BaseObjects/seqInfo.hpp>
+
 
 namespace njhseq {
 class ContigsCompareGraphDev {

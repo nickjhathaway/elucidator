@@ -9,6 +9,9 @@
 
 #include "genExp.hpp"
 
+#include <njhseq/IO/SeqIO/SeqInput.hpp>
+#include <njhseq/IO/SeqIO/SeqOutput.hpp>
+
 namespace njhseq {
 
 

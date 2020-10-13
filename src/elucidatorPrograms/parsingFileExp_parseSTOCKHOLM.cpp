@@ -24,6 +24,8 @@
 //
 
 #include "parsingFileExp.hpp"
+#include <njhseq/objects/BioDataObject/parsers/STOCKHOLMFileParser.hpp>
+
 
 namespace njhseq {
 

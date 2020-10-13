@@ -26,6 +26,7 @@
 //
 
 #include <njhseq/programUtils.h>
+#include <njhseq/programUtils/seqSetUp.hpp>
 
 namespace njhseq {
 

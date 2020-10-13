@@ -26,6 +26,7 @@
 
 #include "genExp.hpp"
 
+#include <njhseq/IO/SeqIO.h>
 
 namespace njhseq {
 

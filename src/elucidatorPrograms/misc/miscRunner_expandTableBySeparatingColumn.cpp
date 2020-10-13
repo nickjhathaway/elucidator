@@ -23,6 +23,10 @@
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
 #include "miscRunner.hpp"
+
+#include <njhseq/IO/SeqIO/SeqIO.hpp>
+
+
 namespace njhseq {
 int miscRunner::expandTableBySeparatingColumn(const njh::progutils::CmdArgs & inputCommands){
 	auto tabOpts = TableIOOpts::genTabFileOut("", false);

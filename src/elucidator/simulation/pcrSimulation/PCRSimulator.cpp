@@ -8,6 +8,13 @@
 
 #include "PCRSimulator.hpp"
 
+#include <njhseq/alignment/aligner/aligner.hpp>
+#include <njhseq/readVectorManipulation/readVectorHelpers.h>
+#include <njhseq/objects/dataContainers/tables/table.hpp>
+
+
+
+
 namespace njhseq {
 
 
@@ -502,7 +509,7 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 		throw std::runtime_error{ss.str()};
 	}
 	//auto finalPerfectAmount = static_cast<uint64_t>(startingTemplate * std::pow(2, pcrRounds));
-	OutputStream libOutFile(outputFileOpts);
+	njh::OutputStream libOutFile(outputFileOpts);
 	std::mutex seqFileLock;
 
 	//account for double stranded

@@ -11,6 +11,8 @@
 #include "readSimulatorRunner.hpp"
 #include "elucidator/simulation.h"
 #include <SeekDeep/objects/TarAmpSetupUtils/PrimersAndMids.hpp>
+#include <njhseq/IO/SeqIO/SeqIO.hpp>
+#include <njhseq/readVectorManipulation/readVectorHelpers/readVecTrimmer.hpp>
 
 namespace njhseq {
 

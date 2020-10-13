@@ -10,6 +10,8 @@
 
 
 #include "seqUtilsInfoRunner.hpp"
+#include <njhseq/IO/SeqIO/SeqIO.hpp>
+#include <njhseq/objects/seqObjects/seqKmers.h>
 
 
 namespace njhseq {

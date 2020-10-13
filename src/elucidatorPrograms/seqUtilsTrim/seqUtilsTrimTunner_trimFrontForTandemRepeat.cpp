@@ -9,7 +9,7 @@
 
 
 #include "seqUtilsTrimRunner.hpp"
-
+#include <njhseq/IO/SeqIO/SeqIO.hpp>
 
 namespace njhseq {
 
@@ -40,17 +40,17 @@ int seqUtilsTrimRunner::trimFrontForTandemRepeat(const njh::progutils::CmdArgs &
 	uint32_t count = 0;
 	while(reader.readNextRead(seq)){
 		++count;
-		std::cout << "count: " << count << std::endl;
+//		std::cout << "count: " << count << std::endl;
 		if(len(seq) > tandem.size()){
 			const std::string front = seq.seq_.substr(0, tandem.size());
 
 			if(!checkTwoRotatingStrings(tandem, front, 0).empty()){
-				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				uint32_t pos = tandem.size();
 				while(pos + tandem.size() < seq.seq_.size() && front == seq.seq_.substr(pos, tandem.size())){
 					pos += tandem.size();
 				}
-				std::cout << "pos: " << pos << std::endl;
+//				std::cout << "pos: " << pos << std::endl;
 				seq = seq.getSubRead(pos);
 			}
 		}
