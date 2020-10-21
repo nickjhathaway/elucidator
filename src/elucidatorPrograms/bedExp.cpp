@@ -94,6 +94,7 @@ bedExpRunner::bedExpRunner()
 					 addFunc("bedKeepRegionsStartingOrEndingInOther", bedKeepRegionsStartingOrEndingInOther, false),
 					 addFunc("getAverageDistanceToOtherRegions", getAverageDistanceToOtherRegions, false),
 					 addFunc("getDistanceToClostestRegion", getDistanceToClostestRegion, false),
+					 addFunc("getIntersectionBetweenTwoBedFiles", getIntersectionBetweenTwoBedFiles, false),
 
            },//
           "bedExp") {}
@@ -1395,8 +1396,8 @@ int bedExpRunner::trimBedRegions(const njh::progutils::CmdArgs & inputCommands) 
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 
-	setUp.setOption(left, "--left", "Expand regions to the left this much");
-	setUp.setOption(right, "--right", "Expand regions to the right this much");
+	setUp.setOption(left, "--left", "Trim regions to the left this much");
+	setUp.setOption(right, "--right", "Trim regions to the right this much");
 	setUp.setOption(bedFile, "--bed", "Bed file to parse", true);
 
 	setUp.processWritingOptions(outOpts);

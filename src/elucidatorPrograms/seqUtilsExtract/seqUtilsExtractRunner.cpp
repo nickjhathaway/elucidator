@@ -53,46 +53,35 @@ seqUtilsExtractRunner::seqUtilsExtractRunner()
 //
 int seqUtilsExtractRunner::extractByName(const njh::progutils::CmdArgs & inputCommands){
 	seqSetUp setUp(inputCommands);
-	bfs::path filename = "";
+	VecStr names;
 	bool excluding = false;
 	setUp.setOption(excluding, "--excluding", "Excluding These Names Instead, default is extract by these names");
-	setUp.setOption(filename, "--file", "File Containing Seq Names in the first column column" , true);
+	setUp.setOption(names, "--names", "Names to extract" , true);
 	setUp.pars_.ioOptions_.out_.outFilename_ = "out";
 	setUp.processDefaultReader(true);
-	setUp.finishSetUp(std::cout);
-	VecStr readNames;
-	if(!bfs::exists(filename)){
-		std::stringstream ss;
-		ss << __PRETTY_FUNCTION__ << "Error, file " << filename << " doesn't exist" << "\n";
-		throw std::runtime_error{ss.str()};
+	if("out" == setUp.pars_.ioOptions_.out_.outFilename_){
+		setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(setUp.pars_.ioOptions_.firstName_, "extracted_");
 	}
+	setUp.finishSetUp(std::cout);
+
 	SeqIO reader(setUp.pars_.ioOptions_);
 	reader.openIn();
 	reader.openOut();
-	std::string line = "";
-	std::ifstream infile(filename.string());
-	if(!infile){
-		std::stringstream ss;
-		ss << __PRETTY_FUNCTION__ << "Error, in opening " << filename << "" << "\n";
-		throw std::runtime_error{ss.str()};
-	}
-	while(njh::files::crossPlatGetline(infile, line)){
-		readNames.emplace_back(line);
-	}
 	readObject read;
 	while(reader.readNextRead(read)){
 		if(excluding){
-			if(!njh::in(read.seqBase_.name_, readNames)){
+			if(!njh::in(read.seqBase_.name_, names)){
 				reader.write(read);
 			}
 		}else{
-			if(njh::in(read.seqBase_.name_, readNames)){
+			if(njh::in(read.seqBase_.name_, names)){
 				reader.write(read);
 			}
 		}
 	}
 	return 0;
 }
+
 int seqUtilsExtractRunner::extractSeqsBeginsWith(const njh::progutils::CmdArgs & inputCommands) {
 	bool allowableErrors = 0;
 	std::string beginsWith = "";

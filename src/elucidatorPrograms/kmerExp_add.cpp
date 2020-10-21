@@ -338,10 +338,9 @@ int kmerExpRunner::genomeKmerCompare(const njh::progutils::CmdArgs & inputComman
 int kmerExpRunner::findingMinimumKLenForNoRedundantKmers(const njh::progutils::CmdArgs & inputCommands){
 
 	seqSetUp setUp(inputCommands);
-  setUp.processVerbose();
-  setUp.processReadInNames(true);
-  setUp.finishSetUp(std::cout);
-
+	setUp.processVerbose();
+	setUp.processReadInNames(true);
+	setUp.finishSetUp(std::cout);
 
 	uint64_t maxLen = 0;
 	seqInfo seq;
@@ -349,43 +348,47 @@ int kmerExpRunner::findingMinimumKLenForNoRedundantKmers(const njh::progutils::C
 
 	reader.openIn();
 	while (reader.readNextRead(seq)) {
-		if(setUp.pars_.verbose_){
+		if (setUp.pars_.verbose_) {
 			std::cout << seq.name_ << std::endl;
 		}
 		readVec::getMaxLength(seq, maxLen);
 	}
 
+	uint32_t klen = 2;
+	bool foundLength = false;
+	while (klen < maxLen && !foundLength) {
+		if (setUp.pars_.verbose_) {
+			std::cout << klen << std::endl;
+		}
+		reader.reOpenIn();
+		bool allPass = true;
+		while (reader.readNextRead(seq)) {
+			kmerInfo kinfo(seq.seq_, klen, false);
+			for (const auto &k : kinfo.kmers_) {
+				if (k.second.count_ > 1) {
+					allPass = false;
+					if (setUp.pars_.verbose_) {
+						std::cout << "\t" << seq.name_ << std::endl;
+					}
+					break;
+				}
+			}
+		}
+		if (allPass) {
+			foundLength = true;
+		} else {
+			++klen;
+		}
+	}
 
-  uint32_t klen = 2;
-  bool foundLength = false;
-  while(klen < maxLen && !foundLength){
-  		if(setUp.pars_.verbose_){
-  			std::cout  << klen  << std::endl;
-  		}
-  		reader.reOpenIn();
-  	  bool allPass = true;
-  		while(reader.readNextRead(seq)){
-  			kmerInfo kinfo(seq.seq_, klen, false);
-  			for(const auto & k : kinfo.kmers_){
-  				if(k.second.count_ > 1){
-  					allPass = false;
-  					break;
-  				}
-  			}
-  	  }
-  		if(allPass){
-  			foundLength = true;
-  		}else{
-  			++klen;
-  		}
-  }
+	if (foundLength) {
+		std::cout << klen << std::endl;
 
-  if(foundLength){
-  		std::cout << klen << std::endl;
-
-  }else{
-  		std::cout << "Found no kmer length that would recreate non-redundant kmers for all input seqs" << std::endl;
-  }
+	} else {
+		std::cout
+				<< "Found no kmer length that would recreate non-redundant kmers for all input seqs"
+				<< std::endl;
+	}
 
   return 0;
 }

@@ -334,20 +334,20 @@ int miscRunner::createSharedPathwaysFromRefSeqs(const njh::progutils::CmdArgs & 
 		reader.openIn();
 		std::unordered_set<std::string> readNames;
 		while(reader.readNextRead(seq)){
-			if(MetaDataInName::nameHasMetaData(seq.name_)){
-				MetaDataInName meta(seq.name_);
-				if(!meta.containsMeta("sample")){
-					auto sampleMeta = seq.name_;
-					MetaDataInName::removeMetaDataInName(sampleMeta);
-					meta.addMeta("sample", sampleMeta);
-					meta.resetMetaInName(seq.name_);
-				}
-			}else{
-				MetaDataInName meta;
-				auto sampleMeta = seq.name_;
-				meta.addMeta("sample", sampleMeta);
-				meta.resetMetaInName(seq.name_);
-			}
+//			if(MetaDataInName::nameHasMetaData(seq.name_)){
+//				MetaDataInName meta(seq.name_);
+//				if(!meta.containsMeta("sample")){
+//					auto sampleMeta = seq.name_;
+//					MetaDataInName::removeMetaDataInName(sampleMeta);
+//					meta.addMeta("sample", sampleMeta);
+//					meta.resetMetaInName(seq.name_);
+//				}
+//			}else{
+//				MetaDataInName meta;
+//				auto sampleMeta = seq.name_;
+//				meta.addMeta("sample", sampleMeta);
+//				meta.resetMetaInName(seq.name_);
+//			}
 			if(njh::in(seq.name_, readNames)){
 				std::stringstream ss;
 				ss << __PRETTY_FUNCTION__ << ", error " << "already have seq name: " << seq.name_ << ", can't have repeat names"<< "\n";
@@ -794,18 +794,18 @@ int miscRunner::createSharedPathwaysFromRefSeqs(const njh::progutils::CmdArgs & 
 			}
 		}
 	}
-	{
-		OutputStream contigsWtihSamplesOut (njh::files::make_path(setUp.pars_.directoryName_, "contigsWtihSamples.tab.txt"));
-		contigsWtihSamplesOut << "contig\tsampleName" << std::endl;
-		uint32_t nodePos = 0;
-		for(const auto & n : compGraph.nodes_){
-			for(const auto & readName : n->inReadNamesIdx_){
-				MetaDataInName meta(readName);
-				contigsWtihSamplesOut << nodePos << "\t" << meta.getMeta("sample") << std::endl;
-			}
-			++nodePos;
-		}
-	}
+//	{
+//		OutputStream contigsWtihSamplesOut (njh::files::make_path(setUp.pars_.directoryName_, "contigsWtihSamples.tab.txt"));
+//		contigsWtihSamplesOut << "contig\tsampleName" << std::endl;
+//		uint32_t nodePos = 0;
+//		for(const auto & n : compGraph.nodes_){
+//			for(const auto & readName : n->inReadNamesIdx_){
+//				MetaDataInName meta(readName);
+//				contigsWtihSamplesOut << nodePos << "\t" << meta.getMeta("sample") << std::endl;
+//			}
+//			++nodePos;
+//		}
+//	}
 	std::unordered_map<std::string, uint32_t> seqLens;
 	for(const auto  & seq : seqs){
 		seqLens[seq.name_] = len(seq);

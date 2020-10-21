@@ -93,6 +93,12 @@ int bedExpRunner::differentSubRegionCombos(const njh::progutils::CmdArgs & input
 	}
 	if(includeFromBack){
 		for(auto & byChrom : regionsByChrom){
+			if(!njh::in(byChrom.first, genomeLen)){
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "don't have chromosome " << byChrom.first << " in genome file " << genomeOpt.firstName_<< "\n";
+				ss << genomeOpt.firstName_ << "has: " << njh::conToStr(njh::getVecOfMapKeys(genomeLen), ",") << "\n";
+				throw std::runtime_error{ss.str()};
+			}
 			if(genomeLen[byChrom.first] - byChrom.second.front()->chromEnd_ > 10){
 				byChrom.second.emplace_back(std::make_shared<Bed6RecordCore>(byChrom.first, genomeLen[byChrom.first] -1, genomeLen[byChrom.first], "back", 1, '+'));
 			}
@@ -119,7 +125,7 @@ int bedExpRunner::differentSubRegionCombos(const njh::progutils::CmdArgs & input
 					if(outRegion.length() >= minLen && outRegion.length() <= maxLen){
 						out << outRegion.toDelimStr() << std::endl;
 					}
-					if(justToNextRegion){
+					if(justToNextRegion && outRegion.length() >= minLen && outRegion.length() <= maxLen){
 						break;
 					}
 				}
