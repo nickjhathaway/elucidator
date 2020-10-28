@@ -43,7 +43,6 @@ class seqUtilsInfoRunner : public njh::progutils::ProgramRunner {
   static int countSeqPortion(const njh::progutils::CmdArgs & inputCommands);
   static int printTandems(const njh::progutils::CmdArgs & inputCommands);
   static int quickMismatchDist(const njh::progutils::CmdArgs & inputCommands);
-  static int countKmers(const njh::progutils::CmdArgs & inputCommands);
   static int countKmersPlusStats(const njh::progutils::CmdArgs & inputCommands);
   static int profileErrors(const njh::progutils::CmdArgs & inputCommands);
   static int countAllSeqs(const njh::progutils::CmdArgs & inputCommands);

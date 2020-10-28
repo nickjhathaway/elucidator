@@ -45,7 +45,6 @@ seqUtilsInfoRunner::seqUtilsInfoRunner()
   addFunc("quickMismatchDist", quickMismatchDist, false),
   addFunc("profileQualityScores", profileQualityScores, false),
   addFunc("countHPRuns", countHPRuns, false),
-	addFunc("countKmers", countKmers, false),
 	addFunc("countKmersPlusStats", countKmersPlusStats, false),
 	addFunc("profileErrors", profileErrors, false),
 	addFunc("countAllSeqs", countAllSeqs, false),
@@ -413,31 +412,7 @@ int seqUtilsInfoRunner::countAllSeqs(const njh::progutils::CmdArgs & inputComman
   return 0;
 }
 
-int seqUtilsInfoRunner::countKmers(const njh::progutils::CmdArgs & inputCommands){
-	seqSetUp setUp(inputCommands);
-	uint32_t kLen = 10;
-	setUp.setOption(kLen, "-k,--kmerLength", "kmer Length");
-	setUp.processDefaultReader(true);
-	setUp.finishSetUp(std::cout);
 
-	std::unordered_map<std::string, uint32_t> kmersCounts;
-	SeqInput reader(setUp.pars_.ioOptions_);
-	reader.openIn();
-	auto inReads = reader.readAllReads<readObject>();
-
-
-	for(const auto & read : inReads){
-		for(auto pos : iter::range(read.seqBase_.seq_.size() - kLen + 1)){
-			kmersCounts[read.seqBase_.seq_.substr(pos,kLen)] += round(read.seqBase_.cnt_);
-		}
-	}
-	auto keys = getVectorOfMapKeys(kmersCounts);
-	njh::sort(keys);
-	for(const auto & k : keys){
-		std::cout << k << "\t" << kmersCounts[k] << "\n";
-	}
-	return 0;
-}
 
 int seqUtilsInfoRunner::profileErrors(const njh::progutils::CmdArgs & inputCommands) {
 	seqSetUp setUp(inputCommands);

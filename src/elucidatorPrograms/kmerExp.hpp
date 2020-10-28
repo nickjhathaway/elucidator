@@ -103,6 +103,12 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int kmerCompareTwoSetsOfContigs(const njh::progutils::CmdArgs & inputCommands);
 
 
+
+	static int kmerConnectionGraph(const njh::progutils::CmdArgs & inputCommands);
+	static int countKmers(const njh::progutils::CmdArgs & inputCommands);
+
+
+
 };
 } /* namespace njhseq */
 

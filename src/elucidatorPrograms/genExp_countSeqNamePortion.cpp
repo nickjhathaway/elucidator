@@ -68,11 +68,13 @@ int genExpRunner::countSeqNamePortion(const njh::progutils::CmdArgs & inputComma
 
 int genExpRunner::countIlluminaSampleNumber(const njh::progutils::CmdArgs & inputCommands){
 	OutOptions outOpts(bfs::path(""), ".tab.txt");
+	uint32_t testNumber = std::numeric_limits<uint32_t>::max();
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.processWritingOptions(outOpts);
 	setUp.processReadInNames(true);
+	setUp.setOption(testNumber, "--testNumber", "Number of reads to read");
 	setUp.finishSetUp(std::cout);
 
 	SeqInput reader(setUp.pars_.ioOptions_);
@@ -80,10 +82,14 @@ int genExpRunner::countIlluminaSampleNumber(const njh::progutils::CmdArgs & inpu
 	OutputStream out(outOpts);
 	seqInfo seq;
 	std::unordered_map<std::string, uint32_t> counts;
-
+	uint32_t totalCount = 0;
 	while(reader.readNextRead(seq)){
 		IlluminaNameFormatDecoder decoded(seq.name_);
 		++counts[decoded.getSampleNumber()];
+		++totalCount;
+		if(totalCount > testNumber){
+			break;
+		}
 	}
 
 	table outTab(counts, VecStr{"sample", "count"});
