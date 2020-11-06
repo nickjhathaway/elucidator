@@ -74,7 +74,7 @@ int genExpRunner::countIlluminaSampleNumber(const njh::progutils::CmdArgs & inpu
 	setUp.processDebug();
 	setUp.processWritingOptions(outOpts);
 	setUp.processReadInNames(true);
-	setUp.setOption(testNumber, "--testNumber", "Number of reads to read");
+	setUp.setOption(testNumber, "--numberOfReadsToCount", "Number of reads to read");
 	setUp.finishSetUp(std::cout);
 
 	SeqInput reader(setUp.pars_.ioOptions_);
