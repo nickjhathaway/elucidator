@@ -89,7 +89,8 @@ bamExpRunner::bamExpRunner()
 					 addFunc("BamGetPairedReadInfoForRegions", BamGetPairedReadInfoForRegions, false),
 					 addFunc("BamGetImproperPairCounts", BamGetImproperPairCounts, false),
 					 addFunc("bamCovBasesRough", bamCovBasesRough, false),
-          },
+					 addFunc("bamCov", bamCov, false),
+          },//
 
 				"bamExp") {
 }
@@ -867,6 +868,102 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 }
 
 
+
+int bamExpRunner::bamCov(const njh::progutils::CmdArgs & inputCommands){
+	OutOptions outOpts(bfs::path(""));
+	uint32_t numThreads = 1;
+	bfs::path bedFnp = "";
+	bfs::path bamFnp = "";
+	bool noHeader = false;
+	outOpts.outExtention_ = ".tab.txt";
+	bool countDups = false;
+	uint32_t mapQualityCutOff = 20;
+	seqSetUp setUp(inputCommands);
+	setUp.description_ = "Get the coverage in base count for bam files for certain regions";
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(mapQualityCutOff, "--mapQualityCutOff",   "Only reads that are this mapping quality and above (inclusive)");
+	setUp.setOption(countDups, "--countDups",   "Count records marked duplicate");
+	setUp.setOption(numThreads, "--numThreads", "Number of threads to use");
+	setUp.processWritingOptions(outOpts);
+	setUp.setOption(bedFnp, "--bedFnp", "Bed file of regions to get coverage for", true, "Input");
+	setUp.setOption(bamFnp, "--bamFnp", "Bam Input file", false, "Input");
+	setUp.setOption(noHeader, "--noHeader", "Don't output a header so output can be treated like a bed file", false, "Writing Output");
+	setUp.finishSetUp(std::cout);
+
+
+	OutputStream out(outOpts);
+	checkBamFilesForIndexesAndAbilityToOpen({bamFnp});
+	auto bed3s = getBed3s(bedFnp);
+	std::vector<GenomicRegion> inputRegions;
+	bool allAbove3 = true;
+	for(const auto & b : bed3s){
+		if(b->extraFields_.size() < 3){
+			allAbove3 = false;
+			break;
+		}
+	}
+	if (allAbove3) {
+		inputRegions = bedPtrsToGenomicRegs(getBeds(bedFnp));
+	} else {
+		inputRegions = bed3PtrsToGenomicRegs(bed3s);
+	}
+
+	//collapse identical regions
+	std::vector<GenomicRegion> regions;
+	for(const auto & inputRegion : inputRegions){
+		if(regions.empty()){
+			regions.emplace_back(inputRegion);
+		}else{
+			if(regions.back().sameRegion(inputRegion)){
+				regions.back().uid_ += "," + inputRegion.uid_;
+			}else{
+				regions.emplace_back(inputRegion);
+			}
+		}
+	}
+
+
+
+	out << "#chrom\tstart\tend\tname\tscore\tstrand\t"<< bamFnp << std::endl;
+
+	njh::concurrent::LockableVec<GenomicRegion> regionsQueue(regions);
+	std::mutex outMut;
+	std::function<void()> getCov = [&regionsQueue,&countDups,&mapQualityCutOff,&bamFnp,&outMut,&out](){
+		GenomicRegion val;
+		while(regionsQueue.getVal(val)){
+
+			BamTools::BamReader bReader;
+			bReader.Open(bamFnp.string());
+			bReader.LocateIndex();
+			setBamFileRegionThrow(bReader, val);
+			auto refData = bReader.GetReferenceData();
+			BamTools::BamAlignment bAln;
+			uint64_t coverage = 0;
+			while(bReader.GetNextAlignmentCore(bAln)){
+				if(bAln.IsMapped() && bAln.IsPrimaryAlignment()){
+					if(bAln.IsDuplicate() && !countDups){
+						continue;
+					}
+					if(bAln.MapQuality < mapQualityCutOff){
+						continue;
+					}
+					/**@todo this doesn't take into account gaps, so base coverage isn't precise right here, more of an approximation, should improve */
+					coverage += 1;
+				}
+			}
+			{
+				std::lock_guard<std::mutex> lockQuard(outMut);
+				out << val.genBedRecordCore().toDelimStr() << "\t" << coverage << std::endl;
+			}
+		}
+	};
+
+	{
+		njh::concurrent::runVoidFunctionThreaded(getCov, numThreads);
+	}
+	return 0;
+}
 
 
 int bamExpRunner::bamCovBasesRough(const njh::progutils::CmdArgs & inputCommands){
