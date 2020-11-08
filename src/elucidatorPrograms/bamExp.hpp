@@ -66,6 +66,8 @@ class bamExpRunner : public njh::progutils::ProgramRunner {
 	static int bamMultiPairStats(const njh::progutils::CmdArgs & inputCommands);
 	static int bamMulticov(const njh::progutils::CmdArgs & inputCommands);
 	static int bamMulticovBasesRough(const njh::progutils::CmdArgs & inputCommands);
+	static int bamCovBasesRough(const njh::progutils::CmdArgs & inputCommands);
+
 	static int bamMulticovBases(const njh::progutils::CmdArgs & inputCommands);
 
 	static int bamDupCounts(const njh::progutils::CmdArgs & inputCommands);
