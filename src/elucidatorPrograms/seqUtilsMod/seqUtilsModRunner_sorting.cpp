@@ -80,6 +80,10 @@ int seqUtilsModRunner::sortReadsByEntropy(const njh::progutils::CmdArgs & inputC
 	std::vector<SeqInfoWithCountEntropy> seqs;
 	seqInfo seq;
 	while(reader.readNextRead(seq)){
+	  readVec::handelLowerCaseBases(seq, setUp.pars_.ioOptions_.lowerCaseBases_);
+	  if (setUp.pars_.ioOptions_.removeGaps_) {
+	    readVec::removeGapsFromReads(seq);
+	  }
 		seqs.emplace_back(seq, minBase);
 	}
 	if(mark){

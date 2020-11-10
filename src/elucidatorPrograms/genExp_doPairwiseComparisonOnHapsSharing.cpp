@@ -626,6 +626,15 @@ public:
 								++totalSet;
 							}
 						}
+//						if(("8034209115" == sampNamesVec_[pair.row_] && "8025874502" == sampNamesVec_[pair.col_]) ||
+//							 ("8025874502" == sampNamesVec_[pair.row_] && "8034209115" == sampNamesVec_[pair.col_]) ){
+//							std::cout << sampNamesVec_[pair.row_] << ":" << sampNamesVec_[pair.col_] << std::endl;
+//							std::cout << "pair.row_: " << pair.row_ << " " << sampNamesVec_[pair.row_] << std::endl;
+//							std::cout << "pair.col_: " << pair.col_ << " " << sampNamesVec_[pair.col_]<< std::endl;
+//							std::cout << "totalShared: " << totalShared << std::endl;
+//							std::cout << "totalSet: " << totalSet << std::endl;
+//							std::cout << "totalShared/static_cast<double>(totalSet): " << totalShared/static_cast<double>(totalSet) << std::endl;
+//						}
 						ret.byAllHaps[pair.row_][pair.col_] = totalShared/static_cast<double>(totalSet);
 						ret.byAllHaps[pair.col_][pair.row_] = totalShared/static_cast<double>(totalSet);
 					}
@@ -949,7 +958,7 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 
 
 
-	outSampNamesOut << njh::conToStr(haps.sampNames_, "\n") << std::endl;
+	outSampNamesOut << njh::conToStr(haps.sampNamesVec_, "\n") << std::endl;
 	for(const auto & it : indexRes.byTarget){
 		byTargetOut << njh::conToStr(it, "\t") << std::endl;
 	}

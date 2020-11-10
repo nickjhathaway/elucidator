@@ -36,6 +36,10 @@ std::vector<std::unique_ptr<seqWithKmerInfo>> createKmerReadVec(const SeqIOOptio
 	SeqInput reader(opts);
 	reader.openIn();
 	while(reader.readNextRead(info)){
+	  readVec::handelLowerCaseBases(info, opts.lowerCaseBases_);
+	  if (opts.removeGaps_) {
+	    readVec::removeGapsFromReads(info);
+	  }
 		ret.emplace_back(std::make_unique<seqWithKmerInfo>(info, kLength, setReverse));
 	}
 	return ret;

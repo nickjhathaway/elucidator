@@ -55,6 +55,10 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 	bool setReverse = false;
 	auto inputSeqs = createKmerReadVec(setUp.pars_.ioOptions_, setUp.pars_.colOpts_.kmerOpts_.kLength_, setReverse);
 	auto refSeqs = createKmerReadVec(setUp.pars_.refIoOptions_, setUp.pars_.colOpts_.kmerOpts_.kLength_, setReverse);
+
+
+
+
   uint64_t maxSize = 0;
   readVec::getMaxLength(inputSeqs, maxSize);
   readVec::getMaxLength(refSeqs, maxSize);
@@ -102,8 +106,8 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 						"ndel\t>2bIndel\tlqMismatch\thqMismatch" << std::endl;
 	}
   std::mutex outMut;
-  readVec::lowerCaseBasesToUpperCase(inputSeqs);
-  readVec::lowerCaseBasesToUpperCase(refSeqs);
+//  readVec::lowerCaseBasesToUpperCase(inputSeqs);
+//  readVec::lowerCaseBasesToUpperCase(refSeqs);
 
 
 

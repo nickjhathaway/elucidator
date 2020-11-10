@@ -42,6 +42,10 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 
 	//extracting sequence information per bed region
 	static int getGCContentOfRegion(const njh::progutils::CmdArgs & inputCommands);
+	static int getEntropyOfRegion(const njh::progutils::CmdArgs & inputCommands);
+	static int getNumOfNsOfRegion(const njh::progutils::CmdArgs & inputCommands);
+	static int getNumOfNsEntropyGCContentOfRegion(const njh::progutils::CmdArgs & inputCommands);
+
 	static int getLongestHomopolymerLengthInRegion(const njh::progutils::CmdArgs & inputCommands);
 
 	static int getAverageDistanceToOtherRegions(const njh::progutils::CmdArgs & inputCommands);

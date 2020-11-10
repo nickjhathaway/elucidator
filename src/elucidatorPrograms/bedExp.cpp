@@ -74,6 +74,11 @@ bedExpRunner::bedExpRunner()
 					 addFunc("getFirstRegionPerChrom", getFirstRegionPerChrom, false),
 					 addFunc("getLastRegionPerChrom", getLastRegionPerChrom, false),
 					 addFunc("getGCContentOfRegions", getGCContentOfRegion, false),
+					 addFunc("getEntropyOfRegion", getEntropyOfRegion, false),
+					 addFunc("getNumOfNsOfRegion", getNumOfNsOfRegion, false),
+					 addFunc("getNumOfNsEntropyGCContentOfRegion", getNumOfNsEntropyGCContentOfRegion, false),
+//
+
 					 addFunc("getLongestHomopolymerLengthInRegion", getLongestHomopolymerLengthInRegion, false),
 					 addFunc("roughSmoothingForBedCoverage", roughSmoothingForBedCoverage, false),
 					 addFunc("fastaToBed", fastaToBed, false),
@@ -1581,6 +1586,101 @@ int bedExpRunner::getLongestHomopolymerLengthInRegion(const njh::progutils::CmdA
 	return 0;
 }
 
+
+int bedExpRunner::getNumOfNsEntropyGCContentOfRegion(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path filename = "";
+	OutOptions outOpts(bfs::path(""), ".bed");
+	bfs::path twoBitFilename = "";
+	bool raw = false;
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(twoBitFilename, "--twoBit", "File path of the 2bit file", true);
+	setUp.setOption(filename, "--bed", "BED6 file", true);
+	setUp.setOption(raw, "--raw", "raw");
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+	OutputStream out(outOpts);
+	TwoBit::TwoBitFile twoBitFile(twoBitFilename);
+	auto seqNames = twoBitFile.sequenceNames();
+	BioDataFileIO<Bed6RecordCore> bedReader{IoOptions(InOptions(filename))};
+	bedReader.openIn();
+	Bed6RecordCore record;
+	out << "#chrom\tstart\tend\tname\tscore\tstrand\tns\tnFrac\tentropy\tgcBases\tgcContent" << std::endl;
+	while (bedReader.readNextRecord(record)) {
+		if (!njh::in(record.chrom_, seqNames)) {
+			std::cerr << "chromosome name not found in seq names, skipping"
+					<< std::endl;
+			std::cerr << "chr: " << record.chrom_ << std::endl;
+			std::cerr << "possibleNames: " << vectorToString(seqNames, ",")
+					<< std::endl;
+		} else {
+			std::string seq = "";
+			twoBitFile[record.chrom_]->getSequence(seq, record.chromStart_,
+					record.chromEnd_);
+			if (record.reverseStrand()) {
+				seq = seqUtil::reverseComplement(seq, "DNA");
+			}
+			if(!raw){
+				njh::for_each(seq,[](char & c){c = toupper(c);});
+			}
+			DNABaseCounter counter;
+			counter.increase(seq);
+			counter.resetAlphabet(false);
+			out << record.toDelimStr()
+					    << "\t" << counter.bases_['N'] + counter.bases_['n']
+							<< "\t" << (counter.bases_['N'] + counter.bases_['n'])/static_cast<double>(seq.size())
+							<< "\t" << counter.computeEntrophyBasedOffAlph(4)
+							<< "\t" << counter.getGcCount()
+							<< "\t" << counter.getGcCount()/static_cast<double>(seq.size())
+							<< std::endl;
+		}
+	}
+	return 0;
+}
+
+
+int bedExpRunner::getNumOfNsOfRegion(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path filename = "";
+	OutOptions outOpts(bfs::path(""), ".bed");
+	bfs::path twoBitFilename = "";
+
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(twoBitFilename, "--twoBit", "File path of the 2bit file", true);
+	setUp.setOption(filename, "--bed", "BED6 file", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+	OutputStream out(outOpts);
+	TwoBit::TwoBitFile twoBitFile(twoBitFilename);
+	auto seqNames = twoBitFile.sequenceNames();
+	BioDataFileIO<Bed6RecordCore> bedReader{IoOptions(InOptions(filename))};
+	bedReader.openIn();
+	Bed6RecordCore record;
+	out << "#chrom\tstart\tend\tname\tscore\tstrand\tns\tnFrac" << std::endl;
+	while (bedReader.readNextRecord(record)) {
+		if (!njh::in(record.chrom_, seqNames)) {
+			std::cerr << "chromosome name not found in seq names, skipping"
+					<< std::endl;
+			std::cerr << "chr: " << record.chrom_ << std::endl;
+			std::cerr << "possibleNames: " << vectorToString(seqNames, ",")
+					<< std::endl;
+		} else {
+			std::string seq = "";
+			twoBitFile[record.chrom_]->getSequence(seq, record.chromStart_,
+					record.chromEnd_);
+			if (record.reverseStrand()) {
+				seq = seqUtil::reverseComplement(seq, "DNA");
+			}
+			DNABaseCounter counter;
+			counter.increase(seq);
+			counter.resetAlphabet(false);
+			out << record.toDelimStr()
+					<< "\t" << counter.bases_['N'] + counter.bases_['n']
+					<< "\t" << (counter.bases_['N'] + counter.bases_['n'])/static_cast<double>(seq.size()) << std::endl;
+		}
+	}
+	return 0;
+}
+
 int bedExpRunner::getGCContentOfRegion(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path filename = "";
 	OutOptions outOpts(bfs::path(""), ".bed");
@@ -1617,6 +1717,52 @@ int bedExpRunner::getGCContentOfRegion(const njh::progutils::CmdArgs & inputComm
 			out << record.toDelimStr()
 					<< "\t" << counter.getGcCount()
 					<< "\t" << counter.getGcCount()/static_cast<double>(seq.size()) << std::endl;
+		}
+	}
+	return 0;
+}
+
+int bedExpRunner::getEntropyOfRegion(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path filename = "";
+	OutOptions outOpts(bfs::path(""), ".bed");
+	bfs::path twoBitFilename = "";
+	bool raw = false;
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(twoBitFilename, "--twoBit", "File path of the 2bit file", true);
+	setUp.setOption(filename, "--bed", "BED6 file", true);
+	setUp.setOption(raw, "--raw", "raw");
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+	OutputStream out(outOpts);
+	TwoBit::TwoBitFile twoBitFile(twoBitFilename);
+	auto seqNames = twoBitFile.sequenceNames();
+	BioDataFileIO<Bed6RecordCore> bedReader{IoOptions(InOptions(filename))};
+	bedReader.openIn();
+	Bed6RecordCore record;
+	out << "#chrom\tstart\tend\tname\tscore\tstrand\tentropy" << std::endl;
+	while (bedReader.readNextRecord(record)) {
+		if (!njh::in(record.chrom_, seqNames)) {
+			std::cerr << "chromosome name not found in seq names, skipping"
+					<< std::endl;
+			std::cerr << "chr: " << record.chrom_ << std::endl;
+			std::cerr << "possibleNames: " << vectorToString(seqNames, ",")
+					<< std::endl;
+		} else {
+			std::string seq = "";
+			twoBitFile[record.chrom_]->getSequence(seq, record.chromStart_,
+					record.chromEnd_);
+			if (record.reverseStrand()) {
+				seq = seqUtil::reverseComplement(seq, "DNA");
+			}
+			if(!raw){
+				njh::for_each(seq,[](char & c){c = toupper(c);});
+			}
+			DNABaseCounter counter;
+			counter.increase(seq);
+			counter.resetAlphabet(false);
+			out << record.toDelimStr()
+					<< "\t" << counter.computeEntrophyBasedOffAlph(4) << std::endl;
 		}
 	}
 	return 0;
