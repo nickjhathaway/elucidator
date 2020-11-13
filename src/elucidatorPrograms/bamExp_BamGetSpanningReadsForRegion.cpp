@@ -79,6 +79,7 @@ int bamExpRunner::MultipleBamGetPileupForRegion(
 		regionSeqs[reg.uid_] = regCopy.extractSeq(topRReader);
 		readVec::getMaxLength(regionSeqs[reg.uid_], maxlenForRegions);
 		inputRegionSeqs[reg.uid_] = reg.extractSeq(topRReader);
+		readVec::handelLowerCaseBases(inputRegionSeqs[reg.uid_], setUp.pars_.ioOptions_.lowerCaseBases_);
 	}
 	auto bamFnps = njh::files::gatherFilesByPatOrNames(dir, std::regex{pat}, bams);
 	checkBamFilesForIndexesAndAbilityToOpen(bamFnps, countPars.numThreads);
@@ -167,6 +168,7 @@ int bamExpRunner::BamGetPileupForRegion(
 		regionSeqs[reg.uid_] = regCopy.extractSeq(topRReader);
 		readVec::getMaxLength(regionSeqs[reg.uid_], maxlenForRegions);
 		inputRegionSeqs[reg.uid_] = reg.extractSeq(topRReader);
+		readVec::handelLowerCaseBases(inputRegionSeqs[reg.uid_], setUp.pars_.ioOptions_.lowerCaseBases_);
 	}
 
 	auto counts = BamCountSpecficRegions(inputRegions, regionSeqs, setUp.pars_.ioOptions_.firstName_, countPars);
