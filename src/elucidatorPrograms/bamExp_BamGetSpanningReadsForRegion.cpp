@@ -40,6 +40,7 @@ int bamExpRunner::MultipleBamGetPileupForRegion(
 	setUp.setOption(dir, "--dir", "Directory to search in");
 	setUp.setOption(pat, "--pat", "Pattern in current directory to get coverage for");
 	setUp.setOption(bams, "--bams", "Either a file with the name of a bam file on each line or a comma separated value of bam file paths");
+	setUp.setOption(setUp.pars_.ioOptions_.lowerCaseBases_, "--lower", "How to mangage lower case bases");
 	setUp.processDirectoryOutputName(njh::pasteAsStr("MultipleBamGetPileupForRegion_", basename(bedFnp), "_", "TODAY"), true);
 	countPars.setDefaults(setUp);
 	setUp.finishSetUp(std::cout);
