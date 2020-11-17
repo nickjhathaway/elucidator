@@ -25,7 +25,6 @@ namespace njhseq {
 int bamExpRunner::MultipleBamGetPileupForRegion(
 		const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFnp = "";
-	bfs::path twoBitFnp = "";
 	std::string bams = "";
 	std::string pat = ".*.bam$";
 	bfs::path dir = "./";
@@ -36,76 +35,43 @@ int bamExpRunner::MultipleBamGetPileupForRegion(
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.setOption(bedFnp, "--bed", "Bed file", true);
-	setUp.setOption(twoBitFnp, "--twoBitFnp", "Two Bit file to genome that sequences were aligned to", true);
 	setUp.setOption(dir, "--dir", "Directory to search in");
 	setUp.setOption(pat, "--pat", "Pattern in current directory to get coverage for");
 	setUp.setOption(bams, "--bams", "Either a file with the name of a bam file on each line or a comma separated value of bam file paths");
-	setUp.setOption(setUp.pars_.ioOptions_.lowerCaseBases_, "--lower", "How to mangage lower case bases");
+	setUp.setOption(countPars.lowerCaseBases, "--lower", "How to mangage lower case bases");
 	setUp.processDirectoryOutputName(njh::pasteAsStr("MultipleBamGetPileupForRegion_", basename(bedFnp), "_", "TODAY"), true);
 	countPars.setDefaults(setUp);
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
-
-	auto inputRegions = bedPtrsToGenomicRegs(getBeds(bedFnp));
-	std::vector<std::string> regionNames;
-	std::set<std::string> repeatNames;
-	for(const auto & region : inputRegions){
-		if(njh::in(region.uid_, regionNames)){
-			repeatNames.emplace(region.uid_);
-		}
-		regionNames.emplace_back(region.uid_);
-	}
-	if(!repeatNames.empty()){
-		std::stringstream ss;
-		ss << __PRETTY_FUNCTION__ << ", error "
-				<< "can't have regions with the same names, following names were repeated:"
-				<< njh::conToStr(repeatNames) << "\n";
-		throw std::runtime_error{ss.str()};
-	}
-	if(countPars.forcePlusStrand){
-		for(auto & region : inputRegions){
-			region.reverseSrand_ = false;
-		}
-	}
-
-	TwoBit::TwoBitFile topRReader(twoBitFnp);
-	std::unordered_map<std::string, seqInfo> regionSeqs;
-	std::unordered_map<std::string, seqInfo> inputRegionSeqs;
-
-	uint64_t maxlenForRegions = 0;
-	auto chromLengths = topRReader.getSeqLens();
-	for(const auto & reg : inputRegions){
-		auto regCopy = reg;
-		BedUtility::extendLeftRight(regCopy, countPars.extendAmount, countPars.extendAmount, njh::mapAt(chromLengths, regCopy.chrom_));
-		regionSeqs[reg.uid_] = regCopy.extractSeq(topRReader);
-		readVec::getMaxLength(regionSeqs[reg.uid_], maxlenForRegions);
-		inputRegionSeqs[reg.uid_] = reg.extractSeq(topRReader);
-		readVec::handelLowerCaseBases(inputRegionSeqs[reg.uid_], setUp.pars_.ioOptions_.lowerCaseBases_);
-	}
+	setUp.rLog_.setCurrentLapName("prep");
+	auto prep = getPrepForBamCountSpecficRegions(bedFnp, countPars);
+	setUp.rLog_.setCurrentLapName("checking input bams");
 	auto bamFnps = njh::files::gatherFilesByPatOrNames(dir, std::regex{pat}, bams);
 	checkBamFilesForIndexesAndAbilityToOpen(bamFnps, countPars.numThreads);
 	OutputStream outCounts(njh::files::make_path(setUp.pars_.directoryName_, "seqCounts.tab.txt.gz"));
-	outCounts << "bamFile\tregion\trefSeq\tseq\tcount" << std::endl;
+	outCounts << "region\trefSeq\tseq\tcount\tsample" << std::endl;
 
+	setUp.rLog_.setCurrentLapName("counting");
 	for(const auto & bam : bamFnps){
 		if(setUp.pars_.verbose_){
 			std::cout << bam << std::endl;
 		}
-		auto counts = BamCountSpecficRegions(inputRegions, regionSeqs, bam, countPars);
-		for(const auto & region : inputRegions){
+		auto counts = BamCountSpecficRegions(prep.inputRegions, prep.regionSeqs, bam, countPars);
+		std::string sample = getPossibleSampleNameFromFnp(setUp.pars_.ioOptions_.firstName_);
+		for(const auto regionPos: iter::range(prep.inputRegions.size())){
 			std::set<std::string> subCounts;
-			njh::addVecToSet(getVectorOfMapKeys(counts[region.uid_]), subCounts);
-			subCounts.emplace(inputRegionSeqs[region.uid_].seq_);
+			njh::addVecToSet(getVectorOfMapKeys(counts[regionPos]), subCounts);
+			subCounts.emplace(prep.inputRegionSeqs[regionPos].seq_);
 			uint64_t total = 0;
 			for(const auto & seq : subCounts){
-				total += counts[region.uid_][seq];
+				total += counts[regionPos][seq];
 			}
 			for(const auto & seq : subCounts){
-				outCounts << bam.filename().string()
-						<< "\t" << region.uid_
-						<< "\t" << inputRegionSeqs[region.uid_].seq_
+				outCounts << prep.inputRegions[regionPos].uid_
+						<< "\t" << prep.inputRegionSeqs[regionPos].seq_
 						<< "\t" << seq
-						<< "\t" << counts[region.uid_][seq]
+						<< "\t" << counts[regionPos][seq]
+						<< "\t" << sample
 						<< std::endl;
 			}
 		}
@@ -119,75 +85,43 @@ int bamExpRunner::MultipleBamGetPileupForRegion(
 int bamExpRunner::BamGetPileupForRegion(
 		const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFnp = "";
-	bfs::path twoBitFnp = "";
 	std::string sample = "";
 	BamCountSpecficRegionsPars countPars;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.processReadInNames(VecStr{"--bam"});
+	countPars.lowerCaseBases = setUp.pars_.ioOptions_.lowerCaseBases_;
 	setUp.processDirectoryOutputName(true);
 	setUp.setOption(bedFnp, "--bed", "Bed file", true);
-	setUp.setOption(twoBitFnp, "--twoBitFnp", "Two Bit file to genome that sequences were aligned to", true);
 	sample = getPossibleSampleNameFromFnp(setUp.pars_.ioOptions_.firstName_);
 	setUp.setOption(sample, "--sample", "Sample name");
 	countPars.setDefaults(setUp);
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
-
-	auto inputRegions = bedPtrsToGenomicRegs(getBeds(bedFnp));
-	std::vector<std::string> regionNames;
-	std::set<std::string> repeatNames;
-	for(const auto & region : inputRegions){
-		if(njh::in(region.uid_, regionNames)){
-			repeatNames.emplace(region.uid_);
-		}
-		regionNames.emplace_back(region.uid_);
-	}
-	if(!repeatNames.empty()){
-		std::stringstream ss;
-		ss << __PRETTY_FUNCTION__ << ", error "
-				<< "can't have regions with the same names, following names were repeated:"
-				<< njh::conToStr(repeatNames) << "\n";
-		throw std::runtime_error{ss.str()};
-	}
-	if(countPars.forcePlusStrand){
-		for(auto & region : inputRegions){
-			region.reverseSrand_ = false;
-		}
-	}
-
-	TwoBit::TwoBitFile topRReader(twoBitFnp);
-	std::unordered_map<std::string, seqInfo> regionSeqs;
-	std::unordered_map<std::string, seqInfo> inputRegionSeqs;
-
-	uint64_t maxlenForRegions = 0;
-	auto chromLengths = topRReader.getSeqLens();
-	for(const auto & reg : inputRegions){
-		auto regCopy = reg;
-		BedUtility::extendLeftRight(regCopy, countPars.extendAmount, countPars.extendAmount, njh::mapAt(chromLengths, regCopy.chrom_));
-		regionSeqs[reg.uid_] = regCopy.extractSeq(topRReader);
-		readVec::getMaxLength(regionSeqs[reg.uid_], maxlenForRegions);
-		inputRegionSeqs[reg.uid_] = reg.extractSeq(topRReader);
-		readVec::handelLowerCaseBases(inputRegionSeqs[reg.uid_], setUp.pars_.ioOptions_.lowerCaseBases_);
-	}
-
-	auto counts = BamCountSpecficRegions(inputRegions, regionSeqs, setUp.pars_.ioOptions_.firstName_, countPars);
+	njh::stopWatch watch;
+	setUp.rLog_.setCurrentLapName("prep");
+	auto prep = getPrepForBamCountSpecficRegions(bedFnp, countPars);
+	watch.logLapTimes(std::cout, true, 6, true);
+	setUp.rLog_.logCurrentTime("counting");
+	auto counts = BamCountSpecficRegions(prep.inputRegions, prep.regionSeqs, setUp.pars_.ioOptions_.firstName_, countPars);
+	watch.logLapTimes(std::cout, true, 6, true);
+	setUp.rLog_.logCurrentTime("logging");
 	OutputStream outCounts(njh::files::make_path(setUp.pars_.directoryName_, "seqCounts.tab.txt.gz"));
 	outCounts << "region\trefSeq\tseq\tcount\tsample" << std::endl;
-	for(const auto & region : inputRegions){
+	for(const auto regionPos: iter::range(prep.inputRegions.size())){
 		std::set<std::string> subCounts;
-		njh::addVecToSet(getVectorOfMapKeys(counts[region.uid_]), subCounts);
-		subCounts.emplace(inputRegionSeqs[region.uid_].seq_);
+		njh::addVecToSet(getVectorOfMapKeys(counts[regionPos]), subCounts);
+		subCounts.emplace(prep.inputRegionSeqs[regionPos].seq_);
 		uint64_t total = 0;
 		for(const auto & seq : subCounts){
-			total += counts[region.uid_][seq];
+			total += counts[regionPos][seq];
 		}
 		for(const auto & seq : subCounts){
-			outCounts << region.uid_
-					<< "\t" << inputRegionSeqs[region.uid_].seq_
+			outCounts << prep.inputRegions[regionPos].uid_
+					<< "\t" << prep.inputRegionSeqs[regionPos].seq_
 					<< "\t" << seq
-					<< "\t" << counts[region.uid_][seq]
+					<< "\t" << counts[regionPos][seq]
 					<< "\t" << sample
 					<< std::endl;
 		}

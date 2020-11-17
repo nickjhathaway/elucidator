@@ -446,57 +446,117 @@ void BamCountSpecficRegionsPars::setDefaults(seqSetUp & setUp){
 	setUp.setOption(countDuplicates, "--countDuplicates", "Skip reads marked as duplicates");
 	setUp.setOption(totalCountCutOff, "--totalCountCutOff", "Total Count Cut Off");
 	setUp.setOption(perBaseCountCutOff, "--perBaseCountCutOff", "Per Base Count Cut Off");
+	setUp.setOption(twoBitFnp, "--twoBitFnp", "Two Bit file to genome that sequences were aligned to", true);
 
 }
 
-std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCountSpecficRegions(
+
+
+PrepForBamCountSpecficRegions getPrepForBamCountSpecficRegions(const bfs::path & bedFnp, const BamCountSpecficRegionsPars & countPars){
+	PrepForBamCountSpecficRegions ret;
+	auto beds = getBeds(bedFnp);
+
+	BedUtility::coordSort(beds);
+	ret.inputRegions.emplace_back(*beds.at(0));
+	for(const auto pos : iter::range<uint32_t>(1, beds.size())){
+		//std::cout << pos << ": " << beds.size() << std::endl;
+		if(!beds[pos-1]->sameRegion(*beds[pos])){
+			ret.inputRegions.emplace_back(*beds[pos]);
+		}
+	}
+
+	if(countPars.forcePlusStrand){
+		for(auto & region : ret.inputRegions){
+			region.reverseSrand_ = false;
+		}
+	}
+	for(auto & reg : ret.inputRegions){
+		reg.uid_ = njh::pasteAsStr(reg.createUidFromCoordsStrand(), ":", reg.uid_);
+	}
+
+	TwoBit::TwoBitFile topRReader(countPars.twoBitFnp);
+
+	auto chromLengths = topRReader.getSeqLens();
+	ret.regionSeqs = std::vector<seqInfo>(ret.inputRegions.size());
+	ret.inputRegionSeqs = std::vector<seqInfo>(ret.inputRegions.size());
+
+	std::vector<uint32_t> inputRegionsPositons(ret.inputRegions.size());
+	njh::iota<uint32_t>(inputRegionsPositons, 0);
+	njh::concurrent::LockableQueue<uint32_t> inputRegionsPositonsQueue(inputRegionsPositons);
+	std::function<void()> extractSeqs = [&inputRegionsPositonsQueue,&ret,&countPars,&chromLengths](){
+		TwoBit::TwoBitFile tReader(countPars.twoBitFnp);
+		uint32_t regPos = 0;
+		while(inputRegionsPositonsQueue.getVal(regPos)){
+			const auto & reg = ret.inputRegions[regPos];
+			auto regCopy = reg;
+			BedUtility::extendLeftRight(regCopy, countPars.extendAmount, countPars.extendAmount, njh::mapAt(chromLengths, regCopy.chrom_));
+			ret.regionSeqs[regPos] = regCopy.extractSeq(tReader);
+			readVec::handelLowerCaseBases(ret.regionSeqs[regPos], countPars.lowerCaseBases);
+			ret.inputRegionSeqs[regPos] = seqInfo(reg.uid_, ret.regionSeqs[regPos].seq_.substr(std::min<size_t>(countPars.extendAmount, reg.start_), reg.getLen()));
+		}
+	};
+
+	njh::concurrent::runVoidFunctionThreaded(extractSeqs, countPars.numThreads);
+	return ret;
+}
+
+std::vector<std::unordered_map<std::string, uint64_t>> BamCountSpecficRegions(
 		const std::vector<GenomicRegion> & inputRegions,
-		const std::unordered_map<std::string, seqInfo> & regionSeqs,
+		const std::vector<seqInfo> & regionSeqs,
 		const bfs::path bamFnp,
 		const BamCountSpecficRegionsPars & pars){
 
-	njh::concurrent::LockableQueue<GenomicRegion> regionsQueue(inputRegions);
+	struct GRegWithIndex{
+		GRegWithIndex(const GenomicRegion & reg, uint32_t index): reg_(reg), index_(index){
+
+		}
+		GRegWithIndex(){
+
+		}
+		GenomicRegion reg_;
+		uint32_t index_ = 0;
+	};
+	std::vector<GRegWithIndex> regionsWithIndex;
+	uint32_t regionCount = 0;
+	for(const auto & reg : inputRegions){
+		regionsWithIndex.emplace_back(reg, regionCount);
+		++regionCount;
+	}
+	njh::concurrent::LockableQueue<GRegWithIndex> regionsQueue(regionsWithIndex);
 	njhseq::concurrent::BamReaderPool bamPool(bamFnp, pars.numThreads);
 	bamPool.openBamFile();
-	std::map<std::string, uint32_t> spanningReadCounts;
-	std::map<std::string, uint32_t> totalReadCounts;
 	std::mutex spanRCountsMut;
 
 	uint64_t maxlenForRegions =0 ;
 	for(const auto & regSeq : regionSeqs){
-		readVec::getMaxLength(regSeq.second, maxlenForRegions);
+		readVec::getMaxLength(regSeq, maxlenForRegions);
 	}
-	std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> allCounts;
+	std::vector<std::unordered_map<std::string, uint64_t>> allRawCounts(inputRegions.size());
 
 	std::function<void()> extractReadsForRegion = [&regionsQueue,
 																&bamPool,&pars,
-																&spanningReadCounts,&totalReadCounts,
-																&spanRCountsMut,
 																&regionSeqs,
 																&maxlenForRegions,
-																&allCounts](){
+																&allRawCounts](){
 
 		aligner alignerObj(std::max<uint64_t>(maxlenForRegions, 500), gapScoringParameters(10,1,0,0,0,0));
-		GenomicRegion currentRegion;
+		GRegWithIndex currentRegion;
 		auto currentBReader = bamPool.popReader();
 		auto refData = currentBReader->GetReferenceData();
 		BamTools::BamAlignment bAln;
-		std::unordered_map<std::string, uint32_t> currentSpanningReadCounts;
-		std::unordered_map<std::string, uint32_t> currentTotalReadCounts;
-		std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> currentCounts;
 
 		uint64_t maxlen = 0;
 		PairedReadProcessor pProcess(pars.pairPars);
 		PairedReadProcessor::ProcessedResultsCounts processCounts;
 		while(regionsQueue.getVal(currentRegion)){
-			const auto & refSeq = regionSeqs.at(currentRegion.uid_);
+			const auto & refSeq = regionSeqs.at(currentRegion.index_);
 			readVecTrimmer::GlobalAlnTrimPars trimPars;
 			trimPars.needJustOneEnd_ = false;
 			trimPars.startInclusive_ = pars.extendAmount;
 			trimPars.endInclusive_ = len(refSeq) - 1 - pars.extendAmount;
 
 			BamAlnsCache cache;
-			setBamFileRegionThrow(*currentBReader, currentRegion);
+			setBamFileRegionThrow(*currentBReader, currentRegion.reg_);
 			while(currentBReader->GetNextAlignment(bAln)){
 				if(bAln.IsPrimaryAlignment() && bAln.IsMapped()){
 					if(bAln.MapQuality < pars.mappingQuality){
@@ -505,8 +565,7 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 					if(bAln.IsDuplicate() && !pars.countDuplicates){
 						continue;
 					}
-					if(bAln.IsPaired() && bAln.IsMateMapped() && bAln.MatePosition < currentRegion.end_){
-						++currentTotalReadCounts[currentRegion.uid_];
+					if(bAln.IsPaired() && bAln.IsMateMapped() && bAln.MatePosition < currentRegion.reg_.end_){
 						if(bAln.Position < bAln.MatePosition){
 							cache.add(bAln);
 						}else {
@@ -514,8 +573,8 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 								auto mate = cache.get(bAln.Name);
 								//see if stitching is even plausible
 								if(mate->GetEndPosition() >  bAln.Position){
-									if(mate->Position <= currentRegion.start_ &&
-										 bAln.GetEndPosition() >= currentRegion.end_ &&
+									if(mate->Position <= currentRegion.reg_.start_ &&
+										 bAln.GetEndPosition() >= currentRegion.reg_.end_ &&
 										 mate->IsReverseStrand() != bAln.IsReverseStrand()){
 										//stitching plausible and spanning
 										//spanning read
@@ -541,7 +600,7 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 										if(nullptr != pairRes.combinedSeq_){
 											readVec::getMaxLength(*pairRes.combinedSeq_, maxlen);
 											alignerObj.parts_.setMaxSize(maxlen);
-											if(reverseCompFirstMate != currentRegion.reverseSrand_){
+											if(reverseCompFirstMate != currentRegion.reg_.reverseSrand_){
 												pairRes.combinedSeq_->reverseComplementRead(false, true);
 											}
 											seqInfo queryCopy = *pairRes.combinedSeq_;
@@ -550,14 +609,13 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 											if(pairRes.combinedSeq_->on_ && alignerObj.comp_.distances_.eventBasedIdentity_ > pars.matchIDCutOff){
 												if(vectorMean(pairRes.combinedSeq_->qual_) > pars.baseQuality){
 													//spanning read
-													++currentSpanningReadCounts[currentRegion.uid_];
-													++currentCounts[currentRegion.uid_][pairRes.combinedSeq_->seq_];
+													++allRawCounts[currentRegion.index_][pairRes.combinedSeq_->seq_];
 												}
 											}
-										}else if(bAln.Position <= currentRegion.start_ && bAln.GetEndPosition() >= currentRegion.end_){
+										}else if(bAln.Position <= currentRegion.reg_.start_ && bAln.GetEndPosition() >= currentRegion.reg_.end_){
 											//spanning read
 											seqInfo querySeq = bamAlnToSeqInfo(bAln, false);
-											if(bAln.IsReverseStrand() != currentRegion.reverseSrand_){
+											if(bAln.IsReverseStrand() != currentRegion.reg_.reverseSrand_){
 												querySeq.reverseComplementRead(false, true);
 											}
 											seqInfo querySeqCopy = querySeq;
@@ -569,14 +627,13 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 											if(querySeq.on_ && alignerObj.comp_.distances_.eventBasedIdentity_ > pars.matchIDCutOff){
 												if(vectorMean(querySeq.qual_) > pars.baseQuality){
 													//spanning read
-													++currentSpanningReadCounts[currentRegion.uid_];
-													++currentCounts[currentRegion.uid_][querySeq.seq_];
+													++allRawCounts[currentRegion.index_][querySeq.seq_];
 												}
 											}
-										}else if(mate->Position <= currentRegion.start_ && mate->GetEndPosition() >= currentRegion.end_){
+										}else if(mate->Position <= currentRegion.reg_.start_ && mate->GetEndPosition() >= currentRegion.reg_.end_){
 											//spanning read
 											seqInfo querySeq = bamAlnToSeqInfo(*mate, false);
-											if(mate->IsReverseStrand() != currentRegion.reverseSrand_){
+											if(mate->IsReverseStrand() != currentRegion.reg_.reverseSrand_){
 												querySeq.reverseComplementRead(false, true);
 											}
 											seqInfo querySeqCopy = querySeq;
@@ -589,8 +646,7 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 											if(querySeq.on_ && alignerObj.comp_.distances_.eventBasedIdentity_ > pars.matchIDCutOff){
 												if(vectorMean(querySeq.qual_) > pars.baseQuality){
 													//spanning read
-													++currentSpanningReadCounts[currentRegion.uid_];
-													++currentCounts[currentRegion.uid_][querySeq.seq_];
+													++allRawCounts[currentRegion.index_][querySeq.seq_];
 												}
 											}
 										}
@@ -599,10 +655,10 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 								cache.remove(bAln.Name);
 							} else {
 								//doesn't have mate, it's mate probably doesn't map to this region
-								if(bAln.Position <= currentRegion.start_ && bAln.GetEndPosition() >= currentRegion.end_){
+								if(bAln.Position <= currentRegion.reg_.start_ && bAln.GetEndPosition() >= currentRegion.reg_.end_){
 									//spanning read
 									seqInfo querySeq = bamAlnToSeqInfo(bAln, false);
-									if(bAln.IsReverseStrand() != currentRegion.reverseSrand_){
+									if(bAln.IsReverseStrand() != currentRegion.reg_.reverseSrand_){
 										querySeq.reverseComplementRead(false, true);
 									}
 									seqInfo querySeqCopy = querySeq;
@@ -615,19 +671,17 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 									if(querySeq.on_ && alignerObj.comp_.distances_.eventBasedIdentity_ > pars.matchIDCutOff){
 										if(vectorMean(querySeq.qual_) > pars.baseQuality){
 											//spanning read
-											++currentSpanningReadCounts[currentRegion.uid_];
-											++currentCounts[currentRegion.uid_][querySeq.seq_];
+											++allRawCounts[currentRegion.index_][querySeq.seq_];
 										}
 									}
 								}
 							}
 						}
 					}else{
-						++currentTotalReadCounts[currentRegion.uid_];
-						if(bAln.Position <= currentRegion.start_ && bAln.GetEndPosition() >= currentRegion.end_){
+						if(bAln.Position <= currentRegion.reg_.start_ && bAln.GetEndPosition() >= currentRegion.reg_.end_){
 							//spanning read
 							seqInfo querySeq = bamAlnToSeqInfo(bAln, false);
-							if(bAln.IsReverseStrand() != currentRegion.reverseSrand_){
+							if(bAln.IsReverseStrand() != currentRegion.reg_.reverseSrand_){
 								querySeq.reverseComplementRead(false, true);
 							}
 							seqInfo querySeqCopy = querySeq;
@@ -637,9 +691,7 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 							alignerObj.profilePrimerAlignment(refSeq, querySeqCopy);
 							if(querySeq.on_ && alignerObj.comp_.distances_.eventBasedIdentity_ > pars.matchIDCutOff){
 								if(vectorMean(querySeq.qual_) > pars.baseQuality){
-									//spanning read
-									++currentSpanningReadCounts[currentRegion.uid_];
-									++currentCounts[currentRegion.uid_][querySeq.seq_];
+									++allRawCounts[currentRegion.index_][querySeq.seq_];
 								}
 							}
 						}
@@ -647,42 +699,23 @@ std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCo
 				}
 			}
 		}
-		{
-			std::lock_guard<std::mutex> lock(spanRCountsMut);
-			for(const auto & spanCount : currentSpanningReadCounts){
-				spanningReadCounts[spanCount.first] = spanCount.second;
-			}
-
-			for(const auto & totalCount : currentTotalReadCounts){
-				totalReadCounts[totalCount.first] = totalCount.second;
-			}
-
-			for(const auto & regionCount : currentCounts){
-				allCounts[regionCount.first] = regionCount.second;
-			}
-
-		}
 	};
 
 	njh::concurrent::runVoidFunctionThreaded(extractReadsForRegion, pars.numThreads);
 
-	//zero out counts;
-	for(const auto & region : inputRegions){
-		spanningReadCounts[region.uid_] += 0;
-	}
 
-	std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> ret;
-	for(const auto & count : allCounts){
+	std::vector<std::unordered_map<std::string, uint64_t>> ret(inputRegions.size());
+	for(const auto  countPos : iter::range(allRawCounts.size())){
 		uint64_t total = 0;
-		for(const auto & subCount : count.second){
+		for(const auto & subCount : allRawCounts[countPos]){
 			if(subCount.second > pars.perBaseCountCutOff){
 				total += subCount.second;
 			}
 		}
 		if(total > pars.totalCountCutOff){
-			for(const auto & subCount : count.second){
+			for(const auto & subCount : allRawCounts[countPos]){
 				if(subCount.second > pars.perBaseCountCutOff){
-					ret[count.first][subCount.first] = subCount.second;
+					ret[countPos][subCount.first] = subCount.second;
 				}
 			}
 		}

@@ -23,7 +23,7 @@ int bedExpRunner::roughSmoothingForBedCoverage(const njh::progutils::CmdArgs & i
 	seqSetUp setUp(inputCommands);
 	setUp.description_ = "Some base coverage smoothing for output by bamMulticovBases";
 	setUp.setOption(coverageFile, "--coverage", "bed file with coverage information", true);
-	setUp.setOption(numThreads, "--numThreads", "number Threads", njh::progutils::ProgramSetUp::CheckCase::NONZERO);
+	setUp.setOption(numThreads, "--numThreads", "number Threads");
 	setUp.setOption(within, "--within", "Use windows within this many bp to smooth coverage", njh::progutils::ProgramSetUp::CheckCase::NONZERO);
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);

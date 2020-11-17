@@ -80,10 +80,10 @@ std::vector<std::shared_ptr<Bed6RecordCore>> RunRegionRefinement(const RegionRef
 
 struct BamCountSpecficRegionsPars{
 	BamCountSpecficRegionsPars();
-	uint32_t extendAmount = 30;
+	uint32_t extendAmount = 25;
 	uint32_t numThreads = 1;
 	uint32_t mappingQuality = 20;
-	uint32_t baseQuality = 25;
+	uint32_t baseQuality = 20;
 	double matchIDCutOff = 0.70;
 
 	uint32_t totalCountCutOff = 5;
@@ -92,14 +92,26 @@ struct BamCountSpecficRegionsPars{
 	bool countDuplicates = false;
 	PairedReadProcessor::ProcessParams pairPars;
 
+	std::string lowerCaseBases = "upper";
+	bfs::path twoBitFnp;
 	void setDefaults(seqSetUp & setUp);
 };
 
-std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> BamCountSpecficRegions(
+std::vector<std::unordered_map<std::string, uint64_t>> BamCountSpecficRegions(
 		const std::vector<GenomicRegion> & inputRegions,
-		const std::unordered_map<std::string, seqInfo> & regionSeqs,
+		const std::vector<seqInfo> & regionSeqs,
 		const bfs::path bamFnp,
 		const BamCountSpecficRegionsPars & pars);
+
+
+struct PrepForBamCountSpecficRegions{
+	std::vector<GenomicRegion> inputRegions;
+	std::vector<seqInfo> regionSeqs;
+	std::vector<seqInfo> inputRegionSeqs;
+};
+
+PrepForBamCountSpecficRegions getPrepForBamCountSpecficRegions(const bfs::path & bedFnp, const BamCountSpecficRegionsPars & countPars);
+
 
 }  // namespace njhseq
 
