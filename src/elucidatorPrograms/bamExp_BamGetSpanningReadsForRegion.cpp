@@ -38,7 +38,7 @@ int bamExpRunner::MultipleBamGetPileupForRegion(
 	setUp.setOption(dir, "--dir", "Directory to search in");
 	setUp.setOption(pat, "--pat", "Pattern in current directory to get coverage for");
 	setUp.setOption(bams, "--bams", "Either a file with the name of a bam file on each line or a comma separated value of bam file paths");
-	setUp.setOption(countPars.lowerCaseBases, "--lower", "How to mangage lower case bases");
+	setUp.setOption(countPars.lowerCaseBases, "--lower", "How to manage lower case bases");
 	setUp.processDirectoryOutputName(njh::pasteAsStr("MultipleBamGetPileupForRegion_", basename(bedFnp), "_", "TODAY"), true);
 	countPars.setDefaults(setUp);
 	setUp.finishSetUp(std::cout);
@@ -50,14 +50,14 @@ int bamExpRunner::MultipleBamGetPileupForRegion(
 	checkBamFilesForIndexesAndAbilityToOpen(bamFnps, countPars.numThreads);
 	OutputStream outCounts(njh::files::make_path(setUp.pars_.directoryName_, "seqCounts.tab.txt.gz"));
 	outCounts << "region\trefSeq\tseq\tcount\tsample" << std::endl;
-
 	setUp.rLog_.setCurrentLapName("counting");
 	for(const auto & bam : bamFnps){
 		if(setUp.pars_.verbose_){
 			std::cout << bam << std::endl;
 		}
-		auto counts = BamCountSpecficRegions(prep.inputRegions, prep.regionSeqs, bam, countPars);
 		std::string sample = getPossibleSampleNameFromFnp(setUp.pars_.ioOptions_.firstName_);
+		setUp.rLog_.setCurrentLapName(njh::pasteAsStr(sample,"-counting"));
+		auto counts = BamCountSpecficRegions(prep.inputRegions, prep.regionSeqs, bam, countPars);
 		for(const auto regionPos: iter::range(prep.inputRegions.size())){
 			std::set<std::string> subCounts;
 			njh::addVecToSet(getVectorOfMapKeys(counts[regionPos]), subCounts);
@@ -99,13 +99,10 @@ int bamExpRunner::BamGetPileupForRegion(
 	countPars.setDefaults(setUp);
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
-	njh::stopWatch watch;
 	setUp.rLog_.setCurrentLapName("prep");
 	auto prep = getPrepForBamCountSpecficRegions(bedFnp, countPars);
-	watch.logLapTimes(std::cout, true, 6, true);
 	setUp.rLog_.logCurrentTime("counting");
 	auto counts = BamCountSpecficRegions(prep.inputRegions, prep.regionSeqs, setUp.pars_.ioOptions_.firstName_, countPars);
-	watch.logLapTimes(std::cout, true, 6, true);
 	setUp.rLog_.logCurrentTime("logging");
 	OutputStream outCounts(njh::files::make_path(setUp.pars_.directoryName_, "seqCounts.tab.txt.gz"));
 	outCounts << "region\trefSeq\tseq\tcount\tsample" << std::endl;
