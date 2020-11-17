@@ -55,8 +55,9 @@ int bamExpRunner::MultipleBamGetPileupForRegion(
 		if(setUp.pars_.verbose_){
 			std::cout << bam << std::endl;
 		}
-		std::string sample = getPossibleSampleNameFromFnp(setUp.pars_.ioOptions_.firstName_);
+		std::string sample = getPossibleSampleNameFromFnp(bam);
 		setUp.rLog_.setCurrentLapName(njh::pasteAsStr(sample,"-counting"));
+		setUp.rLog_.runLogFile_.flush();
 		auto counts = BamCountSpecficRegions(prep.inputRegions, prep.regionSeqs, bam, countPars);
 		for(const auto regionPos: iter::range(prep.inputRegions.size())){
 			std::set<std::string> subCounts;
