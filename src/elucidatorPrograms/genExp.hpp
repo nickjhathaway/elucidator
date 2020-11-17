@@ -127,6 +127,7 @@ class genExpRunner : public njh::progutils::ProgramRunner {
 	static int doPairwiseComparisonOnHapsSharing(const njh::progutils::CmdArgs & inputCommands);
 	static int doPairwiseComparisonOnHapsSharingDev(const njh::progutils::CmdArgs & inputCommands);
 
+	static int clusterPointsIntoGroups(const njh::progutils::CmdArgs & inputCommands);
 
 
 	static int reOrientCirculateGenomeToRef(const njh::progutils::CmdArgs & inputCommands);

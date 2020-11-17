@@ -98,6 +98,7 @@ genExpRunner::genExpRunner()
 					 addFunc("doPairwiseComparisonOnHapsSharingDev", doPairwiseComparisonOnHapsSharingDev, false),
 					 addFunc("reOrientCirculateGenomeToRef", reOrientCirculateGenomeToRef, false),
 					 addFunc("profileErrorsReadsToReferenceSeq", profileErrorsReadsToReferenceSeq, false),
+					 addFunc("clusterPointsIntoGroups", clusterPointsIntoGroups, true),
 
            },//
           "genExp") {}
