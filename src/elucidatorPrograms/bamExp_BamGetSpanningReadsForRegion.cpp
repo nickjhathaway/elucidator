@@ -50,7 +50,7 @@ int bamExpRunner::MultipleBamGetPileupForRegion(
 	checkBamFilesForIndexesAndAbilityToOpen(bamFnps, countPars.numThreads);
 	OutputStream outCounts(njh::files::make_path(setUp.pars_.directoryName_, "seqCounts.tab.txt.gz"));
 	outCounts << "region\trefSeq\tseq\tcount\tsample" << std::endl;
-	setUp.rLog_.setCurrentLapName("counting");
+	setUp.rLog_.runLogFile_.flush();
 	for(const auto & bam : bamFnps){
 		if(setUp.pars_.verbose_){
 			std::cout << bam << std::endl;
