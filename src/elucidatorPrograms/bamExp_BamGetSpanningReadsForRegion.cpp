@@ -43,9 +43,9 @@ int bamExpRunner::MultipleBamGetPileupForRegion(
 	countPars.setDefaults(setUp);
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
-	setUp.rLog_.setCurrentLapName("prep");
+	setUp.rLog_.logCurrentTime("prep");
 	auto prep = getPrepForBamCountSpecficRegions(bedFnp, countPars);
-	setUp.rLog_.setCurrentLapName("checking input bams");
+	setUp.rLog_.logCurrentTime("checking input bams");
 	auto bamFnps = njh::files::gatherFilesByPatOrNames(dir, std::regex{pat}, bams);
 	checkBamFilesForIndexesAndAbilityToOpen(bamFnps, countPars.numThreads);
 	OutputStream outCounts(njh::files::make_path(setUp.pars_.directoryName_, "seqCounts.tab.txt.gz"));
@@ -56,7 +56,8 @@ int bamExpRunner::MultipleBamGetPileupForRegion(
 			std::cout << bam << std::endl;
 		}
 		std::string sample = getPossibleSampleNameFromFnp(bam);
-		setUp.rLog_.setCurrentLapName(njh::pasteAsStr(sample,"-counting"));
+
+		setUp.rLog_.logCurrentTime(njh::pasteAsStr(sample,"-counting"));
 		setUp.rLog_.runLogFile_.flush();
 		auto counts = BamCountSpecficRegions(prep.inputRegions, prep.regionSeqs, bam, countPars);
 		for(const auto regionPos: iter::range(prep.inputRegions.size())){
@@ -100,7 +101,7 @@ int bamExpRunner::BamGetPileupForRegion(
 	countPars.setDefaults(setUp);
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
-	setUp.rLog_.setCurrentLapName("prep");
+	setUp.rLog_.logCurrentTime("prep");
 	auto prep = getPrepForBamCountSpecficRegions(bedFnp, countPars);
 	setUp.rLog_.logCurrentTime("counting");
 	auto counts = BamCountSpecficRegions(prep.inputRegions, prep.regionSeqs, setUp.pars_.ioOptions_.firstName_, countPars);
