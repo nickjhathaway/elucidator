@@ -517,7 +517,7 @@ int seqUtilsInfoRunner::oldQuickHaplotypeInformationAndVariants(const njh::progu
 				throw std::runtime_error{ssAminoAcidPosCheck.str()};
 			}
 			//std::cout << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
-			aligner alignObj(proteinMaxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(1,-1));
+			aligner alignObj(proteinMaxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2));
 
 			//std::cout << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
 			std::unordered_map<std::string, std::set<std::string>> regionsToGeneIds;
