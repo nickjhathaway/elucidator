@@ -40,123 +40,89 @@ int benchMarkingRunner::mapLookUp(const njh::progutils::CmdArgs & inputCommands)
 	OutputStream out(outOpts);
 
 	auto seqs = SeqInput::getSeqVec<seqInfo>(setUp.pars_.ioOptions_	);
-	table outTimes(VecStr{"condition", "kmerLength", "trial", "time"});
 	{
 		std::unordered_map<std::string, uint32_t> kmerCounts;
-		njh::scopedStopWatch watch("unordered_map");
+		{
+			njh::scopedStopWatch watch("unordered_map");
 
-		for(const auto & seq : seqs){
-			if(len(seq) > kmerLength){
-				for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
-					std::string k = seq.seq_.substr(pos, kmerLength);
-					++kmerCounts[k];
+			for(const auto & seq : seqs){
+				if(len(seq) > kmerLength){
+					for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
+						std::string k = seq.seq_.substr(pos, kmerLength);
+						++kmerCounts[k];
+					}
 				}
 			}
+			out << "unordered_map"
+					 << "\t" << kmerLength
+					 << "\t" << 1
+					 << "\t" << watch.totalTime() << std::endl;;
 		}
-		outTimes.addRow("unordered_map", kmerLength, 1, watch.totalTime());
 	}
 
-	{
-		std::map<std::string, uint32_t> kmerCounts;
-		njh::scopedStopWatch watch("map");
-		for(const auto & seq : seqs){
-			if(len(seq) > kmerLength){
-				for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
-					std::string k = seq.seq_.substr(pos, kmerLength);
-					++kmerCounts[k];
-				}
-			}
-		}
-		outTimes.addRow("map", kmerLength, 1, watch.totalTime());
-	}
-	{
-		std::map<std::string, uint32_t> kmerCounts;
-		njh::scopedStopWatch watch("map");
-		for(const auto & seq : seqs){
-			if(len(seq) > kmerLength){
-				for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
-					std::string k = seq.seq_.substr(pos, kmerLength);
-					++kmerCounts[k];
-				}
-			}
-		}
-		outTimes.addRow("map", kmerLength, 2, watch.totalTime());
-	}
+
 	{
 		std::unordered_map<std::string, uint32_t> kmerCounts;
-		njh::scopedStopWatch watch("unordered_map");
+		{
+			njh::scopedStopWatch watch("unordered_map");
 
-		for(const auto & seq : seqs){
-			if(len(seq) > kmerLength){
-				for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
-					std::string k = seq.seq_.substr(pos, kmerLength);
-					++kmerCounts[k];
+			for(const auto & seq : seqs){
+				if(len(seq) > kmerLength){
+					for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
+						std::string k = seq.seq_.substr(pos, kmerLength);
+						++kmerCounts[k];
+					}
 				}
 			}
+			out << "unordered_map"
+					 << "\t" << kmerLength
+					 << "\t" << 2
+					 << "\t" << watch.totalTime() << std::endl;
 		}
-		outTimes.addRow("unordered_map", kmerLength, 2, watch.totalTime());
 	}
 
 
 
+	//1 depth vector
 
 	{
 		std::vector<std::unordered_map<std::string, uint32_t>> kmerContsVector(117);
-		njh::scopedStopWatch watch("unordered_map_vector1");
+		{
+			njh::scopedStopWatch watch("unordered_map_vector1");
 
-		for(const auto & seq : seqs){
-			if(len(seq) > kmerLength){
-				for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
-					std::string k = seq.seq_.substr(pos, kmerLength);
-					++kmerContsVector[k[0]][k];
+			for(const auto & seq : seqs){
+				if(len(seq) > kmerLength){
+					for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
+						std::string k = seq.seq_.substr(pos, kmerLength);
+						++kmerContsVector[k[0]][k];
+					}
 				}
 			}
+			out << "unordered_map_vector1"
+					 << "\t" << kmerLength
+					 << "\t" << 1
+					 << "\t" << watch.totalTime() << std::endl;;
 		}
-		outTimes.addRow("unordered_map_vector1", kmerLength, 1, watch.totalTime());
 	}
 
-	{
-		std::vector<std::map<std::string, uint32_t>> kmerContsVector(117);
-		njh::scopedStopWatch watch("map_vector1");
-
-		for(const auto & seq : seqs){
-			if(len(seq) > kmerLength){
-				for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
-					std::string k = seq.seq_.substr(pos, kmerLength);
-					++kmerContsVector[k[0]][k];
-				}
-			}
-		}
-		outTimes.addRow("map_vector1", kmerLength, 1, watch.totalTime());
-	}
-	{
-		std::vector<std::map<std::string, uint32_t>> kmerContsVector(117);
-
-		njh::scopedStopWatch watch("map_vector1");
-
-		for(const auto & seq : seqs){
-			if(len(seq) > kmerLength){
-				for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
-					std::string k = seq.seq_.substr(pos, kmerLength);
-					++kmerContsVector[k[0]][k];
-				}
-			}
-		}
-		outTimes.addRow("map_vector1", kmerLength, 2, watch.totalTime());
-	}
 	{
 		std::vector<std::unordered_map<std::string, uint32_t>> kmerContsVector(117);
-		njh::scopedStopWatch watch("unordered_map_vector1");
+		{
+			njh::scopedStopWatch watch("unordered_map_vector1");
 
-		for(const auto & seq : seqs){
-			if(len(seq) > kmerLength){
-				for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
-					std::string k = seq.seq_.substr(pos, kmerLength);
-					++kmerContsVector[k[0]][k];
+			for(const auto & seq : seqs){
+				if(len(seq) > kmerLength){
+					for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
+						std::string k = seq.seq_.substr(pos, kmerLength);
+						++kmerContsVector[k[0]][k];
+					}
 				}
 			}
+			out << "unordered_map_vector1"
+					 << "\t" << kmerLength
+					 << "\t" << 2
+					 << "\t" << watch.totalTime() << std::endl;;
 		}
-		outTimes.addRow("unordered_map_vector1", kmerLength, 2, watch.totalTime());
 	}
 
 
@@ -164,68 +130,251 @@ int benchMarkingRunner::mapLookUp(const njh::progutils::CmdArgs & inputCommands)
 	//2 depth vector
 	{
 		std::vector<std::vector<std::unordered_map<std::string, uint32_t>>> kmerContsVector(117, std::vector<std::unordered_map<std::string, uint32_t>>(117));
-		njh::scopedStopWatch watch("unordered_map_vector2");
+		{
+			njh::scopedStopWatch watch("unordered_map_vector2");
 
-		for(const auto & seq : seqs){
-			if(len(seq) > kmerLength){
-				for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
-					std::string k = seq.seq_.substr(pos, kmerLength);
-					++kmerContsVector[k[0]][k[1]][k];
+			for(const auto & seq : seqs){
+				if(len(seq) > kmerLength){
+					for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
+						std::string k = seq.seq_.substr(pos, kmerLength);
+						++kmerContsVector[k[0]][k[1]][k];
+					}
 				}
 			}
+			out << "unordered_map_vector2"
+					 << "\t" << kmerLength
+					 << "\t" << 1
+					 << "\t" << watch.totalTime() << std::endl;;
 		}
-		outTimes.addRow("unordered_map_vector2", kmerLength, 1, watch.totalTime());
 	}
 
-	{
-		std::vector<std::vector<std::map<std::string, uint32_t>>> kmerContsVector(117, std::vector<std::map<std::string, uint32_t>>(117));
-		njh::scopedStopWatch watch("map_vector2");
-
-		for(const auto & seq : seqs){
-			if(len(seq) > kmerLength){
-				for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
-					std::string k = seq.seq_.substr(pos, kmerLength);
-					++kmerContsVector[k[0]][k[1]][k];
-				}
-			}
-		}
-		outTimes.addRow("map_vector2", kmerLength, 1, watch.totalTime());
-	}
-	{
-		std::vector<std::vector<std::map<std::string, uint32_t>>> kmerContsVector(117, std::vector<std::map<std::string, uint32_t>>(117));
-
-		njh::scopedStopWatch watch("map_vector2");
-
-		for(const auto & seq : seqs){
-			if(len(seq) > kmerLength){
-				for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
-					std::string k = seq.seq_.substr(pos, kmerLength);
-					++kmerContsVector[k[0]][k[1]][k];
-				}
-			}
-		}
-		outTimes.addRow("map_vector2", kmerLength, 2, watch.totalTime());
-	}
 	{
 		std::vector<std::vector<std::unordered_map<std::string, uint32_t>>> kmerContsVector(117, std::vector<std::unordered_map<std::string, uint32_t>>(117));
-		njh::scopedStopWatch watch("unordered_map_vector2");
+		{
+			njh::scopedStopWatch watch("unordered_map_vector2");
 
-		for(const auto & seq : seqs){
-			if(len(seq) > kmerLength){
-				for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
-					std::string k = seq.seq_.substr(pos, kmerLength);
-					++kmerContsVector[k[0]][k[1]][k];
+			for(const auto & seq : seqs){
+				if(len(seq) > kmerLength){
+					for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
+						std::string k = seq.seq_.substr(pos, kmerLength);
+						++kmerContsVector[k[0]][k[1]][k];
+					}
 				}
 			}
+			out << "unordered_map_vector2"
+					 << "\t" << kmerLength
+					 << "\t" << 2
+					 << "\t" << watch.totalTime() << std::endl;;
 		}
-		outTimes.addRow("unordered_map_vector2", kmerLength, 2, watch.totalTime());
 	}
 
 
+	//3 depth vector
+	{
+		std::vector<std::vector<std::vector<std::unordered_map<std::string, uint32_t>>>> kmerContsVector(117, std::vector<std::vector<std::unordered_map<std::string, uint32_t>>>(117, std::vector<std::unordered_map<std::string, uint32_t>>(117)));
+		{
+			njh::scopedStopWatch watch("unordered_map_vector3");
 
-	outTimes.outPutContents(out, "\t");
+			for(const auto & seq : seqs){
+				if(len(seq) > kmerLength){
+					for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
+						std::string k = seq.seq_.substr(pos, kmerLength);
+						++kmerContsVector[k[0]][k[1]][k[2]][k];
+					}
+				}
+			}
+			out << "unordered_map_vector3"
+					 << "\t" << kmerLength
+					 << "\t" << 1
+					 << "\t" << watch.totalTime() << std::endl;;
+		}
+	}
+
+	{
+		std::vector<std::vector<std::vector<std::unordered_map<std::string, uint32_t>>>> kmerContsVector(117, std::vector<std::vector<std::unordered_map<std::string, uint32_t>>>(117, std::vector<std::unordered_map<std::string, uint32_t>>(117)));
+		{
+			njh::scopedStopWatch watch("unordered_map_vector3");
+
+			for(const auto & seq : seqs){
+				if(len(seq) > kmerLength){
+					for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
+						std::string k = seq.seq_.substr(pos, kmerLength);
+						++kmerContsVector[k[0]][k[1]][k[2]][k];
+					}
+				}
+			}
+			out << "unordered_map_vector3"
+					 << "\t" << kmerLength
+					 << "\t" << 2
+					 << "\t" << watch.totalTime() << std::endl;;
+		}
+	}
+
+	//3 depth vector
+	{
+		std::vector<std::vector<std::vector<std::unordered_map<std::string, uint32_t>>>> kmerContsVector(117, std::vector<std::vector<std::unordered_map<std::string, uint32_t>>>(117, std::vector<std::unordered_map<std::string, uint32_t>>(117)));
+		{
+			njh::scopedStopWatch watch("unordered_map_vector3");
+
+			for(const auto & seq : seqs){
+				if(len(seq) > kmerLength){
+					for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
+						std::string k = seq.seq_.substr(pos, kmerLength);
+						++kmerContsVector[k[0]][k[1]][k[2]][k];
+					}
+				}
+			}
+			out << "unordered_map_vector3"
+					 << "\t" << kmerLength
+					 << "\t" << 3
+					 << "\t" << watch.totalTime() << std::endl;;
+		}
+	}
+
+	{
+		std::vector<std::vector<std::vector<std::unordered_map<std::string, uint32_t>>>> kmerContsVector(117, std::vector<std::vector<std::unordered_map<std::string, uint32_t>>>(117, std::vector<std::unordered_map<std::string, uint32_t>>(117)));
+		{
+			njh::scopedStopWatch watch("unordered_map_vector3");
+
+			for(const auto & seq : seqs){
+				if(len(seq) > kmerLength){
+					for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
+						std::string k = seq.seq_.substr(pos, kmerLength);
+						++kmerContsVector[k[0]][k[1]][k[2]][k];
+					}
+				}
+			}
+			out << "unordered_map_vector3"
+					 << "\t" << kmerLength
+					 << "\t" << 4
+					 << "\t" << watch.totalTime() << std::endl;;
+		}
+	}
+
+	//2 depth vector
+	{
+		std::vector<std::vector<std::unordered_map<std::string, uint32_t>>> kmerContsVector(117, std::vector<std::unordered_map<std::string, uint32_t>>(117));
+		{
+			njh::scopedStopWatch watch("unordered_map_vector2");
+
+			for(const auto & seq : seqs){
+				if(len(seq) > kmerLength){
+					for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
+						std::string k = seq.seq_.substr(pos, kmerLength);
+						++kmerContsVector[k[0]][k[1]][k];
+					}
+				}
+			}
+			out << "unordered_map_vector2"
+					 << "\t" << kmerLength
+					 << "\t" << 3
+					 << "\t" << watch.totalTime() << std::endl;;
+		}
+	}
+
+	{
+		std::vector<std::vector<std::unordered_map<std::string, uint32_t>>> kmerContsVector(117, std::vector<std::unordered_map<std::string, uint32_t>>(117));
+		{
+			njh::scopedStopWatch watch("unordered_map_vector2");
+
+			for(const auto & seq : seqs){
+				if(len(seq) > kmerLength){
+					for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
+						std::string k = seq.seq_.substr(pos, kmerLength);
+						++kmerContsVector[k[0]][k[1]][k];
+					}
+				}
+			}
+			out << "unordered_map_vector2"
+					 << "\t" << kmerLength
+					 << "\t" << 4
+					 << "\t" << watch.totalTime() << std::endl;;
+		}
+	}
 
 
+	//1 depth vector
+
+	{
+		std::vector<std::unordered_map<std::string, uint32_t>> kmerContsVector(117);
+		{
+			njh::scopedStopWatch watch("unordered_map_vector1");
+
+			for(const auto & seq : seqs){
+				if(len(seq) > kmerLength){
+					for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
+						std::string k = seq.seq_.substr(pos, kmerLength);
+						++kmerContsVector[k[0]][k];
+					}
+				}
+			}
+			out << "unordered_map_vector1"
+					 << "\t" << kmerLength
+					 << "\t" << 3
+					 << "\t" << watch.totalTime() << std::endl;;
+		}
+	}
+
+	{
+		std::vector<std::unordered_map<std::string, uint32_t>> kmerContsVector(117);
+		{
+			njh::scopedStopWatch watch("unordered_map_vector1");
+
+			for(const auto & seq : seqs){
+				if(len(seq) > kmerLength){
+					for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
+						std::string k = seq.seq_.substr(pos, kmerLength);
+						++kmerContsVector[k[0]][k];
+					}
+				}
+			}
+			out << "unordered_map_vector1"
+					 << "\t" << kmerLength
+					 << "\t" << 4
+					 << "\t" << watch.totalTime() << std::endl;;
+		}
+	}
+
+	{
+		std::unordered_map<std::string, uint32_t> kmerCounts;
+		{
+			njh::scopedStopWatch watch("unordered_map");
+
+			for(const auto & seq : seqs){
+				if(len(seq) > kmerLength){
+					for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
+						std::string k = seq.seq_.substr(pos, kmerLength);
+						++kmerCounts[k];
+					}
+				}
+			}
+			out << "unordered_map"
+					 << "\t" << kmerLength
+					 << "\t" << 3
+					 << "\t" << watch.totalTime() << std::endl;;
+		}
+	}
+
+
+	{
+		std::unordered_map<std::string, uint32_t> kmerCounts;
+		{
+			njh::scopedStopWatch watch("unordered_map");
+
+			for(const auto & seq : seqs){
+				if(len(seq) > kmerLength){
+					for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
+						std::string k = seq.seq_.substr(pos, kmerLength);
+						++kmerCounts[k];
+					}
+				}
+			}
+			out << "unordered_map"
+					 << "\t" << kmerLength
+					 << "\t" << 4
+					 << "\t" << watch.totalTime() << std::endl;
+		}
+	}
 
 
 	return 0;
