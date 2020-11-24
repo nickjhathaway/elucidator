@@ -40,6 +40,13 @@ class benchMarkingRunner : public njh::progutils::ProgramRunner {
 	static int benchGzWritingSetChunks(const njh::progutils::CmdArgs & inputCommands);
 	static int benchGzWritingRdBuf(const njh::progutils::CmdArgs & inputCommands);
 
+	static int mapLookUp(const njh::progutils::CmdArgs & inputCommands);
+
+
+
+
+
+
 
 };
 

@@ -39,6 +39,7 @@ benchMarkingRunner::benchMarkingRunner()
 	 	 	 	 	 addFunc("benchGzWritingOneRead", benchGzWritingOneRead, false),
 					 addFunc("benchGzWritingSetChunks", benchGzWritingSetChunks, false),
 					 addFunc("benchGzWritingRdBuf", benchGzWritingRdBuf, false),
+					 addFunc("mapLookUp", mapLookUp, false),
            },//
           "benchMarking") {}
 
