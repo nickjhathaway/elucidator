@@ -73,6 +73,7 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("kmerCompareTwoSetsOfContigs", kmerCompareTwoSetsOfContigs, false),
 					 addFunc("kmerConnectionGraph", kmerConnectionGraph, false),
 					 addFunc("countKmers", countKmers, false),
+					 addFunc("getKmerSharedBlocksBetweenGenomes", getKmerSharedBlocksBetweenGenomes, false),
 					 //
            },
           "kmerExp") {}

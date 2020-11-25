@@ -94,6 +94,8 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 
 	static int pairwiseComparisonOfUniqueKmers(const njh::progutils::CmdArgs & inputCommands);
 	static int kmerTestingGround(const njh::progutils::CmdArgs & inputCommands);
+	static int getKmerSharedBlocksBetweenGenomes(const njh::progutils::CmdArgs & inputCommands);
+
 	static int getWithinGenomeUniqueKmers(const njh::progutils::CmdArgs & inputCommands);
 
 
