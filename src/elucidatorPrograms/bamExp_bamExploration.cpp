@@ -328,7 +328,7 @@ int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & 
 	BamTools::BamAlignment bAln;
 	uint32_t count = 0;
 	OutputStream out(outOpts);
-	out << "FileIndexPosition\tName\tPosition\tEndPosition\tQuerySize\tAlnSize\tRefId\tRefName\tMateRefID\tMatePosition\tIsMateMapped\tIsMapped\tIsPaired\tIsPrimaryAlignment\tIsFirstMate\tDuplicate\tRevComp\tProperPair" << "\n";
+	out << "FileIndexPosition\tName\tPosition\tEndPosition\tQuerySize\tAlnSize\tRefId\tRefName\tMateRefID\tMatePosition\tIsMateMapped\tIsMapped\tIsPaired\tIsPrimaryAlignment\tIsFirstMate\tDuplicate\tRevComp\tProperPair\tMapQ" << "\n";
 	while(bReader.GetNextAlignment(bAln)){
 		if (njh::in(bAln.Name, names)) {
 			out << count
@@ -348,7 +348,8 @@ int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & 
 					<< "\t" << njh::boolToStr(bAln.IsFirstMate())
 				  << "\t" << njh::boolToStr(bAln.IsDuplicate())
 					<< "\t" << njh::boolToStr(bAln.IsReverseStrand())
-					<< "\t" << njh::boolToStr(bAln.IsProperPair())<< std::endl;
+					<< "\t" << njh::boolToStr(bAln.IsProperPair())
+			    << "\t" << static_cast<uint32_t>(bAln.MapQuality) << std::endl;
 		}
 		++count;
 	}

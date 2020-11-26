@@ -70,10 +70,14 @@ int bedExpRunner::getIntersectionBetweenTwoBedFiles(const njh::progutils::CmdArg
 		}
 		if(overlappingRegions.size() > 0){
 			for(const auto & overReg : overlappingRegions){
+				bool scoreIsLength = inputRegion->score_ == inputRegion->length();
 				Bed6RecordCore outRegion = *inputRegion;
 				outRegion.chromStart_ = std::max(overReg->chromStart_, inputRegion->chromStart_);
 				outRegion.chromEnd_ = std::min(overReg->chromEnd_, inputRegion->chromEnd_);
 				outRegion.name_ = outRegion.genUIDFromCoordsWithStrand();
+				if(scoreIsLength){
+					outRegion.score_ = outRegion.length();
+				}
 				out << outRegion.toDelimStr() << std::endl;
 			}
 		}
