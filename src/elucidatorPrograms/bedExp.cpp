@@ -1426,7 +1426,12 @@ int bedExpRunner::trimBedRegions(const njh::progutils::CmdArgs & inputCommands) 
 		}
 		auto uid = njh::pasteAsStr(reg.chrom_, "-", reg.chromStart_, "-", reg.chromEnd_);
 		reg.chromStart_ += left;
-		reg.chromEnd_ -= right > reg.chromEnd_ ? 0 : reg.chromEnd_ - right;
+		if(right > reg.chromEnd_ ){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "right: " << right << " larger than end position: " << reg.chromEnd_<< "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		reg.chromEnd_ -= right;
 		if(reg.chromEnd_ <= reg.chromStart_){
 			std::stringstream ss;
 			ss << __PRETTY_FUNCTION__ << ", error " << "region: " << uid << " will now have a end that is before the start: " <<  njh::pasteAsStr(reg.chrom_, "-", reg.chromStart_, "-", reg.chromEnd_)<< "\n";
