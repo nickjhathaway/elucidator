@@ -77,6 +77,7 @@ bedExpRunner::bedExpRunner()
 					 addFunc("getEntropyOfRegion", getEntropyOfRegion, false),
 					 addFunc("getNumOfNsOfRegion", getNumOfNsOfRegion, false),
 					 addFunc("getNumOfNsEntropyGCContentOfRegion", getNumOfNsEntropyGCContentOfRegion, false),
+					 addFunc("bedKeepRegionsCompletelyInOther", bedKeepRegionsCompletelyInOther, false),
 //
 
 					 addFunc("getLongestHomopolymerLengthInRegion", getLongestHomopolymerLengthInRegion, false),
