@@ -1395,9 +1395,11 @@ int kmerExpRunner::getWithinGenomeUniqueKmers(const njh::progutils::CmdArgs & in
 	return 0;
 }
 
-int kmerExpRunner::pairwiseComparisonOfUniqueKmers(const njh::progutils::CmdArgs & inputCommands){
+
+int kmerExpRunner::pairwiseWithinComparisonOfUniqueKmers(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t klen = 35;
 	uint32_t numThreads = 1;
+	bool getReverseComp = false;
 	OutOptions outOpts(bfs::path(""), ".tab.txt");
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -1406,6 +1408,8 @@ int kmerExpRunner::pairwiseComparisonOfUniqueKmers(const njh::progutils::CmdArgs
 	setUp.processWritingOptions(outOpts);
 	setUp.setOption(numThreads, "--numThreads", "Number of threads to use", njh::progutils::ProgramSetUp::CheckCase::GTEQ1);
 	setUp.setOption(klen, "--klen", "kmer Length", true);
+	setUp.setOption(getReverseComp, "--getReverseComp", "Compare the reverse complement as well");
+
 	setUp.finishSetUp(std::cout);
 
   njh::stopWatch watch;
@@ -1414,26 +1418,68 @@ int kmerExpRunner::pairwiseComparisonOfUniqueKmers(const njh::progutils::CmdArgs
 
 	SeqInput reader(setUp.pars_.ioOptions_);
 	std::unordered_map<std::string, std::unordered_map<std::string, kmer>> uniqueKmersPerRecord;
+	std::unordered_map<std::string, std::unordered_map<std::string, kmer>> uniqueKmersPerRecordRevComplement;
+
 	reader.openIn();
-	seqInfo seq;
-	while (reader.readNextRead(seq)) {
-		std::unordered_map<std::string, kmer> allKmers;
-		if (len(seq) > klen + 1) {
-			for (uint32_t pos = 0; pos < len(seq) - klen + 1; ++pos) {
-				auto k = seq.seq_.substr(pos, klen);
-				if(njh::in(k, allKmers)){
-					allKmers[k].addPosition(pos);
-				}else{
-					allKmers[k] = kmer(k, pos);
+
+
+	std::mutex uniqueKmersPerRecord_mut;
+
+	std::function<void()> getUniqueKmers = [&reader,&uniqueKmersPerRecord, &uniqueKmersPerRecordRevComplement,
+																					&uniqueKmersPerRecord_mut, &klen, &getReverseComp](){
+		seqInfo seq;
+
+
+		while (reader.readNextReadLock(seq)) {
+			std::unordered_map<std::string, kmer> allKmers;
+			std::unordered_map<std::string, kmer> allKmersRevComp;
+			std::unordered_map<std::string, kmer> uniqueKmersForRecord;
+			std::unordered_map<std::string, kmer> uniqueKmersForRecordRevComplement;
+			if (len(seq) > klen + 1) {
+				for (uint32_t pos = 0; pos < len(seq) - klen + 1; ++pos) {
+					auto k = seq.seq_.substr(pos, klen);
+					if(njh::in(k, allKmers)){
+						allKmers[k].addPosition(pos);
+					}else{
+						allKmers[k] = kmer(k, pos);
+					}
+				}
+			}
+			for (const auto &k : allKmers) {
+				if (1 == k.second.count_) {
+					uniqueKmersForRecord.emplace(k);
+				}
+			}
+			if(getReverseComp){
+				seq.reverseComplementRead(false, true);
+				if (len(seq) > klen + 1) {
+					for (uint32_t pos = 0; pos < len(seq) - klen + 1; ++pos) {
+						auto k = seq.seq_.substr(pos, klen);
+						if(njh::in(k, allKmersRevComp)){
+							allKmersRevComp[k].addPosition(pos);
+						}else{
+							allKmersRevComp[k] = kmer(k, pos);
+						}
+					}
+				}
+				for (const auto &k : allKmersRevComp) {
+					if (1 == k.second.count_) {
+						uniqueKmersForRecordRevComplement.emplace(k);
+					}
+				}
+			}
+			{
+				std::lock_guard<std::mutex> lock(uniqueKmersPerRecord_mut);
+				uniqueKmersPerRecord[seq.name_] = uniqueKmersForRecord;
+				if(getReverseComp){
+					uniqueKmersPerRecordRevComplement[seq.name_] = uniqueKmersForRecordRevComplement;
 				}
 			}
 		}
-		for (const auto &k : allKmers) {
-			if (1 == k.second.count_) {
-				uniqueKmersPerRecord[seq.name_].emplace(k);
-			}
-		}
-	}
+	};
+
+	njh::concurrent::runVoidFunctionThreaded(getUniqueKmers, numThreads);
+
 	watch.startNewLap("comparing");
 	PairwisePairFactory pFac(uniqueKmersPerRecord.size());
 
@@ -1444,25 +1490,47 @@ int kmerExpRunner::pairwiseComparisonOfUniqueKmers(const njh::progutils::CmdArgs
 
 	std::mutex outMut;
 
-	std::function<void()> runComp = [&out,&outMut,&pFac,&uniqueKmersPerRecord,recordNames](){
+	std::function<void()> runComp = [&out,&outMut,&pFac,&uniqueKmersPerRecord, &uniqueKmersPerRecordRevComplement, &getReverseComp,&recordNames](){
 		PairwisePairFactory::PairwisePair pair;
 		while(pFac.setNextPair(pair)){
-			uint32_t shared = 0;
-			for(const auto & k :uniqueKmersPerRecord[recordNames[pair.col_]]){
-				if(njh::in(k.first, uniqueKmersPerRecord[recordNames[pair.row_]])){
-					++shared;
+
+			{
+				uint32_t shared = 0;
+				for(const auto & k :uniqueKmersPerRecord[recordNames[pair.col_]]){
+					if(njh::in(k.first, uniqueKmersPerRecord[recordNames[pair.row_]])){
+						++shared;
+					}
+				}
+				{
+					std::lock_guard<std::mutex> lock(outMut);
+					out << recordNames[pair.col_]
+							<< "\t" << recordNames[pair.row_]
+							<< "\t" << uniqueKmersPerRecord[recordNames[pair.col_]].size()
+							<< "\t" << uniqueKmersPerRecord[recordNames[pair.row_]].size()
+							<< "\t" << shared
+							<< "\t" <<  static_cast<double>(shared)/std::min(uniqueKmersPerRecord[recordNames[pair.col_]].size(), uniqueKmersPerRecord[recordNames[pair.row_]].size())
+					    << "\t" << (static_cast<double>(shared))/(uniqueKmersPerRecord[recordNames[pair.col_]].size() +  uniqueKmersPerRecord[recordNames[pair.row_]].size() - shared)
+					<< std::endl;
 				}
 			}
-			{
-				std::lock_guard<std::mutex> lock(outMut);
-				out << recordNames[pair.col_]
-						<< "\t" << recordNames[pair.row_]
-						<< "\t" << uniqueKmersPerRecord[recordNames[pair.col_]].size()
-						<< "\t" << uniqueKmersPerRecord[recordNames[pair.row_]].size()
-						<< "\t" << shared
-						<< "\t" << static_cast<double>(shared)/std::min(uniqueKmersPerRecord[recordNames[pair.col_]].size(), uniqueKmersPerRecord[recordNames[pair.row_]].size())
-				<< "\t" << (static_cast<double>(shared))/(uniqueKmersPerRecord[recordNames[pair.col_]].size() +  uniqueKmersPerRecord[recordNames[pair.row_]].size() - shared)
-				<< std::endl;
+			if(getReverseComp){
+				uint32_t shared = 0;
+				for(const auto & k :uniqueKmersPerRecord[recordNames[pair.col_]]){
+					if(njh::in(k.first, uniqueKmersPerRecordRevComplement[recordNames[pair.row_]])){
+						++shared;
+					}
+				}
+				{
+					std::lock_guard<std::mutex> lock(outMut);
+					out << recordNames[pair.col_]
+							<< "\t" << recordNames[pair.row_] << "_revComp"
+							<< "\t" << uniqueKmersPerRecord[recordNames[pair.col_]].size()
+							<< "\t" << uniqueKmersPerRecordRevComplement[recordNames[pair.row_]].size()
+							<< "\t" << shared
+							<< "\t" <<  static_cast<double>(shared)/std::min(uniqueKmersPerRecord[recordNames[pair.col_]].size(), uniqueKmersPerRecordRevComplement[recordNames[pair.row_]].size())
+					    << "\t" << (static_cast<double>(shared))/(uniqueKmersPerRecord[recordNames[pair.col_]].size() +  uniqueKmersPerRecordRevComplement[recordNames[pair.row_]].size() - shared)
+					<< std::endl;
+				}
 			}
 		}
 	};

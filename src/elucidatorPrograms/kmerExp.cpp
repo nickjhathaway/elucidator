@@ -66,7 +66,7 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("findUniqKmersBetweenSeqs", findUniqKmersBetweenSeqs, false),
 					 addFunc("kmerPositionQualCounts", kmerPositionQualCounts, false),
 					 addFunc("kmerTestingGround", kmerTestingGround, false),
-					 addFunc("pairwiseComparisonOfUniqueKmers", pairwiseComparisonOfUniqueKmers, false),
+					 addFunc("pairwiseWithinComparisonOfUniqueKmers", pairwiseWithinComparisonOfUniqueKmers, false),
 					 addFunc("getWithinGenomeUniqueKmers", getWithinGenomeUniqueKmers, false),
 					 addFunc("getUniqKmerBlocksOnGenomeAgainstRef", getUniqKmerBlocksOnGenomeAgainstRef, false),
 					 addFunc("findPositionsOfUniqueKmersInEachOther", findPositionsOfUniqueKmersInEachOther, false),
@@ -74,7 +74,7 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("kmerConnectionGraph", kmerConnectionGraph, false),
 					 addFunc("countKmers", countKmers, false),
 					 addFunc("getKmerSharedBlocksBetweenGenomes", getKmerSharedBlocksBetweenGenomes, false),
-					 //
+					 //pairwiseWithinComparisonOfUniqueKmers
            },
           "kmerExp") {}
 
