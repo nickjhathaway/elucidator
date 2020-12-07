@@ -93,6 +93,7 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 
 
 	static int pairwiseWithinComparisonOfUniqueKmers(const njh::progutils::CmdArgs & inputCommands);
+	static int allByAllComparisonOfUniqueKmers(const njh::progutils::CmdArgs & inputCommands);
 
 
 	static int kmerTestingGround(const njh::progutils::CmdArgs & inputCommands);

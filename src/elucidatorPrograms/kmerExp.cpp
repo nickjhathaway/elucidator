@@ -74,7 +74,8 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("kmerConnectionGraph", kmerConnectionGraph, false),
 					 addFunc("countKmers", countKmers, false),
 					 addFunc("getKmerSharedBlocksBetweenGenomes", getKmerSharedBlocksBetweenGenomes, false),
-					 //pairwiseWithinComparisonOfUniqueKmers
+					 addFunc("allByAllComparisonOfUniqueKmers", allByAllComparisonOfUniqueKmers, false),
+					 //
            },
           "kmerExp") {}
 

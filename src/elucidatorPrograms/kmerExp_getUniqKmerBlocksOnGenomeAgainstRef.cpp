@@ -60,7 +60,7 @@ int kmerExpRunner::getUniqKmerBlocksOnGenomeAgainstRef(const njh::progutils::Cmd
 			seqInfo seq;
 			while(reader.readNextReadLock(seq)){
 				if(len(seq) > kmerLength){
-					for(uint32_t pos = 0; pos < len(seq) -kmerLength + 1; ++pos){
+					for(uint32_t pos = 0; pos < len(seq) - kmerLength + 1; ++pos){
 						refKmersCurrent.emplace(seq.seq_.substr(pos, kmerLength));
 					}
 				}
@@ -90,7 +90,7 @@ int kmerExpRunner::getUniqKmerBlocksOnGenomeAgainstRef(const njh::progutils::Cmd
 					++run;
 					start = 0;
 				}
-				for(uint32_t pos = 1; pos < len(seq) -kmerLength + 1; ++pos){
+				for(uint32_t pos = 1; pos < len(seq) - kmerLength + 1; ++pos){
 					auto k = seq.seq_.substr(pos, kmerLength);
 					if(!njh::in(k, refKmers)){
 						if(0 == run){
@@ -100,7 +100,7 @@ int kmerExpRunner::getUniqKmerBlocksOnGenomeAgainstRef(const njh::progutils::Cmd
 					} else {
 						if(run > 1){
 							std::lock_guard<std::mutex> lock(compMut);
-							auto end = start + run * kmerLength;
+							auto end = start + kmerLength + run - 1;
 							out << seq.name_ << "\t"
 									<< start << "\t"
 									<< end << "\t"
@@ -113,7 +113,7 @@ int kmerExpRunner::getUniqKmerBlocksOnGenomeAgainstRef(const njh::progutils::Cmd
 				}
 				if(run > 1){
 					std::lock_guard<std::mutex> lock(compMut);
-					auto end = start + run * kmerLength;
+					auto end = start + kmerLength + run - 1;
 					out << seq.name_ << "\t"
 							<< start << "\t"
 							<< end << "\t"

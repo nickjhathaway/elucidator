@@ -1324,9 +1324,11 @@ int bedExpRunner::filterBedRecordsByLength(const njh::progutils::CmdArgs & input
 int bedExpRunner::bed3ToBed6(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile;
 	OutOptions outOpts;
+	bool reverseStrand = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.setOption(bedFile, "--bed", "Bed file to parse", true);
+	setUp.setOption(reverseStrand, "--reverseStrand", "Output in Reverse Strand");
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 
@@ -1339,7 +1341,12 @@ int bedExpRunner::bed3ToBed6(const njh::progutils::CmdArgs & inputCommands) {
 	writer.openOut();
 
 	while(reader.readNextRecord(reg)){
-		writer.write(GenomicRegion(reg).genBedRecordCore(), [](const Bed6RecordCore & bedReg, std::ostream & out){
+
+		auto outBedRec = GenomicRegion(reg).genBedRecordCore();
+		if(reverseStrand){
+			outBedRec.strand_ = '-';
+		}
+		writer.write(outBedRec, [&reverseStrand]( const Bed6RecordCore & bedReg, std::ostream & out){
 			out << bedReg.toDelimStr() << std::endl;
 		});
 	}
