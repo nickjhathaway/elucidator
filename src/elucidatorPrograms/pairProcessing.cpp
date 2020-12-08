@@ -135,14 +135,15 @@ int pairProcessingRunner::detectPossiblePrimers(
 
 	double errorAllowed = 0.01;
 	uint32_t hardMismatchCutOff = 10;
-	uint32_t checkAmount = 100;
+	uint32_t checkAmount = 10000;
 	double fracCutOff = 0.01;
 	uint32_t qualCutOff = 12;
 	TableIOOpts tabOpts = TableIOOpts::genTabFileOut(bfs::path(""), true);
 	OutOptions outOpts(bfs::path("out"));
-	uint32_t testNumber = 20000000;//std::numeric_limits<uint32_t>::max(); trimToRefWithGlobalAlignment
+	uint32_t testNumber = 20000000;//std::numeric_limits<uint32_t>::max();
 	uint32_t gatheredNumber = 40000; //std::numeric_limits<uint32_t>::max();
 	uint32_t outPrimerLengthMax = 70;
+	uint32_t outPrimerLengthMin = 7;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -162,6 +163,8 @@ int pairProcessingRunner::detectPossiblePrimers(
 	setUp.setOption(testNumber, "--testNumber", "The total number of sequences to try to get overhangs from, once this number is hit no matter how many overhangs there are no more will be collected");
 	setUp.setOption(gatheredNumber, "--gatheredNumber", "The number of gathered overhangs needed, once this number is hit no more overhangs will be collected");
 	setUp.setOption(outPrimerLengthMax, "--outPrimerLengthMax","Output Primer Maximum length to output");
+	setUp.setOption(outPrimerLengthMin, "--outPrimerLengthMin","Output Primer Minimum length to output");
+
 	setUp.setOption(hardMismatchCutOff, "--hardMismatchCutOff", "Hard Mismatch Cut Off, also don't allow this many mismatches");
 	setUp.setOption(minOverlap, "--minOverlap", "Minimum overlap");
 	setUp.setOption(minOverhangLen, "--minOverhangLen", "min Overhang Len");
@@ -200,7 +203,7 @@ int pairProcessingRunner::detectPossiblePrimers(
 			break;
 		}
 	}
-
+	maxsize = maxsize * 2;
 	auto alnGapPars = gapScoringParameters(
 			setUp.pars_.gapInfo_.gapOpen_,
 			setUp.pars_.gapInfo_.gapExtend_,
@@ -271,9 +274,15 @@ int pairProcessingRunner::detectPossiblePrimers(
 	while(reader.readNextRead(seq)){
 		++total;
 		if(total % 25000 == 0 && setUp.pars_.verbose_){
-			std::cout << total << std::endl;
+			//std::cout << total << std::endl;
+			std::cout << total << " " << len(seq.seqBase_) << " : " <<  len(seq.mateSeqBase_)<< std::endl;
 		}
 
+		readVec::getMaxLength(seq.seqBase_, maxsize);
+		readVec::getMaxLength(seq.mateSeqBase_, maxsize);
+		if(maxsize > alignerObj.parts_.maxSize_){
+			alignerObj.parts_.setMaxSize(maxsize);
+		}
 		motif frontMot(seq.seqBase_.seq_.substr(0, minOverlap));
 		if(0 == frontMot.findPositionsFull(seq.mateSeqBase_.seq_, std::max<uint32_t>(1, round(log10(frontMot.motifOriginal_.size())))).size()){
 			++overlapFail;
@@ -381,7 +390,7 @@ int pairProcessingRunner::detectPossiblePrimers(
 			break;
 		}
 	}
-
+	std::cout << __FILE__ << " " << __LINE__ << std::endl;
 	Json::Value outVal;
 	outVal["overlapFail"] = overlapFail;
 	outVal["overlapFailPerc"] = (overlapFail/static_cast<double>(total)) * 100;
@@ -600,7 +609,7 @@ int pairProcessingRunner::detectPossiblePrimers(
 						readVecTrimmer::trimToMaxLength(conSeqInfo, outPrimerLengthMax);
 						trimAtPolys(conSeqInfo);
 						readVecTrimmer::trimAtRstripBase(conSeqInfo, 'N');
-						if ("" != conSeqInfo.seq_) {
+						if ("" != conSeqInfo.seq_ && len(conSeqInfo) > outPrimerLengthMin) {
 							bool alreadyAdded = false;
 							for (const auto & otherCon : cons) {
 								if (otherCon.seq_ == conSeqInfo.seq_) {
@@ -777,7 +786,7 @@ int pairProcessingRunner::detectPossiblePrimers(
 						readVecTrimmer::trimToMaxLength(conSeqInfo, outPrimerLengthMax);
 						trimAtPolys(conSeqInfo);
 						readVecTrimmer::trimAtRstripBase(conSeqInfo, 'N');
-						if ("" != conSeqInfo.seq_) {
+						if ("" != conSeqInfo.seq_ && len(conSeqInfo) > outPrimerLengthMin) {
 							bool alreadyAdded = false;
 							for (const auto & otherCon : cons) {
 								if (otherCon.seq_ == conSeqInfo.seq_) {

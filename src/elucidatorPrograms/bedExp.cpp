@@ -1346,7 +1346,7 @@ int bedExpRunner::bed3ToBed6(const njh::progutils::CmdArgs & inputCommands) {
 		if(reverseStrand){
 			outBedRec.strand_ = '-';
 		}
-		writer.write(outBedRec, [&reverseStrand]( const Bed6RecordCore & bedReg, std::ostream & out){
+		writer.write(outBedRec, []( const Bed6RecordCore & bedReg, std::ostream & out){
 			out << bedReg.toDelimStr() << std::endl;
 		});
 	}
