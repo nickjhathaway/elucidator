@@ -54,23 +54,27 @@ int miscRunner::expandTableBySeparatingColumn(const njh::progutils::CmdArgs & in
 	auto colPos = namesTab.getColPos(columnName);
 	OutputStream out(tabOpts.out_);
 	if(tabOpts.hasHeader_){
-		out << njh::conToStr(namesTab.columnNames_, tabOpts.outDelim_) << "\n";
+		out << njh::conToStr(namesTab.columnNames_, tabOpts.outDelim_) << std::endl;;
 	}
 	for(const auto & row : namesTab.content_){
-		auto toks =  tokenizeString(row[colPos], sep);
-		auto rowCopy = row;
-		uint32_t count = 0;
-		for(const auto & tok : toks){
-			std::string element = tok;
-			if(0 != count && "" != prepend){
-				element = prepend + element;
+		if("" == row[colPos]){
+			out << njh::conToStr(row, tabOpts.outDelim_) << std::endl;;
+		}else{
+			auto toks =  tokenizeString(row[colPos], sep);
+			auto rowCopy = row;
+			uint32_t count = 0;
+			for(const auto & tok : toks){
+				std::string element = tok;
+				if(0 != count && "" != prepend){
+					element = prepend + element;
+				}
+				if(toks.size() != (count + 1) && "" != append){
+					element.append(append);
+				}
+				++count;
+				rowCopy[colPos] = element;
+				out << njh::conToStr(rowCopy, tabOpts.outDelim_) << std::endl;;
 			}
-			if(toks.size() != (count + 1) && "" != append){
-				element.append(append);
-			}
-			++count;
-			rowCopy[colPos] = element;
-			out << njh::conToStr(rowCopy, tabOpts.outDelim_) << "\n";
 		}
 	}
 	return 0;
