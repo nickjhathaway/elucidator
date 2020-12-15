@@ -52,6 +52,7 @@ seqUtilsModRunner::seqUtilsModRunner()
 		addFunc("sortReadsByEntropy", sortReadsByEntropy, false),
 		addFunc("sortReadsByKmerEntropy", sortReadsByKmerEntropy, false),
 		addFunc("sortReadsByKCompToTop", sortReadsByKCompToTop, false),
+		addFunc("sortReadsByNameNaturalSort", sortReadsByNameNaturalSort, false),
 
 
 },//

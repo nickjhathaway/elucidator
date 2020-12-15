@@ -16,6 +16,78 @@
 
 
 namespace njhseq {
+
+
+
+
+int seqUtilsModRunner::sortReadsByNameNaturalSort(const njh::progutils::CmdArgs & inputCommands) {
+
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.processDefaultReader(true);
+  if (setUp.pars_.ioOptions_.out_.outFilename_ == "out") {
+  	setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(njh::files::removeExtension(setUp.pars_.ioOptions_.firstName_), "sorted_");
+  }
+	setUp.finishSetUp(std::cout);
+	SeqInput reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	std::regex regPat{"([A-Za-z0-9\\.]+)"};
+	std::regex subPat{"([A-Za-z]*)([0-9\\.]*)"};
+
+	struct SeqWithNameSplit {
+
+		SeqWithNameSplit(const seqInfo & seq, const std::regex & regPat, const std::regex & subPat):
+			seqBase_(seq),
+			subPat_(subPat),
+			nameToks_(njh::tokStrOnMatchRegex(seqBase_.name_, regPat))
+			{
+			for(const auto & name : nameToks_){
+				std::smatch nameMatch;
+				if(!std::regex_match(name.begin(), name.end(), nameMatch, subPat_)){
+					std::stringstream ss;
+					ss << __PRETTY_FUNCTION__ << ", error " << "name didn't match pattern"<< "\n";
+					throw std::runtime_error{ss.str()};
+				}
+//				std::cout << "fullname " << seqBase_.name_ << std::endl;
+//				std::cout << "nameTok: " << name << std::endl;
+//				std::cout << nameMatch[1] << std::endl;
+//				std::cout << nameMatch[2] << std::endl;
+				subNameToks_.emplace_back(std::make_pair(nameMatch[1], ("" == nameMatch[2] ? std::numeric_limits<double>::min() :std::stod(nameMatch[2]) ) ) );
+			}
+		}
+		seqInfo seqBase_;
+		std::regex subPat_;
+		VecStr nameToks_;
+
+		std::vector<std::pair<std::string, double>> subNameToks_;
+
+	};
+	std::vector<SeqWithNameSplit> seqs;
+	seqInfo seq;
+	while(reader.readNextRead(seq)){
+		seqs.emplace_back(seq, regPat, subPat);
+	}
+
+	njh::sort(seqs, []( const SeqWithNameSplit & seq1,  const SeqWithNameSplit & seq2){
+		auto smallest = std::min(seq1.nameToks_.size(), seq2.nameToks_.size());
+		for(uint32_t pos = 0; pos < smallest; ++pos){
+			if(seq1.subNameToks_[pos].first == seq2.subNameToks_[pos].first){
+				if(seq1.subNameToks_[pos].second != seq2.subNameToks_[pos].second){
+					return seq1.subNameToks_[pos].second < seq2.subNameToks_[pos].second;
+				}
+			}else{
+				return seq1.subNameToks_[pos].first < seq2.subNameToks_[pos].first;
+			}
+		}
+		return seq1.subNameToks_.size() < seq2.subNameToks_.size();
+	});
+
+	SeqOutput::write(seqs, setUp.pars_.ioOptions_);
+
+	return 0;
+}
+
 int seqUtilsModRunner::sortReadsByKmerEntropy(const njh::progutils::CmdArgs & inputCommands) {
 	bool mark = false;
 	uint32_t kLen = 2;
