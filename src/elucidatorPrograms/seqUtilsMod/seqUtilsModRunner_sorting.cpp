@@ -36,7 +36,6 @@ int seqUtilsModRunner::sortReadsByNameNaturalSort(const njh::progutils::CmdArgs 
 	std::regex subPat{"([A-Za-z]*)([0-9\\.]*)"};
 
 	struct SeqWithNameSplit {
-
 		SeqWithNameSplit(const seqInfo & seq, const std::regex & regPat, const std::regex & subPat):
 			seqBase_(seq),
 			subPat_(subPat),
@@ -45,23 +44,19 @@ int seqUtilsModRunner::sortReadsByNameNaturalSort(const njh::progutils::CmdArgs 
 			for(const auto & name : nameToks_){
 				std::smatch nameMatch;
 				if(!std::regex_match(name.begin(), name.end(), nameMatch, subPat_)){
-					std::stringstream ss;
-					ss << __PRETTY_FUNCTION__ << ", error " << "name didn't match pattern"<< "\n";
-					throw std::runtime_error{ss.str()};
+//					std::stringstream ss;
+//					ss << __PRETTY_FUNCTION__ << ", error " << "name didn't match pattern"<< "\n";
+//					throw std::runtime_error{ss.str()};
+					subNameToks_.emplace_back(std::make_pair(name, std::numeric_limits<double>::min()) );
+				}else{
+					subNameToks_.emplace_back(std::make_pair(nameMatch[1], ("" == nameMatch[2] ? std::numeric_limits<double>::min() :std::stod(nameMatch[2]) ) ) );
 				}
-//				std::cout << "fullname " << seqBase_.name_ << std::endl;
-//				std::cout << "nameTok: " << name << std::endl;
-//				std::cout << nameMatch[1] << std::endl;
-//				std::cout << nameMatch[2] << std::endl;
-				subNameToks_.emplace_back(std::make_pair(nameMatch[1], ("" == nameMatch[2] ? std::numeric_limits<double>::min() :std::stod(nameMatch[2]) ) ) );
 			}
 		}
 		seqInfo seqBase_;
 		std::regex subPat_;
 		VecStr nameToks_;
-
 		std::vector<std::pair<std::string, double>> subNameToks_;
-
 	};
 	std::vector<SeqWithNameSplit> seqs;
 	seqInfo seq;

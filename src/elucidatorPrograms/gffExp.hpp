@@ -39,7 +39,6 @@ class gffExpRunner : public njh::progutils::ProgramRunner {
 	static int gffDescriptionsCount(const njh::progutils::CmdArgs & inputCommands);
 	static int gffAttributesCount(const njh::progutils::CmdArgs & inputCommands);
 	static int gffCountAttribute(const njh::progutils::CmdArgs & inputCommands);
-	static int extractGffFeature(const njh::progutils::CmdArgs & inputCommands);
 	static int gffToBed(const njh::progutils::CmdArgs & inputCommands);
 	static int gffToBedByFeature(const njh::progutils::CmdArgs & inputCommands);
 	static int gffToBedByAttribute(const njh::progutils::CmdArgs & inputCommands);
@@ -47,8 +46,12 @@ class gffExpRunner : public njh::progutils::ProgramRunner {
 	static int gffToBedByChrom(const njh::progutils::CmdArgs & inputCommands);
 	static int gffToBedByBedLoc(const njh::progutils::CmdArgs & inputCommands);
 	static int gffToBedByName(const njh::progutils::CmdArgs & inputCommands);
-
 	static int gffToJsonByID(const njh::progutils::CmdArgs & inputCommands);
+
+	static int extractGffFeature(const njh::progutils::CmdArgs & inputCommands);
+	static int extractGffChrom(const njh::progutils::CmdArgs & inputCommands);
+
+
 
 	static int gffSortInefficient(const njh::progutils::CmdArgs & inputCommands);
 	static int roughGffConversionToOther(const njh::progutils::CmdArgs & inputCommands);
@@ -74,6 +77,11 @@ class gffExpRunner : public njh::progutils::ProgramRunner {
 	static int aaPositionsToBed(const njh::progutils::CmdArgs & inputCommands);
 
 	static int appendGff(const njh::progutils::CmdArgs & inputCommands);
+
+	static int revCompGff(const njh::progutils::CmdArgs & inputCommands);
+
+
+
 
 };
 } /* namespace njhseq */

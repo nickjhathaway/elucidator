@@ -41,6 +41,7 @@ gffExpRunner::gffExpRunner()
 					 addFunc("gffFeatureCount", gffFeatureCount, false),
 					 addFunc("gffDescriptionsCount", gffDescriptionsCount, false),
 					 addFunc("extractGffFeature", extractGffFeature, false),
+					 addFunc("extractGffChrom", extractGffChrom, false),
 					 addFunc("gffToBed", gffToBed, false),
 					 addFunc("gffToBedByDescription", gffToBedByDescription, false),
 					 addFunc("gffToBedByChrom", gffToBedByChrom, false),
@@ -65,6 +66,7 @@ gffExpRunner::gffExpRunner()
 					 addFunc("gffToBedByFeature", gffToBedByFeature, false),
 					 addFunc("roughGffConversionToOther", roughGffConversionToOther, false),
 					 addFunc("appendGff", appendGff, false),
+					 addFunc("revCompGff", revCompGff, false),
            },//
           "gffExp") {}
 class AmionoAcidPositionInfo {
@@ -725,6 +727,62 @@ int gffExpRunner::extractGffRecordWithChildren(const njh::progutils::CmdArgs & i
 		}
 		gRecord = reader.readNextRecord();
 		++count;
+	}
+	return 0;
+}
+
+int gffExpRunner::extractGffChrom(const njh::progutils::CmdArgs & inputCommands){
+	bfs::path inputFile;
+	OutOptions outOpts(bfs::path("out.gff"));
+	VecStr chroms;
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(inputFile, "--gff", "Input gff file", true);
+	setUp.setOption(chroms, "--chroms", "Feature to extract", true);
+	setUp.processVerbose();
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
+	reader.openIn();
+	uint32_t count = 0;
+	std::string line = "";
+	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
+	std::unordered_map<std::string, std::unordered_map<std::string, uint32_t>> chromCounts;
+	std::ofstream outFile;
+	outOpts.openFile(outFile);
+	{
+		//write header
+		std::ifstream infile(inputFile.string());
+		while('#' == infile.peek()){
+			njh::files::crossPlatGetline(infile, line);
+			outFile << line << std::endl;
+		}
+	}
+	while (nullptr != gRecord) {
+
+		if(njh::in(gRecord->seqid_,chroms ) ){
+			gRecord->writeGffRecord(outFile);
+			++chromCounts[gRecord->seqid_][gRecord->type_];
+		}
+
+		bool end = false;
+		while ('#' == reader.inFile_->peek()) {
+			if (njh::files::nextLineBeginsWith(*reader.inFile_, "##FASTA")) {
+				end = true;
+				break;
+			}
+			njh::files::crossPlatGetline(*reader.inFile_, line);
+		}
+		if (end) {
+			break;
+		}
+		gRecord = reader.readNextRecord();
+		++count;
+	}
+	if (setUp.pars_.verbose_) {
+		table out(chromCounts, VecStr {"chrom", "feature", "count" });
+		out.sortTable("feature", false);
+		out.outPutContents(std::cout, "\t");
 	}
 	return 0;
 }

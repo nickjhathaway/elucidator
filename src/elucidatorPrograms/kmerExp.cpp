@@ -31,6 +31,8 @@
 
 #include <njhseq/objects/seqObjects/seqKmers.h>
 
+#include <njhseq/concurrency/AllByAllPairFactory.hpp>
+
 
 namespace njhseq {
 kmerExpRunner::kmerExpRunner()
@@ -40,7 +42,7 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("profileKmerAccerlation", profileKmerAccerlation, false),
 					 addFunc("getNewScanKmerDist", getNewScanKmerDist, false),
 					 addFunc("readingDistanceCheck", readingDistanceCheck, false),
-					 addFunc("getKmerDist", getKmerDist, false),
+					 addFunc("getKmerDistAgainstRef", getKmerDistAgainstRef, false),
 					 addFunc("writingDistanceCheck", writingDistanceCheck, false),
 					 addFunc("writeKmerAccerlation",writeKmerAccerlation, false),
 					 addFunc("kDistVsNucDist",kDistVsNucDist, false),
@@ -48,7 +50,7 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("getKmerDistStatsMultiple",getKmerDistStatsMultiple, false),
 					 addFunc("getKmerDistStats",getKmerDistStats, false),
 					 addFunc("scaningKmerDist",scaningKmerDist, false),
-					 addFunc("kDist",kDist, false),
+					 addFunc("getKmerDistTwoSeqs",getKmerDistTwoSeqs, false),
 					 addFunc("scoveViaKmers",scoveViaKmers, false),
 					 addFunc("kmerRevVsForDist",kmerRevVsForDist, false),
 					 addFunc("profileLargeKmerIndex",profileLargeKmerIndex, false),
@@ -501,7 +503,7 @@ int kmerExpRunner::pidVsKmers(const njh::progutils::CmdArgs & inputCommands) {
   distTab.outPutContents(TableIOOpts(setUp.pars_.ioOptions_.out_, "\t", distTab.hasHeader_));
   return 0;
 }
-//tempGetGV
+
 int kmerExpRunner::scoveViaKmers(const njh::progutils::CmdArgs & inputCommands) {
 	seqSetUp setUp(inputCommands);
 	setUp.pars_.ioOptions_.out_.outFilename_ = "kDist.tab.txt";
@@ -575,20 +577,19 @@ int kmerExpRunner::scoveViaKmers(const njh::progutils::CmdArgs & inputCommands) 
   return 0;
 }//scoveViaKmers
 
-int kmerExpRunner::kDist(const njh::progutils::CmdArgs & inputCommands){
+int kmerExpRunner::getKmerDistTwoSeqs(const njh::progutils::CmdArgs & inputCommands){
 	seqSetUp setUp(inputCommands);
 	std::string seq1 = "";
 	std::string seq2 = "";
 	uint32_t kLength = 5;
 	bool getReverseDistance = false;
-	setUp.processSeq(seq1, "-seq1", "Sequence 1", true);
-	setUp.processSeq(seq2, "-seq2", "Sequence 2", true);
-	setUp.setOption(kLength, "-kLength", "Kmer Length");
-	setUp.setOption(getReverseDistance, "-getReverseDistance", "Get Reverse Complement Distance");
+	setUp.processSeq(seq1, "--seq1", "Sequence 1", true);
+	setUp.processSeq(seq2, "--seq2", "Sequence 2", true);
+	setUp.setOption(kLength, "--kLength", "Kmer Length");
+	setUp.setOption(getReverseDistance, "--getReverseDistance", "Get Reverse Complement Distance");
   setUp.finishSetUp(std::cout);
 
   seqWithKmerInfo seq1Obj(seqInfo("seq1", seq1), kLength, getReverseDistance);
-
   seqWithKmerInfo seq2Obj(seqInfo("seq2", seq2), kLength, getReverseDistance);
   std::pair<uint32_t,double> distance;
   if(getReverseDistance){
@@ -597,13 +598,14 @@ int kmerExpRunner::kDist(const njh::progutils::CmdArgs & inputCommands){
   	distance = seq1Obj.compareKmers(seq2Obj);
   }
 
-  std::cout << "KmersShared:" << distance.first << "("
-  		<< std::min(seq1.size(), seq2.size()) - kLength + 1 << ")" << "\n";
+  std::cout << "KmersShared:" << distance.first << "(" << std::min(seq1.size(), seq2.size()) - kLength + 1 << ")" << "\n";
   std::cout << "KmersDistance:" << distance.second << "\n";
 
 
   return 0;
 }
+
+
 class testRead : public seqWithKmerInfo {
 public:
 	testRead(const seqInfo & seqBase): seqWithKmerInfo(seqBase){
@@ -986,8 +988,10 @@ int kmerExpRunner::getNewScanKmerDist(const njh::progutils::CmdArgs & inputComma
 
 
 
-int kmerExpRunner::getKmerDist(const njh::progutils::CmdArgs & inputCommands){
+int kmerExpRunner::getKmerDistAgainstRef(const njh::progutils::CmdArgs & inputCommands){
   bool dontSkipSameName = false;
+  bool getRevComp = false;
+  uint32_t numThreads = 1;
   uint32_t kLenStart = 2;
   uint32_t kLenStop = std::numeric_limits<uint32_t>::max();
   uint32_t kLenStep = 1;
@@ -996,7 +1000,8 @@ int kmerExpRunner::getKmerDist(const njh::progutils::CmdArgs & inputCommands){
 	setUp.setOption(kLenStop, "--kLenStop", "kmer Length Stop", true);
 	setUp.setOption(kLenStart, "--kLenStart", "kmer Length Start");
 	setUp.setOption(kLenStep, "--kLenStep", "kmer Length Step");
-
+	setUp.setOption(numThreads, "--numThreads", "number of threads to use");
+	setUp.setOption(getRevComp, "--getRevComp", "Get Rev Comp");
 	setUp.setOption(dontSkipSameName, "--dontSkipSameName", "Don't skip comparison if they have the same name");
 	setUp.processVerbose();
   setUp.processReadInNames(true);
@@ -1029,20 +1034,46 @@ int kmerExpRunner::getKmerDist(const njh::progutils::CmdArgs & inputCommands){
   		std::cerr.flush();
   	}
 		allSetKmers(refReads, k, false);
-		allSetKmers(reads, k, false);
-  	for(const auto & seq : reads){
-  		for(const auto & ref : refReads){
-  			if(seq->seqBase_.name_ == ref->seqBase_.name_ && !dontSkipSameName){
-  				continue;
-  			}
-  			auto dist = ref->compareKmers(*seq);
-  			outFile << seq->seqBase_.name_
-  					<< "\t" << ref->seqBase_.name_
-						<< "\t" << k
-						<< "\t" << dist.second
-  					<< "\t" << dist.first << "\n";
-  		}
-  	}
+		allSetKmers(reads, k, getRevComp);
+
+		std::mutex outFileMut;
+
+		AllByAllPairFactory allFactory(reads.size(), refReads.size());
+
+		std::function<void()> getDist = [&allFactory,&getRevComp,&refReads,&reads,
+										&outFileMut,&outFile,&k,&dontSkipSameName](){
+			AllByAllPairFactory::AllByAllPair pair;
+			while(allFactory.setNextPair(pair)){
+				const auto & seq = reads[pair.row_];
+				const auto & ref = refReads[pair.col_];
+				if(seq->seqBase_.name_ == ref->seqBase_.name_ && !dontSkipSameName){
+					continue;
+				}
+				auto dist = ref->compareKmers(*seq);
+				std::pair<uint32_t,double> revDist;
+				if(getRevComp){
+					revDist = ref->compareKmersRevComp(*seq);
+				}
+				{
+					std::lock_guard<std::mutex> lock(outFileMut);
+					outFile << seq->seqBase_.name_
+							<< "\t" << ref->seqBase_.name_
+							<< "\t" << k
+							<< "\t" << dist.second
+							<< "\t" << dist.first << "\n";
+					if(getRevComp){
+		  			outFile << seq->seqBase_.name_ << "_revComp"
+		  					<< "\t" << ref->seqBase_.name_
+								<< "\t" << k
+								<< "\t" << revDist.second
+		  					<< "\t" << revDist.first << "\n";
+					}
+				}
+			}
+		};
+		njh::concurrent::runVoidFunctionThreaded(getDist, numThreads);
+
+
   }
   if(setUp.pars_.verbose_){
   	std::cerr << std::endl;

@@ -35,7 +35,9 @@ namespace njhseq {
 
 int kmerExpRunner::getBestKmerDist(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t kmerLength = 7;
-	OutOptions outOpts(bfs::path("out.tab.txt"));
+	uint32_t numThreads = 1;
+	bool getRevComp = false;
+	OutOptions outOpts(bfs::path(""), ".tab.txt");
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -43,39 +45,66 @@ int kmerExpRunner::getBestKmerDist(const njh::progutils::CmdArgs & inputCommands
 	setUp.processRefFilename(true);
 	setUp.processWritingOptions(outOpts);
 	setUp.setOption(kmerLength, "--kmerLength", "kmer Length");
+	setUp.setOption(getRevComp, "--getRevComp", "Compare Reverse Complement as well");
+
+	setUp.setOption(numThreads, "--numThreads", "number of threads to use");
+
 	setUp.finishSetUp(std::cout);
 
-	auto refSeqs = createKmerReadVec(setUp.pars_.refIoOptions_, kmerLength, false);
+	auto refSeqs = createKmerReadVec(setUp.pars_.refIoOptions_, kmerLength, getRevComp);
 
 	SeqInput reader(setUp.pars_.ioOptions_);
 	reader.openIn();
-	seqInfo seq;
+
 	OutputStream out(outOpts);
 	out << "name\tBestRef\tdistance" << "\n";
-	while(reader.readNextRead(seq)){
-		kmerInfo kInfo(seq.seq_, kmerLength, false);
-		double bestKmerDist = std::numeric_limits<double>::min();
-		uint32_t index = std::numeric_limits<uint32_t>::max();
-		for(const auto pos : iter::range(refSeqs.size())){
-			const auto & refSeq = refSeqs[pos];
-			auto dist = refSeq->kInfo_.compareKmers(kInfo);
-			if(dist.second > bestKmerDist){
-				bestKmerDist = dist.second;
-				index = pos;
+	std::mutex outMut;
+	std::function<void()> getBestDist = [&reader,&out,&outMut,
+																			 &getRevComp,&kmerLength,
+																			 &refSeqs](){
+		seqInfo seq;
+		while(reader.readNextReadLock(seq)){
+
+			kmerInfo kInfo(seq.seq_, kmerLength, false);
+			double bestKmerDist = std::numeric_limits<double>::min();
+			uint32_t index = std::numeric_limits<uint32_t>::max();
+			std::string name = seq.name_;
+			for(const auto pos : iter::range(refSeqs.size())){
+				const auto & refSeq = refSeqs[pos];
+				auto dist = refSeq->kInfo_.compareKmers(kInfo);
+				if(dist.second > bestKmerDist){
+					bestKmerDist = dist.second;
+					index = pos;
+				}
+				if(getRevComp){
+					auto revDist = kInfo.compareKmersRevComp(refSeq->kInfo_);
+					if(revDist.second > bestKmerDist){
+						bestKmerDist = revDist.second;
+						index = pos;
+						name = seq.name_ + "_revComp";
+					}
+				}
+			}
+			{
+				std::lock_guard<std::mutex> lock(outMut);
+				if(std::numeric_limits<uint32_t>::max() != index){
+					out << name
+							<< "\t" << refSeqs[index]->seqBase_.name_
+							<< "\t" << bestKmerDist
+							<< "\n";
+				}else{
+					out << name
+							<< "\t" << "*"
+							<< "\t" << ""
+							<< "\n";
+				}
 			}
 		}
-		if(std::numeric_limits<uint32_t>::max() != index){
-			out << seq.name_
-					<< "\t" << refSeqs[index]->seqBase_.name_
-					<< "\t" << bestKmerDist
-					<< "\n";
-		}else{
-			out << seq.name_
-					<< "\t" << "*"
-					<< "\t" << ""
-					<< "\n";
-		}
-	}
+	};
+
+	njh::concurrent::runVoidFunctionThreaded(getBestDist, numThreads);
+
+
 
 	return 0;
 
