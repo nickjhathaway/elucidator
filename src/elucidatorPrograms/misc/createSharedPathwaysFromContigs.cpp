@@ -7,11 +7,18 @@
 
 
 
+#include <njhseq/GenomeUtils.h>
 
 #include "miscRunner.hpp"
 #include "elucidator/simulation.h"
 #include "elucidator/BamToolsUtils.h"
 #include "elucidator/objects/dataContainers/graphs/ContigsCompareGraph.hpp"
+#include "elucidator/BioRecordsUtils/BedUtility.hpp"
+
+
+#include <set>
+#include <unordered_set>
+
 
 namespace njhseq {
 
@@ -301,8 +308,9 @@ int miscRunner::createSharedPathwaysFromRefSeqs(const njh::progutils::CmdArgs & 
 	uint32_t kmerOccurenceCutOff = 0;
 	uint32_t correctionOccurenceCutOff = 2;
 	comparison allowableError;
-	uint32_t lowFreqCutOff = 0;
-//	bool writeOutForRD3SankeyGraph = false;
+	allowableError.hqMismatches_ = 1;
+	allowableError.oneBaseIndel_ = 1;
+	uint32_t lowFreqCutOff = 3;
 	bool collapseLowFreqNodes = false;
 	bool writeBasesShared = false;
 	seqSetUp setUp(inputCommands);
@@ -311,7 +319,6 @@ int miscRunner::createSharedPathwaysFromRefSeqs(const njh::progutils::CmdArgs & 
 	setUp.setOption(klen, "--klen", "k-mer length", true);
 	setUp.setOption(writeBasesShared, "--writeBasesShared", "Write Bases Shared");
 	setUp.setOption(kmerOccurenceCutOff, "--kmerOccurenceCutOff", "K-mer Occurence Cut Off");
-//	setUp.setOption(writeOutForRD3SankeyGraph, "--writeOutForRD3SankeyGraph", "writeOutForRD3SankeyGraph");
 
 	setUp.setOption(collapseLowFreqNodes, "--collapseLowFreqNodes", "collapse Low Freq Nodes");
 	setUp.setOption(lowFreqCutOff, "--lowFreqCutOff", "Low Freq Cut Off");
@@ -862,6 +869,615 @@ int miscRunner::createSharedPathwaysFromRefSeqs(const njh::progutils::CmdArgs & 
 //	}
 	return 0;
 }
+
+
+
+
+
+
+int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs & inputCommands){
+	uint32_t minimumKlen = 12;
+	uint32_t kmerOccurenceCutOff = 0;
+	uint32_t correctionOccurenceCutOff = 2;
+	comparison allowableError;
+	allowableError.hqMismatches_ = 1;
+	allowableError.oneBaseIndel_ = 1;
+	uint32_t lowFreqCutOff = 3;
+	bool doNotCollapseLowFreqNodes = false;
+	std::string refSeqName = "";
+	bfs::path genomeFnp = "";
+
+	BedUtility::genSubRegionCombosPars subRegionComboPars;
+
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(subRegionComboPars.includeFromBack, "--includeFromBack", "include from back if the last region isn't shared");
+	setUp.setOption(subRegionComboPars.includeFromFront, "--includeFromFront", "include from front if the last region isn't shared");
+	setUp.setOption(subRegionComboPars.includeFromSubRegionSize, "--includeFromSubRegionSize", "the maximum to include from the conserved regions");
+	setUp.setOption(subRegionComboPars.justToNextRegion, "--justToNextRegion", "Just do the adjacent regions rather than all possible regions");
+	setUp.setOption(subRegionComboPars.maxLen, "--maxSubRegionLen", "Maximum subregion size");
+	setUp.setOption(subRegionComboPars.minLen, "--minSubRegionLen", "Minimum subregion size");
+	setUp.setOption(subRegionComboPars.minBlockRegionLen, "--minBlockRegionLen", "Minimum subregion to start a block from");
+
+	setUp.setOption(genomeFnp, "--genome",
+			"Path to a genome to determine the location in", true);
+	setUp.setOption(minimumKlen, "--minimumKlen", "minimum k-mer length");
+	setUp.setOption(kmerOccurenceCutOff, "--kmerOccurenceCutOff", "K-mer Occurence Cut Off");
+	setUp.setOption(doNotCollapseLowFreqNodes, "--doNotCollapseLowFreqNodes", "don't collapse Low Freq Nodes");
+	setUp.setOption(lowFreqCutOff, "--lowFreqCutOff", "Low Freq Cut Off");
+	setUp.setOption(correctionOccurenceCutOff, "--correctionOccurenceCutOff", "correction Occurrence Cut Off");
+	setUp.setOption(refSeqName, "--refSeqName", "The sample name of the sequence to output reference to", true);
+
+	setUp.processComparison(allowableError);
+
+
+	setUp.processReadInNames(true);
+	setUp.processDirectoryOutputName(true);
+	setUp.finishSetUp(std::cout);
+	setUp.startARunLog(setUp.pars_.directoryName_);
+	OutOptions outOpts(njh::files::make_path(setUp.pars_.directoryName_, "graph"), ".dot");
+
+	seqInfo refSeq;
+	std::vector<seqInfo> seqs;
+	{
+		seqInfo seq;
+		SeqInput reader(setUp.pars_.ioOptions_);
+		reader.openIn();
+		std::unordered_set<std::string> readNames;
+		while(reader.readNextRead(seq)){
+			bool matchingRefSeqName = false;
+			if(seq.name_ == refSeqName){
+				matchingRefSeqName = true;
+				refSeq = seq;
+			}else{
+				if (MetaDataInName::nameHasMetaData(seq.name_)) {
+					MetaDataInName meta(seq.name_);
+					if (meta.containsMeta("sample")) {
+						if(meta.getMeta("sample") == refSeqName){
+							matchingRefSeqName = true;
+						}
+					}
+				}
+			}
+			if(matchingRefSeqName){
+				if("" != refSeq.name_){
+					std::stringstream ss;
+					ss << __PRETTY_FUNCTION__ << ", error " << "already found a seq maching reference name: " << refSeqName << "\n";
+					ss << "previous: " << refSeq.name_ << "\n";
+					ss << "current: " << seq.name_ << "\n";
+					throw std::runtime_error{ss.str()};
+				}else{
+					refSeq = seq;
+				}
+			}
+			if(njh::in(seq.name_, readNames)){
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "already have seq name: " << seq.name_ << ", can't have repeat names"<< "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			seqs.emplace_back(seq);
+			readNames.emplace(seq.name_);
+		}
+	}
+	if("" == refSeq.name_){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << "didn't find a matching seq for reference: " << refSeqName<< "\n";
+		throw std::runtime_error{ss.str()};
+	}
+
+	//refSeq.name_ = refSeqName;
+	{
+
+		auto refSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "refSeq.fasta"));
+		SeqOutput::write(std::vector<seqInfo>{refSeq}, refSeqOpts);
+	}
+	GenomicRegion refSeqLoc;
+	{
+		//determine refseq location
+
+		auto genomeName = bfs::basename(genomeFnp);
+		if (std::string::npos != genomeName.rfind(".")) {
+			genomeName = genomeName.substr(0, genomeName.rfind("."));
+		}
+
+		MultiGenomeMapper genomeMapper(genomeFnp.parent_path(),
+				genomeName);
+		genomeMapper.setSelectedGenomes(VecStr { genomeName });
+		genomeMapper.loadInGenomes();
+		TwoBit::TwoBitFile tReader(genomeMapper.genomes_[genomeName]->fnpTwoBit_);
+		//open out file
+		OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "refSeq.bed"));
+		//map reads
+		auto outputs = genomeMapper.alignToGenomes(SeqIOOptions::genFastaIn(njh::files::make_path(setUp.pars_.directoryName_, "refSeq.fasta")), setUp.pars_.directoryName_);
+		std::unordered_map<std::string, bfs::path> bamFnps;
+		for (const auto & output : outputs) {
+			bamFnps[output.first] = output.second.alignedFnp_;
+		}
+		auto bamFnp = bamFnps.begin()->second;
+		BamTools::BamReader bReader;
+		BamTools::BamAlignment bAln;
+		bReader.Open(bamFnp.string());
+		checkBamOpenThrow(bReader, bamFnp.string());
+		auto refDAta = bReader.GetReferenceData();
+		std::vector<AlignmentResults> bestAlnResults;
+		double bestAlnScore =std::numeric_limits<double>::min();
+		while(bReader.GetNextAlignment(bAln)){
+			AlignmentResults alnRes(bAln, refDAta);
+			alnRes.setRefSeq(tReader);
+			alnRes.setComparison(true);
+			if(alnRes.comp_.distances_.eventBasedIdentity_ > bestAlnScore){
+				bestAlnResults.clear();
+				bestAlnResults.emplace_back(alnRes);
+				bestAlnScore = alnRes.comp_.distances_.eventBasedIdentity_;
+			}else if(alnRes.comp_.distances_.eventBasedIdentity_ == bestAlnScore){
+				bestAlnResults.emplace_back(alnRes);
+			}
+		}
+		if(bestAlnResults.empty()){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "couldn't determine " << refSeq.name_ << " in " << genomeFnp << "\n";
+			throw std::runtime_error{ss.str()};
+		}else if(bestAlnResults.size() > 1){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << " found multiple possible matches "<< "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		refSeqLoc = bestAlnResults.front().gRegion_;
+		out << bestAlnResults.front().gRegion_.genBedRecordCore().toDelimStr() << std::endl;
+	}
+	uint64_t maxLen = readVec::getMaxLength(seqs);
+	uint32_t klen = minimumKlen;
+
+	bool foundLength = false;
+	while (klen < maxLen && !foundLength) {
+		if (setUp.pars_.verbose_) {
+			std::cout << klen << std::endl;
+		}
+		bool allPass = true;
+		for(const auto & seq : seqs) {
+			kmerInfo kinfo(seq.seq_, klen, false);
+			for (const auto &k : kinfo.kmers_) {
+				if (k.second.count_ > 1) {
+					allPass = false;
+					if (setUp.pars_.verbose_) {
+						std::cout << "\t" << seq.name_ << std::endl;
+					}
+					break;
+				}
+			}
+		}
+		if (allPass) {
+			foundLength = true;
+		} else {
+			++klen;
+		}
+	}
+	if(!foundLength){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << " couldn't determine a minimum non-redundant kmer size"<< "\n";
+		throw std::runtime_error{ss.str()};
+	}
+
+	if(setUp.pars_.debug_){
+		std::cout << "Read in" << std::endl;
+		for(const auto & seq : seqs){
+			std::cout << seq.name_ << std::endl;
+		}
+	}
+	if(std::numeric_limits<uint32_t>::max() == subRegionComboPars.includeFromSubRegionSize){
+		subRegionComboPars.includeFromSubRegionSize = klen;
+	}
+	{
+		njh::stopWatch watch;
+		//correction
+		ContigsCompareGraphDev compGraph(klen);
+		compGraph.setOccurenceCutOff(kmerOccurenceCutOff);
+		for(const auto & seq : seqs){
+			compGraph.increaseKCounts(seq.seq_);
+		}
+		compGraph.populateNodesFromCounts();
+		for(const auto & seq : seqs){
+			compGraph.threadThroughSequence(seq, seq.name_);
+		}
+
+		struct SubSeqment{
+			SubSeqment(uint32_t pos, uint32_t size):pos_(pos), size_(size){
+
+			}
+			std::string head_;
+			std::string tail_;
+
+			uint32_t pos_;
+			uint32_t size_;
+
+		};
+		std::unordered_map<std::string, uint32_t> seqnameToPosition;
+		{
+			uint32_t seqCount = 0;
+			for(const auto & seq : seqs){
+				seqnameToPosition[seq.name_] = seqCount++;
+			}
+		}
+		std::vector<seqInfo> correctedSeqs = seqs;
+		for(const auto & seq : seqs){
+			bool printInfo = setUp.pars_.debug_;
+			std::vector<SubSeqment> subPositions;
+			for(uint32_t pos = 0; pos < len(seq) + 1 - klen; ++pos){
+				std::string subK = seq.seq_.substr(pos, klen);
+				if(compGraph.kCounts_[subK] <= correctionOccurenceCutOff){
+					if(subPositions.empty() || (subPositions.back().pos_ + subPositions.back().size_ + 1 - klen != pos)){
+						subPositions.emplace_back(SubSeqment(pos, klen));
+					}else{
+						subPositions.back().size_ += 1;
+					}
+				}
+			}
+			if(printInfo){
+				std::cout << "subPositions.size(): " << subPositions.size() << std::endl;
+			}
+			if(!subPositions.empty()){
+				if(printInfo){
+					std::cout << seq.name_ << std::endl;
+				}
+				njh::sort(subPositions,[](const SubSeqment & s1, const SubSeqment & s2){
+					return s1.pos_ > s2.pos_;
+				});
+				for(const auto & subPosition : subPositions){
+					std::string subSegment = seq.seq_.substr(subPosition.pos_, subPosition.size_);
+					if(printInfo){
+						std::cout << "\t" <<"subsegment: " << subSegment << std::endl;
+						std::cout << "\t" << "pos : " << subPosition.pos_ << std::endl;
+						std::cout << "\t" << "size: " << subPosition.size_ << std::endl;
+
+					}
+					std::string head = "";
+					std::string tail = "";
+					if(subPosition.pos_ != 0){
+						head = seq.seq_.substr(subPosition.pos_ - 1, klen);
+						if(printInfo){
+							std::cout << "\t\t" << "head: " << std::endl;
+							std::cout << "\t\t" << head << std::endl;
+							std::cout << "\t\t" << compGraph.kCounts_[head] << std::endl;
+						}
+					}
+					if(subPosition.pos_ + subPosition.size_ != len(seq)){
+						tail = seq.seq_.substr(subPosition.pos_ + subPosition.size_ + 1 - klen, klen);
+						if(printInfo){
+							std::cout << "\t\t" << "tail: " << std::endl;
+							std::cout << "\t\t" << tail << std::endl;
+							std::cout << "\t\t" << compGraph.kCounts_[tail] << std::endl;
+						}
+					}
+					std::unordered_map<std::string, uint32_t> headPositions;
+					std::unordered_map<std::string, uint32_t> tailPositions;
+					uint32_t replaceStart = subPosition.pos_;
+					uint32_t replaceLen = subPosition.size_;
+					if("" != head){
+						--replaceStart;
+						++replaceLen;
+						for(const auto & tailEdge : compGraph.nodes_[compGraph.nodePositions_[head]]->tailEdges_){
+							for(const auto & con : tailEdge->connectorInfos_){
+								headPositions[con.readName_] = con.headPos_;
+							}
+						}
+					}
+					if("" != tail){
+						++replaceLen;
+						for(const auto & headEdge :compGraph.nodes_[compGraph.nodePositions_[tail]]->headEdges_){
+							for(const auto & con : headEdge->connectorInfos_){
+								tailPositions[con.readName_] = con.tailPos_;
+							}
+						}
+					}
+					if("" == head){
+						for(const auto & tailPosition : tailPositions){
+							headPositions[tailPosition.first] = 0;
+						}
+					}
+					if("" == tail){
+						for(const auto & headPosition : headPositions){
+							tailPositions[headPosition.first] = len(seqs[seqnameToPosition[headPosition.first]]);
+						}
+					}
+					std::unordered_map<std::string, uint32_t> subSeqCounts;
+					for(const auto & headPosition : headPositions){
+						if(headPosition.first == seq.name_){
+							continue;
+						}
+						if(njh::in(headPosition.first, tailPositions) && tailPositions[headPosition.first] > headPosition.second){
+							++subSeqCounts[seqs[seqnameToPosition[headPosition.first]].seq_.substr(headPosition.second, tailPositions[headPosition.first] - headPosition.second + klen)];
+						}
+					}
+					std::vector<std::string> subSeqsAbove;
+					if(printInfo){
+						std::cout << "\t" << "subSeqsCounts" << std::endl;
+					}
+					for(const auto & subSeq : subSeqCounts){
+						if(printInfo){
+							std::cout << "\t" << subSeq.first << ": " << subSeq.second << std::endl;
+						}
+						if(subSeq.second > std::max(correctionOccurenceCutOff, lowFreqCutOff)){
+							subSeqsAbove.emplace_back(subSeq.first);
+						}
+					}
+					if(1 == subSeqsAbove.size()){
+						if(printInfo){
+							std::cout << "replacing: " << replaceStart << "," << replaceLen << std::endl;
+							std::cout << "old        : " << correctedSeqs[seqnameToPosition[seq.name_]].seq_.substr(replaceStart, replaceLen) << std::endl;
+							std::cout << "replacement: " << subSeqsAbove.front() << std::endl;
+						}
+						correctedSeqs[seqnameToPosition[seq.name_]].seq_.replace(replaceStart, replaceLen, subSeqsAbove.front());
+					}
+				}
+			}
+		}
+		if(setUp.pars_.verbose_){
+			watch.logLapTimes(std::cout, true, 6, true);
+		}
+		SeqOutput::write(correctedSeqs, SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "correctedSeqs")));
+		seqs = correctedSeqs;
+	}
+
+
+	ContigsCompareGraphDev compGraph(klen);
+	compGraph.setOccurenceCutOff(kmerOccurenceCutOff);
+	for(const auto & seq : seqs){
+		compGraph.increaseKCounts(seq.seq_);
+	}
+	compGraph.populateNodesFromCounts();
+	for(const auto & seq : seqs){
+		compGraph.threadThroughSequence(seq, seq.name_);
+	}
+
+
+
+
+	compGraph.collapseSingleLinkedPathsSameReads();
+
+	uint32_t graphCount = 0;
+	{
+		auto outOptsCurrent = outOpts;
+		outOptsCurrent.outFilename_ = njh::files::prependFileBasename(outOptsCurrent.outFilename_,
+				njh::leftPadNumStr<uint32_t>(graphCount++, 10000) + "_");
+		OutputStream out(outOptsCurrent);
+		compGraph.writeRectangleDotColorBySampleCount(out);
+		auto outSeqs = compGraph.nodesToSeqs();
+		auto seqsOutOpts = SeqIOOptions::genFastaOut(outOptsCurrent.outFilename_);
+		seqsOutOpts.out_.transferOverwriteOpts(outOpts);
+		SeqOutput::write(outSeqs, seqsOutOpts);
+	}
+	if(!doNotCollapseLowFreqNodes){
+		uint32_t collapseCount = 0;
+		while(compGraph.collapseLowFreqNodes(allowableError, lowFreqCutOff)){
+			{
+				auto outOptsCurrent = outOpts;
+				outOptsCurrent.outFilename_ = njh::files::prependFileBasename(outOptsCurrent.outFilename_,
+						njh::leftPadNumStr<uint32_t>(graphCount++, 10000) + "-collapseLowFreq-" + estd::to_string(collapseCount) + "_") ;
+				OutputStream out(outOptsCurrent);
+				compGraph.writeRectangleDotColorBySampleCount(out);
+				auto outSeqs = compGraph.nodesToSeqs();
+				auto seqsOutOpts = SeqIOOptions::genFastaOut(outOptsCurrent.outFilename_);
+				seqsOutOpts.out_.transferOverwriteOpts(outOpts);
+				SeqOutput::write(outSeqs, seqsOutOpts);
+			}
+			compGraph.collapseSingleLinkedPathsSameReads();
+			{
+				auto outOptsCurrent = outOpts;
+				outOptsCurrent.outFilename_ = njh::files::prependFileBasename(outOptsCurrent.outFilename_,
+						njh::leftPadNumStr<uint32_t>(graphCount++, 10000)+ "-collapseLowFreq-" + estd::to_string(collapseCount) + "-collpased" + "_");
+				OutputStream out(outOptsCurrent);
+				compGraph.writeRectangleDotColorBySampleCount(out);
+				auto outSeqs = compGraph.nodesToSeqs();
+				auto seqsOutOpts = SeqIOOptions::genFastaOut(outOptsCurrent.outFilename_);
+				seqsOutOpts.out_.transferOverwriteOpts(outOpts);
+				SeqOutput::write(outSeqs, seqsOutOpts);
+			}
+			++collapseCount;
+		}
+	}
+	uint32_t splitCount = 0;
+	while(compGraph.splitNodesWithRedundantKmers()){
+		{
+			++splitCount;
+			auto outOptsCurrent = outOpts;
+			outOptsCurrent.outFilename_ = njh::files::prependFileBasename(outOptsCurrent.outFilename_,
+					njh::pasteAsStr(njh::leftPadNumStr<uint32_t>(graphCount++, 10000), "_splitCount_", splitCount, "_"));
+			OutputStream out(outOptsCurrent);
+			compGraph.writeRectangleDotColorBySampleCount(out);
+			auto outSeqs = compGraph.nodesToSeqs();
+			auto seqsOutOpts = SeqIOOptions::genFastaOut(outOptsCurrent.outFilename_);
+			seqsOutOpts.out_.transferOverwriteOpts(outOpts);
+			SeqOutput::write(outSeqs, seqsOutOpts);
+		}
+		compGraph.collapseSingleLinkedPathsSameReads();
+
+		{
+			auto outOptsCurrent = outOpts;
+			outOptsCurrent.outFilename_ = njh::files::prependFileBasename(outOptsCurrent.outFilename_,
+					njh::pasteAsStr(njh::leftPadNumStr<uint32_t>(graphCount, 10000), "_splitCount_", splitCount, "_collpased_"));
+			OutputStream out(outOptsCurrent);
+			compGraph.writeRectangleDotColorBySampleCount(out);
+			auto outSeqs = compGraph.nodesToSeqs();
+			auto seqsOutOpts = SeqIOOptions::genFastaOut(outOptsCurrent.outFilename_);
+			seqsOutOpts.out_.transferOverwriteOpts(outOpts);
+			SeqOutput::write(outSeqs, seqsOutOpts);
+		}
+	}
+
+	{
+		{
+			auto outOptsCurrent = outOpts;
+			outOptsCurrent.outFilename_ = njh::files::prependFileBasename(outOptsCurrent.outFilename_,"final_");
+			OutputStream out(outOptsCurrent);
+			compGraph.writeRectangleDotColorBySampleCount(out);
+		}
+	}
+
+	{
+		std::unordered_map<uint32_t, std::vector<std::shared_ptr<ContigsCompareGraphDev::node>>> nodesWithFull;
+		compGraph.resetGroups();
+
+		//get the max count of contigs per group to get the max
+		std::unordered_map<uint32_t, std::unordered_set<std::string>> contigCountsPerGroup;
+		for(const auto & n : compGraph.nodes_){
+			contigCountsPerGroup[n->group_].insert(n->inReadNamesIdx_.begin(), n->inReadNamesIdx_.end());
+		}
+
+		for(const auto & n : compGraph.nodes_){
+			if(n->inReadNamesIdx_.size() >= contigCountsPerGroup[n->group_].size() ){
+				nodesWithFull[n->group_].emplace_back(n);
+			}
+		}
+		OutputStream groupContigCountsOut(njh::files::make_path(setUp.pars_.directoryName_, "groupContigCountsOut.tab.txt"));
+		groupContigCountsOut << "group\tcount" << std::endl;
+		for(const auto & group : contigCountsPerGroup){
+			groupContigCountsOut << group.first << '\t' << group.second.size() << std::endl;
+		}
+		OutputStream conservedNodeOut(njh::files::make_path(setUp.pars_.directoryName_, "conservedNodesPerGroup.tab.txt"));
+		conservedNodeOut << "group\tsubSegment\tseqCount\ttailCount\theadCount" << std::endl;
+
+		for(const auto & nodes : nodesWithFull){
+			std::vector<seqInfo> conservedSeqs;
+
+			for(const auto & n : nodes.second){
+				conservedSeqs.emplace_back(seqInfo(n->k_, n->k_));
+				conservedNodeOut << nodes.first
+						<< "\t" << n->k_
+						<< "\t" << n->inReadNamesIdx_.size()
+						<< "\t" << n->tailCount()
+						<< "\t" << n->headCount()
+						<< std::endl;
+
+			}
+			auto conservedSeqsOpts = SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr(nodes.first, "_conservedNodes.fasta")));
+			SeqOutput::write(conservedSeqs, conservedSeqsOpts);
+		}
+
+		struct SubSeqPos{
+			SubSeqPos(const std::string & subSeq, const uint32_t pos): subSeq_(subSeq), pos_(pos){
+
+			}
+			std::string subSeq_;
+			uint32_t pos_;
+		};
+		auto bedDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{"sharedLocs"});
+		OutputStream sharedLocsOutRefSeq(njh::files::make_path(bedDir, njh::pasteAsStr("refSeqGenomicLocs.bed")));
+		table outSubSeqs(VecStr{"target", "frontSeq", "endSeq"});
+
+		for(const auto & nodes : nodesWithFull){
+			std::vector<GenomicRegion> refSeqPositionsRelativeToCurentSeq;
+			std::unordered_map<std::string, std::vector<SubSeqPos>> seqToNodePositions;
+			for(const auto & n : nodes.second){
+				std::unordered_map<std::string, uint32_t> nodePositionPerSeq;
+				for(const auto & h : n->headEdges_){
+					for(const auto & con : h->connectorInfos_){
+						nodePositionPerSeq[con.readName_] = con.tailPos_;
+					}
+				}
+				for(const auto & t : n->tailEdges_){
+					for(const auto & con : t->connectorInfos_){
+						nodePositionPerSeq[con.readName_] = con.headPos_ - (n->k_.size() - n->kLen_);
+					}
+				}
+				for(const auto & seq : nodePositionPerSeq){
+					seqToNodePositions[seq.first].emplace_back(n->k_, seq.second);
+				}
+			}
+			std::unordered_set<std::string> paths;
+			for(auto & subSeqs : seqToNodePositions){
+				njh::sort(subSeqs.second, [](const SubSeqPos & p1, const SubSeqPos & p2 ){
+					return p1.pos_ < p2.pos_;
+				});
+				std::string path = "";
+
+				for(const auto & sub : subSeqs.second){
+					if("" != path){
+						path += "-";
+					}
+					path += sub.subSeq_;
+				}
+				paths.emplace(path);
+			}
+			if(paths.size() > 1){
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << " error more than one path , " << njh::conToStr(paths, ",") << "\n";
+				throw std::runtime_error{ss.str()};
+			}
+
+			OutputStream sharedLocsOut(njh::files::make_path(bedDir, njh::pasteAsStr(nodes.first, "_sharedLocs.bed")));
+			OutputStream refSharedLocsOut(njh::files::make_path(bedDir, njh::pasteAsStr(nodes.first, "_ref_sharedLocs.bed")));
+
+			for(auto & subSeqs : seqToNodePositions){
+				//std::cout << subSeqs.first <<std::endl;
+				for(const auto & sub : subSeqs.second){
+					if(subSeqs.first == refSeq.name_){
+						refSeqPositionsRelativeToCurentSeq.emplace_back(
+								GenomicRegion(sub.subSeq_, subSeqs.first, sub.pos_,
+										sub.pos_ + sub.subSeq_.size(), false));
+					}
+					//std::cout << "\t" << sub.pos_ << ": " << sub.subSeq_ << std::endl;
+					sharedLocsOut << subSeqs.first
+							<< "\t" << sub.pos_
+							<< "\t" << sub.pos_ + sub.subSeq_.size()
+							<< "\t" << sub.subSeq_
+							<< "\t" << sub.subSeq_.size()
+							<< "\t" << "+" << std::endl;
+				}
+			}
+			std::unordered_map<std::string, uint32_t> lengths;
+			lengths[refSeq.name_] = len(refSeq);
+			std::vector<Bed6RecordCore> refSeqPositionsRelativeToCurentSeqBeds;
+			std::vector<Bed6RecordCore> refSeqPositionsBeds;
+
+			for(const auto & g : refSeqPositionsRelativeToCurentSeq){
+				auto bedReg = g.genBedRecordCore();
+				refSeqPositionsRelativeToCurentSeqBeds.emplace_back(bedReg);
+				refSharedLocsOut << bedReg.toDelimStr() << std::endl;
+			}
+
+			std::vector<BedUtility::SubRegionCombo> subRegions = BedUtility::genSubRegionCombos(refSeqPositionsRelativeToCurentSeqBeds, lengths, subRegionComboPars);
+			OutputStream refSubRegionsLocsOut(njh::files::make_path(bedDir, njh::pasteAsStr(nodes.first, "_ref_subRegions.bed")));
+			for(const auto & subReg : subRegions){
+				auto bedReg = subReg.genOut(subRegionComboPars.includeFromSubRegionSize);;
+				Bed6RecordCore genomicLoc = bedReg;
+				genomicLoc.chrom_ = refSeqLoc.chrom_;
+				auto startSubReg = subReg.genSubStart(subRegionComboPars.includeFromSubRegionSize);;
+				auto endSubReg   = subReg.genSubEnd(subRegionComboPars.includeFromSubRegionSize);;
+				seqInfo startSubSeq = refSeq.getSubRead(startSubReg.chromStart_, startSubReg.length());
+				seqInfo endSubSeq = refSeq.getSubRead(endSubReg.chromStart_, endSubReg.length());
+
+				if(refSeqLoc.reverseSrand_){
+					genomicLoc.strand_ = '-';
+					genomicLoc.chromStart_ = refSeqLoc.start_ +(len(refSeq) - 1 - bedReg.chromEnd_ );
+					genomicLoc.chromEnd_ = refSeqLoc.start_ + (len(refSeq) - 1 - bedReg.chromStart_ );
+				}else{
+					genomicLoc.chromStart_ = refSeqLoc.start_ + bedReg.chromStart_;
+					genomicLoc.chromEnd_ = refSeqLoc.start_ + bedReg.chromEnd_;
+					genomicLoc.strand_ = '+';
+				}
+
+				GenomicRegion gRegion(genomicLoc);
+				auto uid = gRegion.createUidFromCoordsStrand();
+				genomicLoc.name_ = uid;
+				outSubSeqs.addRow(uid, startSubSeq.seq_, endSubSeq.seq_);
+
+				refSeqPositionsBeds.emplace_back(genomicLoc);
+				refSubRegionsLocsOut << bedReg.toDelimStr() << std::endl;
+			}
+
+			for(const auto & subReg : refSeqPositionsBeds){
+				sharedLocsOutRefSeq << subReg.toDelimStr()<< std::endl;
+			}
+		}
+		OutputStream outSubSeqsOut(njh::files::make_path(bedDir, "startEndSeqs.tab.txt"));
+		outSubSeqs.outPutContents(outSubSeqsOut, "\t");
+	}
+	return 0;
+}
+
+
+
 
 } // namespace njhseq
 

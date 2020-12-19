@@ -19,6 +19,8 @@
 namespace njhseq {
 
 
+
+
 int bedExpRunner::differentSubRegionCombos(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile;
 	bfs::path genomeFnp;
@@ -52,6 +54,20 @@ int bedExpRunner::differentSubRegionCombos(const njh::progutils::CmdArgs & input
 
 	OutputStream out(outOpts);
 	auto regionsRaw = getBeds(bedFile);
+
+	std::unordered_map<std::string, uint32_t> genomeLen;
+	auto genomeOpt = SeqIOOptions::genFastaIn(genomeFnp);
+	genomeOpt.includeWhiteSpaceInName_ = false;
+	{
+		seqInfo seq;
+		SeqInput reader(genomeOpt);
+		reader.openIn();
+		while(reader.readNextRead(seq)){
+			genomeLen[seq.name_] = len(seq);
+		}
+	}
+
+
 	BedUtility::coordSort(regionsRaw, false);
 	std::vector<std::shared_ptr<Bed6RecordCore>> regions;
 	regions.emplace_back(std::make_shared<Bed6RecordCore>(*regionsRaw.front()));
@@ -67,17 +83,7 @@ int bedExpRunner::differentSubRegionCombos(const njh::progutils::CmdArgs & input
 		}
 	}
 
-	std::unordered_map<std::string, uint32_t> genomeLen;
-	auto genomeOpt = SeqIOOptions::genFastaIn(genomeFnp);
-	genomeOpt.includeWhiteSpaceInName_ = false;
-	{
-		seqInfo seq;
-		SeqInput reader(genomeOpt);
-		reader.openIn();
-		while(reader.readNextRead(seq)){
-			genomeLen[seq.name_] = len(seq);
-		}
-	}
+
 	std::unordered_map<std::string, std::vector<std::shared_ptr<Bed6RecordCore>>> regionsByChrom;
 	for(const auto & region : regions){
 		regionsByChrom[region->chrom_].emplace_back(region);
@@ -99,7 +105,7 @@ int bedExpRunner::differentSubRegionCombos(const njh::progutils::CmdArgs & input
 				ss << genomeOpt.firstName_ << "has: " << njh::conToStr(njh::getVecOfMapKeys(genomeLen), ",") << "\n";
 				throw std::runtime_error{ss.str()};
 			}
-			if(genomeLen[byChrom.first] - byChrom.second.front()->chromEnd_ > 10){
+			if(genomeLen[byChrom.first] - byChrom.second.back()->chromEnd_ > 10){
 				byChrom.second.emplace_back(std::make_shared<Bed6RecordCore>(byChrom.first, genomeLen[byChrom.first] -1, genomeLen[byChrom.first], "back", 1, '+'));
 			}
 		}

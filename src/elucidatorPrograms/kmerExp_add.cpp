@@ -335,6 +335,9 @@ int kmerExpRunner::genomeKmerCompare(const njh::progutils::CmdArgs & inputComman
 }
 
 
+
+
+
 int kmerExpRunner::findingMinimumKLenForNoRedundantKmers(const njh::progutils::CmdArgs & inputCommands){
 
 	seqSetUp setUp(inputCommands);
