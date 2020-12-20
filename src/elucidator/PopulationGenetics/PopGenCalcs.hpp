@@ -44,6 +44,7 @@ public:
 
 	};
 
+
 	/**@brief Get several general measures of diversity, assumes haps are already collapsed to unique haplotypes and have frequencies set
 	 *
 	 * @param haps a vector of unique haplotypes
@@ -73,6 +74,26 @@ public:
 		res.expShannonEntropy_ = std::exp(-sumOfLogFreqTimesFreq);
 
 		return res;
+	}
+
+	/**@brief Get several general measures of diversity, assumes haps are already collapsed to unique haplotypes and have frequencies set
+	 *
+	 * @param haps a vector of unique haplotypes
+	 * @return a struct with several diversity measurements
+	 */
+	template<typename T>
+	static DiversityMeasures getGeneralMeasuresOfDiversityRawInput(const std::vector<T> & haps){
+		std::unordered_map<std::string, uint32_t> popCounts;
+		for(const auto & seq : haps){
+			++popCounts[getSeqBase(seq).seq_];
+		}
+		std::vector<PopGenCalculator::PopHapInfo> popHapInfos;
+		uint32_t count = 0;
+		for(const auto & popCount : popCounts){
+			popHapInfos.emplace_back(count, popCount.second);
+			++count;
+		}
+		return getGeneralMeasuresOfDiversity(popHapInfos);
 	}
 
 

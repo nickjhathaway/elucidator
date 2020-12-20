@@ -16,9 +16,7 @@
 #include "elucidator/BioRecordsUtils/BedUtility.hpp"
 
 
-#include <set>
-#include <unordered_set>
-
+#include "elucidator/PopulationGenetics.h"
 
 namespace njhseq {
 
@@ -371,6 +369,8 @@ int miscRunner::createSharedPathwaysFromRefSeqs(const njh::progutils::CmdArgs & 
 			std::cout << seq.name_ << std::endl;
 		}
 	}
+
+
 
 	{
 		njh::stopWatch watch;
@@ -886,7 +886,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	bool doNotCollapseLowFreqNodes = false;
 	std::string refSeqName = "";
 	bfs::path genomeFnp = "";
-
+	bool filterRegionsWithinRegions = false;
 	BedUtility::genSubRegionCombosPars subRegionComboPars;
 
 	seqSetUp setUp(inputCommands);
@@ -899,6 +899,9 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	setUp.setOption(subRegionComboPars.maxLen, "--maxSubRegionLen", "Maximum subregion size");
 	setUp.setOption(subRegionComboPars.minLen, "--minSubRegionLen", "Minimum subregion size");
 	setUp.setOption(subRegionComboPars.minBlockRegionLen, "--minBlockRegionLen", "Minimum subregion to start a block from");
+
+	setUp.setOption(filterRegionsWithinRegions, "--filterRegionsWithinRegions", "Filter Regions Within Regions");
+
 
 	setUp.setOption(genomeFnp, "--genome",
 			"Path to a genome to determine the location in", true);
@@ -918,8 +921,9 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	setUp.startARunLog(setUp.pars_.directoryName_);
 	OutOptions outOpts(njh::files::make_path(setUp.pars_.directoryName_, "graph"), ".dot");
 
-	seqInfo refSeq;
 	std::vector<seqInfo> seqs;
+	seqInfo refSeq;
+
 	{
 		seqInfo seq;
 		SeqInput reader(setUp.pars_.ioOptions_);
@@ -1068,6 +1072,11 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	if(std::numeric_limits<uint32_t>::max() == subRegionComboPars.includeFromSubRegionSize){
 		subRegionComboPars.includeFromSubRegionSize = klen;
 	}
+	std::unordered_map<std::string, uint32_t> seqKey;
+	for(const auto seq: iter::enumerate(seqs)){
+		seqKey[seq.element.name_] = seq.index;
+	}
+
 	{
 		njh::stopWatch watch;
 		//correction
@@ -1218,7 +1227,8 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 		SeqOutput::write(correctedSeqs, SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "correctedSeqs")));
 		seqs = correctedSeqs;
 	}
-
+	//replace refseq with any error correction done
+	refSeq = seqs[seqKey[refSeq.name_]];
 
 	ContigsCompareGraphDev compGraph(klen);
 	compGraph.setOccurenceCutOff(kmerOccurenceCutOff);
@@ -1360,8 +1370,30 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 			}
 			std::string subSeq_;
 			uint32_t pos_;
+
+			Bed6RecordCore genBedRegion(const std::string & chrom)const{
+				return Bed6RecordCore(chrom, pos_, pos_ + subSeq_.size(),subSeq_,subSeq_.size(), '+' );
+			}
 		};
 		auto bedDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{"sharedLocs"});
+		auto seqsDir = njh::files::makeDir(bedDir, njh::files::MkdirPar{"subSeqs"});
+		OutputStream outDivMeasures(njh::files::make_path(bedDir, "divMeasuresPerSubRegion.tab.txt"));
+		outDivMeasures << "target\ttotalHaps\tuniqueHaps\the\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE" << '\n';
+
+		//first full div
+		{
+			std::unordered_map<std::string, uint32_t> popCounts;
+			auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversityRawInput(seqs);
+			outDivMeasures << refSeqLoc.createUidFromCoordsStrand()
+													<< "\t" << seqs.size()
+													<< "\t" << divMeasures.alleleNumber_
+													<< "\t" << divMeasures.heterozygostiy_
+													<< "\t" << divMeasures.singlets_
+													<< "\t" << divMeasures.doublets_
+													<< "\t" << divMeasures.effectiveNumOfAlleles_
+													<< "\t" << divMeasures.ShannonEntropyE_
+													<< '\n';
+		}
 		OutputStream sharedLocsOutRefSeq(njh::files::make_path(bedDir, njh::pasteAsStr("refSeqGenomicLocs.bed")));
 		table outSubSeqs(VecStr{"target", "frontSeq", "endSeq"});
 
@@ -1408,21 +1440,19 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 			OutputStream sharedLocsOut(njh::files::make_path(bedDir, njh::pasteAsStr(nodes.first, "_sharedLocs.bed")));
 			OutputStream refSharedLocsOut(njh::files::make_path(bedDir, njh::pasteAsStr(nodes.first, "_ref_sharedLocs.bed")));
 
+
+			std::unordered_map<std::string, std::unordered_map<std::string, Bed6RecordCore>> subSeqToReadNameToPos;
+
 			for(auto & subSeqs : seqToNodePositions){
 				//std::cout << subSeqs.first <<std::endl;
 				for(const auto & sub : subSeqs.second){
+					auto outRegion = sub.genBedRegion(subSeqs.first);
 					if(subSeqs.first == refSeq.name_){
-						refSeqPositionsRelativeToCurentSeq.emplace_back(
-								GenomicRegion(sub.subSeq_, subSeqs.first, sub.pos_,
-										sub.pos_ + sub.subSeq_.size(), false));
+						refSeqPositionsRelativeToCurentSeq.emplace_back(GenomicRegion(outRegion));
 					}
+					subSeqToReadNameToPos[sub.subSeq_].emplace(subSeqs.first, outRegion);
 					//std::cout << "\t" << sub.pos_ << ": " << sub.subSeq_ << std::endl;
-					sharedLocsOut << subSeqs.first
-							<< "\t" << sub.pos_
-							<< "\t" << sub.pos_ + sub.subSeq_.size()
-							<< "\t" << sub.subSeq_
-							<< "\t" << sub.subSeq_.size()
-							<< "\t" << "+" << std::endl;
+					sharedLocsOut << outRegion.toDelimStr()<< std::endl;
 				}
 			}
 			std::unordered_map<std::string, uint32_t> lengths;
@@ -1436,8 +1466,93 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 				refSharedLocsOut << bedReg.toDelimStr() << std::endl;
 			}
 
+
 			std::vector<BedUtility::SubRegionCombo> subRegions = BedUtility::genSubRegionCombos(refSeqPositionsRelativeToCurentSeqBeds, lengths, subRegionComboPars);
 			OutputStream refSubRegionsLocsOut(njh::files::make_path(bedDir, njh::pasteAsStr(nodes.first, "_ref_subRegions.bed")));
+
+
+			//key = sub seq UID, val = 1st node seq start, 2nd node seq stop
+			std::unordered_map<std::string, std::pair<std::string, std::string>> subPortionsByConservedSeq;
+
+			njh::sort(subRegions,[](const BedUtility::SubRegionCombo & com1, const BedUtility::SubRegionCombo & com2){
+				if(com1.startRegion_.chromStart_ == com2.startRegion_.chromStart_){
+					return com1.endRegion_.chromEnd_ > com2.endRegion_.chromEnd_;
+				}else{
+					return com1.startRegion_.chromStart_ < com2.startRegion_.chromStart_;
+				}
+			});
+			if(!refSeqPositionsRelativeToCurentSeqBeds.empty()){
+				//getting the region with the last and first conserved regions
+				BedUtility::coordSort(refSeqPositionsRelativeToCurentSeqBeds, false);
+				Bed6RecordCore genomicLoc = refSeqPositionsRelativeToCurentSeqBeds.front();
+				genomicLoc.chromEnd_ = refSeqPositionsRelativeToCurentSeqBeds.back().chromEnd_;
+				genomicLoc.score_ = genomicLoc.length();
+				Bed6RecordCore relativeBedReg = genomicLoc;
+				genomicLoc.chrom_ = refSeqLoc.chrom_;
+				if(refSeqLoc.reverseSrand_){
+					genomicLoc.strand_ = '-';
+					genomicLoc.chromStart_ = refSeqLoc.start_ +(len(refSeq) - 1 - relativeBedReg.chromEnd_ );
+					genomicLoc.chromEnd_ = refSeqLoc.start_ + (len(refSeq) - 1 - relativeBedReg.chromStart_ );
+				} else {
+					genomicLoc.chromStart_ = refSeqLoc.start_ + relativeBedReg.chromStart_;
+					genomicLoc.chromEnd_ = refSeqLoc.start_ + relativeBedReg.chromEnd_;
+					genomicLoc.strand_ = '+';
+				}
+				GenomicRegion gRegion(genomicLoc);
+				auto uid = gRegion.createUidFromCoordsStrand();
+				genomicLoc.name_ = uid;
+				OutputStream refSharedLocsOut(njh::files::make_path(bedDir, njh::pasteAsStr(nodes.first, "_refFirstToLastSharedRegion.bed")));
+				refSharedLocsOut << genomicLoc.toDelimStr() << std::endl;
+			}
+			if(!refSeqPositionsRelativeToCurentSeqBeds.empty()){
+				//getting the region with the last and first conserved regions
+				BedUtility::coordSort(refSeqPositionsRelativeToCurentSeqBeds, false);
+				BedUtility::SubRegionCombo subReg(refSeqPositionsRelativeToCurentSeqBeds.front(), refSeqPositionsRelativeToCurentSeqBeds.back());
+				auto bedReg = subReg.genOut(subRegionComboPars.includeFromSubRegionSize);;
+				Bed6RecordCore genomicLoc = bedReg;
+				genomicLoc.chrom_ = refSeqLoc.chrom_;
+				auto startSubReg = subReg.genSubStart(subRegionComboPars.includeFromSubRegionSize);;
+				auto endSubReg   = subReg.genSubEnd(subRegionComboPars.includeFromSubRegionSize);;
+				seqInfo startSubSeq = refSeq.getSubRead(startSubReg.chromStart_, startSubReg.length());
+				seqInfo endSubSeq = refSeq.getSubRead(endSubReg.chromStart_, endSubReg.length());
+
+				if(refSeqLoc.reverseSrand_){
+					genomicLoc.strand_ = '-';
+					genomicLoc.chromStart_ = refSeqLoc.start_ +(len(refSeq) - 1 - bedReg.chromEnd_ );
+					genomicLoc.chromEnd_ = refSeqLoc.start_ + (len(refSeq) - 1 - bedReg.chromStart_ );
+				}else{
+					genomicLoc.chromStart_ = refSeqLoc.start_ + bedReg.chromStart_;
+					genomicLoc.chromEnd_ = refSeqLoc.start_ + bedReg.chromEnd_;
+					genomicLoc.strand_ = '+';
+				}
+
+				GenomicRegion gRegion(genomicLoc);
+				auto uid = gRegion.createUidFromCoordsStrand();
+				seqInfo startSubSeqFull = refSeq.getSubRead(subReg.startRegion_.chromStart_, subReg.startRegion_.length());
+				seqInfo endSubSeqFull = refSeq.getSubRead(subReg.endRegion_.chromStart_, subReg.endRegion_.length());
+				genomicLoc.name_ = uid;
+				OutputStream refSharedLocsOut(njh::files::make_path(bedDir, njh::pasteAsStr(nodes.first, "_refFirstToLastSharedRegionSlimmer.bed")));
+				refSharedLocsOut << genomicLoc.toDelimStr() << std::endl;
+			}
+			if(filterRegionsWithinRegions){
+				std::vector<BedUtility::SubRegionCombo> filteredRegions;
+
+				for(const auto & subRegion : subRegions){
+					bool foundWithInAnother = false;
+					for(const auto & other : filteredRegions){
+						if(subRegion.startRegion_.chromStart_ >= other.startRegion_.chromStart_
+						&& subRegion.endRegion_.chromEnd_     <= other.endRegion_.chromEnd_){
+							foundWithInAnother = true;
+							break;
+						}
+					}
+					if(!foundWithInAnother){
+						filteredRegions.emplace_back(subRegion);
+					}
+				}
+				subRegions = filteredRegions;
+			}
+
 			for(const auto & subReg : subRegions){
 				auto bedReg = subReg.genOut(subRegionComboPars.includeFromSubRegionSize);;
 				Bed6RecordCore genomicLoc = bedReg;
@@ -1459,9 +1574,13 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 
 				GenomicRegion gRegion(genomicLoc);
 				auto uid = gRegion.createUidFromCoordsStrand();
-				genomicLoc.name_ = uid;
-				outSubSeqs.addRow(uid, startSubSeq.seq_, endSubSeq.seq_);
+				seqInfo startSubSeqFull = refSeq.getSubRead(subReg.startRegion_.chromStart_, subReg.startRegion_.length());
+				seqInfo endSubSeqFull = refSeq.getSubRead(subReg.endRegion_.chromStart_, subReg.endRegion_.length());
 
+				genomicLoc.name_ = uid;
+
+				subPortionsByConservedSeq[uid] = std::make_pair(startSubSeqFull.seq_, endSubSeqFull.seq_);
+				outSubSeqs.addRow(uid, startSubSeq.seq_, endSubSeq.seq_);
 				refSeqPositionsBeds.emplace_back(genomicLoc);
 				refSubRegionsLocsOut << bedReg.toDelimStr() << std::endl;
 			}
@@ -1469,9 +1588,54 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 			for(const auto & subReg : refSeqPositionsBeds){
 				sharedLocsOutRefSeq << subReg.toDelimStr()<< std::endl;
 			}
+
+			//cut input to subsegments
+			std::unordered_map<std::string, std::vector<seqInfo>> subRegionsSeqs;
+//			std::cout << "subPortionsByConservedSeq.size(): " << subPortionsByConservedSeq.size() << std::endl;
+//			std::cout << "subSeqToReadNameToPos.size(): " << subSeqToReadNameToPos.size() << std::endl;
+//			std::cout << njh::conToStr(getVectorOfMapKeys(subSeqToReadNameToPos), "\n") << std::endl;
+
+			for(const auto & subRegion : subPortionsByConservedSeq){
+//				std::cout << subRegion.second.first << std::endl;
+
+				for(const auto & frontRegion : subSeqToReadNameToPos[subRegion.second.first]){
+//					std::cout << "\t" << subRegion.second.first << std::endl;
+//					std::cout << "\t" << subRegion.second.second << std::endl;
+
+					auto startRegion = frontRegion.second;
+					auto endRegion = njh::mapAt(subSeqToReadNameToPos[subRegion.second.second], frontRegion.first);
+					BedUtility::SubRegionCombo subRegionForSeq(startRegion, endRegion);
+					auto outRegion = subRegionForSeq.genOut(subRegionComboPars.includeFromSubRegionSize);
+					seqInfo subSeq(seqs[seqKey[frontRegion.first]].getSubRead(outRegion.chromStart_, outRegion.length()));
+					MetaDataInName seqMeta(subSeq.name_);
+					seqMeta.addMeta("SubRegUID", subRegion.first, true);
+					seqMeta.addMeta("SeqStart", outRegion.chromStart_, true);
+					seqMeta.addMeta("SeqStop", outRegion.chromEnd_, true);
+					seqMeta.resetMetaInName(subSeq.name_);
+					subRegionsSeqs[subRegion.first].emplace_back(subSeq);
+				}
+			}
+//			std::cout << "subRegionsSeqs.size(): " << subRegionsSeqs.size() << std::endl;
+
+			for(const auto & subSeqs : subRegionsSeqs){
+				auto subSeqOpts = SeqIOOptions::genFastaOutGz(njh::files::make_path(seqsDir, subSeqs.first + ".fasta.gz"));
+				SeqOutput::write(subSeqs.second, subSeqOpts);
+				auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversityRawInput(subSeqs.second);
+				outDivMeasures << subSeqs.first
+														<< "\t" << subSeqs.second.size()
+														<< "\t" << divMeasures.alleleNumber_
+														<< "\t" << divMeasures.heterozygostiy_
+														<< "\t" << divMeasures.singlets_
+														<< "\t" << divMeasures.doublets_
+														<< "\t" << divMeasures.effectiveNumOfAlleles_
+														<< "\t" << divMeasures.ShannonEntropyE_
+														<< '\n';
+			}
 		}
 		OutputStream outSubSeqsOut(njh::files::make_path(bedDir, "startEndSeqs.tab.txt"));
 		outSubSeqs.outPutContents(outSubSeqsOut, "\t");
+
+
 	}
 	return 0;
 }
