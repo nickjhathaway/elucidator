@@ -63,6 +63,7 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int clostestKmerDist(const njh::progutils::CmdArgs & inputCommands);
 
 
+	static int getKmerSetDistBetween(const njh::progutils::CmdArgs & inputCommands);
 
 
 	static int getKmerDistTwoSeqs(const njh::progutils::CmdArgs & inputCommands);
