@@ -196,6 +196,9 @@ int bamExpRunner::isBamSorted(
 	return 0;
 }
 
+
+
+
 int bamExpRunner::determineRegion(
 		const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path genomeFnp = "";
@@ -226,9 +229,7 @@ int bamExpRunner::determineRegion(
 	genomeMapper.setSelectedGenomes(VecStr { genomeName });
 	genomeMapper.loadInGenomes();
 	//open out file
-	std::ofstream outFile;
-	std::ostream out(determineOutBuf(outFile, setUp.pars_.ioOptions_.out_));
-
+	OutputStream out(setUp.pars_.ioOptions_.out_);
 	//map reads
 	auto outputs = genomeMapper.alignToGenomes(setUp.pars_.ioOptions_, "./");
 	std::unordered_map<std::string, bfs::path> bamFnps;

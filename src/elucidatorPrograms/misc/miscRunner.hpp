@@ -77,6 +77,7 @@ class miscRunner : public njh::progutils::ProgramRunner {
   static int renameDownloadedGenome(const njh::progutils::CmdArgs & inputCommands);
 
 
+  static int createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs & inputCommands);
 
   static int createSharedPathwaysFromRefSeqs(const njh::progutils::CmdArgs & inputCommands);
   static int createSharedPathwaysFromContigs(const njh::progutils::CmdArgs & inputCommands);
