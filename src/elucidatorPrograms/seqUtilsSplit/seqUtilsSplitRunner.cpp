@@ -34,6 +34,9 @@ seqUtilsSplitRunner::seqUtilsSplitRunner()
     : njh::progutils::ProgramRunner({
   		addFunc("SeqSplitOnLenBelow", SeqSplitOnLenBelow, false),
   		addFunc("SeqSplitOnLenWithin", SeqSplitOnLenWithin, false),
+  		addFunc("SeqSplitOnLenWithinMedianLen", SeqSplitOnLenWithinMedianLen, false),
+
+
   		addFunc("SeqSplitOnNameContains", SeqSplitOnNameContains, false),
   		addFunc("SeqSplitOnSeqContains", SeqSplitOnSeqContains, false),
   		addFunc("SeqSplitOnLenAbove", SeqSplitOnLenAbove, false),
@@ -454,6 +457,54 @@ int seqUtilsSplitRunner::SeqSplitOnCount(const njh::progutils::CmdArgs & inputCo
   return 0;
 }
 
+
+int seqUtilsSplitRunner::SeqSplitOnLenWithinMedianLen(const njh::progutils::CmdArgs & inputCommands) {
+	defaultSplitPars dSplitPars;
+	uint32_t within = 0;
+
+  seqSetUp setUp(inputCommands);
+  defaultSplitSetUpOptions(setUp, dSplitPars);
+
+	setUp.setOption(within, "--within", "Within");
+
+  setUp.finishSetUp(std::cout);
+
+  MultiSeqOutCache<seqInfo> seqOuts;
+  seqOuts.addReader("include", dSplitPars.incOpts_);
+  seqOuts.addReader("exclude", dSplitPars.excOpts_);
+	uint32_t length = 0;
+	{
+		std::vector<uint32_t> readLengths;
+	  SeqIO reader(setUp.pars_.ioOptions_);
+	  reader.openIn();
+	  seqInfo seq;
+	  while(reader.readNextRead(seq)){
+	  	readLengths.emplace_back(len(seq));
+	  }
+	  length = std::round(vectorMedianRef(readLengths));
+	}
+	auto checker = std::make_unique<const ReadCheckerLenWithin>(within, length, dSplitPars.mark_);
+
+
+  SeqIO reader(setUp.pars_.ioOptions_);
+  reader.openIn();
+  seqInfo seq;
+  while(reader.readNextRead(seq)){
+  	checker->checkRead(seq);
+    std::string condition = "";
+    if(seq.on_){
+    	condition = "include";
+    }else{
+    	condition = "exclude";
+    }
+    seqOuts.add(condition, seq);
+  }
+
+  if(setUp.pars_.verbose_){
+  	setUp.logRunTime(std::cout);
+  }
+  return 0;
+}
 int seqUtilsSplitRunner::SeqSplitOnLenWithin(const njh::progutils::CmdArgs & inputCommands) {
 	defaultSplitPars dSplitPars;
 	uint32_t length = 0;
@@ -463,7 +514,7 @@ int seqUtilsSplitRunner::SeqSplitOnLenWithin(const njh::progutils::CmdArgs & inp
   defaultSplitSetUpOptions(setUp, dSplitPars);
 
 	setUp.setOption(within, "--within", "Within");
-	setUp.setOption(length, "--length", "MinimumLength", true);
+	setUp.setOption(length, "--length", "Target Length", true);
 
   setUp.finishSetUp(std::cout);
 
