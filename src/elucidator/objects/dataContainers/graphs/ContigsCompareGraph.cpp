@@ -1235,8 +1235,36 @@ void ContigsCompareGraphDev::collapseSingleLinkedPathsSameReads(){
 					break;
 				}
 			}
+			for (const auto & nextRead : nodes_[nPos]->inReadNamesIdx_ ) {
+				if (!njh::in(nextRead, next->inReadNamesIdx_)) {
+					containsNext = false;
+					break;
+				}
+			}
 		}
 		while(next != nullptr && next->headCount() == 1 && containsNext && nodes_[nPos]->uid_ != next->uid_){
+//			if("TTTTTTTTTTTTTTTTTTTTTTTTTTTTTT" == next->k_){
+//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//				std::cout << " next->inReadNamesIdx_.size(): " << next->inReadNamesIdx_.size() << std::endl;
+//				std::cout << "nodes_[nPos]->inReadNamesIdx_.size(): " << nodes_[nPos]->inReadNamesIdx_.size() << std::endl;
+//				std::cout << "nodes_[nPos]->uid_: " << nodes_[nPos]->uid_ << std::endl;
+//			}
+//			if("ATATTTTAACATAAAAATAAGTACATATTT" == next->k_){
+//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//				std::cout << " next->inReadNamesIdx_.size(): " << next->inReadNamesIdx_.size() << std::endl;
+//				std::cout << "nodes_[nPos]->inReadNamesIdx_.size(): " << nodes_[nPos]->inReadNamesIdx_.size() << std::endl;
+//				std::cout << "nodes_[nPos]->uid_: " << nodes_[nPos]->uid_ << std::endl;
+//			}
+//
+//
+//			if(next->k_.find("ATATTTTAACATAAAAATAAGTACATATTT") != std::string::npos ){
+//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//				std::cout << " next->inReadNamesIdx_.size(): " << next->inReadNamesIdx_.size() << std::endl;
+//				std::cout << "nodes_[nPos]->inReadNamesIdx_.size(): " << nodes_[nPos]->inReadNamesIdx_.size() << std::endl;
+//				std::cout << "nodes_[nPos]->uid_: " << nodes_[nPos]->uid_ << std::endl;
+//			}
+
+
 			next->visitCount_ += 1;
 			nodes_[nPos]->k_.append(next->k_.substr(klen_ - 1 ));
 			nodes_[nPos]->cnt_+= next->cnt_;
@@ -1276,6 +1304,12 @@ void ContigsCompareGraphDev::collapseSingleLinkedPathsSameReads(){
 					containsNext = true;
 					for(const auto & nextRead : next->inReadNamesIdx_){
 						if(!njh::in(nextRead, nodes_[nPos]->inReadNamesIdx_)){
+							containsNext = false;
+							break;
+						}
+					}
+					for (const auto & nextRead : nodes_[nPos]->inReadNamesIdx_ ) {
+						if (!njh::in(nextRead, next->inReadNamesIdx_)) {
 							containsNext = false;
 							break;
 						}
