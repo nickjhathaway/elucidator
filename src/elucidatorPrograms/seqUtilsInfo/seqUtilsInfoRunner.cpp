@@ -111,8 +111,7 @@ int seqUtilsInfoRunner::multipleAlnProteinToPcaInput(const njh::progutils::CmdAr
 		counter.resetAlphabet(false);
 		counter.setFractions();
 	}
-	std::ofstream testFile;
-	openTextFile(testFile, setUp.pars_.ioOptions_.out_);
+	OutputStream testFile(setUp.pars_.ioOptions_.out_);
 	std::vector<std::map<char, uint32_t>> rankConverters;
 
 	for(auto pos : iter::range(counters.size())){

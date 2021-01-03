@@ -1466,6 +1466,12 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 			OutputStream out(outOptsCurrent);
 			compGraph.writeRectangleDotColorBySampleCount(out);
 		}
+		{
+			auto outOptsCurrent = outOpts;
+			outOptsCurrent.outFilename_ = njh::files::prependFileBasename(outOptsCurrent.outFilename_,"noLabels_final_");
+			OutputStream out(outOptsCurrent);
+			compGraph.writeRectangleDotColorBySampleCount(out, true);
+		}
 	}
 
 	{
