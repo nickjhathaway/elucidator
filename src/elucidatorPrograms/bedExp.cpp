@@ -101,6 +101,7 @@ bedExpRunner::bedExpRunner()
 					 addFunc("getAverageDistanceToOtherRegions", getAverageDistanceToOtherRegions, false),
 					 addFunc("getDistanceToClostestRegion", getDistanceToClostestRegion, false),
 					 addFunc("getIntersectionBetweenTwoBedFiles", getIntersectionBetweenTwoBedFiles, false),
+					 addFunc("removeSubRegionsFromBedFile", removeSubRegionsFromBedFile, false),
 
            },//
           "bedExp") {}

@@ -212,8 +212,6 @@ int seqUtilsRunner::checkTwoReadFiles(const njh::progutils::CmdArgs & inputComma
 }
 
 
-//quickLenInfo
-
 
 int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommands) {
 	uint32_t numThreads = 1;

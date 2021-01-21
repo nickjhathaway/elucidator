@@ -116,6 +116,7 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	static int createWindowsInRegions(const njh::progutils::CmdArgs & inputCommands);
 
 	static int getIntersectionBetweenTwoBedFiles(const njh::progutils::CmdArgs & inputCommands);
+	static int removeSubRegionsFromBedFile(const njh::progutils::CmdArgs & inputCommands);
 
 	//coverage
 	static int roughSmoothingForBedCoverage(const njh::progutils::CmdArgs & inputCommands);
