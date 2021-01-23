@@ -53,8 +53,8 @@ class randomFileCreator {
 
   // Members
   charCounter counter_;
-  uint32_t qualStart_ = 40;
-  uint32_t qualStop_ = 40;
+  uint8_t qualStart_ = 40;
+  uint8_t qualStop_ = 40;
   randomGenerator rgen_;
 
 	// functions

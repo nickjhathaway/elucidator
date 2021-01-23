@@ -1106,7 +1106,7 @@ seqInfo calculateConsensusToCurrent(const readObject & read,
 	}
 	std::string calculatedConsensus = "";
 	calculatedConsensus.reserve(len(read));
-	std::vector<uint32_t> calculatedConsensusQuality;
+	std::vector<uint8_t> calculatedConsensusQuality;
 	calculatedConsensusQuality.reserve(len(read));
 	// first deal with any gaps in the beginning
 	double fortyPercent = 0.40 * read.seqBase_.cnt_;

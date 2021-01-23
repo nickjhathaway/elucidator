@@ -602,7 +602,7 @@ int seqUtilsInfoRunner::profileQualityScores(const njh::progutils::CmdArgs & inp
 	std::string qualWindow;
 	uint32_t qualityWindowLength;
 	uint32_t qualityWindowStep;
-	uint32_t qualityWindowThres;
+	uint8_t qualityWindowThres;
   if (setUp.setOption(qualWindow, "-qualWindow", "SlidingQualityWindow")) {
     seqUtil::processQualityWindowString(qualWindow, qualityWindowLength,
                                         qualityWindowStep, qualityWindowThres);

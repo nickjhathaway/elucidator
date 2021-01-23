@@ -295,7 +295,8 @@ public:
 		std::string targetNameCol = "";
 		std::string popIDCol = "";
 		std::string relAbundCol = "";
-
+		std::unordered_set<std::string> selectSamples{};
+		std::unordered_set<std::string> selectTargets{};
 		void setDefaults(seqSetUp & setUp){
 		  setUp.setOption(tableFnp, "--tableFnp", "Table to read in (should be tab delimited)", true);
 
@@ -303,7 +304,13 @@ public:
 		  setUp.setOption(targetNameCol, "--targetNameCol", "targetNameCol", true);
 		  setUp.setOption(popIDCol, "--popIDCol", "popIDCol", true);
 		  setUp.setOption(relAbundCol, "--relAbundCol", "relAbundCol", true);
+
+		  setUp.setOption(selectSamples, "--selectSamples", "Only analyze these select samples");
+		  setUp.setOption(selectTargets, "--selectTargets", "Only analyze these select targets");
+
 		}
+
+		bool majorOnly = false;
 	};
 
 	HapsEncodedMatrix(const SetWithExternalPars & pars){
@@ -315,8 +322,15 @@ public:
 			//read in first to gather information on the table
 			VecStr row;
 			while(hapTab.getNextRow(row)){
+
 				auto samp = row[hapTab.header_.getColPos(pars.sampleCol)];
 				auto tar = row[hapTab.header_.getColPos(pars.targetNameCol)];
+				if(!pars.selectSamples.empty() && !njh::in(samp, pars.selectSamples)){
+					continue;
+				}
+				if(!pars.selectTargets.empty() && !njh::in(tar, pars.selectTargets)){
+					continue;
+				}
 				auto hapName = row[hapTab.header_.getColPos(pars.popIDCol)];
 				addSampTarHapForEncoding(samp, tar, hapName);
 			}
@@ -330,10 +344,69 @@ public:
 			while(reReadHapTab.getNextRow(row)){
 				auto samp = row[reReadHapTab.header_.getColPos(pars.sampleCol)];
 				auto tar = row[reReadHapTab.header_.getColPos(pars.targetNameCol)];
+				if(!pars.selectSamples.empty() && !njh::in(samp, pars.selectSamples)){
+					continue;
+				}
+				if(!pars.selectTargets.empty() && !njh::in(tar, pars.selectTargets)){
+					continue;
+				}
 				auto hapName = row[reReadHapTab.header_.getColPos(pars.popIDCol)];
-				auto rBund = row[reReadHapTab.header_.getColPos(pars.relAbundCol)]; //doing nothing right now with this
+				//auto rBund = njh::StrToNumConverter::stoToNum<double>(row[reReadHapTab.header_.getColPos(pars.relAbundCol)]); //doing nothing right now with this
 
 				encodeSampTarHap(samp, tar, hapName);
+			}
+		}
+		if(pars.majorOnly){
+			std::vector<std::vector<double>> hapsEncodeBySampRelAbund = std::vector<std::vector<double>> (sampNames_.size());
+			for(const auto & samp : sampNames_){
+				hapsEncodeBySampRelAbund[sampNamesKey_[samp]] = std::vector<double>(totalHaps_, 0);
+			}
+			TableReader reReadHapTab(TableIOOpts(InOptions(pars.tableFnp), "\t", true));
+			VecStr row;
+			while(reReadHapTab.getNextRow(row)){
+				auto samp = row[reReadHapTab.header_.getColPos(pars.sampleCol)];
+				auto tar = row[reReadHapTab.header_.getColPos(pars.targetNameCol)];
+				if(!pars.selectSamples.empty() && !njh::in(samp, pars.selectSamples)){
+					continue;
+				}
+				if(!pars.selectTargets.empty() && !njh::in(tar, pars.selectTargets)){
+					continue;
+				}
+				auto hapName = row[reReadHapTab.header_.getColPos(pars.popIDCol)];
+				auto rBund = njh::StrToNumConverter::stoToNum<double>(row[reReadHapTab.header_.getColPos(pars.relAbundCol)]);
+				auto tKey = tarNameKey_[tar];
+				auto hKey = hapNamesKey_[tar][hapName];
+//				if(rBund > 0 && rBund < 1){
+//					std::cout << rBund << std::endl;
+//				}
+				hapsEncodeBySampRelAbund[sampNamesKey_[samp]][tarStart_[tKey] + hKey] = rBund;
+			}
+//			std::cout << __FILE__ << " " << __LINE__ << std::endl;
+			//now determine the major hap per sample per target
+			for(const auto sampIndex : iter::range(sampNamesVec_.size())){
+				for(const auto targetIndex : iter::range(tarNamesVec_.size())){
+					//check if sample has target
+					if(targetsEncodeBySamp_[sampIndex][targetIndex] > 0){
+						auto maxAbundance = std::numeric_limits<double>::min();
+						uint32_t bestIndex = std::numeric_limits<uint32_t>::max();
+						//determine the highest rel abundance
+						for(const auto hapIndex : iter::range(tarStart_[targetIndex], tarStart_[targetIndex] + numberOfHapsPerTarget_[targetIndex]) ){
+//							if(hapsEncodeBySampRelAbund[sampIndex][hapIndex] > 0 && hapsEncodeBySampRelAbund[sampIndex][hapIndex] < 1){
+//								std::cout << hapsEncodeBySampRelAbund[sampIndex][hapIndex] << std::endl;
+//							}
+							if(hapsEncodeBySampRelAbund[sampIndex][hapIndex] > maxAbundance){
+								maxAbundance = hapsEncodeBySampRelAbund[sampIndex][hapIndex];
+								bestIndex = hapIndex;
+							}
+						}
+						//set all other indexes for the sample target hap presence to be 0
+						for(const auto hapIndex : iter::range(tarStart_[targetIndex], tarStart_[targetIndex] + numberOfHapsPerTarget_[targetIndex]) ){
+							if(hapIndex != bestIndex){
+								hapsEncodeBySamp_[sampIndex][hapIndex] = 0;
+							}
+						}
+					}
+				}
 			}
 		}
 	}
@@ -347,7 +420,7 @@ public:
 	std::vector<std::string> tarNamesVec_; //! target names, index is the key to the targets
 	std::unordered_map<std::string, uint32_t> tarNameKey_; //! key to target name to target index
 
-	std::unordered_map<std::string, std::unordered_set<std::string>> hapNamesForTars_; //! all haplotype names for each target
+	std::unordered_map<std::string, std::unordered_map<std::string, uint32_t>> hapNamesForTars_; //! all haplotype names for each target
 	std::unordered_map<std::string, std::unordered_map<std::string, uint32_t>> hapNamesKey_; //! key for each haplotype within each target, will range from 0 to haplotype count for target
 
 
@@ -381,7 +454,7 @@ public:
 			const std::string &hap){
 		sampNames_.emplace(samp);
 		tarNames_.emplace(tar);
-		hapNamesForTars_[tar].emplace(hap);
+		++hapNamesForTars_[tar][hap];
 	}
 
 	void addSampTarHapForEncoding(const SampTarHap & adding){
@@ -466,7 +539,11 @@ public:
 		}
 
 		for(const auto & hapName : hapNamesForTars_){
-			std::vector<std::string> hapNamesVec{hapName.second.begin(), hapName.second.end()};
+			std::vector<std::string> hapNamesVec = getVectorOfMapKeys(hapName.second);
+			//sort by hap sample abundance
+			njh::sort(hapNamesVec, [&hapName](const std::string & hap1, const std::string & hap2){
+				return hapName.second.at(hap1) > hapName.second.at(hap2);
+			});
 			for(const auto pos : iter::range(hapNamesVec.size())){
 				hapNamesKey_[hapName.first][hapNamesVec[pos]] = pos;
 				++totalHaps_;
@@ -916,7 +993,7 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 	bfs::path metaFnp;
 	VecStr metaFieldsToCalcPopDiffs{};
 	HapsEncodedMatrix::SetWithExternalPars pars;
-
+	bool calcMajorHapOnly = false;
 	uint32_t numThreads = 1;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -925,6 +1002,8 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 	setUp.setOption(metaFieldsToCalcPopDiffs, "--metaFieldsToCalcPopDiffs", "Meta Fields To Calc Pop Diffs");
 
 	setUp.setOption(numThreads, "--numThreads", "number of cpus to use");
+	setUp.setOption(calcMajorHapOnly, "--calcMajorHapOnly", "calculate differences by major haplotype only");
+	pars.majorOnly = calcMajorHapOnly;
   pars.setDefaults(setUp);
 
   setUp.processDirectoryOutputName(bfs::path(bfs::basename(pars.tableFnp)).string() + "_doPairwiseComparisonOnHapsSharing_TODAY", true);

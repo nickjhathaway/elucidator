@@ -755,7 +755,7 @@ int seqUtilsSplitRunner::SeqSplitOnQualityWindow(const njh::progutils::CmdArgs &
 
 	uint32_t qualWindowLength = 50;
 	uint32_t qualWindowStep = 5;
-	uint32_t qualWindowThres = 25;
+	uint8_t qualWindowThres = 25;
   seqUtil::processQualityWindowString(qualWindowString, qualWindowLength,
   		qualWindowStep, qualWindowThres);
 

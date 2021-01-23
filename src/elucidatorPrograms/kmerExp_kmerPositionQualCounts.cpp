@@ -44,7 +44,7 @@ int kmerExpRunner::kmerPositionQualCounts(const njh::progutils::CmdArgs & inputC
 		}
 	}
 	reader.reOpenIn();
-	std::unordered_map<std::string, std::vector<uint32_t>> kCountsQuals;
+	std::unordered_map<std::string, std::vector<uint8_t>> kCountsQuals;
 
 	while (reader.readNextRead(seq)) {
 		if (seq.seq_.size() > klen) {
