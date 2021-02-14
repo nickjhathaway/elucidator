@@ -306,16 +306,18 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 	for(const auto & seq : clusters){
 		alignerObj.alignCacheGlobal(refSeq, seq);
 		alignerObj.profileAlignment(refSeq, seq, false, false, false);
+//		alignerObj.alignObjectA_.seqBase_.outPutSeqAnsi(std::cout);
+//		alignerObj.alignObjectB_.seqBase_.outPutSeqAnsi(std::cout);
 		for(const auto & m : alignerObj.comp_.distances_.mismatches_){
 			snps[m.second.refBasePos][m.second.seqBase]+= seq.seqBase_.cnt_;
 		}
 		for(const auto & g : alignerObj.comp_.distances_.alignmentGaps_){
 			if(g.second.ref_){
 				//insertion
-				insertions[g.second.refPos_ - 1][g.second.gapedSequence_]++;
+				insertions[g.second.refPos_ - 1][g.second.gapedSequence_] += seq.seqBase_.cnt_;
 			}else{
 				//deletion
-				deletions[g.second.refPos_ - 1][g.second.gapedSequence_]++;
+				deletions[g.second.refPos_ - 1][g.second.gapedSequence_] += seq.seqBase_.cnt_;
 			}
 		}
 	}
@@ -973,7 +975,8 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 					njh::reverse(positions);
 				}
 				for(const auto & pos : positions){
-					vcfOut <<  refRegion.chrom_
+					vcfOut
+							<<  refRegion.chrom_
 							<< "\t" << refRegion.getRelativePositionFromStartStrandAware(pos) + 1
 							<< "\t" << "."
 							<< "\t";
@@ -1022,8 +1025,8 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 							<< "AC=" << njh::conToStr(altsCounts, ",") << ";"
 							<< "AF=" << njh::conToStr(altsFreqs, ",")
 					<< std::endl;
-					if (njh::in(pos, deletions)) {
-						for (const auto & d : deletions[pos]) {
+					if (njh::in(pos, deletionsFinal)) {
+						for (const auto & d : deletionsFinal[pos]) {
 							vcfOut <<  refRegion.chrom_
 									<< "\t" << refRegion.getRelativePositionFromStartStrandAware(pos) + 1
 									<< "\t" << "."
@@ -1173,94 +1176,95 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 			njh::reverse(positions);
 		}
 		for(const auto & pos : positions){
-			vcfOut <<  refRegion.chrom_
-					<< "\t" << refRegion.getRelativePositionFromStartStrandAware(pos) + 1
-					<< "\t" << "."
-					<< "\t";
-			std::vector<std::string> alts;
-			std::vector<uint32_t> altsCounts;
-			std::vector<double> altsFreqs;
+			if (njh::in(pos, insertionsFinal) || njh::in(pos, snpsFinal)) {
+				vcfOut <<  refRegion.chrom_
+						<< "\t" << refRegion.getRelativePositionFromStartStrandAware(pos) + 1
+						<< "\t" << "."
+						<< "\t";
+				std::vector<std::string> alts;
+				std::vector<uint32_t> altsCounts;
+				std::vector<double> altsFreqs;
 
-			if(refRegion.reverseSrand_){
-				vcfOut << seqUtil::reverseComplement(std::string(1, refSeq.seq_[pos]), "DNA") << "\t";
-				if(njh::in(pos, snpsFinal)){
-					uint32_t snpCount = 0;
-					for(const auto & b : snpsFinal[pos]){
+				if(refRegion.reverseSrand_){
+					vcfOut << seqUtil::reverseComplement(std::string(1, refSeq.seq_[pos]), "DNA") << "\t";
+					if(njh::in(pos, snpsFinal)){
+						uint32_t snpCount = 0;
+						for(const auto & b : snpsFinal[pos]){
+							snpTabOut << refRegion.chrom_
+									<< "\t" << refRegion.getRelativePositionFromStartStrandAware(pos)
+									<< "\t" << seqUtil::reverseComplement(std::string(1, refSeq.seq_[pos]), "DNA")
+									<< "\t" << seqUtil::reverseComplement(std::string(1, b.first), "DNA")
+									<< "\t" << b.second
+									<< "\t" << b.second/static_cast<double>(totalInput)
+									<< "\t" << totalInput
+									<< "\t" << samplesCalled << std::endl;
+							snpCount+= b.second;
+							alts.emplace_back(seqUtil::reverseComplement(std::string(1, b.first), "DNA"));
+							altsCounts.emplace_back(b.second);
+							altsFreqs.emplace_back(b.second/static_cast<double>(totalInput));
+						}
 						snpTabOut << refRegion.chrom_
 								<< "\t" << refRegion.getRelativePositionFromStartStrandAware(pos)
 								<< "\t" << seqUtil::reverseComplement(std::string(1, refSeq.seq_[pos]), "DNA")
-								<< "\t" << seqUtil::reverseComplement(std::string(1, b.first), "DNA")
-								<< "\t" << b.second
-								<< "\t" << b.second/static_cast<double>(totalInput)
+								<< "\t" << seqUtil::reverseComplement(std::string(1, refSeq.seq_[pos]), "DNA")
+								<< "\t" << totalInput - snpCount
+								<< "\t" << (totalInput - snpCount)/static_cast<double>(totalInput)
 								<< "\t" << totalInput
 								<< "\t" << samplesCalled << std::endl;
-						snpCount+= b.second;
-						alts.emplace_back(seqUtil::reverseComplement(std::string(1, b.first), "DNA"));
-						altsCounts.emplace_back(b.second);
-						altsFreqs.emplace_back(b.second/static_cast<double>(totalInput));
 					}
-					snpTabOut << refRegion.chrom_
-							<< "\t" << refRegion.getRelativePositionFromStartStrandAware(pos)
-							<< "\t" << seqUtil::reverseComplement(std::string(1, refSeq.seq_[pos]), "DNA")
-							<< "\t" << seqUtil::reverseComplement(std::string(1, refSeq.seq_[pos]), "DNA")
-							<< "\t" << totalInput - snpCount
-							<< "\t" << (totalInput - snpCount)/static_cast<double>(totalInput)
-							<< "\t" << totalInput
-							<< "\t" << samplesCalled << std::endl;
-				}
-				if (njh::in(pos, insertionsFinal)) {
-					for (const auto & ins : insertionsFinal[pos]) {
-						alts.emplace_back(seqUtil::reverseComplement(ins.first, "DNA"));
-						altsCounts.emplace_back(ins.second);
-						altsFreqs.emplace_back(ins.second/static_cast<double>(totalInput));
+					if (njh::in(pos, insertionsFinal)) {
+						for (const auto & ins : insertionsFinal[pos]) {
+							alts.emplace_back(seqUtil::reverseComplement(ins.first, "DNA"));
+							altsCounts.emplace_back(ins.second);
+							altsFreqs.emplace_back(ins.second/static_cast<double>(totalInput));
+						}
 					}
-				}
-			}else{
-				vcfOut << refSeq.seq_[pos] << "\t";
-				if(njh::in(pos, snpsFinal)){
-					uint32_t snpCount = 0;
-					for(const auto & b : snpsFinal[pos]){
+				}else{
+					vcfOut << refSeq.seq_[pos] << "\t";
+					if(njh::in(pos, snpsFinal)){
+						uint32_t snpCount = 0;
+						for(const auto & b : snpsFinal[pos]){
+							snpTabOut << refRegion.chrom_
+									<< "\t" << refRegion.getRelativePositionFromStartStrandAware(pos)
+									<< "\t" << std::string(1, refSeq.seq_[pos])
+									<< "\t" << std::string(1, b.first)
+									<< "\t" << b.second
+									<< "\t" << b.second/static_cast<double>(totalInput)
+									<< "\t" << totalInput
+									<< "\t" << samplesCalled << std::endl;
+							snpCount+= b.second;
+							alts.emplace_back(std::string(1, b.first));
+							altsCounts.emplace_back(b.second);
+							altsFreqs.emplace_back(b.second/static_cast<double>(totalInput));
+						}
 						snpTabOut << refRegion.chrom_
 								<< "\t" << refRegion.getRelativePositionFromStartStrandAware(pos)
 								<< "\t" << std::string(1, refSeq.seq_[pos])
-								<< "\t" << std::string(1, b.first)
-								<< "\t" << b.second
-								<< "\t" << b.second/static_cast<double>(totalInput)
+								<< "\t" << std::string(1, refSeq.seq_[pos])
+								<< "\t" << totalInput - snpCount
+								<< "\t" << (totalInput - snpCount)/static_cast<double>(totalInput)
 								<< "\t" << totalInput
 								<< "\t" << samplesCalled << std::endl;
-						snpCount+= b.second;
-						alts.emplace_back(std::string(1, b.first));
-						altsCounts.emplace_back(b.second);
-						altsFreqs.emplace_back(b.second/static_cast<double>(totalInput));
 					}
-					snpTabOut << refRegion.chrom_
-							<< "\t" << refRegion.getRelativePositionFromStartStrandAware(pos)
-							<< "\t" << std::string(1, refSeq.seq_[pos])
-							<< "\t" << std::string(1, refSeq.seq_[pos])
-							<< "\t" << totalInput - snpCount
-							<< "\t" << (totalInput - snpCount)/static_cast<double>(totalInput)
-							<< "\t" << totalInput
-							<< "\t" << samplesCalled << std::endl;
-				}
-				if (njh::in(pos, insertionsFinal)) {
-					for (const auto & ins : insertionsFinal[pos]) {
-						alts.emplace_back(ins.first);
-						altsCounts.emplace_back(ins.second);
-						altsFreqs.emplace_back(ins.second/static_cast<double>(totalInput));
+					if (njh::in(pos, insertionsFinal)) {
+						for (const auto & ins : insertionsFinal[pos]) {
+							alts.emplace_back(ins.first);
+							altsCounts.emplace_back(ins.second);
+							altsFreqs.emplace_back(ins.second/static_cast<double>(totalInput));
+						}
 					}
 				}
+				vcfOut << njh::conToStr(alts, ",")
+				<< "\t40\tPASS\t";
+				vcfOut
+						<< "DP=" << totalInput << ";"
+						<< "NS=" << samplesCalled << ";"
+						<< "AC=" << njh::conToStr(altsCounts, ",") << ";"
+						<< "AF=" << njh::conToStr(altsFreqs, ",")
+				<< std::endl;
 			}
-			vcfOut << njh::conToStr(alts, ",")
-			<< "\t40\tPASS\t";
-			vcfOut
-					<< "DP=" << totalInput << ";"
-					<< "NS=" << samplesCalled << ";"
-					<< "AC=" << njh::conToStr(altsCounts, ",") << ";"
-					<< "AF=" << njh::conToStr(altsFreqs, ",")
-			<< std::endl;
-
-			if (njh::in(pos, deletions)) {
-				for (const auto & d : deletions[pos]) {
+			if (njh::in(pos, deletionsFinal)) {
+				for (const auto & d : deletionsFinal[pos]) {
 					vcfOut <<  refRegion.chrom_
 							<< "\t" << refRegion.getRelativePositionFromStartStrandAware(pos) + 1
 							<< "\t" << "."
