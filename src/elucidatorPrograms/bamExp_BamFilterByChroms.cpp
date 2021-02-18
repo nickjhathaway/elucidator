@@ -160,7 +160,7 @@ int bamExpRunner::BamFilterByChromsToBam(const njh::progutils::CmdArgs & inputCo
 			} else {
 				if (njh::in(refData[bAln.RefID].RefName, chroms)) {
 					if(getTotalSoftClippedBases(bAln)   <= allowableSoftClip){
-						if(writeFilteredBam){
+						if(writeFilteredBam || writeOnlyFilteredBam){
 							bWriterFiltered.SaveAlignment(bAln);
 						}
 						++filteredCountsByChrom[refData[bAln.RefID].RefName].singles_;
@@ -195,7 +195,7 @@ int bamExpRunner::BamFilterByChromsToBam(const njh::progutils::CmdArgs & inputCo
 							getTotalSoftClippedBases(bAln)   <= allowableSoftClip){
 						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
 						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
-						if(writeFilteredBam){
+						if(writeFilteredBam || writeOnlyFilteredBam){
 							bWriterFiltered.SaveAlignment(bAln);
 							bWriterFiltered.SaveAlignment(*search);
 						}
@@ -249,7 +249,7 @@ int bamExpRunner::BamFilterByChromsToBam(const njh::progutils::CmdArgs & inputCo
 		for (const auto &name : names) {
 			++filteredOrphans_;
 			auto search = filterAlnCache.get(name);
-			if (writeFilteredBam) {
+			if (writeFilteredBam || writeOnlyFilteredBam) {
 				bWriterFiltered.SaveAlignment(*search);
 			}
 			filterAlnCache.remove(name);
