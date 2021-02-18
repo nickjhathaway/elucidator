@@ -541,6 +541,8 @@ int seqUtilsTrimRunner::trimBetweenSeqs(
 	while (reader.readNextRead(seq)) {
 		readVecTrimmer::trimBetweenSequences(seq, forwardObject, backObject,
 				alignObj, pars.allowableErrors, pars.tSeqPars_);
+//		alignObj.alignObjectA_.seqBase_.outPutSeqAnsi(std::cout);
+//		alignObj.alignObjectB_.seqBase_.outPutSeqAnsi(std::cout);
 
 		if (seq.on_ || !pars.keepOnlyOn) {
 			reader.openWrite(seq);

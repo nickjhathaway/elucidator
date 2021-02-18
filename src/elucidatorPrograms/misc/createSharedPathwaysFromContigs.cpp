@@ -947,7 +947,6 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 			bool matchingRefSeqName = false;
 			if(seq.name_ == refSeqName){
 				matchingRefSeqName = true;
-				refSeq = seq;
 			}else{
 				if (MetaDataInName::nameHasMetaData(seq.name_)) {
 					MetaDataInName meta(seq.name_);

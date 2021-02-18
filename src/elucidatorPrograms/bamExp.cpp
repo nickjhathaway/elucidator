@@ -90,6 +90,7 @@ bamExpRunner::bamExpRunner()
 					 addFunc("BamGetImproperPairCounts", BamGetImproperPairCounts, false),
 					 addFunc("bamCovBasesRough", bamCovBasesRough, false),
 					 addFunc("bamCov", bamCov, false),
+					 addFunc("BamFilterByChromsToBam", BamFilterByChromsToBam, false),
           },//
 
 				"bamExp") {
