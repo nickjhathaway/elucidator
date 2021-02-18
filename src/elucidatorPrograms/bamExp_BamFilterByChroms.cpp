@@ -37,10 +37,10 @@ namespace njhseq {
 
 uint32_t getTotalSoftClippedBases(const BamTools::BamAlignment & baln){
 	uint32_t ret = 0;
-	if('C' == baln.CigarData.front().Type){
+	if('S' == baln.CigarData.front().Type){
 		ret += baln.CigarData.front().Length;
 	}
-	if(baln.CigarData.size() > 1 && 'C' == baln.CigarData.back().Type){
+	if(baln.CigarData.size() > 1 && 'S' == baln.CigarData.back().Type){
 		ret += baln.CigarData.front().Length;
 	}
 	return ret;
@@ -51,7 +51,7 @@ int bamExpRunner::BamFilterByChromsToBam(const njh::progutils::CmdArgs & inputCo
 	std::string chromFnp = "";
 	bool writeFilteredBam = false;
 	OutOptions outOpts(bfs::path("out"), ".bam");
-	uint32_t allowableSoftClip = 10;
+	uint32_t allowableSoftClip = std::numeric_limits<uint32_t>::max();
 	bool requireProperPair = false;
 	bool skipWritingCounts = false;
 	bool writeOnlyFilteredBam = false;
@@ -322,9 +322,7 @@ int bamExpRunner::BamFilterByChromsToBam(const njh::progutils::CmdArgs & inputCo
 int bamExpRunner::BamGetImproperPairsOnChroms(const njh::progutils::CmdArgs & inputCommands){
 	std::string chromFnp = "";
 	OutOptions outOpts(bfs::path("out"));
-	uint32_t allowableSoftClip = 10;
-
-
+	uint32_t allowableSoftClip = std::numeric_limits<uint32_t>::max();
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
