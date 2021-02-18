@@ -54,6 +54,7 @@ int bamExpRunner::BamFilterByChromsToBam(const njh::progutils::CmdArgs & inputCo
 	uint32_t allowableSoftClip = 10;
 	bool requireProperPair = false;
 	bool skipWritingCounts = false;
+	bool writeOnlyFilteredBam = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -61,6 +62,8 @@ int bamExpRunner::BamFilterByChromsToBam(const njh::progutils::CmdArgs & inputCo
 	setUp.setOption(chromFnp, "--chroms", "chromosomes to filter off", true);
 	setUp.setOption(requireProperPair, "--requireProperPair", "Require Proper Pair to be filtered off");
 	setUp.setOption(writeFilteredBam, "--writeFilteredBam", "Write Filtered Bam");
+	setUp.setOption(writeOnlyFilteredBam, "--writeOnlyFilteredBam", "Write Only Filtered Bam");
+
 	setUp.setOption(skipWritingCounts, "--skipWritingCounts", "Skip Writing Counts");
 	setUp.processReadInNames({"--bam"}, true);
 	setUp.processWritingOptions(outOpts);
@@ -81,8 +84,10 @@ int bamExpRunner::BamFilterByChromsToBam(const njh::progutils::CmdArgs & inputCo
 	bfs::path bamOut = outOpts.outName();
 	bfs::path bamFilterOut = njh::files::prependFileBasename(outOpts.outName(), "filtered_");
 
-	bWriter.Open(bamOut.string(), bReader.GetConstSamHeader(), refData);
-	if(writeFilteredBam){
+	if(!writeOnlyFilteredBam){
+		bWriter.Open(bamOut.string(), bReader.GetConstSamHeader(), refData);
+	}
+	if(writeFilteredBam || writeOnlyFilteredBam){
 		bWriterFiltered.Open(bamFilterOut.string(), bReader.GetConstSamHeader(), refData);
 	}
 
@@ -149,7 +154,9 @@ int bamExpRunner::BamFilterByChromsToBam(const njh::progutils::CmdArgs & inputCo
 			++input.singles_;
 			if (!bAln.IsMapped()) {
 				++kept.singles_;
-				bWriter.SaveAlignment(bAln);
+				if(!writeOnlyFilteredBam){
+					bWriter.SaveAlignment(bAln);
+				}
 			} else {
 				if (njh::in(refData[bAln.RefID].RefName, chroms)) {
 					if(getTotalSoftClippedBases(bAln)   <= allowableSoftClip){
@@ -159,11 +166,15 @@ int bamExpRunner::BamFilterByChromsToBam(const njh::progutils::CmdArgs & inputCo
 						++filteredCountsByChrom[refData[bAln.RefID].RefName].singles_;
 					}else{
 						++kept.singles_;
-						bWriter.SaveAlignment(bAln);
+						if(!writeOnlyFilteredBam){
+							bWriter.SaveAlignment(bAln);
+						}
 					}
 				} else {
 					++kept.singles_;
-					bWriter.SaveAlignment(bAln);
+					if(!writeOnlyFilteredBam){
+						bWriter.SaveAlignment(bAln);
+					}
 				}
 			}
 		} else {
@@ -190,8 +201,10 @@ int bamExpRunner::BamFilterByChromsToBam(const njh::progutils::CmdArgs & inputCo
 						}
 					}else{
 						++kept.pairs_;++kept.pairs_;
-						bWriter.SaveAlignment(bAln);
-						bWriter.SaveAlignment(*search);
+						if(!writeOnlyFilteredBam){
+							bWriter.SaveAlignment(bAln);
+							bWriter.SaveAlignment(*search);
+						}
 					}
 					// now that operations have been computed, remove ther other mate found from cache
 					filterAlnCache.remove(search->Name);
@@ -206,8 +219,10 @@ int bamExpRunner::BamFilterByChromsToBam(const njh::progutils::CmdArgs & inputCo
 				} else {
 					auto search = alnCache.get(bAln.Name);
 					++kept.pairs_;++kept.pairs_;
-					bWriter.SaveAlignment(bAln);
-					bWriter.SaveAlignment(*search);
+					if(!writeOnlyFilteredBam){
+						bWriter.SaveAlignment(bAln);
+						bWriter.SaveAlignment(*search);
+					}
 					// now that operations have been computed, remove ther other mate found from cache
 					alnCache.remove(search->Name);
 					continue;
@@ -222,7 +237,9 @@ int bamExpRunner::BamFilterByChromsToBam(const njh::progutils::CmdArgs & inputCo
 		for (const auto & name : names) {
 			++keptOrphans_;
 			auto search = alnCache.get(name);
-			bWriter.SaveAlignment(*search);
+			if(!writeOnlyFilteredBam){
+				bWriter.SaveAlignment(*search);
+			}
 			alnCache.remove(name);
 		}
 	}
