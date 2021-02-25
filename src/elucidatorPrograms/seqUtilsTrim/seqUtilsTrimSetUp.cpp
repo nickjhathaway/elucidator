@@ -33,6 +33,7 @@ void seqUtilsTrimSetUp::setUpTrimFront(FullTrimReadsPars & pars) {
   processVerbose();
   processDebug();
 	setOption(pars.numberOfFowardBases, "--forwardBases", "Number of bases to trim off front", true);;
+	setOption(pars.keepOnlyOn, "--keepOnlyOn", "Keep Only the Reads that are still on");
 	processIoOptions();
 	finishSetUp(std::cout);
 }
@@ -78,6 +79,7 @@ void seqUtilsTrimSetUp::setUpTrimEnd(FullTrimReadsPars & pars) {
   processDebug();
 	setOption(pars.numberOfEndBases, "--endBases", "Number of bases to trim off end", true);
 	processIoOptions();
+	setOption(pars.keepOnlyOn, "--keepOnlyOn", "Keep Only the Reads that are still on");
 	finishSetUp(std::cout);
 }
 
@@ -87,6 +89,7 @@ void seqUtilsTrimSetUp::setUpTrimEnds(FullTrimReadsPars & pars) {
   processDebug();
 	setOption(pars.numberOfEndBases, "--endBases", "Number of bases to trim off end", true);
 	setOption(pars.numberOfFowardBases, "--forwardBases", "Number of bases to trim off front", true);;
+	setOption(pars.keepOnlyOn, "--keepOnlyOn", "Keep Only the Reads that are still on");
 	processIoOptions();
 	finishSetUp(std::cout);
 }

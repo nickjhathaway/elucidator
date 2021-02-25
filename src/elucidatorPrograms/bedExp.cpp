@@ -45,6 +45,9 @@ bedExpRunner::bedExpRunner()
     : njh::progutils::ProgramRunner(
           {
 					 addFunc("getFastaWithBed", getFastaWithBed, false),
+					 addFunc("getSeqFromTwoBit", getSeqFromTwoBit, false),
+
+
 					 addFunc("splitBedFile", splitBedFile, false),
 					 addFunc("separateOutRecordsInBedFile", separateOutRecordsInBedFile, false),
 					 addFunc("bedUnqiue", bedUnqiue, false),
@@ -1779,6 +1782,52 @@ int bedExpRunner::getEntropyOfRegion(const njh::progutils::CmdArgs & inputComman
 					<< "\t" << counter.computeEntrophyBasedOffAlph(4) << std::endl;
 		}
 	}
+	return 0;
+}
+
+
+
+int bedExpRunner::getSeqFromTwoBit(const njh::progutils::CmdArgs & inputCommands) {
+	OutOptions outOpts(bfs::path(""));
+	outOpts.outExtention_ = ".fasta";
+	bfs::path twoBitFilename = "";
+	std::string chrom = "";
+	uint32_t start = std::numeric_limits<uint32_t>::max();
+	uint32_t end = std::numeric_limits<uint32_t>::max();
+	bool reverseStrand = false;
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(twoBitFilename, "--twoBit,--2bit", "File path of the 2bit file", true);
+	setUp.setOption(chrom, "--chrom", "chromosome", true);
+	setUp.setOption(start, "--start", "start", true);
+	end = start + 1;
+	setUp.setOption(end, "--end", "end");
+	setUp.setOption(reverseStrand, "--reverseStrand", "Get Reverse Strand");
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+	OutputStream out(outOpts);
+	TwoBit::TwoBitFile twoBitFile(twoBitFilename);
+	auto seqNames = twoBitFile.sequenceNames();
+
+	Bed6RecordCore record(chrom, start, end, njh::pasteAsStr(chrom, "-", start, "-", end), end - start, (reverseStrand? '-' : '+'));
+
+	if (!njh::in(record.chrom_, seqNames)) {
+		std::cerr << "chromosome name not found in seq names, skipping"
+				<< std::endl;
+		std::cerr << "chr: " << record.chrom_ << std::endl;
+		std::cerr << "possibleNames: " << vectorToString(seqNames, ",")
+				<< std::endl;
+	} else {
+		std::string seq = "";
+		twoBitFile[record.chrom_]->getSequence(seq, record.chromStart_,
+				record.chromEnd_);
+		if (record.reverseStrand()) {
+			seq = seqUtil::reverseComplement(seq, "DNA");
+		}
+		out << ">" << record.name_ << std::endl;
+		out << seq << std::endl;
+	}
+
 	return 0;
 }
 

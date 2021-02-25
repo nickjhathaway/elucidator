@@ -38,6 +38,7 @@ namespace njhseq {
 kmerExpRunner::kmerExpRunner()
     : njh::progutils::ProgramRunner(
           {
+
 					 addFunc("profileScanningKmerDist", profileScanningKmerDist, false),
 					 addFunc("profileKmerAccerlation", profileKmerAccerlation, false),
 					 addFunc("getNewScanKmerDist", getNewScanKmerDist, false),
@@ -78,6 +79,9 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("getKmerSharedBlocksBetweenGenomes", getKmerSharedBlocksBetweenGenomes, false),
 					 addFunc("allByAllComparisonOfUniqueKmers", allByAllComparisonOfUniqueKmers, false),
 					 addFunc("getKmerSetDistBetween", getKmerSetDistBetween, false),
+					 addFunc("getAvgKmerPosition", getAvgKmerPosition, false),
+					 addFunc("getAvgKmerPositionPerSeq", getAvgKmerPositionPerSeq, false),
+					 addFunc("filterPerSeqAvgKmerPosition", filterPerSeqAvgKmerPosition, false),
 					 //
            },
           "kmerExp") {}

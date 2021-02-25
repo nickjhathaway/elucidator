@@ -39,6 +39,7 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 
 	//extracting sequencing using bed file
 	static int getFastaWithBed(const njh::progutils::CmdArgs & inputCommands);
+	static int getSeqFromTwoBit(const njh::progutils::CmdArgs & inputCommands);
 
 	//extracting sequence information per bed region
 	static int getGCContentOfRegion(const njh::progutils::CmdArgs & inputCommands);

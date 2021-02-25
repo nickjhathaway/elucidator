@@ -313,7 +313,11 @@ int seqUtilsTrimRunner::trimFront(const njh::progutils::CmdArgs & inputCommands)
 	seqInfo seq;
 
 	while(reader.readNextRead(seq)){
-		readVecTrimmer::trimOffForwardBases(seq, pars.numberOfFowardBases);
+		if(len(seq) > pars.numberOfFowardBases){
+			readVecTrimmer::trimOffForwardBases(seq, pars.numberOfFowardBases);
+		}else{
+			seq.on_ = false;
+		}
 		if (seq.on_ || !pars.keepOnlyOn) {
 			reader.openWrite(seq);
 		}
@@ -403,7 +407,11 @@ int seqUtilsTrimRunner::trimEnd(const njh::progutils::CmdArgs & inputCommands){
 	seqInfo seq;
 
 	while(reader.readNextRead(seq)){
-		readVecTrimmer::trimOffEndBases(seq, pars.numberOfEndBases);
+		if(len(seq) > pars.numberOfEndBases){
+			readVecTrimmer::trimOffEndBases(seq, pars.numberOfEndBases);
+		}else{
+			seq.on_ = false;
+		}
 		if (seq.on_ || !pars.keepOnlyOn) {
 			reader.openWrite(seq);
 		}
@@ -426,8 +434,13 @@ int seqUtilsTrimRunner::trimEdges(const njh::progutils::CmdArgs & inputCommands)
 	seqInfo seq;
 
 	while(reader.readNextRead(seq)){
-		readVecTrimmer::trimOffForwardBases(seq, pars.numberOfFowardBases);
-		readVecTrimmer::trimOffEndBases(seq, pars.numberOfEndBases);
+		if(len(seq) > pars.numberOfFowardBases + pars.numberOfEndBases){
+			readVecTrimmer::trimOffForwardBases(seq, pars.numberOfFowardBases);
+			readVecTrimmer::trimOffEndBases(seq, pars.numberOfEndBases);
+		}else{
+			seq.on_ = false;
+		}
+
 		if (seq.on_ || !pars.keepOnlyOn) {
 			reader.openWrite(seq);
 		}
@@ -500,6 +513,10 @@ int seqUtilsTrimRunner::trimFromSeq(const njh::progutils::CmdArgs & inputCommand
 	while (reader.readNextRead(seq)) {
 		readVecTrimmer::trimAtSequence(seq, backObject, alignObj,
 				pars.allowableErrors, pars.tSeqPars_);
+		if(setUp.pars_.debug_){
+			alignObj.alignObjectA_.seqBase_.outPutSeqAnsi(std::cout);
+			alignObj.alignObjectB_.seqBase_.outPutSeqAnsi(std::cout);
+		}
 		if (seq.on_ || !pars.keepOnlyOn) {
 			reader.openWrite(seq);
 		}

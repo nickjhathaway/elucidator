@@ -116,6 +116,7 @@ int gffExpRunner::aaPositionsToBed(const njh::progutils::CmdArgs & inputCommands
 	setUp.finishSetUp(std::cout);
 	OutputStream out(outOpts);
 	AmionoAcidPositionInfo aaInfos(proteinMutantTypingFnp, zeroBased);
+
 	auto genes = GeneFromGffs::getGenesFromGffForIds(gffFnp, aaInfos.ids_);
 
 	TwoBit::TwoBitFile tReader(twoBitFnp);

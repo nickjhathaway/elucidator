@@ -35,6 +35,8 @@
 #include <njhseq/programUtils/seqSetUp.hpp>
 
 
+
+
 namespace njhseq {
 bamExpRunner::bamExpRunner()
     : njh::progutils::ProgramRunner(
@@ -497,7 +499,7 @@ int bamExpRunner::bamMulticov(const njh::progutils::CmdArgs & inputCommands){
 	std::ostream out(determineOutBuf(outFile, outOpts));
 
 
-	auto bamFnps = njh::files::gatherFilesByPatOrNames(std::regex{pat}, bams);
+	auto bamFnps = njh::files::gatherFilesByPatOrNames(std::regex(pat), bams);
 	checkBamFilesForIndexesAndAbilityToOpen(bamFnps);
 	if(setUp.pars_.verbose_){
 		printVector(bamFnps, "\t", std::cout);
@@ -555,7 +557,7 @@ int bamExpRunner::bamMulticov(const njh::progutils::CmdArgs & inputCommands){
 
 	njh::concurrent::LockableVec<std::shared_ptr<BamFnpRegionPair>> pairsList(pairs);
 
-	std::function<void()> getCov = [&pairsList](){
+	std::function<void()> getCov = std::function<void()>([&pairsList](){
 		std::shared_ptr<BamFnpRegionPair> val;
 		while(pairsList.getVal(val)){
 			BamTools::BamReader bReader;
@@ -569,7 +571,7 @@ int bamExpRunner::bamMulticov(const njh::progutils::CmdArgs & inputCommands){
 				}
 			}
 		}
-	};
+	});
 
 	{
 		njh::concurrent::runVoidFunctionThreaded(getCov, numThreads);
@@ -782,7 +784,7 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 
 
 	table outputProperPairs(header);
-	outputProperPairs.content_ = std::vector<std::vector<std::string>>{regions.size(), std::vector<std::string>{header.size()}};
+	outputProperPairs.content_ = std::vector<std::vector<std::string>>(regions.size(), VecStr(header.size()));
 	uint32_t regRowCount = 0;
 	std::unordered_map<std::string, uint32_t> regUidToRowPos;
 	for(const auto & reg : regions){
@@ -796,7 +798,7 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 	}
 
 	table outputTotalPairs(header);
-	outputTotalPairs.content_ = std::vector<std::vector<std::string>>{regions.size(), std::vector<std::string>{header.size()}};
+	outputTotalPairs.content_ = std::vector<std::vector<std::string> >(regions.size(), std::vector<std::string>(header.size()));
 	regRowCount = 0;
 	for(const auto & reg : regions){
 		auto regAsBed = reg.genBedRecordCore();
@@ -808,7 +810,7 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 	}
 
 	table outputMateUnmappedPairs(header);
-	outputMateUnmappedPairs.content_ = std::vector<std::vector<std::string>>{regions.size(), std::vector<std::string>{header.size()}};
+	outputMateUnmappedPairs.content_ = std::vector<std::vector<std::string> >{regions.size(), std::vector<std::string>{header.size()}};
 	regRowCount = 0;
 	for(const auto & reg : regions){
 		auto regAsBed = reg.genBedRecordCore();
@@ -820,7 +822,7 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 	}
 
 	table outputDiscordantPairs(header);
-	outputDiscordantPairs.content_ = std::vector<std::vector<std::string>>{regions.size(), std::vector<std::string>{header.size()}};
+	outputDiscordantPairs.content_ = std::vector<std::vector<std::string> >{regions.size(), std::vector<std::string>{header.size()}};
 	regRowCount = 0;
 	for(const auto & reg : regions){
 		auto regAsBed = reg.genBedRecordCore();

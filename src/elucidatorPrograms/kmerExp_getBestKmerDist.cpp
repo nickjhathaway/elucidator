@@ -24,6 +24,7 @@
 // You should have received a copy of the GNU General Public License
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
+
 #include "kmerExp.hpp"
 #include "elucidator/utils/KmerUtils.hpp"
 #include "elucidator/objects/seqObjects/seqKmers.h"

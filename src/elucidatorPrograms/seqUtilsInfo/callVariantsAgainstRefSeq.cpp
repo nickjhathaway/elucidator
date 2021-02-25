@@ -1,9 +1,12 @@
 /*
- * seqUtilsInfoRunner_getHapPopDifAndVariantsInfo.cpp
+ * callVariantsAgainstRefSeq.cpp
  *
- *  Created on: Aug 16, 2019
- *      Author: nicholashathaway
+ *  Created on: Feb 24, 2021
+ *      Author: nick
+ *
+ *
  */
+
 
 
 
@@ -28,7 +31,8 @@
 namespace njhseq {
 
 
-int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArgs & inputCommands) {
+
+int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & inputCommands) {
 
 	/**@todo should add the following 1) average pairwise difference, 2) make into a function, 3) generate connected hap map, 4) unique haps to region count, 5) doing multiple pop fields at once */
 
@@ -37,14 +41,13 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
   bfs::path knownAminoAcidChangesFnp;
 
 	std::string identifier = "";
-	std::string popMeta = "";
 	variantCallerRunPars.lowVariantCutOff = 0.005;
 	variantCallerRunPars.occurrenceCutOff = 1;
 
-	uint32_t lengthDiffForLengthPoly = 6;
 	bfs::path bedFnp = "";
 	uint32_t outwardsExpand = 5;
-	bool zeroBased = false;
+
+	bfs::path metaFnp;
 	bool keepNonFieldSamples = false;
 	std::set<std::string> ignoreSubFields;
 	MultiGenomeMapper::inputParameters gPars;
@@ -54,10 +57,10 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 	setUp.processReadInNames(true);
 	setUp.processDirectoryOutputName(true);
 	setUp.processAlnInfoInput();
-	setUp.setOption(lengthDiffForLengthPoly, "--lengthDiffForLengthPoly", "If there is a length difference of this or above, label as there being length polymorphism");
 	setUp.setOption(variantCallerRunPars.occurrenceCutOff, "--occurrenceCutOff", "Occurrence Cut Off, don't report variants below this count");
 	setUp.setOption(variantCallerRunPars.lowVariantCutOff, "--lowVariantCutOff", "Low Variant Cut Off, don't report variants below this fraction");
 	setUp.setOption(outwardsExpand, "--outwardsExpand", "The amount to expand outwards from given region when determining variants positions with extracted ref seq");
+	setUp.setOption(metaFnp,    "--metaFnp",    "Meta data to add to sequences");
 
 	setUp.setOption(bedFnp,    "--bed",    "A bed file of the location for the extraction", true);
 	setUp.setOption(transPars.lzPars_.genomeFnp, "--genome", "A reference genome to compare against", true);
@@ -71,12 +74,10 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 	gPars.primaryGenome_ = gPars.primaryGenome_.substr(0, gPars.primaryGenome_.rfind("."));
 	gPars.selectedGenomes_ = {gPars.primaryGenome_};
 
-	setUp.setOption(ignoreSubFields, "--ignoreSubFields", "Meta Sub Fields to ignore when doing population analysis");
+	setUp.setOption(ignoreSubFields, "--ignoreSubFields", "Meta Sub Field values to ignore when calculating variants, e.g. --ignoreSubFields \"isFieldSample:TRUE,PreferredSample:FALSE\"");
 
 	setUp.setOption(identifier, "--identifier", "Give a identifier name for info");
-	setUp.setOption(popMeta,    "--popMeta",    "Meta field to calculate population stats by");
 	setUp.setOption(knownAminoAcidChangesFnp, "--proteinMutantTypingFnp", "Protein Mutant Typing Fnp, columns should be ID=gene id in gff, AAPosition=amino acid position", false);
-	setUp.setOption(zeroBased, "--zeroBased", "If the positions in the proteinMutantTypingFnp are zero based");
 	setUp.setOption(keepNonFieldSamples, "--keepNonFieldSamples", "Keep Non Field Samples for population stats");
 
 	setUp.finishSetUp(std::cout);
@@ -138,23 +139,46 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 	SeqInput reader(setUp.pars_.ioOptions_);
 	reader.openIn();
 
-	std::unordered_map<std::string, std::shared_ptr<std::vector<identicalCluster>>> uniqueSeqsByMetaForwardStrand;
+	std::unique_ptr<MultipleGroupMetaData> meta;
+	if("" != metaFnp){
+		meta = std::make_unique<MultipleGroupMetaData>(metaFnp);
+	}
 
 	std::vector<identicalCluster> originalOrientationClusters;
 	seqInfo seq;
 	uint32_t totalInputSeqs = 0;
-	bool calculatingFst = "" != popMeta;
 	std::set<std::string> samples;
-	std::set<std::string> allMetaKeys;
-	std::unordered_map<std::string, std::set<std::string>> samplesByMeta;
+
+	std::unordered_map<std::string, std::string> metaValuesToAvoid;
+	for(const auto & fieldValue : ignoreSubFields){
+		auto toks = tokenizeString(fieldValue, ":");
+		if(2 != toks.size()){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "meta field values to ignore need to be in format of METAFIELD:VALUE not " << fieldValue<< "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		metaValuesToAvoid[toks[0]] = toks[1];
+	}
+
 
 	// read in reads and collapse to unique
 	while(reader.readNextRead(seq)) {
+		if ("" != metaFnp) {
+			meta->attemptToAddSeqMeta(seq);
+		}
 		//get meta keys if available
 		if(MetaDataInName::nameHasMetaData(getSeqBase(seq).name_)){
 			MetaDataInName metaData(getSeqBase(seq).name_);
-			for(const auto & meta : metaData.meta_){
-				allMetaKeys.emplace(meta.first);
+			bool skip = false;
+			for(const auto & ignoreField : metaValuesToAvoid){
+				if(metaData.containsMeta(ignoreField.first) && metaData.getMeta(ignoreField.first) == ignoreField.second){
+					skip = true;
+					break;
+					//skip this seq
+				}
+			}
+			if(skip){
+				continue;
 			}
 		}
 
@@ -182,67 +206,16 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 			originalOrientationClusters.emplace_back(seq);
 		}
 
-		//if calculating sub population differences collect unique sequences for the given field
-		if(calculatingFst){
-			MetaDataInName seqMeta(seq.name_);
-			bool found = false;
-			//skip ignore fields
-			if(njh::in(seqMeta.getMeta(popMeta), ignoreSubFields)){
-				continue;
-			}
-			//skip non field samples
-			if(!keepNonFieldSamples && seqMeta.containsMeta("IsFieldSample") && !seqMeta.getMeta<bool>("IsFieldSample")){
-				continue;
-			}
-			if(!njh::in(seqMeta.getMeta(popMeta),  uniqueSeqsByMetaForwardStrand)){
-				uniqueSeqsByMetaForwardStrand[seqMeta.getMeta(popMeta)] = std::make_shared<std::vector<identicalCluster>>();
-			}
-			if(seqMeta.containsMeta("sample")){
-				samplesByMeta[seqMeta.getMeta(popMeta)].emplace(seqMeta.getMeta("sample"));
-			}
-
-			for (auto &cIter : *uniqueSeqsByMetaForwardStrand[seqMeta.getMeta(popMeta)]) {
-				if (cIter.seqBase_.seq_ == seq.seq_) {
-					cIter.addRead(seq);
-					found = true;
-					break;
-				}
-			}
-			if (!found) {
-				uniqueSeqsByMetaForwardStrand[seqMeta.getMeta(popMeta)]->emplace_back(seq);
-			}
-		}
 	}
 	std::vector<identicalCluster> forwardStrandClusters = originalOrientationClusters;
 
-
-
-	double sumGCContent = 0;
-	for(auto & clus : originalOrientationClusters){
-		clus.setLetterCount();
-		clus.counter_.calcGcContent();
-		sumGCContent += clus.counter_.gcContent_ * clus.seqBase_.cnt_;
-	}
-	double avgGCContent = sumGCContent/totalInputSeqs;
-
-
-	VecStr allMetaKeysVec(allMetaKeys.begin(), allMetaKeys.end());
 
 	uint32_t samplesCalled = totalInputSeqs;
 	if(!samples.empty()){
 		samplesCalled = samples.size();
 	}
 
-
-
-
-
 	if(gPos->reverseStrand()){
-		for( auto & field : uniqueSeqsByMetaForwardStrand){
-			for( auto & seq : *field.second){
-				seq.seqBase_.reverseComplementRead(false, true);
-			}
-		}
 		for(const auto & clus : originalOrientationClusters){
 			forwardStrandClusters.emplace_back(clus);
 			forwardStrandClusters.back().seqBase_.reverseComplementRead(false, true);
@@ -263,23 +236,6 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 		++seqId;
 	}
 
-	if(calculatingFst){
-		std::unordered_map<std::string, uint32_t> seqIdForField;
-		for(auto & field : uniqueSeqsByMetaForwardStrand){
-			readVec::allSetFractionByTotalCount(*field.second);
-			for (auto &cIter : *field.second) {
-				MetaDataInName popMeta;
-				std::string popName = nameLookUp[cIter.seqBase_.seq_];
-				MetaDataInName popNameMeta(popName);
-				MetaDataInName::removeMetaDataInName(popName);
-				popMeta.addMeta("HapPopUID", popName);
-				popMeta.addMeta(popNameMeta, true);
-				popMeta.addMeta("HapUniqueCount", static_cast<uint32_t>(std::round(cIter.seqBase_.cnt_)));
-				cIter.seqBase_.name_ = njh::pasteAsStr(field.first, ".", leftPadNumStr<uint32_t>(seqIdForField[field.first], field.second->size()), popMeta.createMetaName());
-				++seqIdForField[field.first];
-			}
-		}
-	}
 
 	//get region and ref seq for mapping of variants
 	OutputStream inputRegionBeforeExpandOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "inputRegionBeforeExpand.bed")));
@@ -324,15 +280,6 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 
 	TranslatorByAlignment::VariantsInfo varInfo(identifier);
 
-//	std::unordered_map<uint32_t, std::unordered_map<char, uint32_t>> snps;
-//	std::unordered_map<uint32_t, std::unordered_map<std::string,uint32_t>> insertions;
-//	std::unordered_map<uint32_t, std::unordered_map<std::string,uint32_t>> deletions;
-//
-//	std::unordered_map<uint32_t, std::unordered_map<char, uint32_t>> snpsFinal;
-//	std::unordered_map<uint32_t, std::unordered_map<std::string,uint32_t>> insertionsFinal;
-//	std::unordered_map<uint32_t, std::unordered_map<std::string,uint32_t>> deletionsFinal;
-	//
-
 	for(const auto & seq : forwardStrandClusters){
 
 		alignerObj.alignCacheGlobal(forwardStrandRefSeq, seq);
@@ -366,12 +313,12 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 
 
 	{
-		uint32_t numVariants = varInfo.snpsFinal.size() + varInfo.insertionsFinal.size() + varInfo.deletionsFinal.size();
-		OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "basicInfo.tab.txt"));
-		out << "id\ttotalHaplotypes\tuniqueHaplotypes\tnsamples\tsingletons\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism\tnvariantsAbove"
-				<< variantCallerRunPars.lowVariantCutOff * 100 << "%" << "\tvariableRegionID\t" << "avgGCContent";
+//		uint32_t numVariants = varInfo.snpsFinal.size() + varInfo.insertionsFinal.size() + varInfo.deletionsFinal.size();
+//		OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "basicInfo.tab.txt"));
+//		out << "id\ttotalHaplotypes\tuniqueHaplotypes\tnsamples\tsingletons\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism\tnvariantsAbove"
+//				<< variantCallerRunPars.lowVariantCutOff * 100 << "%" << "\tvariableRegionID\t" << "avgGCContent";
 		//out << "\tAvgPairwiseDistWeighted";
-		out << std::endl;
+//		out << std::endl;
 		std::map<uint32_t, uint32_t> readLens;
 		//writing out unique sequences
 		auto uniqueSeqsOpts = SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs.fasta"));
@@ -407,26 +354,7 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 			metaLabNamesOut << cIter.seqBase_.name_ << "\t" << njh::conToStr(nonFieldSampleNames, ",") << std::endl;
 		}
 
-//		PairwisePairFactory pFac(clusters.size());
-//		PairwisePairFactory::PairwisePair pPair;
-//		double sumOfPairwiseDist = 0;
-//		double sumOfPairwiseDistWeighted = 0;
-//
-//		while (pFac.setNextPair(pPair)) {
-//			alignerObj.alignCacheGlobal(clusters[pPair.col_], clusters[pPair.row_]);
-//			alignerObj.profileAlignment(clusters[pPair.col_], clusters[pPair.row_],
-//					false, false, false);
-//			sumOfPairwiseDist += alignerObj.comp_.distances_.eventBasedIdentity_;
-//			sumOfPairwiseDistWeighted +=
-//					alignerObj.comp_.distances_.eventBasedIdentity_
-//							* (clusters[pPair.col_].seqBase_.cnt_
-//									* clusters[pPair.row_].seqBase_.cnt_);
-//		}
-
 		std::map<std::string, std::map<std::string, MetaDataInName>> knownAAMeta;
-		//       seqName               transcript   amino acid positions and amino acid
-		//std::map<std::string, std::map<std::string, MetaDataInName>> fullAATyped;
-		//seqname meta
 
 		std::map<std::string, MetaDataInName> fullAATyped;
 		std::map<std::string, std::vector<TranslatorByAlignment::AAInfo>> fullAATypedWithCodonInfo;
@@ -639,417 +567,11 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 				}
 			}
 		}
-
-		if(!allMetaKeys.empty()){
-			OutputStream metaOutPut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "popHapMeta.tab.txt")));
-			VecStr columnNames = allMetaKeysVec;
-			metaOutPut << "Identifier\tPopName\tHapPopUIDCount" << "\t" << njh::conToStr(columnNames, "\t");
-			metaOutPut << std::endl;
-			for(const auto & popSeq : forwardStrandClusters){
-				for(const auto & inputSeq : popSeq.reads_){
-					MetaDataInName outMeta;
-					VecStr missingMetaFields;
-					if (MetaDataInName::nameHasMetaData(inputSeq->seqBase_.name_)) {
-						MetaDataInName seqMeta(inputSeq->seqBase_.name_);
-						outMeta = seqMeta;
-						for (const auto & mf : allMetaKeysVec) {
-							if (!njh::in(mf, seqMeta.meta_)) {
-								missingMetaFields.emplace_back(mf);
-							}
-						}
-					} else {
-						missingMetaFields = allMetaKeysVec;
-					}
-					for(const auto & mf : missingMetaFields){
-						outMeta.addMeta(mf, "NA");
-					}
-					metaOutPut << identifier
-							<< "\t" << popSeq.seqBase_.name_;
-					MetaDataInName popSeqMeta(popSeq.seqBase_.name_);
-					metaOutPut << "\t" << popSeqMeta.getMeta("HapPopUIDCount");
-					for(const auto & mf : allMetaKeysVec){
-						metaOutPut << '\t' << outMeta.meta_[mf];
-					}
-
-					metaOutPut<< std::endl;
-				}
-			}
-		}
-
-		//amino typing
-		{
-			OutputStream aminoMetaOutPut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "popHapMetaWithAminoChanges.tab.txt")));
-
-			std::set<std::string> aminoTypingFields;
-			for (const auto & popHapTyped : fullAATyped) {
-				for (const auto & aminoMetaLevel : popHapTyped.second.meta_) {
-					aminoTypingFields.emplace(aminoMetaLevel.first);
-				}
-			}
-			if (!aminoTypingFields.empty()) {
-
-				aminoMetaOutPut << "PopName\tHapPopUIDCount";
-				if(!allMetaKeys.empty()){
-					aminoMetaOutPut << "\t" << njh::conToStr(allMetaKeys, "\t");
-				}
-				//aminoMetaOutPut << "\t" << njh::conToStr(aminoTypingFields, "\t");
-				aminoMetaOutPut << "\t" << "transcript"
-						<< "\t" << "AA"
-						<< "\t" << "AAPos(1-based)"
-						<< "\t" << "codon"
-						<< "\t" << "knownMutation(based-on-supplied)";
-
-				aminoMetaOutPut << std::endl;
-
-				for(const auto & popSeq : forwardStrandClusters){
-					for(const auto & inputSeq : popSeq.reads_){
-						MetaDataInName outMeta;
-						if(!allMetaKeys.empty()){
-							VecStr missingMetaFields;
-							if (MetaDataInName::nameHasMetaData(inputSeq->seqBase_.name_)) {
-								MetaDataInName seqMeta(inputSeq->seqBase_.name_);
-								outMeta = seqMeta;
-								for (const auto & mf : allMetaKeysVec) {
-									if (!njh::in(mf, seqMeta.meta_)) {
-										missingMetaFields.emplace_back(mf);
-									}
-								}
-							} else {
-								missingMetaFields = allMetaKeysVec;
-							}
-							for(const auto & mf : missingMetaFields){
-								outMeta.addMeta(mf, "NA");
-							}
-						}
-						for(const auto & aminoInfo : fullAATypedWithCodonInfo[popSeq.seqBase_.name_]){
-							aminoMetaOutPut << popSeq.seqBase_.name_;
-							MetaDataInName popSeqMeta(popSeq.seqBase_.name_);
-							aminoMetaOutPut << "\t" << popSeqMeta.getMeta("HapPopUIDCount");
-							if(!allMetaKeys.empty()){
-								for(const auto & mf : allMetaKeysVec){
-									aminoMetaOutPut << '\t' << outMeta.meta_[mf];
-								}
-							}
-							aminoMetaOutPut << "\t" << aminoInfo.transcriptName_
-									<< "\t" << aminoInfo.aa_
-									<< "\t" << aminoInfo.zeroBasedPos_ + 1
-									<< "\t" << std::get<0>(aminoInfo.codon_) << std::get<1>(aminoInfo.codon_) << std::get<2>(aminoInfo.codon_)
-									<< "\t" << njh::boolToStr(aminoInfo.knownMut_);
-							aminoMetaOutPut<< std::endl;
-						}
-					}
-				}
-			}
-		}
-
-
-
-
-		table readLensTab(readLens, VecStr{"length", "count"});
-		OutputStream readLensOut(njh::files::make_path(setUp.pars_.directoryName_, "readLengthCounts.tab.txt"));
-		readLensTab.outPutContents(readLensOut, "\t");
-		uint32_t mostCommonReadLen = 0;
-		uint32_t mostCommonReadLenCount = 0;
-		for(const auto & rlen : readLens){
-			if(rlen.second > mostCommonReadLenCount){
-				mostCommonReadLen = rlen.first;
-				mostCommonReadLenCount = rlen.second;
-			}
-		}
-		uint32_t countOfNotMostCommonReadLen = 0;
-		for(const auto & rlen : readLens){
-			if(rlen.first != mostCommonReadLen && uAbsdiff(mostCommonReadLen , rlen.first) >= lengthDiffForLengthPoly){
-				countOfNotMostCommonReadLen += rlen.second;
-			}
-		}
-		bool lengthPoly = false;
-		if((countOfNotMostCommonReadLen/static_cast<double>(totalInputSeqs)) > variantCallerRunPars.lowVariantCutOff){
-			lengthPoly = true;
-		}
-		readVec::allSetFractionByTotalCount(forwardStrandClusters);
-		PopGenCalculator::DiversityMeasures divMeasures  = PopGenCalculator::getGeneralMeasuresOfDiversity(forwardStrandClusters);
-		//PairwisePairFactory pFacIfTotal(totalInput);
-		out << identifier
-				<< "\t" << totalInputSeqs
-				<< "\t" << forwardStrandClusters.size()
-				<< "\t" << samplesCalled
-				<< "\t" << divMeasures.singlets_
-				<< "\t" << divMeasures.doublets_
-				<< "\t" << divMeasures.expShannonEntropy_
-				<< "\t" << divMeasures.ShannonEntropyE_
-				<< "\t" << divMeasures.effectiveNumOfAlleles_
-				<< "\t" << divMeasures.heterozygostiy_
-				<< "\t" << (lengthPoly ? "true" : "false")
-				<< "\t" << numVariants
-				<< "\t" << variableRegionID
-				<< "\t" << avgGCContent
-				//<< "\t" << sumOfPairwiseDist/pFac.totalCompares_
-				<< std::endl;
-				//<< "\t" << sumOfPairwiseDistWeighted/pFacIfTotal.totalCompares_<< std::endl;
 	}
 
 	auto variantCallsDir = njh::files::make_path(setUp.pars_.directoryName_, "variantCalls");
 	njh::files::makeDir(njh::files::MkdirPar{variantCallsDir});
 
-	if(calculatingFst){
-		OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, popMeta + "_basicInfo.tab.txt"));
-		out << "id\t" << popMeta << "\ttotalHaplotypes\tuniqueHaplotypes\tnsamples\tsingletons\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism\tnvariantsAbove" << variantCallerRunPars.lowVariantCutOff * 100 << "%" << std::endl;
-		std::unordered_map<std::string, double> heForFields;
-
-		for(auto & field : uniqueSeqsByMetaForwardStrand){
-			double sumOfSquares = 0;
-			std::map<uint32_t, uint32_t> readLens;
-			njh::sort(*field.second);
-			uint32_t singletons = 0;
-			uint32_t doublets = 0;
-			double seqCountPerField = readVec::getTotalReadCount(*field.second);
-			for(const auto & cIter : *field.second){
-				if(1 == cIter.seqBase_.cnt_){
-					++singletons;
-				}
-				if(2 == cIter.seqBase_.cnt_){
-					++doublets;
-				}
-				sumOfSquares += std::pow(cIter.seqBase_.cnt_/seqCountPerField, 2);
-				readLens[len(cIter.seqBase_)]+= cIter.seqBase_.cnt_;
-			}
-			TranslatorByAlignment::VariantsInfo varInfo(identifier);
-
-		//	std::unordered_map<uint32_t, std::unordered_map<char, uint32_t>> snps;
-		//	std::unordered_map<uint32_t, std::unordered_map<std::string,uint32_t>> insertions;
-		//	std::unordered_map<uint32_t, std::unordered_map<std::string,uint32_t>> deletions;
-		//
-		//	std::unordered_map<uint32_t, std::unordered_map<char, uint32_t>> snpsFinal;
-		//	std::unordered_map<uint32_t, std::unordered_map<std::string,uint32_t>> insertionsFinal;
-		//	std::unordered_map<uint32_t, std::unordered_map<std::string,uint32_t>> deletionsFinal;
-			//
-
-			for(const auto & seq : *field.second){
-
-				alignerObj.alignCacheGlobal(forwardStrandRefSeq, seq);
-				alignerObj.profileAlignment(forwardStrandRefSeq, seq, false, false, false);
-				varInfo.addVariantInfo(
-						alignerObj.alignObjectA_.seqBase_.seq_,
-						alignerObj.alignObjectB_.seqBase_.seq_,
-						seq.seqBase_.cnt_,
-						alignerObj.comp_,
-						refRegion.start_);
-			}
-			varInfo.setFinals(variantCallerRunPars);
-
-
-			uint32_t mostCommonReadLen = 0;
-			uint32_t mostCommonReadLenCount = 0;
-			for(const auto & rlen : readLens){
-				if(rlen.second > mostCommonReadLenCount){
-					mostCommonReadLen = rlen.first;
-					mostCommonReadLenCount = rlen.second;
-				}
-			}
-			uint32_t countOfNotMostCommonReadLen = 0;
-			for(const auto & rlen : readLens){
-				if(rlen.first != mostCommonReadLen && uAbsdiff(mostCommonReadLen , rlen.first) >= lengthDiffForLengthPoly){
-					countOfNotMostCommonReadLen += rlen.second;
-				}
-			}
-
-			bool lengthPoly = false;
-			if((countOfNotMostCommonReadLen/static_cast<double>(seqCountPerField)) > variantCallerRunPars.lowVariantCutOff){
-				lengthPoly = true;
-			}
-
-			double he = 1 - sumOfSquares;
-			heForFields[field.first] = he;
-			auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversity(*field.second);
-			out << identifier
-					<< "\t" << field.first
-					<< "\t" << seqCountPerField
-					<< "\t" << field.second->size()
-					<< "\t" << samplesByMeta.at(field.first).size()
-					<< "\t" << divMeasures.singlets_
-					<< "\t" << divMeasures.doublets_
-					<< "\t" << divMeasures.expShannonEntropy_
-					<< "\t" << divMeasures.ShannonEntropyE_
-					<< "\t" << divMeasures.effectiveNumOfAlleles_
-					<< "\t" << divMeasures.heterozygostiy_
-					<< "\t" << (lengthPoly ? "true" : "false")
-					<< "\t" << varInfo.snpsFinal.size() + varInfo.deletionsFinal.size() + varInfo.insertionsFinal.size() << std::endl;
-
-			if(!varInfo.snpsFinal.empty() || ! varInfo.deletionsFinal.empty() || !varInfo.insertionsFinal.empty()){
-				OutputStream vcfOut(njh::files::make_path(variantCallsDir, "variants_" + field.first + ".vcf"));
-				std::unordered_set<uint32_t> positionsSet;
-				for(const auto & snps : varInfo.snpsFinal){
-					positionsSet.emplace(snps.first);
-				}
-				for(const auto & ins : varInfo.insertionsFinal){
-					positionsSet.emplace(ins.first);
-				}
-				for(const auto & del : varInfo.deletionsFinal){
-					positionsSet.emplace(del.first);
-				}
-				vcfOut << "##fileformat=VCFv4.0" << std::endl;
-				vcfOut << "##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Total Allele Depth\">" << std::endl;
-				vcfOut << "##INFO=<ID=NS,Number=1,Type=Integer,Description=\"Number of Samples With Data\">" << std::endl;
-				vcfOut << "##INFO=<ID=AF,Number=.,Type=Float,Description=\"Allele Frequency\">" << std::endl;
-				vcfOut << "##INFO=<ID=AC,Number=.,Type=Integer,Description=\"Allele Count\">" << std::endl;
-				vcfOut << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO" << std::endl;
-				std::vector<uint32_t> positions(positionsSet.begin(), positionsSet.end());
-				uint32_t samplesCalledForField = seqCountPerField;
-				if(!samplesByMeta[field.first].empty()){
-					samplesCalledForField = samplesByMeta[field.first].size();
-				}
-				njh::sort(positions);
-//				if(refRegion.reverseSrand_){
-//					njh::reverse(positions);
-//				}
-				for(const auto & pos : positions){
-					vcfOut
-							<<  refRegion.chrom_
-							<< "\t" << pos + 1
-							<< "\t" << "."
-							<< "\t";
-					std::vector<std::string> alts;
-					std::vector<uint32_t> altsCounts;
-					std::vector<double> altsFreqs;
-					vcfOut << baseForPosition[pos] << "\t";
-					if(njh::in(pos, varInfo.snpsFinal)){
-						for(const auto & b : varInfo.snpsFinal[pos]){
-							alts.emplace_back(std::string(1, b.first));
-							altsCounts.emplace_back(b.second);
-							altsFreqs.emplace_back(b.second/static_cast<double>(varInfo.depthPerPosition[pos]));
-						}
-					}
-					if (njh::in(pos, varInfo.insertionsFinal)) {
-						for (const auto & ins : varInfo.insertionsFinal[pos]) {
-							alts.emplace_back(ins.first);
-							altsCounts.emplace_back(ins.second);
-							altsFreqs.emplace_back(ins.second/static_cast<double>(varInfo.depthPerPosition[pos]));
-						}
-					}
-					vcfOut << njh::conToStr(alts, ",")
-					<< "\t40\tPASS\t";
-					vcfOut
-							<< "DP=" << varInfo.depthPerPosition[pos] << ";"
-							<< "NS=" << samplesCalledForField << ";"
-							<< "AC=" << njh::conToStr(altsCounts, ",") << ";"
-							<< "AF=" << njh::conToStr(altsFreqs, ",")
-					<< std::endl;
-					if (njh::in(pos, varInfo.deletionsFinal)) {
-						for (const auto & d : varInfo.deletionsFinal[pos]) {
-							vcfOut <<  refRegion.chrom_
-									<< "\t" << pos + 1
-									<< "\t" << "."
-									<< "\t";
-							vcfOut << baseForPosition[pos] << d.first
-							<< "\t" << baseForPosition[pos] << "\t";
-							vcfOut << "40\tPASS\t";
-							vcfOut
-									<< "DP=" << varInfo.depthPerPosition[pos] << ";"
-									<< "NS=" << samplesCalledForField << ";"
-									<< "AC=" << d.second << ";"
-									<< "AF=" << d.second/static_cast<double>(varInfo.depthPerPosition[pos])
-							<< std::endl;
-						}
-					}
-				}
-			}
-		}
-
-
-		OutputStream pairwiseDiffsOut(njh::files::make_path(setUp.pars_.directoryName_, "pairwisePopDiffMeasures.tab.txt"));
-		pairwiseDiffsOut << "identifier"
-				<< "\t" << popMeta << "1"
-				<< "\t" << "popMeta" << "1_totalHaps"
-				<< "\t" << "popMeta" << "1_uniqueHaps"
-				<< "\t" << "popMeta" << "1_samples"
-				<< "\t" << popMeta << "2"
-				<< "\t" << "popMeta" << "2_totalHaps"
-				<< "\t" << "popMeta" << "2_uniqueHaps"
-				<< "\t" << "popMeta" << "2_samples"
-				<< "\t" << "HsSample"
-								<<"\t"<<"HsEst"
-								<<"\t"<<"HtSample"
-								<<"\t"<<"HtEst"
-								<<"\t"<<"Gst"
-								<<"\t"<<"GstEst"
-								<<"\t"<<"JostD"
-								<<"\t"<<"JostDEst"
-								<<"\t"<<"ChaoA"
-								<<"\t"<<"ChaoB"
-								<<"\t"<<"JostDChaoEst" << std::endl;
-
-		auto pairwiseMeasurements = PopGenCalculator::getPairwisePopDiff(uniqueSeqsByMetaForwardStrand);
-		for(const auto & field1 : pairwiseMeasurements){
-			for(const auto & field2 : field1.second){
-				uint32_t total1 = 0;
-				uint32_t total2 = 0;
-				for(const auto & haps1 : *uniqueSeqsByMetaForwardStrand.at(field1.first)){
-					total1 += haps1.seqBase_.cnt_;
-				}
-				for(const auto & haps2 : *uniqueSeqsByMetaForwardStrand.at(field2.first)){
-					total2 += haps2.seqBase_.cnt_;
-				}
-				pairwiseDiffsOut << identifier
-						<< "\t" << field1.first
-						<< "\t" << total1
-						<< "\t" << uniqueSeqsByMetaForwardStrand.at(field1.first)->size()
-						<< "\t" << samplesByMeta.at(field1.first).size()
-						<< "\t" << field2.first
-						<< "\t" << total2
-						<< "\t" << uniqueSeqsByMetaForwardStrand.at(field2.first)->size()
-						<< "\t" << samplesByMeta.at(field2.first).size()
-				    << "\t" << field2.second.hsSample_
-						<< "\t" << field2.second.hsEst_
-						<< "\t" << field2.second.htSample_
-						<< "\t" << field2.second.htEst_
-						<< "\t" << field2.second.gst_
-						<< "\t" << field2.second.gstEst_
-						<< "\t" << field2.second.jostD_
-						<< "\t" << field2.second.jostDEst_
-						<< "\t" << field2.second.chaoA_
-						<< "\t" << field2.second.chaoB_
-						<< "\t" << field2.second.jostDChaoEst_
-						<< std::endl;
-			}
-		}
-		OutputStream popDiffOut(njh::files::make_path(setUp.pars_.directoryName_, "popDiffMeasures.tab.txt"));
-		popDiffOut << "identifier"
-				<<"\t"<<"totalHaps"
-				<<"\t"<<"uniqueHaps"
-				<<"\t"<<"nsamples"
-				<<"\t"<<"HsSample"
-				<<"\t"<<"HsEst"
-				<<"\t"<<"HtSample"
-				<<"\t"<<"HtEst"
-				<<"\t"<<"Gst"
-				<<"\t"<<"GstEst"
-				<<"\t"<<"JostD"
-				<<"\t"<<"JostDEst"
-				<<"\t"<<"ChaoA"
-				<<"\t"<<"ChaoB"
-				<<"\t"<<"JostDChaoEst" << std::endl;
-
-		//PopGenCalculator::PopDifferentiationMeasures temp;
-		auto diffMeasures = PopGenCalculator::getOverallPopDiffForSeqs(uniqueSeqsByMetaForwardStrand);
-
-		popDiffOut << identifier
-
-				<< "\t" << totalInputSeqs
-				<< "\t" << forwardStrandClusters.size()
-				<< "\t" << samplesCalled
-		    << "\t" << diffMeasures.hsSample_
-				<< "\t" << diffMeasures.hsEst_
-				<< "\t" << diffMeasures.htSample_
-				<< "\t" << diffMeasures.htEst_
-				<< "\t" << diffMeasures.gst_
-				<< "\t" << diffMeasures.gstEst_
-				<< "\t" << diffMeasures.jostD_
-				<< "\t" << diffMeasures.jostDEst_
-				<< "\t" << diffMeasures.chaoA_
-				<< "\t" << diffMeasures.chaoB_
-				<< "\t" << diffMeasures.jostDChaoEst_
-				<< std::endl;
-	}
 
 	alignerObj.processAlnInfoOutput(setUp.pars_.outAlnInfoDirName_, setUp.pars_.verbose_);
 	if(!varInfo.snpsFinal.empty() || ! varInfo.deletionsFinal.empty() || !varInfo.insertionsFinal.empty()){
@@ -1157,5 +679,9 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 
 
 
-}  // namespace njhseq
+
+
+}  //namespace njhseq
+
+
 
