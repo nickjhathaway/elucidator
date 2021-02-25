@@ -213,7 +213,7 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 			}
 		}
 	}
-	std::vector<identicalCluster> forwardStrandClusters = originalOrientationClusters;
+	std::vector<identicalCluster> forwardStrandClusters;
 
 
 
@@ -247,6 +247,8 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 			forwardStrandClusters.emplace_back(clus);
 			forwardStrandClusters.back().seqBase_.reverseComplementRead(false, true);
 		}
+	}else{
+		forwardStrandClusters = originalOrientationClusters;
 	}
 
 	njh::sort(forwardStrandClusters);

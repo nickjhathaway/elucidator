@@ -207,7 +207,7 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 		}
 
 	}
-	std::vector<identicalCluster> forwardStrandClusters = originalOrientationClusters;
+	std::vector<identicalCluster> forwardStrandClusters;
 
 
 	uint32_t samplesCalled = totalInputSeqs;
@@ -220,6 +220,8 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 			forwardStrandClusters.emplace_back(clus);
 			forwardStrandClusters.back().seqBase_.reverseComplementRead(false, true);
 		}
+	}else{
+		forwardStrandClusters = originalOrientationClusters;
 	}
 
 	njh::sort(forwardStrandClusters);
