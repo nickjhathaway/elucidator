@@ -57,6 +57,8 @@ class seqUtilsInfoRunner : public njh::progutils::ProgramRunner {
 
   static int qualCounts(const njh::progutils::CmdArgs & inputCommands);
 
+  static int callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & inputCommands);
+
   static int quickHaplotypeInformation(const njh::progutils::CmdArgs & inputCommands);
   static int getHapPopDifAndVariantsInfo(const njh::progutils::CmdArgs & inputCommands);
   static int oldQuickHaplotypeInformationAndVariants(const njh::progutils::CmdArgs & inputCommands);

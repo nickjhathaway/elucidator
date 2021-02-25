@@ -33,7 +33,9 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
  public:
 	kmerExpRunner();
 
-
+	static int getAvgKmerPositionPerSeq(const njh::progutils::CmdArgs & inputCommands);
+	static int filterPerSeqAvgKmerPosition(const njh::progutils::CmdArgs & inputCommands);
+	static int getAvgKmerPosition(const njh::progutils::CmdArgs & inputCommands);
 
 	static int convertKmerSearchToBinaryMatrix(const njh::progutils::CmdArgs & inputCommands);
 	static int kmerSearch(const njh::progutils::CmdArgs & inputCommands);

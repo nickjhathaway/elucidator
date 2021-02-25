@@ -31,6 +31,9 @@ namespace njhseq {
 
 seqUtilsInfoRunner::seqUtilsInfoRunner()
     : njh::progutils::ProgramRunner({
+
+	addFunc("callVariantsAgainstRefSeq", callVariantsAgainstRefSeq, false),
+
 	addFunc("getHpProfile", getHpProfile, false),
   addFunc("profileReadsToReference", profileReadsToReference, false),
   addFunc("findSeq", findSeq, false),
