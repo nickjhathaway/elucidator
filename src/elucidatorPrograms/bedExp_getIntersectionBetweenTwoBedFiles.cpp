@@ -118,7 +118,6 @@ int bedExpRunner::removeSubRegionsFromBedFile(const njh::progutils::CmdArgs & in
 
 
 
-	std::vector<uint32_t> allDistances;
 
 	for(const auto & inputRegion : inputRegions){
 		std::vector<std::shared_ptr<Bed6RecordCore>> overlappingRegions;
@@ -141,7 +140,7 @@ int bedExpRunner::removeSubRegionsFromBedFile(const njh::progutils::CmdArgs & in
 		}
 		if(overlappingRegions.size() > 0){
 			std::map<uint32_t, uint32_t> positionsCovered;
-			for(const auto pos : iter::range(inputRegion->length())){
+			for(const auto pos : iter::range(inputRegion->chromStart_, inputRegion->chromEnd_)){
 				positionsCovered[pos] = 0;
 			}
 			for(const auto & overReg : overlappingRegions){
@@ -164,10 +163,10 @@ int bedExpRunner::removeSubRegionsFromBedFile(const njh::progutils::CmdArgs & in
 			};
 
 			std::vector<StartEnd> regionsNotCovered;
-			for(const auto & posCov : positionsCovered){
-				if(0 == posCov.second ){
-					if(regionsNotCovered.empty() || regionsNotCovered.back().end_ != posCov.first){
-						regionsNotCovered.emplace_back(posCov.first);
+			for(const auto pos : iter::range(inputRegion->chromStart_, inputRegion->chromEnd_)){
+				if(0 == positionsCovered[pos] ){
+					if(regionsNotCovered.empty() || regionsNotCovered.back().end_ != pos){
+						regionsNotCovered.emplace_back(pos);
 					}else{
 						++regionsNotCovered.back().end_;
 					}
