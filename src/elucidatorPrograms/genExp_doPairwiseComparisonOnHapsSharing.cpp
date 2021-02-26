@@ -307,13 +307,14 @@ public:
 
 		  setUp.setOption(selectSamples, "--selectSamples", "Only analyze these select samples");
 		  setUp.setOption(selectTargets, "--selectTargets", "Only analyze these select targets");
-
+			setUp.setOption(numThreads, "--numThreads", "number of cpus to use");
+			setUp.setOption(majorOnly, "--calcMajorHapOnly", "calculate differences by major haplotype only");
 		}
-
+		uint32_t numThreads = 1;
 		bool majorOnly = false;
 	};
 
-	HapsEncodedMatrix(const SetWithExternalPars & pars){
+	HapsEncodedMatrix(const SetWithExternalPars & pars): pars_(pars){
 		TableReader hapTab(TableIOOpts(InOptions(pars.tableFnp), "\t", true));
 		hapTab.header_.checkForColumnsThrow(VecStr{pars.sampleCol, pars.targetNameCol, pars.popIDCol, pars.relAbundCol}, __PRETTY_FUNCTION__);
 
@@ -411,6 +412,7 @@ public:
 		}
 	}
 
+	SetWithExternalPars pars_;
 
 	std::unordered_set<std::string> sampNames_; //! used during the encoding phase
 	std::vector<std::string> sampNamesVec_; //! sample names, index is the key to the sample
@@ -497,6 +499,13 @@ public:
 		}
 	}
 
+	table getNumberTargetsPerSample() const {
+		table ret(VecStr { "sample", "targetCount" });
+		for (const auto row : iter::range(targetsEncodeBySamp_.size())) {
+			ret.addRow(sampNamesVec_[row], vectorSum(targetsEncodeBySamp_[row]));
+		}
+		return ret;
+	}
 
 	void addMeta(const bfs::path & metaFnp){
 		if(encodeKeysSet_){
@@ -608,7 +617,9 @@ public:
 
 	};
 
-	IndexResults genIndexMeasures(uint32_t numThreads, bool verbose = false) const{
+
+
+	IndexResults genIndexMeasures(bool verbose = false) const{
 		IndexResults ret(sampNames_.size());
 
 		PairwisePairFactory pFactor(sampNames_.size());
@@ -720,7 +731,7 @@ public:
 		};
 
 
-		njh::concurrent::runVoidFunctionThreaded(compSamps, numThreads);
+		njh::concurrent::runVoidFunctionThreaded(compSamps, pars_.numThreads);
 
 		return ret;
 	}
@@ -993,17 +1004,11 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 	bfs::path metaFnp;
 	VecStr metaFieldsToCalcPopDiffs{};
 	HapsEncodedMatrix::SetWithExternalPars pars;
-	bool calcMajorHapOnly = false;
-	uint32_t numThreads = 1;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.setOption(metaFnp, "--metaFnp", "Table of meta data for samples, needs a column named sample and each additonal column will be the meta data associated with that sample");
 	setUp.setOption(metaFieldsToCalcPopDiffs, "--metaFieldsToCalcPopDiffs", "Meta Fields To Calc Pop Diffs");
-
-	setUp.setOption(numThreads, "--numThreads", "number of cpus to use");
-	setUp.setOption(calcMajorHapOnly, "--calcMajorHapOnly", "calculate differences by major haplotype only");
-	pars.majorOnly = calcMajorHapOnly;
   pars.setDefaults(setUp);
 
   setUp.processDirectoryOutputName(bfs::path(bfs::basename(pars.tableFnp)).string() + "_doPairwiseComparisonOnHapsSharing_TODAY", true);
@@ -1023,8 +1028,14 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 	}
 	setUp.timer_.startNewLap("get hap probabilities");
 	haps.calcHapProbs();
+	setUp.timer_.startNewLap("writing sample info");
+
+	auto numTargetsPerSample = haps.getNumberTargetsPerSample();
+	numTargetsPerSample.sortTable("sample", true);
+	OutputStream outSamplesPerTarget(njh::files::make_path(setUp.pars_.directoryName_, "numTargetsPerSample.tab.txt"));
+	numTargetsPerSample.outPutContents(outSamplesPerTarget, "\t");
 	setUp.timer_.startNewLap("get index measures");
-	auto indexRes = haps.genIndexMeasures(numThreads, setUp.pars_.verbose_);
+	auto indexRes = haps.genIndexMeasures(setUp.pars_.verbose_);
 
 	OutputStream outSampNamesOut(njh::files::make_path(setUp.pars_.directoryName_, "sampleNames.tab.txt"));
 	OutputStream byTargetOut(njh::files::make_path(setUp.pars_.directoryName_, "percOfTarSharingAtLeastOneHap.tab.txt.gz"));
@@ -1102,7 +1113,7 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 			}
 		};
 
-		njh::concurrent::runVoidFunctionThreaded(getTargetInfo, numThreads);
+		njh::concurrent::runVoidFunctionThreaded(getTargetInfo, pars.numThreads);
 	}
 
 
@@ -1285,7 +1296,7 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 				}
 			};
 
-			njh::concurrent::runVoidFunctionThreaded(getPopDiffMeasures, numThreads);
+			njh::concurrent::runVoidFunctionThreaded(getPopDiffMeasures, pars.numThreads);
 		}
 	}
 
