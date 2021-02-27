@@ -67,6 +67,7 @@ class gffExpRunner : public njh::progutils::ProgramRunner {
 	static int reorientBedToIntersectingGeneInGff(const njh::progutils::CmdArgs & inputCommands);
 	static int setBedPositionsToIntersectingGeneInGff(const njh::progutils::CmdArgs & inputCommands);
 
+	static int gffTranscriptIDForGeneIDs(const njh::progutils::CmdArgs & inputCommands);
 	static int gffGetNumOfTranscriptsForGenes(const njh::progutils::CmdArgs & inputCommands);
 	static int gffPrintIds(const njh::progutils::CmdArgs & inputCommands);
 

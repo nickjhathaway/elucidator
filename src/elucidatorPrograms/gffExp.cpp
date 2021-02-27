@@ -67,6 +67,7 @@ gffExpRunner::gffExpRunner()
 					 addFunc("roughGffConversionToOther", roughGffConversionToOther, false),
 					 addFunc("appendGff", appendGff, false),
 					 addFunc("revCompGff", revCompGff, false),
+					 addFunc("gffTranscriptIDForGeneIDs", gffTranscriptIDForGeneIDs, false),
            },//
           "gffExp") {}
 class AmionoAcidPositionInfo {
@@ -76,18 +77,43 @@ public:
 			inputInfoFnp_(inputInfoFnp),
 			infoTab_(inputInfoFnp, "\t", true),
 			zeroBased_(zeroBased){
-		infoTab_.checkForColumnsThrow(VecStr { "ID", "AAPosition" },
-				__PRETTY_FUNCTION__);
-		/**@todo add readding in the rest of the columns as possible meta data to be associated with amino acid position*/
-		auto idsVec = infoTab_.getColumnLevels("ID");
+		VecStr oldColNames = infoTab_.columnNames_;
+		njh::for_each(infoTab_.columnNames_,[](std::string & col){
+			njh::strToLower(col);
+		});
+		const std::string idColName = "id";
+		const std::string aaPosColName = "aaposition";
+		VecStr expectedColuns { idColName, aaPosColName };
+		infoTab_.checkForColumnsThrow(expectedColuns, __PRETTY_FUNCTION__);
+		/**@todo add reading in the rest of the columns as possible meta data to be associated with amino acid position*/
+		auto idsVec = infoTab_.getColumnLevels(idColName);
 		ids_ = std::set<std::string>(idsVec.begin(), idsVec.end());
-		for (const auto & row : infoTab_.content_) {
-			aminoPositionsPerId_[row[infoTab_.getColPos("ID")]].emplace(
+
+		VecStr additionalColumns;
+		for(const auto & col : infoTab_.columnNames_){
+			if(!njh::in(col, expectedColuns)){
+				additionalColumns.emplace_back(col);
+			}
+		}
+		std::vector<uint32_t> addColPositions;
+		for(const auto & col : additionalColumns){
+			addColPositions.emplace_back(infoTab_.getColPos(col));
+		}
+		for (const auto &row : infoTab_.content_) {
+			auto aaPos =
 					zeroBased ?
 							njh::StrToNumConverter::stoToNum<uint32_t>(
-									row[infoTab_.getColPos("AAPosition")]) :
+									row[infoTab_.getColPos(aaPosColName)]) :
 							njh::StrToNumConverter::stoToNum<uint32_t>(
-									row[infoTab_.getColPos("AAPosition")]) - 1);
+									row[infoTab_.getColPos(aaPosColName)]) - 1;
+			auto idName = row[infoTab_.getColPos(idColName)];
+			aminoPositionsPerId_[idName].emplace(aaPos);
+			//add any additional column as meta data
+			MetaDataInName meta;
+			for (const auto &pos : addColPositions) {
+				meta.addMeta(oldColNames[pos], row[pos]);
+			}
+			metaDataForAAPos_[idName][aaPos] = meta;
 		}
 	}
 	const bfs::path inputInfoFnp_;
@@ -95,21 +121,24 @@ public:
 	bool zeroBased_ = false;
 	std::set<std::string> ids_;
 	std::map<std::string, std::set<uint32_t>> aminoPositionsPerId_;
+	std::map<std::string, std::unordered_map<uint32_t, MetaDataInName>> metaDataForAAPos_;
 
 };//
+
+
 int gffExpRunner::aaPositionsToBed(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path proteinMutantTypingFnp = "";
 	bfs::path gffFnp = "";
 	bfs::path twoBitFnp = "";
 	bool zeroBased = false;
 	bool collapsePerId = false;
-	OutOptions outOpts(bfs::path("out.bed"));
+	OutOptions outOpts(bfs::path(""), ".bed");
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.setOption(proteinMutantTypingFnp, "--aaPositionsFile", "Amino Acid positions file, must have at least two columns; ID and aaPosition", true);
 	setUp.setOption(gffFnp, "--gff", "GFF (gene feature format) file", true);
 	setUp.setOption(twoBitFnp, "--2bit", "2bit file of genome", true);
-	setUp.setOption(zeroBased, "--zeroBased", "Zero based");
+	setUp.setOption(zeroBased, "--zeroBased", "Zero based amino acid positioning in input file");
 	setUp.setOption(collapsePerId, "--collapsePerId", "Create a bed record that collapses all the amino acids from id rather than each position individually");
 	setUp.processWritingOptions(outOpts);
 
@@ -122,7 +151,7 @@ int gffExpRunner::aaPositionsToBed(const njh::progutils::CmdArgs & inputCommands
 	TwoBit::TwoBitFile tReader(twoBitFnp);
 	for (const auto & positions : aaInfos.aminoPositionsPerId_) {
 		auto gsInfos = njh::mapAt(genes, positions.first)->generateGeneSeqInfo(tReader, false);
-		/**@todo need to fix, just taking the first transcipt so this compiles for the time*/
+		/**@todo need to fix, just taking the first transcript so this compiles for the time*/
 		auto gsInfo = gsInfos.begin()->second;
 		if (collapsePerId && positions.second.size() > 1) {
 			std::vector<uint32_t> posVec(positions.second.begin(),
@@ -154,6 +183,32 @@ int gffExpRunner::aaPositionsToBed(const njh::progutils::CmdArgs & inputCommands
 }
 
 
+int gffExpRunner::gffTranscriptIDForGeneIDs(const njh::progutils::CmdArgs & inputCommands){
+	bfs::path inputFile;
+	std::set<std::string> geneIDs;
+	OutOptions outOpts(bfs::path(""), ".tab.txt");
+	seqSetUp setUp(inputCommands);
+	setUp.description_ = "Print all transcript IDs for gene IDs, only works if GFF is sorted with gene parent coming before mRNA";
+	setUp.setOption(inputFile, "--gff", "Input gff file", true);
+	setUp.setOption(geneIDs, "--geneIDs", "geneIDs", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	auto genes = GeneFromGffs::getGenesFromGffForIds(inputFile, geneIDs);
+
+
+	OutputStream out(outOpts);
+	out << "GeneID\tTranscript\tNumTranscripts" << std::endl;
+	for(const auto & gene : geneIDs){
+		for(const auto & mRNA : njh::mapAt(genes,gene)->mRNAs_){
+			out << gene
+					<< "\t" << mRNA->getIDAttr()
+					<< "\t" << genes.at(gene)->mRNAs_.size() << std::endl;
+		}
+	}
+
+	return 0;
+}
 
 int gffExpRunner::gffGetNumOfTranscriptsForGenes(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path inputFile;
@@ -167,7 +222,7 @@ int gffExpRunner::gffGetNumOfTranscriptsForGenes(const njh::progutils::CmdArgs &
 	BioDataFileIO<GFFCore> reader{(IoOptions(InOptions(inputFile)))};
 	reader.openIn();
 	OutputStream out(outOpts);
-	out << "GeneID\tTranscript" << std::endl;
+	out << "GeneID\tTranscripts" << std::endl;
 	uint32_t count = 0;
 	std::string line = "";
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
@@ -211,13 +266,6 @@ int gffExpRunner::gffGetNumOfTranscriptsForGenes(const njh::progutils::CmdArgs &
 	return 0;
 }
 
-
-/**
- *
-
- * @param inputCommands
- * @return
- */
 
 
 int gffExpRunner::removeFastaFromGffFile(const njh::progutils::CmdArgs & inputCommands){
