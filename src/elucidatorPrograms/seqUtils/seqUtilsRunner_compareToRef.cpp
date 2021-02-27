@@ -41,20 +41,24 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 	bool forceMatch = false;
 	bool dontSkipSameName = false;
 	OutOptions outOpts(bfs::path("refComparisonInfo.tab.txt"));
+	bool setReverse = false;
+
   seqUtilsSetUp setUp(inputCommands);
   setUp.pars_.colOpts_.kmerOpts_.kLength_ = 5;
   setUp.setOption(dontSkipSameName, "--dontSkipSameName", "By default reads with the same name are skipped, use this flag to compare reads even if they have the same name");
   setUp.setOption(kmerCutOff, "--kmerCutOff", "kmer Cut Off");
   setUp.setOption(forceMatch, "--forceMatch", "Force finding a match");
   setUp.setOption(numThreads, "--numThreads", "Number of threads to use when comparing");
+  setUp.setOption(setReverse, "--checkReverseComplement", "Check reverse complement");
+
   setUp.processWritingOptions(outOpts);
   setUp.setUpCompareToRef();
 
   // read in the clusters
 
-	bool setReverse = false;
 	auto inputSeqs = createKmerReadVec(setUp.pars_.ioOptions_, setUp.pars_.colOpts_.kmerOpts_.kLength_, setReverse);
 	auto refSeqs = createKmerReadVec(setUp.pars_.refIoOptions_, setUp.pars_.colOpts_.kmerOpts_.kLength_, setReverse);
+
 
 
 
@@ -96,12 +100,12 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 //         "ndel\t>2bIndel\tlqMismatch\thqMismatch" << std::endl;
 	if (setUp.pars_.colOpts_.alignOpts_.eventBased_) {
 		profileInfoFile
-				<< "ReadNumber\tReadId\tReadFraction\tBestRef\tscore\talnScore\thqScore\tkDist-"
+				<< "ReadNumber\tReadId\tReadFraction\tBestRef\trevComp\tscore\talnScore\thqScore\tkDist-"
 				<< setUp.pars_.colOpts_.kmerOpts_.kLength_ << "\t1bIndel\t2bI"
 						"ndel\t>2bIndel\tlqMismatch\thqMismatch" << std::endl;
 	} else {
 		profileInfoFile
-				<< "ReadNumber\tReadId\tReadFraction\tBestRef\tscore\tperId\thqScore\tkDist-"
+				<< "ReadNumber\tReadId\tReadFraction\tBestRef\trevComp\tscore\tperId\thqScore\tkDist-"
 				<< setUp.pars_.colOpts_.kmerOpts_.kLength_ << "\t1bIndel\t2bI"
 						"ndel\t>2bIndel\tlqMismatch\thqMismatch" << std::endl;
 	}
@@ -128,53 +132,107 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
   alnPool.initAligners();
 
 
-  std::function<void()> compareInput = [&dontSkipSameName,&outMut,&profileInfoFile,&tempFile,&alnPool,&setUp,&inputSeqs,&refSeqs,&counter,&pBar,&posQueue,&kmerCutOff,&forceMatch](){
+  std::function<void()> compareInput = [&dontSkipSameName,&outMut,&profileInfoFile,&tempFile,&alnPool,
+																				&setUp,&inputSeqs,&refSeqs,&counter,&pBar,&posQueue,&kmerCutOff,
+																				&forceMatch, &setReverse](){
   	std::vector<uint32_t> subPositions;
   	auto curAligner = alnPool.popAligner();
   	while(posQueue.getVals(subPositions, 5	)){
   		std::unordered_map<uint32_t, std::vector<uint32_t>> bestRefsForPos;
+  		std::unordered_map<uint32_t, std::vector<uint32_t>> bestRefsForPosRevComp;
+
 		for(const auto pos : iter::reversed(subPositions)){
 				const auto & input = inputSeqs[pos];
+
 		    double bestScore = std::numeric_limits<double>::lowest();
 		    std::vector<uint32_t> bestRefs;
-		    double currentKmerCutOff = kmerCutOff;
-		    bool run = true;
-		    while(run){
-			    for (const auto refPos : iter::range(refSeqs.size())) {
-			      const auto & ref = refSeqs[refPos];
-						if (!dontSkipSameName && ref->seqBase_.name_ == input->seqBase_.name_) {
-							if(1 == refSeqs.size()) {
-								run = false;
-								currentKmerCutOff = -0.05;
+		    std::vector<uint32_t> bestRefsRevComp;
+
+		    {//forward
+			    double currentKmerCutOff = kmerCutOff;
+			    bool run = true;
+			    while(run){
+				    for (const auto refPos : iter::range(refSeqs.size())) {
+				      const auto & ref = refSeqs[refPos];
+							if (!dontSkipSameName && ref->seqBase_.name_ == input->seqBase_.name_) {
+								if(1 == refSeqs.size()) {
+									run = false;
+									currentKmerCutOff = -0.05;
+								}
+								continue;
 							}
-							continue;
+				      if(ref->compareKmers(*input).second < currentKmerCutOff){
+				       	continue;
+				      }
+							curAligner->alignCache(ref, input, setUp.pars_.local_);
+							double currentScore = 0;
+							if(setUp.pars_.colOpts_.alignOpts_.eventBased_) {
+								curAligner->profileAlignment(ref, input, false, true, false);
+								currentScore = curAligner->comp_.distances_.eventBasedIdentity_;
+							} else {
+								currentScore = curAligner->parts_.score_;
+							}
+							if (currentScore == bestScore) {
+								bestRefs.push_back(refPos);
+							}
+							if (currentScore > bestScore) {
+								bestRefs.clear();
+								bestRefs.push_back(refPos);
+								bestScore = currentScore;
+							}
 						}
-			      if(ref->compareKmers(*input).second < currentKmerCutOff){
-			       	continue;
-			      }
-						curAligner->alignCache(ref, input, setUp.pars_.local_);
-						double currentScore = 0;
-						if(setUp.pars_.colOpts_.alignOpts_.eventBased_) {
-							curAligner->profileAlignment(ref, input, false, true, false);
-							currentScore = curAligner->comp_.distances_.eventBasedIdentity_;
-						} else {
-							currentScore = curAligner->parts_.score_;
-						}
-						if (currentScore == bestScore) {
-							bestRefs.push_back(refPos);
-						}
-						if (currentScore > bestScore) {
-							bestRefs.clear();
-							bestRefs.push_back(refPos);
-							bestScore = currentScore;
-						}
-					}
-			    bestRefsForPos[pos] = bestRefs;
-			    run = false;
-			    if(bestRefs.empty() && forceMatch && currentKmerCutOff > 0){
-			    		run = true;
+				    bestRefsForPos[pos] = bestRefs;
+				    run = false;
+				    if(bestRefs.empty() && forceMatch && currentKmerCutOff > 0){
+				    		run = true;
+				    }
+				    currentKmerCutOff -= 0.05;
 			    }
-			    currentKmerCutOff -= 0.05;
+		    }
+		    if(setReverse){
+			    double currentKmerCutOff = kmerCutOff;
+			    bool run = true;
+			    seqInfo revComp = input->seqBase_;
+			    revComp.reverseComplementRead(true, false);
+			    while(run){
+				    for (const auto refPos : iter::range(refSeqs.size())) {
+				      const auto & ref = refSeqs[refPos];
+							if (!dontSkipSameName && ref->seqBase_.name_ == input->seqBase_.name_) {
+								if(1 == refSeqs.size()) {
+									run = false;
+									currentKmerCutOff = -0.05;
+								}
+								continue;
+							}
+				      if(ref->compareKmersRevComp(*input).second < currentKmerCutOff){
+				       	continue;
+				      }
+							curAligner->alignCache(ref, revComp, setUp.pars_.local_);
+							double currentScore = 0;
+							if(setUp.pars_.colOpts_.alignOpts_.eventBased_) {
+								curAligner->profileAlignment(ref, revComp, false, true, false);
+								currentScore = curAligner->comp_.distances_.eventBasedIdentity_;
+							} else {
+								currentScore = curAligner->parts_.score_;
+							}
+							if (currentScore == bestScore) {
+								bestRefsRevComp.push_back(refPos);
+							}
+							if (currentScore > bestScore) {
+								bestRefs.clear(); // better match than forward, clear it
+								bestRefsRevComp.clear();
+								bestRefsRevComp.push_back(refPos);
+								bestScore = currentScore;
+							}
+						}
+				    bestRefsForPos[pos] = bestRefs;
+				    bestRefsForPosRevComp[pos] = bestRefsRevComp;
+				    run = false;
+				    if(bestRefsRevComp.empty() && forceMatch && currentKmerCutOff > 0){
+				    		run = true;
+				    }
+				    currentKmerCutOff -= 0.05;
+			    }
 		    }
 			}//quickHaplotypeInformationDeeper
 			{
@@ -184,10 +242,11 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 				}
 				for(const auto & bestRefs : bestRefsForPos) {
 					const auto & input = inputSeqs[bestRefs.first];
-					if(bestRefs.second.empty()) {
+
+					if(bestRefs.second.empty() && bestRefsForPosRevComp[bestRefs.first].empty()) {
 						profileInfoFile << counter << "\t" << input->seqBase_.name_ << "\t"
 						<< input->seqBase_.frac_ << "\t" << "*"
-						<< "\t" << "*";
+						<< "\t" << "*" << "\t" << "*";
 						profileInfoFile << "\t" << "*";;
 						profileInfoFile
 						<< "\t" << "*"
@@ -198,7 +257,8 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 						<< "*" << "\t"
 						<< "*" << "\t"
 						<< "*" << std::endl;
-					} else {
+					}
+					if (!bestRefs.second.empty()){
 				    for (const auto& bestPos : bestRefs.second) {
 				    	const auto & best = refSeqs[bestPos];
 				      curAligner->alignCache(best, input, setUp.pars_.local_);
@@ -213,6 +273,42 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 				      curAligner->alignObjectB_.seqBase_.outPutFastq(tempFile);
 				      profileInfoFile << counter << "\t" << input->seqBase_.name_ << "\t"
 									<< input->seqBase_.frac_ << "\t" << best->seqBase_.name_
+									<< "\t" << "false"
+									<< "\t" << score;
+				      if(setUp.pars_.colOpts_.alignOpts_.eventBased_){
+				      		profileInfoFile << "\t" << curAligner->parts_.score_;;
+				      }else{
+				      		profileInfoFile << "\t" << curAligner->comp_.distances_.eventBasedIdentity_;;
+				      }
+				      profileInfoFile
+									<< "\t" << curAligner->comp_.distances_.eventBasedIdentityHq_
+									<< "\t"
+									<< input->compareKmers(*best).second << "\t"
+									<< curAligner->comp_.oneBaseIndel_ << "\t"
+									<< curAligner->comp_.twoBaseIndel_<< "\t"
+									<< curAligner->comp_.largeBaseIndel_ << "\t"
+									<< curAligner->comp_.lqMismatches_ << "\t"
+									<< curAligner->comp_.hqMismatches_ << std::endl;
+				    }
+					}
+					if (!bestRefsForPosRevComp[bestRefs.first].empty()){
+				    for (const auto& bestPos : bestRefsForPosRevComp[bestRefs.first]) {
+				    	const auto & best = refSeqs[bestPos];
+					    seqInfo revComp = input->seqBase_;
+					    revComp.reverseComplementRead(true, false);
+				      curAligner->alignCache(best, revComp, setUp.pars_.local_);
+				      double score = 0;
+				      curAligner->profileAlignment(best, revComp, false, true, false);
+				      if(setUp.pars_.colOpts_.alignOpts_.eventBased_){
+				      		score = curAligner->comp_.distances_.eventBasedIdentity_;
+				      } else {
+				      		score = curAligner->parts_.score_;
+				      }
+				      curAligner->alignObjectA_.seqBase_.outPutFastq(tempFile);
+				      curAligner->alignObjectB_.seqBase_.outPutFastq(tempFile);
+				      profileInfoFile << counter << "\t" << input->seqBase_.name_ << "\t"
+									<< input->seqBase_.frac_ << "\t" << best->seqBase_.name_
+									<< "\t" << "true"
 									<< "\t" << score;
 				      if(setUp.pars_.colOpts_.alignOpts_.eventBased_){
 				      		profileInfoFile << "\t" << curAligner->parts_.score_;;
