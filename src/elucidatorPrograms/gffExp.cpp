@@ -81,11 +81,16 @@ public:
 		njh::for_each(infoTab_.columnNames_,[](std::string & col){
 			njh::strToLower(col);
 		});
-		const std::string idColName = "id";
-		const std::string aaPosColName = "aaposition";
+		infoTab_.setColNamePositions();
+
+		std::string idColName = "id";
+		if(njh::in(std::string("transcriptid"), infoTab_.columnNames_)){
+			idColName = "transcriptid";
+		}
+		std::string aaPosColName = "aaposition";
 		VecStr expectedColuns { idColName, aaPosColName };
 		infoTab_.checkForColumnsThrow(expectedColuns, __PRETTY_FUNCTION__);
-		/**@todo add reading in the rest of the columns as possible meta data to be associated with amino acid position*/
+
 		auto idsVec = infoTab_.getColumnLevels(idColName);
 		ids_ = std::set<std::string>(idsVec.begin(), idsVec.end());
 
@@ -132,6 +137,7 @@ int gffExpRunner::aaPositionsToBed(const njh::progutils::CmdArgs & inputCommands
 	bfs::path twoBitFnp = "";
 	bool zeroBased = false;
 	bool collapsePerId = false;
+	std::string addMetaField = "";
 	OutOptions outOpts(bfs::path(""), ".bed");
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -139,6 +145,7 @@ int gffExpRunner::aaPositionsToBed(const njh::progutils::CmdArgs & inputCommands
 	setUp.setOption(gffFnp, "--gff", "GFF (gene feature format) file", true);
 	setUp.setOption(twoBitFnp, "--2bit", "2bit file of genome", true);
 	setUp.setOption(zeroBased, "--zeroBased", "Zero based amino acid positioning in input file");
+	setUp.setOption(addMetaField, "--addMetaField", "Add Meta Field");
 	setUp.setOption(collapsePerId, "--collapsePerId", "Create a bed record that collapses all the amino acids from id rather than each position individually");
 	setUp.processWritingOptions(outOpts);
 
@@ -146,36 +153,118 @@ int gffExpRunner::aaPositionsToBed(const njh::progutils::CmdArgs & inputCommands
 	OutputStream out(outOpts);
 	AmionoAcidPositionInfo aaInfos(proteinMutantTypingFnp, zeroBased);
 
-	auto genes = GeneFromGffs::getGenesFromGffForIds(gffFnp, aaInfos.ids_);
+	auto genes = GeneFromGffs::getGenesFromGffForGuessedTranscriptOrGeneIds(gffFnp, aaInfos.ids_);
 
 	TwoBit::TwoBitFile tReader(twoBitFnp);
 	for (const auto & positions : aaInfos.aminoPositionsPerId_) {
-		auto gsInfos = njh::mapAt(genes, positions.first)->generateGeneSeqInfo(tReader, false);
-		/**@todo need to fix, just taking the first transcript so this compiles for the time*/
-		auto gsInfo = gsInfos.begin()->second;
-		if (collapsePerId && positions.second.size() > 1) {
-			std::vector<uint32_t> posVec(positions.second.begin(),
-					positions.second.end());
-			auto minAAPos = vectorMinimum(posVec);
-			auto maxAAPos = vectorMaximum(posVec);
-			auto posBed = gsInfo->genBedFromAAPositions(minAAPos, maxAAPos + 1);
-			if (zeroBased) {
-				posBed.name_ = njh::pasteAsStr(positions.first, "-", "[AA", minAAPos,
-						"-", maxAAPos + 1, ")");
-			} else {
-				posBed.name_ = njh::pasteAsStr(positions.first, "-", "[AA",
-						minAAPos + 1, "-", maxAAPos + 1, "]");
-			}
-			out << posBed.toDelimStr() << std::endl;
-		} else {
-			for (const auto & pos : positions.second) {
-				auto posBed = gsInfo->genBedFromAAPositions(pos, pos + 1);
-				if (zeroBased) {
-					posBed.name_ = njh::pasteAsStr(positions.first, "-", "AA", pos);
-				} else {
-					posBed.name_ = njh::pasteAsStr(positions.first, "-", "AA", pos + 1);
+		bool byTranscript = false;
+		std::string geneID = positions.first;
+		for(const auto & gene : genes){
+			for(const auto & mRNA : gene.second->mRNAs_){
+				if(mRNA->getIDAttr() == positions.first){
+					byTranscript = true;
+					geneID = gene.first;
+					break;
 				}
-				out << posBed.toDelimStr() << std::endl;
+			}
+		}
+
+		auto gsInfos = njh::mapAt(genes, geneID)->generateGeneSeqInfo(tReader, false);
+		MetaDataInName metaForCollapse;
+		if (collapsePerId && positions.second.size() > 1) {
+			std::unordered_map<std::string, VecStr> combinedMeta;
+			std::unordered_map<std::string, std::unordered_set<std::string>> combinedMetaCollapsed;
+			for(const auto & pos : positions.second){
+				for(const auto & metaFields : aaInfos.metaDataForAAPos_[positions.first][pos].meta_){
+					combinedMetaCollapsed[metaFields.first].emplace(metaFields.second);
+					combinedMeta[metaFields.first].emplace_back(njh::pasteAsStr(pos, "-", metaFields.second));
+				}
+			}
+			for(const auto & field : combinedMeta){
+				if(combinedMetaCollapsed[field.first].size() == 1){
+					std::string metaField = *combinedMetaCollapsed[field.first].begin();
+					metaForCollapse.addMeta(field.first,metaField);
+				}else{
+					metaForCollapse.addMeta(field.first, njh::conToStr(field.second, ","));
+				}
+			}
+			metaForCollapse.addMeta("GeneID", geneID);
+		}
+		if(byTranscript){
+			auto gsInfo = njh::mapAt(gsInfos, positions.first);
+			if (collapsePerId && positions.second.size() > 1) {
+				metaForCollapse.addMeta("transcript", positions.first);
+				std::vector<uint32_t> posVec(positions.second.begin(),
+						positions.second.end());
+				auto minAAPos = vectorMinimum(posVec);
+				auto maxAAPos = vectorMaximum(posVec);
+				auto posBed = gsInfo->genBedFromAAPositions(minAAPos, maxAAPos + 1);
+				posBed.extraFields_.emplace_back(metaForCollapse.createMetaName());
+				if (zeroBased) {
+					posBed.name_ = njh::pasteAsStr(positions.first, "-", "[AA", minAAPos,
+							"-", maxAAPos + 1, ")");
+				} else {
+					posBed.name_ = njh::pasteAsStr(positions.first, "-", "[AA", minAAPos + 1, "-", maxAAPos + 1, "]");
+				}
+				out << posBed.toDelimStrWithExtra() << std::endl;
+			} else {
+				for (const auto & pos : positions.second) {
+					MetaDataInName meta = aaInfos.metaDataForAAPos_[positions.first][pos];
+					meta.addMeta("transcript", positions.first);
+					meta.addMeta("GeneID", geneID);
+
+					auto posBed = gsInfo->genBedFromAAPositions(pos, pos + 1);
+					posBed.extraFields_.emplace_back(meta.createMetaName());
+					std::string add = "";
+					if("" != addMetaField && meta.containsMeta(addMetaField)){
+						add = "-" + meta.getMeta(addMetaField);
+					}
+					if (zeroBased) {
+						posBed.name_ = njh::pasteAsStr(positions.first, add, "-", "AA", pos);
+					} else {
+						posBed.name_ = njh::pasteAsStr(positions.first, add, "-", "AA", pos + 1);
+					}
+					out << posBed.toDelimStrWithExtra() << std::endl;
+				}
+			}
+		}else{
+			for(const auto & gsInfo : gsInfos){
+				if (collapsePerId && positions.second.size() > 1) {
+					std::vector<uint32_t> posVec(positions.second.begin(),
+							positions.second.end());
+					auto minAAPos = vectorMinimum(posVec);
+					auto maxAAPos = vectorMaximum(posVec);
+					metaForCollapse.addMeta("transcript", gsInfo.first);
+					auto posBed = gsInfo.second->genBedFromAAPositions(minAAPos, maxAAPos + 1);
+					posBed.extraFields_.emplace_back(metaForCollapse.createMetaName());
+
+					if (zeroBased) {
+						posBed.name_ = njh::pasteAsStr(gsInfo.first, "-", "[AA", minAAPos,
+								"-", maxAAPos + 1, ")");
+					} else {
+						posBed.name_ = njh::pasteAsStr(gsInfo.first, "-", "[AA", minAAPos + 1, "-", maxAAPos + 1, "]");
+					}
+					out << posBed.toDelimStrWithExtra() << std::endl;
+				} else {
+					for (const auto & pos : positions.second) {
+						MetaDataInName meta = aaInfos.metaDataForAAPos_[positions.first][pos];
+						meta.addMeta("transcript", gsInfo.first);
+						meta.addMeta("GeneID", geneID);
+
+						auto posBed = gsInfo.second->genBedFromAAPositions(pos, pos + 1);
+						posBed.extraFields_.emplace_back(meta.createMetaName());
+						std::string add = "";
+						if("" != addMetaField && meta.containsMeta(addMetaField)){
+							add = "-" + meta.getMeta(addMetaField);
+						}
+						if (zeroBased) {
+							posBed.name_ = njh::pasteAsStr(gsInfo.first, add, "-", "AA", pos);
+						} else {
+							posBed.name_ = njh::pasteAsStr(gsInfo.first, add, "-", "AA", pos + 1);
+						}
+						out << posBed.toDelimStrWithExtra() << std::endl;
+					}
+				}
 			}
 		}
 	}
