@@ -587,12 +587,12 @@ int metaExpRunner::excludeSeqsFileWithNumericMetaCutOff(const njh::progutils::Cm
 
 	std::function<bool(const MetaDataInName &)> exclusionCheck =
 			[&metaValue,&metaField](const MetaDataInName & mvalues) {
-				return mvalues.getMeta<double>(metaField) <=metaValue;
+				return "NA" == mvalues.getMeta(metaField) || mvalues.getMeta<double>(metaField) <=metaValue;
 			};
 
 	if (aboveCutOff) {
 		exclusionCheck = [&metaValue,&metaField](const MetaDataInName & mvalues) {
-			return mvalues.getMeta<double>(metaField) >=metaValue;
+			return "NA" == mvalues.getMeta(metaField) || mvalues.getMeta<double>(metaField) >=metaValue;
 		};
 	}
 
