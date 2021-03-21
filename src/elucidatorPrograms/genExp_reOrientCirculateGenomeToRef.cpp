@@ -22,13 +22,12 @@ namespace njhseq {
 int genExpRunner::reOrientCirculateGenomeToRef(const njh::progutils::CmdArgs & inputCommands){
 
 	readVecTrimmer::trimCircularGenomeToRefPars trimPars;
-	uint32_t extend = 0;
 	auto outSeqOpts = SeqIOOptions::genFastaOut("");
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.processWritingOptions(outSeqOpts.out_);
-	setUp.setOption(extend, "--extend", "extend this amount by adding this length to the front from the back and to the back from the front");
+	setUp.setOption(trimPars.extend_, "--extend", "extend this amount by adding this length to the front from the back and to the back from the front");
 
 	setUp.setOption(trimPars.kmerLength_, "--kmerLength", "kmer Length");
 	setUp.processReadInNames(true);
@@ -72,7 +71,7 @@ int genExpRunner::reOrientCirculateGenomeToRef(const njh::progutils::CmdArgs & i
 		}
 	}
 	KmerMaps emptyMaps;
-	maxSize += extend * 2;
+	maxSize += trimPars.extend_ * 2;
 	aligner alignerObj(maxSize, setUp.pars_.gapInfo_,
 			setUp.pars_.scoring_, emptyMaps, setUp.pars_.qScorePars_,
 			setUp.pars_.colOpts_.alignOpts_.countEndGaps_,
@@ -84,10 +83,10 @@ int genExpRunner::reOrientCirculateGenomeToRef(const njh::progutils::CmdArgs & i
 	seqInfo seq;
 	reader.openIn();
 	while(reader.readNextRead(seq)){
-		if(extend > 0){
-			if(len(seq) > extend){
-				auto front = seq.getSubRead(0, extend);
-				auto back = seq.getSubRead(len(seq) - extend);
+		if(trimPars.extend_ > 0){
+			if(len(seq) > trimPars.extend_){
+				auto front = seq.getSubRead(0, trimPars.extend_);
+				auto back = seq.getSubRead(len(seq) - trimPars.extend_);
 				seq.prepend(back);
 				seq.append(front);
 			}else{
