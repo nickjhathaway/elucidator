@@ -66,6 +66,7 @@ seqUtilsInfoRunner::seqUtilsInfoRunner()
 	addFunc("multipleAlnProteinToPcaInput", multipleAlnProteinToPcaInput, false),
 	addFunc("getHapPopDifAndVariantsInfo", getHapPopDifAndVariantsInfo, false),
 	addFunc("getSlidingEntropy", getSlidingEntropy, false),
+	addFunc("callVariantsAgainstRefSeqIndividual", callVariantsAgainstRefSeqIndividual, false),
 	},
                     "seqUtilsInfo") {}
 //

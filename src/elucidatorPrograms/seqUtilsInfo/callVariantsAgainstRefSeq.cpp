@@ -32,6 +32,176 @@ namespace njhseq {
 
 
 
+
+int seqUtilsInfoRunner::callVariantsAgainstRefSeqIndividual(const njh::progutils::CmdArgs & inputCommands) {
+
+
+
+
+	OutOptions outOpts(bfs::path(""), ".tab.txt");
+
+	bfs::path bedFnp = "";
+	uint32_t outwardsExpand = 5;
+
+	bfs::path genomeFnp = "";
+
+
+
+	MultiGenomeMapper::inputParameters gPars;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.processReadInNames(true);
+	setUp.processWritingOptions(outOpts);
+	setUp.processAlnInfoInput();
+	setUp.setOption(outwardsExpand, "--outwardsExpand", "The amount to expand outwards from given region when determining variants positions with extracted ref seq");
+
+	setUp.setOption(bedFnp,    "--bed",    "A bed file of the location for the extraction", true);
+	setUp.setOption(genomeFnp, "--genome", "A reference genome to compare against", true);
+	if(!bfs::is_regular_file(genomeFnp)){
+		setUp.failed_ = true;
+		setUp.addWarning(njh::pasteAsStr(genomeFnp, " should be a file, not a directory"));
+	}
+	gPars.genomeDir_ = njh::files::normalize(genomeFnp.parent_path());
+	gPars.primaryGenome_ = bfs::basename(genomeFnp);
+	gPars.primaryGenome_ = gPars.primaryGenome_.substr(0, gPars.primaryGenome_.rfind("."));
+	gPars.selectedGenomes_ = {gPars.primaryGenome_};
+
+	setUp.finishSetUp(std::cout);
+
+
+	njh::files::checkExistenceThrow(bedFnp, __PRETTY_FUNCTION__);
+	njh::files::checkExistenceThrow(genomeFnp, __PRETTY_FUNCTION__);
+	OutputStream out(outOpts);
+	auto beds = getBeds(bedFnp);
+	if(beds.empty()){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error no records found in " << bedFnp << "\n";
+		throw std::runtime_error{ss.str()};
+	}
+	MultiGenomeMapper gMapper(gPars);
+	gMapper.loadInGenomes();
+	gMapper.setUpGenomes();
+	auto gPos = beds.front();
+
+	uint64_t maxLen = 0;
+	SeqInput reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+
+	std::vector<identicalCluster> originalOrientationClusters;
+	seqInfo seq;
+
+
+
+	// read in reads and collapse to unique
+	while(reader.readNextRead(seq)) {
+		//get meta keys if available
+		readVec::handelLowerCaseBases(seq, setUp.pars_.ioOptions_.lowerCaseBases_);
+		if(setUp.pars_.ioOptions_.removeGaps_){
+			seq.removeGaps();
+		}
+		bool found = false;
+		for (auto &cIter : originalOrientationClusters) {
+			if (cIter.seqBase_.seq_ == seq.seq_) {
+				cIter.addRead(seq);
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			originalOrientationClusters.emplace_back(seq);
+		}
+	}
+	std::vector<identicalCluster> forwardStrandClusters;
+	if (gPos->reverseStrand()) {
+		for (const auto &clus : originalOrientationClusters) {
+			forwardStrandClusters.emplace_back(clus);
+			forwardStrandClusters.back().seqBase_.reverseComplementRead(false, true);
+		}
+	} else {
+		forwardStrandClusters = originalOrientationClusters;
+	}
+
+	njh::sort(forwardStrandClusters);
+
+
+	uint32_t oldLen = gPos->length();
+	BedUtility::extendLeftRight(*gPos, outwardsExpand, outwardsExpand,
+			gMapper.genomes_.at(gPars.primaryGenome_)->chromosomeLengths_.at(
+					gPos->chrom_));
+	if(oldLen == gPos->score_){
+		gPos->score_ = gPos->length();
+	}
+
+	GenomicRegion refRegion(*gPos);
+
+	TwoBit::TwoBitFile tReader(
+			gMapper.genomes_.at(gPars.primaryGenome_)->fnpTwoBit_);
+	auto regionOrientationReferenceSeq = refRegion.extractSeq(tReader);
+	auto forwardStrandRefSeq = regionOrientationReferenceSeq;
+	if(refRegion.reverseSrand_){
+		forwardStrandRefSeq = regionOrientationReferenceSeq	;
+		forwardStrandRefSeq.reverseComplementRead(false, true);
+	}
+
+	readVec::getMaxLength(forwardStrandRefSeq, maxLen);
+	aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
+	alignerObj.weighHomopolymers_ = false;
+	alignerObj.processAlnInfoInput(setUp.pars_.alnInfoDirName_, setUp.pars_.verbose_);
+
+	out << "#chrom\tstart\tend\tname\ttype\tref\tquery" << "\n";
+	for(const auto & seq : forwardStrandClusters){
+
+		alignerObj.alignCacheGlobal(forwardStrandRefSeq, seq);
+		alignerObj.profileAlignment(forwardStrandRefSeq, seq, false, false, false);
+		if(setUp.pars_.debug_){
+			alignerObj.alignObjectA_.seqBase_.outPutSeq(std::cout);
+			alignerObj.alignObjectB_.seqBase_.outPutSeq(std::cout);
+
+		}
+		//iterate over the sub clusters
+		for(const auto & subName : seq.reads_){
+			//mismatches
+			for(const auto & m : alignerObj.comp_.distances_.mismatches_){
+				out << njh::conToStr(toVecStr(
+						gPos->chrom_,
+						gPos->chromStart_ + m.second.refBasePos,
+						gPos->chromStart_ + m.second.refBasePos + 1,
+						subName->seqBase_.name_,
+						"SNP",
+						m.second.refBase,
+						m.second.seqBase), "\t") << "\n";
+			}
+			//INDELs
+			for(const auto & indel: alignerObj.comp_.distances_.alignmentGaps_){
+				if(indel.second.ref_){
+					//gap is in reference so a insertion
+					out << njh::conToStr(toVecStr(
+							gPos->chrom_,
+							gPos->chromStart_ + indel.second.refPos_,
+							gPos->chromStart_ + indel.second.refPos_ + 1,
+							subName->seqBase_.name_,
+							"insertion",
+							std::string(indel.second.gapedSequence_.size(), '-'),
+							indel.second.gapedSequence_), "\t") << "\n";
+				}else{
+					//gap is in query so a deletion
+					out << njh::conToStr(toVecStr(
+							gPos->chrom_,
+							gPos->chromStart_ + indel.second.refPos_,
+							gPos->chromStart_ + indel.second.refPos_ + indel.second.gapedSequence_.size(),
+							subName->seqBase_.name_,
+							"deletion",
+							indel.second.gapedSequence_,
+							std::string(indel.second.gapedSequence_.size(), '-')), "\t") << "\n";
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+
 int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & inputCommands) {
 
 	/**@todo should add the following 1) average pairwise difference, 2) make into a function, 3) generate connected hap map, 4) unique haps to region count, 5) doing multiple pop fields at once */
@@ -344,11 +514,17 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 			readLens[len(cIter.seqBase_)]+= cIter.seqBase_.cnt_;
 			VecStr nonFieldSampleNames{};
 			for(const auto & name : inputNames){
+				std::cout << name << std::endl;
+
 				if(MetaDataInName::nameHasMetaData(name)){
 					MetaDataInName meta(name);
-					if(meta.containsMeta("BiologicalSample") && meta.containsMeta("IsFieldSample") && !meta.getMeta<bool>("IsFieldSample")){
-						if(!meta.containsMeta("country") || "NA" != meta.getMeta("country")){
-							nonFieldSampleNames.emplace_back(meta.getMeta("BiologicalSample"));
+					std::string sampleField = "sample";
+					if(meta.containsMeta("BiologicalSample")){
+						sampleField = "BiologicalSample";
+					}
+					if(meta.containsMeta(sampleField) && meta.containsMeta("IsFieldSample") && !meta.getMeta<bool>("IsFieldSample")){
+						if(meta.containsMeta("site") && "LabIsolate" == meta.getMeta("site")){
+							nonFieldSampleNames.emplace_back(meta.getMeta(sampleField));
 						}
 					}
 				}

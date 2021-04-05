@@ -16,6 +16,7 @@
 #include <SeekDeep/objects/IlluminaUtils/PairedReadProcessor.hpp>
 #include <PathWeaver/PathFinding/WayFindingUtils/WayFindingPreFilteringUtils.hpp>
 #include <njhseq/objects/BioDataObject/BioRecordsUtils/BedUtility.hpp>
+#include "elucidator/BamToolsUtils/BamUtilities.hpp"
 
 namespace njhseq {
 

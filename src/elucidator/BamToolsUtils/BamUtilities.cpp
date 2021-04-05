@@ -700,9 +700,7 @@ std::vector<std::unordered_map<std::string, uint64_t>> BamCountSpecficRegions(
 			}
 		}
 	};
-
 	njh::concurrent::runVoidFunctionThreaded(extractReadsForRegion, pars.numThreads);
-
 
 	std::vector<std::unordered_map<std::string, uint64_t>> ret(inputRegions.size());
 	for(const auto  countPos : iter::range(allRawCounts.size())){
