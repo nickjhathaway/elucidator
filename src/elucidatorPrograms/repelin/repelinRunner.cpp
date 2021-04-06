@@ -663,7 +663,7 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t delta{7};
 	uint32_t PM{80};
 	uint32_t PI{10};
-	uint32_t Minscore{24}; //with a match of 2 and a min score of 24, the smallest repeat size would be 12bps
+	uint32_t Minscore{50}; //with a match of 2 and a min score of 50, the smallest repeat size would be 25bps
 	uint32_t MaxPeriod{1000};
 
 	bool supplement = false;
@@ -673,6 +673,24 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
   setUp.processVerbose();
   setUp.setOption(supplement, "--supplement", "supplement TRF output with simple repeat determination which can sometimes be missed by TRF");
   setUp.processReadInNames({"--fasta", "--fastq", "--fastagz", "--fastqgz"});
+  //TRF options
+  setUp.setOption(match,     "--match", "match");
+  setUp.setOption(mismatch,  "--mismatch", "mismatch");
+  setUp.setOption(delta,     "--delta", "delta");
+  setUp.setOption(PM,        "--PM", "PM");
+  setUp.setOption(PI,        "--PI", "PI");
+  setUp.setOption(Minscore,  "--Minscore", "Minscore");
+  setUp.setOption(MaxPeriod, "--MaxPeriod", "MaxPeriod");
+  //supplemental options
+  setUp.setOption(pars.doNotAddFlankingSeq, "--doNotAddFlankingSeq", "supplemental-do Not Add Flanking Seq");
+  setUp.setOption(pars.lengthCutOff, "--lengthCutOff", "supplemental-length Cut Off");
+  setUp.setOption(pars.maxRepeatUnitSize, "--maxRepeatUnitSize", "supplemental-max Repeat Unit Size");
+  setUp.setOption(pars.minNumRepeats, "--minNumRepeats", "supplemental-min Num Repeats");
+  setUp.setOption(pars.numThreads, "--numThreads", "supplemental-numThreads");
+  setUp.setOption(pars.searchAllUnits, "--searchAllUnits", "supplemental-search All Units");
+  pars.verbose = setUp.pars_.verbose_;
+
+
   setUp.processDirectoryOutputName(true);
   if(supplement){
   	pars.setDefaultOpts(setUp);
