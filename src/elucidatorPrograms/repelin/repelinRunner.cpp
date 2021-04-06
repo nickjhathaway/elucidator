@@ -681,18 +681,13 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
   setUp.setOption(PI,        "--PI", "PI");
   setUp.setOption(Minscore,  "--Minscore", "Minscore");
   setUp.setOption(MaxPeriod, "--MaxPeriod", "MaxPeriod");
-  //supplemental options
-  setUp.setOption(pars.doNotAddFlankingSeq, "--doNotAddFlankingSeq", "supplemental-do Not Add Flanking Seq");
-  setUp.setOption(pars.lengthCutOff, "--lengthCutOff", "supplemental-length Cut Off");
-  setUp.setOption(pars.maxRepeatUnitSize, "--maxRepeatUnitSize", "supplemental-max Repeat Unit Size");
-  setUp.setOption(pars.minNumRepeats, "--minNumRepeats", "supplemental-min Num Repeats");
-  setUp.setOption(pars.numThreads, "--numThreads", "supplemental-numThreads");
-  setUp.setOption(pars.searchAllUnits, "--searchAllUnits", "supplemental-search All Units");
-  pars.verbose = setUp.pars_.verbose_;
+
 
 
   setUp.processDirectoryOutputName(true);
   if(supplement){
+    //supplemental options
+    pars.verbose = setUp.pars_.verbose_;
   	pars.setDefaultOpts(setUp);
   }
   setUp.finishSetUp();
