@@ -105,6 +105,7 @@ bedExpRunner::bedExpRunner()
 					 addFunc("getDistanceToClostestRegion", getDistanceToClostestRegion, false),
 					 addFunc("getIntersectionBetweenTwoBedFiles", getIntersectionBetweenTwoBedFiles, false),
 					 addFunc("removeSubRegionsFromBedFile", removeSubRegionsFromBedFile, false),
+					 addFunc("getDegreeOfOverlappingBedRegions", getDegreeOfOverlappingBedRegions, false),
 
            },//
           "bedExp") {}
@@ -1199,6 +1200,67 @@ int bedExpRunner::bedRenameRepeatUids(const njh::progutils::CmdArgs & inputComma
 		reader.write(*bed, [](const Bed6RecordCore & bRecord, std::ostream & out){
 			out << bRecord.toDelimStrWithExtra() << "\n";
 		});
+	}
+	return 0;
+}
+
+
+
+
+int bedExpRunner::getDegreeOfOverlappingBedRegions(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path bedFile;
+	bfs::path intersectWithBed;
+	OutOptions outOpts;
+	uint32_t overlapLen = 1;
+	bool ignoreSameID = false;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.setOption(overlapLen, "--overlapLen", "The minimum overlap length to be considered overlap, 0 means one region must be completely found in another");
+	setUp.setOption(bedFile, "--bed", "Bed file to parse", true);
+	setUp.setOption(ignoreSameID, "--ignoreSameID", "Don't compare regions with the same id if ids present");
+	setUp.setOption(intersectWithBed, "--intersectWithBed", "Bed file to intersect with", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	BioDataFileIO<Bed6RecordCore> reader{IoOptions(InOptions(bedFile), outOpts)};
+	auto intersectingBed3s = getBed3s(intersectWithBed);
+	auto intersectingBed6s = convertBed3ToBed6(intersectingBed3s);
+	Bed6RecordCore reg;
+
+	reader.openIn();
+	reader.openOut();
+	(*reader.out_) << "#chrom\tstart\tend\treg1name\tscore\tstrand\toverlap\treg1OverlapPerc\treg2Name\treg2OverlapPerc" << std::endl;
+	while(reader.readNextRecord(reg)){
+		std::vector<Bed6RecordCore> intersectingRegions;
+		for(const auto & bed : intersectingBed6s){
+			if(ignoreSameID && reg.extraFields_.size() >=1 &&  bed->name_ == reg.extraFields_[0]){
+				continue;
+			}
+			//a overlapLen of 0 indicates to find only regions that completely overlap with each other
+			if(overlapLen == 0){
+				auto overlapAmount = reg.getOverlapLen(*bed);
+				if(bed->length() == overlapAmount ||reg.length() == overlapAmount){
+					intersectingRegions.emplace_back(*bed);
+				}
+			}else{
+				if(reg.overlaps(*bed, overlapLen)){
+					intersectingRegions.emplace_back(*bed);
+				}
+			}
+		}
+		if(!intersectingRegions.empty()){
+			reader.write(reg, [&intersectingRegions](const Bed6RecordCore & bedReg, std::ostream & out){
+				for(const auto & ireg : intersectingRegions){
+					auto overlapAmount = ireg.getOverlapLen(bedReg);
+					out << bedReg.toDelimStr()
+							<< "\t" << overlapAmount
+							<< "\t" << static_cast<double>(overlapAmount)/bedReg.length()
+							<< "\t" << ireg.name_
+							<< "\t" << static_cast<double>(overlapAmount)/ireg.length()
+							<< std::endl;
+				}
+			});
+		}
 	}
 	return 0;
 }

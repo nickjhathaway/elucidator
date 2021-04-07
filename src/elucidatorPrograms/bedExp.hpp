@@ -68,6 +68,9 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	static int bedFilterRegionsStartingOrEndingInOther(const njh::progutils::CmdArgs & inputCommands);
 	static int bedKeepRegionsStartingOrEndingInOther(const njh::progutils::CmdArgs & inputCommands);
 
+	//getting info
+	static int getDegreeOfOverlappingBedRegions(const njh::progutils::CmdArgs & inputCommands);
+
 
 	//combing bed files
 	static int bedCreateSpanningRegions(const njh::progutils::CmdArgs & inputCommands);
