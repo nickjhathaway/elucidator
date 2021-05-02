@@ -1618,16 +1618,45 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 			std::unordered_map<std::string, uint32_t> lengths;
 			lengths[refSeq.name_] = len(refSeq);
 			std::vector<Bed6RecordCore> refSeqPositionsRelativeToCurentSeqBeds;
+			std::vector<Bed6RecordCore> refSeqPositionsRelativeToGenomeLocBeds;
+
 			std::vector<Bed6RecordCore> refSeqPositionsBeds;
 
 			for(const auto & g : refSeqPositionsRelativeToCurentSeq){
 				auto bedReg = g.genBedRecordCore();
 				refSeqPositionsRelativeToCurentSeqBeds.emplace_back(bedReg);
 				refSharedLocsOut << bedReg.toDelimStr() << std::endl;
+				Bed6RecordCore relativeBedReg = bedReg;
+
+				bedReg.chrom_ = refSeqLoc.chrom_;
+				if(refSeqLoc.reverseSrand_){
+					bedReg.strand_ = '-';
+					bedReg.chromStart_ = refSeqLoc.start_ +(len(refSeq) - 1 - relativeBedReg.chromEnd_ );
+					bedReg.chromEnd_ = refSeqLoc.start_ + (len(refSeq) - 1 - relativeBedReg.chromStart_ );
+				} else {
+					bedReg.chromStart_ = refSeqLoc.start_ + relativeBedReg.chromStart_;
+					bedReg.chromEnd_ = refSeqLoc.start_ + relativeBedReg.chromEnd_;
+					bedReg.strand_ = '+';
+				}
+				bedReg.name_ = bedReg.genUIDFromCoordsWithStrand();
+				refSeqPositionsRelativeToGenomeLocBeds.emplace_back(bedReg);
+			}
+			OutputStream refSharedLocsToRefOut(njh::files::make_path(bedDir, njh::pasteAsStr(nodes.first, "_ref_sharedLocs_genomic.bed")));
+			for(const auto & refSeqPositionsRelativeToGenomeLocBed : refSeqPositionsRelativeToGenomeLocBeds){
+				refSharedLocsToRefOut << refSeqPositionsRelativeToGenomeLocBed.toDelimStr() << std::endl;
 			}
 
 
-			std::vector<BedUtility::SubRegionCombo> subRegions = BedUtility::genSubRegionCombos(refSeqPositionsRelativeToCurentSeqBeds, lengths, subRegionComboPars);
+			std::vector<BedUtility::SubRegionCombo> subRegionsRaw = BedUtility::genSubRegionCombos(refSeqPositionsRelativeToCurentSeqBeds, lengths, subRegionComboPars);
+			std::vector<BedUtility::SubRegionCombo> subRegions;
+			//filter overlapping start and end regions
+			//technically need to get a little more sophisticated with region choosing for regions with tandem repeats
+			for(const auto & subRegion : subRegionsRaw){
+				if(!subRegion.startRegion_.overlaps(subRegion.endRegion_, 1) && subRegion.startRegion_.chromEnd_ != subRegion.endRegion_.chromStart_){
+					subRegions.emplace_back(subRegion);
+				}
+			}
+
 			OutputStream refSubRegionsLocsOut(njh::files::make_path(bedDir, njh::pasteAsStr(nodes.first, "_ref_subRegions.bed")));
 
 
@@ -1641,7 +1670,10 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					return com1.startRegion_.chromStart_ < com2.startRegion_.chromStart_;
 				}
 			});
+
 			if(!refSeqPositionsRelativeToCurentSeqBeds.empty()){
+
+
 				//getting the region with the last and first conserved regions
 				BedUtility::coordSort(refSeqPositionsRelativeToCurentSeqBeds, false);
 				Bed6RecordCore genomicLoc = refSeqPositionsRelativeToCurentSeqBeds.front();

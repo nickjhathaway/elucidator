@@ -1593,6 +1593,7 @@ int gffExpRunner::bedGetIntersectingRecordsInGff(const njh::progutils::CmdArgs &
 	setUp.setOption(features, "--features", "Feature to extract, if left blank all features are extracted, or can be comma separated for multiple features");
 	setUp.setOption(overlapMin, "--overlapMin", "overlap minimum");
 	setUp.setOption(pars.gffFnp_, "--gff", "Input gff file", true);
+
 	setUp.setOption(bedFnp, "--bed", "Bed regions to extract", true);
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
