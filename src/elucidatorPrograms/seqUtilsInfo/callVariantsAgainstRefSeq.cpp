@@ -514,7 +514,7 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 			readLens[len(cIter.seqBase_)]+= cIter.seqBase_.cnt_;
 			VecStr nonFieldSampleNames{};
 			for(const auto & name : inputNames){
-				std::cout << name << std::endl;
+				//std::cout << name << std::endl;
 
 				if(MetaDataInName::nameHasMetaData(name)){
 					MetaDataInName meta(name);
