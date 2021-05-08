@@ -759,12 +759,35 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 		for(const auto & snps : varInfo.snpsFinal){
 			positionsSet.emplace(snps.first);
 		}
+
+
+		std::map<uint32_t, std::map<std::string,uint32_t>> insertionsFinalForVCF;
+		std::map<uint32_t, std::map<std::string,uint32_t>> deletionsFinalForVCF;
 		for(const auto & ins : varInfo.insertionsFinal){
-			positionsSet.emplace(ins.first);
+			if(0 == ins.first ){
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "can't handle insertion at position 0"<< "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			insertionsFinalForVCF[ins.first - 1] = ins.second;
 		}
 		for(const auto & del : varInfo.deletionsFinal){
+			if(0 == del.first ){
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "can't handle insertion at position 0"<< "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			deletionsFinalForVCF[del.first - 1] = del.second;
+		}
+
+		for(const auto & ins : insertionsFinalForVCF){
+			positionsSet.emplace(ins.first);
+		}
+		for(const auto & del : deletionsFinalForVCF){
 			positionsSet.emplace(del.first);
 		}
+
+
 		vcfOut << "##fileformat=VCFv4.0" << std::endl;
 		vcfOut << "##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Total Allele Depth\">" << std::endl;
 		vcfOut << "##INFO=<ID=NS,Number=1,Type=Integer,Description=\"Number of Samples With Data\">" << std::endl;
@@ -780,7 +803,7 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 //			njh::reverse(positions);
 //		}
 		for(const auto & pos : positions){
-			if (njh::in(pos, varInfo.insertionsFinal) || njh::in(pos, varInfo.snpsFinal)) {
+			if (njh::in(pos, insertionsFinalForVCF) || njh::in(pos, varInfo.snpsFinal)) {
 				vcfOut <<  refRegion.chrom_
 						<< "\t" << pos+ 1
 						<< "\t" << "."
@@ -816,9 +839,9 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 							<< "\t" << varInfo.depthPerPosition[pos]
 							<< "\t" << samplesCalled << std::endl;
 				}
-				if (njh::in(pos, varInfo.insertionsFinal)) {
-					for (const auto & ins : varInfo.insertionsFinal[pos]) {
-						alts.emplace_back(ins.first);
+				if (njh::in(pos, insertionsFinalForVCF)) {
+					for (const auto & ins : insertionsFinalForVCF[pos]) {
+						alts.emplace_back(njh::pasteAsStr(baseForPosition[pos], ins.first));
 						altsCounts.emplace_back(ins.second);
 						altsFreqs.emplace_back(ins.second/static_cast<double>(varInfo.depthPerPosition[pos]));
 					}
@@ -833,10 +856,10 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 						<< "AF=" << njh::conToStr(altsFreqs, ",")
 				<< std::endl;
 			}
-			if (njh::in(pos, varInfo.deletionsFinal)) {
-				for (const auto & d : varInfo.deletionsFinal[pos]) {
+			if (njh::in(pos, deletionsFinalForVCF)) {
+				for (const auto & d : deletionsFinalForVCF[pos]) {
 					vcfOut <<  refRegion.chrom_
-							<< "\t" << pos+ 1
+							<< "\t" << pos + 1
 							<< "\t" << "."
 							<< "\t";
 					vcfOut << baseForPosition[pos] << d.first
