@@ -1209,8 +1209,11 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 							}
 						}
 					}
-					auto generalDiff = PopGenCalculator::getOverallPopDiff(hapsForTargetPerPopulation);
 
+					PopGenCalculator::PopDifferentiationMeasures generalDiff;
+					if(hapsForTargetPerPopulation.size() > 1){
+						generalDiff = PopGenCalculator::getOverallPopDiff(hapsForTargetPerPopulation);
+					}
 					std::unordered_map<std::string, std::unordered_map<std::string, PopGenCalculator::PopDifferentiationMeasures>> pairwiseDiffs;
 
 					if(hapsForTargetPerPopulation.size() > 1){
@@ -1241,27 +1244,28 @@ int genExpRunner::doPairwiseComparisonOnHapsSharingDev(const njh::progutils::Cmd
 																	<< "\t" << popDiv.second.doublets_
 																	<< "\t" << popDiv.second.effectiveNumOfAlleles_
 																	<< "\t" << popDiv.second.ShannonEntropyE_
-																	<< "\t" << generalDiff.informativenessForAssignPerPopulation_[popDiv.first]
+																	<< "\t" << (hapsForTargetPerPopulation.size() > 1 ? generalDiff.informativenessForAssignPerPopulation_[popDiv.first] : 0)
 																	<< '\n';
 						}
-						diffMeasuresOut << field << "\t"
-								<< haps.tarNamesVec_[tarKey]
-								<<"\t"<< grandTotalHaps
-								<<"\t"<< haps.numberOfHapsPerTarget_[tarKey]
-								<<"\t"<< grandTotalSamples
-								<<"\t"<< generalDiff.hsSample_
-								<<"\t"<< generalDiff.hsEst_
-								<<"\t"<< generalDiff.htSample_
-								<<"\t"<< generalDiff.htEst_
-								<<"\t"<< generalDiff.gst_
-								<<"\t"<< generalDiff.gstEst_
-								<<"\t"<< generalDiff.jostD_
-								<<"\t"<< generalDiff.jostDEst_
-								<<"\t"<< generalDiff.chaoA_
-								<<"\t"<< generalDiff.chaoB_
-								<<"\t"<< generalDiff.jostDChaoEst_
-								<<"\t"<< generalDiff.informativenessForAssign_<< std::endl;
+
 						if(hapsForTargetPerPopulation.size() > 1){
+							diffMeasuresOut << field << "\t"
+									<< haps.tarNamesVec_[tarKey]
+									<<"\t"<< grandTotalHaps
+									<<"\t"<< haps.numberOfHapsPerTarget_[tarKey]
+									<<"\t"<< grandTotalSamples
+									<<"\t"<< generalDiff.hsSample_
+									<<"\t"<< generalDiff.hsEst_
+									<<"\t"<< generalDiff.htSample_
+									<<"\t"<< generalDiff.htEst_
+									<<"\t"<< generalDiff.gst_
+									<<"\t"<< generalDiff.gstEst_
+									<<"\t"<< generalDiff.jostD_
+									<<"\t"<< generalDiff.jostDEst_
+									<<"\t"<< generalDiff.chaoA_
+									<<"\t"<< generalDiff.chaoB_
+									<<"\t"<< generalDiff.jostDChaoEst_
+									<<"\t"<< generalDiff.informativenessForAssign_<< std::endl;
 							auto keys = getVectorOfMapKeys(pairwiseDiffs);
 							njh::sort(keys);
 							for(const auto & key : keys){
