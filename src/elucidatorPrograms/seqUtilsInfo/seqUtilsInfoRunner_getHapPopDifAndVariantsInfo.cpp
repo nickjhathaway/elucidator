@@ -139,6 +139,7 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 	reader.openIn();
 
 	std::unordered_map<std::string, std::shared_ptr<std::vector<identicalCluster>>> uniqueSeqsByMetaForwardStrand;
+	std::unordered_map<std::string,std::unordered_map<std::string, std::unordered_set<std::string>>> samplesPerSeqPerMeta;
 
 	std::vector<identicalCluster> originalOrientationClusters;
 	seqInfo seq;
@@ -147,6 +148,7 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 	std::set<std::string> samples;
 	std::set<std::string> allMetaKeys;
 	std::unordered_map<std::string, std::set<std::string>> samplesByMeta;
+	std::unordered_map<std::string, std::unordered_set<std::string>> samplesPerSeq;
 
 	// read in reads and collapse to unique
 	while(reader.readNextRead(seq)) {
@@ -163,12 +165,19 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 			seq.removeGaps();
 		}
 		readVec::getMaxLength(seq, maxLen);
+		std::string sample = seq.name_;
+
 		if(seq.nameHasMetaData()){
 			MetaDataInName seqMeta(seq.name_);
 			if(seqMeta.containsMeta("sample")){
-				samples.emplace(seqMeta.getMeta("sample"));
+				sample = seqMeta.getMeta("sample");
+			}else if(seqMeta.containsMeta("BiologicalSample")){
+				sample = seqMeta.getMeta("BiologicalSample");
 			}
 		}
+		samples.emplace(sample);
+		samplesPerSeq[seq.seq_].emplace(sample);
+
 		++totalInputSeqs;
 		bool found = false;
 		for (auto &cIter : originalOrientationClusters) {
@@ -196,6 +205,7 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 			}
 			if(!njh::in(seqMeta.getMeta(popMeta),  uniqueSeqsByMetaForwardStrand)){
 				uniqueSeqsByMetaForwardStrand[seqMeta.getMeta(popMeta)] = std::make_shared<std::vector<identicalCluster>>();
+
 			}
 			if(seqMeta.containsMeta("sample")){
 				samplesByMeta[seqMeta.getMeta(popMeta)].emplace(seqMeta.getMeta("sample"));
@@ -208,6 +218,7 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 					break;
 				}
 			}
+			samplesPerSeqPerMeta[seqMeta.getMeta(popMeta)][seq.name_].emplace(sample);
 			if (!found) {
 				uniqueSeqsByMetaForwardStrand[seqMeta.getMeta(popMeta)]->emplace_back(seq);
 			}
@@ -255,12 +266,15 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 	uint32_t seqId = 0;
 	std::unordered_map<std::string, std::string> nameLookUp;
 	std::unordered_map<std::string, uint32_t> sampCountsForPopHaps;
+	std::unordered_map<std::string, std::unordered_set<std::string>> sampNamesForPopHaps;
 
 	for (auto &cIter : forwardStrandClusters) {
 		MetaDataInName popMeta;
 		popMeta.addMeta("HapPopUIDCount", static_cast<uint32_t>(std::round(cIter.seqBase_.cnt_)));
 		cIter.seqBase_.name_ = njh::pasteAsStr(identifier, ".", leftPadNumStr<uint32_t>(seqId, forwardStrandClusters.size()),popMeta.createMetaName());
 		sampCountsForPopHaps[cIter.seqBase_.name_] = cIter.seqBase_.cnt_;
+		sampNamesForPopHaps[cIter.seqBase_.name_] = samplesPerSeq[cIter.seqBase_.seq_];
+
 		nameLookUp[cIter.seqBase_.seq_] = cIter.seqBase_.name_;
 		++seqId;
 	}
@@ -323,8 +337,9 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 	aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 	alignerObj.weighHomopolymers_ = false;
 	alignerObj.processAlnInfoInput(setUp.pars_.alnInfoDirName_, setUp.pars_.verbose_);
-
-	TranslatorByAlignment::VariantsInfo varInfo(identifier);
+	auto seqWithID = forwardStrandRefSeq;
+	seqWithID.name_ = identifier;
+	TranslatorByAlignment::VariantsInfo varInfo(refRegion.genBed3RecordCore(), seqWithID);
 
 //	std::unordered_map<uint32_t, std::unordered_map<char, uint32_t>> snps;
 //	std::unordered_map<uint32_t, std::unordered_map<std::string,uint32_t>> insertions;
@@ -343,6 +358,7 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 				alignerObj.alignObjectA_.seqBase_.seq_,
 				alignerObj.alignObjectB_.seqBase_.seq_,
 				seq.seqBase_.cnt_,
+				samplesPerSeq[seq.seqBase_.seq_],
 				alignerObj.comp_,
 				refRegion.start_);
 	}
@@ -439,7 +455,7 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 			njh::files::makeDir(njh::files::MkdirPar{variantInfoDir});
 			translator->pars_.keepTemporaryFiles_ = true;
 			translator->pars_.workingDirtory_ = variantInfoDir;
-			auto translatedRes = translator->run(uniqueSeqInOpts, sampCountsForPopHaps, variantCallerRunPars);
+			auto translatedRes = translator->run(uniqueSeqInOpts, sampNamesForPopHaps, variantCallerRunPars);
 			SeqOutput transwriter(SeqIOOptions::genFastaOut(njh::files::make_path(variantInfoDir, "translatedInput.fasta")));
 			for(const auto & seqName : translatedRes.translations_){
 				for(const auto & transcript : seqName.second){
@@ -815,7 +831,7 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 				sumOfSquares += std::pow(cIter.seqBase_.cnt_/seqCountPerField, 2);
 				readLens[len(cIter.seqBase_)]+= cIter.seqBase_.cnt_;
 			}
-			TranslatorByAlignment::VariantsInfo varInfo(identifier);
+			TranslatorByAlignment::VariantsInfo varInfo(refRegion.genBed3RecordCore(), seqWithID);
 
 		//	std::unordered_map<uint32_t, std::unordered_map<char, uint32_t>> snps;
 		//	std::unordered_map<uint32_t, std::unordered_map<std::string,uint32_t>> insertions;
@@ -834,6 +850,7 @@ int seqUtilsInfoRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArg
 						alignerObj.alignObjectA_.seqBase_.seq_,
 						alignerObj.alignObjectB_.seqBase_.seq_,
 						seq.seqBase_.cnt_,
+						njh::mapAt(samplesPerSeqPerMeta, field.first)[seq.seqBase_.seq_],
 						alignerObj.comp_,
 						refRegion.start_);
 			}

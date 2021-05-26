@@ -331,6 +331,7 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 	}
 
 
+	std::unordered_map<std::string, std::unordered_set<std::string>> samplesPerSeq;
 	// read in reads and collapse to unique
 	while(reader.readNextRead(seq)) {
 		if ("" != metaFnp) {
@@ -357,12 +358,19 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 			seq.removeGaps();
 		}
 		readVec::getMaxLength(seq, maxLen);
+		std::string sample = seq.name_;
+
 		if(seq.nameHasMetaData()){
 			MetaDataInName seqMeta(seq.name_);
 			if(seqMeta.containsMeta("sample")){
-				samples.emplace(seqMeta.getMeta("sample"));
+				sample = seqMeta.getMeta("sample");
+			}else if(seqMeta.containsMeta("BiologicalSample")){
+				sample = seqMeta.getMeta("BiologicalSample");
 			}
 		}
+		samples.emplace(sample);
+		samplesPerSeq[seq.seq_].emplace(sample);
+
 		++totalInputSeqs;
 		bool found = false;
 		for (auto &cIter : originalOrientationClusters) {
@@ -375,7 +383,6 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 		if (!found) {
 			originalOrientationClusters.emplace_back(seq);
 		}
-
 	}
 	std::vector<identicalCluster> forwardStrandClusters;
 
@@ -398,12 +405,14 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 	uint32_t seqId = 0;
 	std::unordered_map<std::string, std::string> nameLookUp;
 	std::unordered_map<std::string, uint32_t> sampCountsForPopHaps;
+	std::unordered_map<std::string, std::unordered_set<std::string>> sampNamesForPopHaps;
 
 	for (auto &cIter : forwardStrandClusters) {
 		MetaDataInName popMeta;
 		popMeta.addMeta("HapPopUIDCount", static_cast<uint32_t>(std::round(cIter.seqBase_.cnt_)));
 		cIter.seqBase_.name_ = njh::pasteAsStr(identifier, ".", leftPadNumStr<uint32_t>(seqId, forwardStrandClusters.size()),popMeta.createMetaName());
 		sampCountsForPopHaps[cIter.seqBase_.name_] = cIter.seqBase_.cnt_;
+		sampNamesForPopHaps[cIter.seqBase_.name_] = samplesPerSeq[cIter.seqBase_.seq_];
 		nameLookUp[cIter.seqBase_.seq_] = cIter.seqBase_.name_;
 		++seqId;
 	}
@@ -450,7 +459,9 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 	alignerObj.weighHomopolymers_ = false;
 	alignerObj.processAlnInfoInput(setUp.pars_.alnInfoDirName_, setUp.pars_.verbose_);
 
-	TranslatorByAlignment::VariantsInfo varInfo(identifier);
+	auto idSeq = forwardStrandRefSeq;
+	idSeq.name_ = identifier;
+	TranslatorByAlignment::VariantsInfo varInfo(refRegion.genBed3RecordCore(), idSeq);
 
 	for(const auto & seq : forwardStrandClusters){
 
@@ -460,6 +471,7 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 				alignerObj.alignObjectA_.seqBase_.seq_,
 				alignerObj.alignObjectB_.seqBase_.seq_,
 				seq.seqBase_.cnt_,
+				samplesPerSeq[seq.seqBase_.seq_],
 				alignerObj.comp_,
 				refRegion.start_);
 	}
@@ -543,7 +555,7 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 			njh::files::makeDir(njh::files::MkdirPar{variantInfoDir});
 			translator->pars_.keepTemporaryFiles_ = true;
 			translator->pars_.workingDirtory_ = variantInfoDir;
-			auto translatedRes = translator->run(uniqueSeqInOpts, sampCountsForPopHaps, variantCallerRunPars);
+			auto translatedRes = translator->run(uniqueSeqInOpts, sampNamesForPopHaps, variantCallerRunPars);
 			SeqOutput transwriter(SeqIOOptions::genFastaOut(njh::files::make_path(variantInfoDir, "translatedInput.fasta")));
 			for(const auto & seqName : translatedRes.translations_){
 				for(const auto & transcript : seqName.second){
@@ -752,128 +764,15 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 
 
 	alignerObj.processAlnInfoOutput(setUp.pars_.outAlnInfoDirName_, setUp.pars_.verbose_);
+//	std::cout << "varInfo.snpsFinal.size(): " << varInfo.snpsFinal.size() << std::endl;
+//	std::cout << "varInfo.deletionsFinal.size(): " << varInfo.deletionsFinal.size() << std::endl;
+//	std::cout << "varInfo.insertionsFinal.size(): " << varInfo.insertionsFinal.size() << std::endl;
+//
+
 	if(!varInfo.snpsFinal.empty() || ! varInfo.deletionsFinal.empty() || !varInfo.insertionsFinal.empty()){
-		OutputStream snpTabOut(njh::files::make_path(variantCallsDir, "allSNPs.tab.txt"));
-		OutputStream vcfOut(njh::files::make_path(variantCallsDir, "allVariants.vcf"));
-		std::unordered_set<uint32_t> positionsSet;
-		for(const auto & snps : varInfo.snpsFinal){
-			positionsSet.emplace(snps.first);
-		}
+		varInfo.writeVCF(njh::files::make_path(variantCallsDir, "allVariants.vcf"));
+		varInfo.writeSNPTable(njh::files::make_path(variantCallsDir, "allSNPs.tab.txt"));
 
-
-		std::map<uint32_t, std::map<std::string,uint32_t>> insertionsFinalForVCF;
-		std::map<uint32_t, std::map<std::string,uint32_t>> deletionsFinalForVCF;
-		for(const auto & ins : varInfo.insertionsFinal){
-			if(0 == ins.first ){
-				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", error " << "can't handle insertion at position 0"<< "\n";
-				throw std::runtime_error{ss.str()};
-			}
-			insertionsFinalForVCF[ins.first - 1] = ins.second;
-		}
-		for(const auto & del : varInfo.deletionsFinal){
-			if(0 == del.first ){
-				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", error " << "can't handle insertion at position 0"<< "\n";
-				throw std::runtime_error{ss.str()};
-			}
-			deletionsFinalForVCF[del.first - 1] = del.second;
-		}
-
-		for(const auto & ins : insertionsFinalForVCF){
-			positionsSet.emplace(ins.first);
-		}
-		for(const auto & del : deletionsFinalForVCF){
-			positionsSet.emplace(del.first);
-		}
-
-
-		vcfOut << "##fileformat=VCFv4.0" << std::endl;
-		vcfOut << "##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Total Allele Depth\">" << std::endl;
-		vcfOut << "##INFO=<ID=NS,Number=1,Type=Integer,Description=\"Number of Samples With Data\">" << std::endl;
-		vcfOut << "##INFO=<ID=AF,Number=.,Type=Float,Description=\"Allele Frequency\">" << std::endl;
-		vcfOut << "##INFO=<ID=AC,Number=.,Type=Integer,Description=\"Allele Count\">" << std::endl;
-		vcfOut << "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO" << std::endl;
-		snpTabOut << "chrom\tposition\tref\tvariant\tcount\tfrequency\talleleDepth\tsamples" << std::endl;
-
-		std::vector<uint32_t> positions(positionsSet.begin(), positionsSet.end());
-
-		njh::sort(positions);
-//		if(refRegion.reverseSrand_){
-//			njh::reverse(positions);
-//		}
-		for(const auto & pos : positions){
-			if (njh::in(pos, insertionsFinalForVCF) || njh::in(pos, varInfo.snpsFinal)) {
-				vcfOut <<  refRegion.chrom_
-						<< "\t" << pos+ 1
-						<< "\t" << "."
-						<< "\t";
-				std::vector<std::string> alts;
-				std::vector<uint32_t> altsCounts;
-				std::vector<double> altsFreqs;
-
-
-				vcfOut << baseForPosition[pos] << "\t";
-				if(njh::in(pos, varInfo.snpsFinal)){
-					uint32_t snpCount = 0;
-					for(const auto & b : varInfo.snpsFinal[pos]){
-						snpTabOut << refRegion.chrom_
-								<< "\t" << pos
-								<< "\t" << baseForPosition[pos]
-								<< "\t" << std::string(1, b.first)
-								<< "\t" << b.second
-								<< "\t" << b.second/static_cast<double>(varInfo.depthPerPosition[pos])
-								<< "\t" << varInfo.depthPerPosition[pos]
-								<< "\t" << samplesCalled << std::endl;
-						snpCount+= b.second;
-						alts.emplace_back(std::string(1, b.first));
-						altsCounts.emplace_back(b.second);
-						altsFreqs.emplace_back(b.second/static_cast<double>(varInfo.depthPerPosition[pos]));
-					}
-					snpTabOut << refRegion.chrom_
-							<< "\t" << pos
-							<< "\t" << baseForPosition[pos]
-							<< "\t" << baseForPosition[pos]
-							<< "\t" << varInfo.depthPerPosition[pos] - snpCount
-							<< "\t" << (varInfo.depthPerPosition[pos] - snpCount)/static_cast<double>(varInfo.depthPerPosition[pos])
-							<< "\t" << varInfo.depthPerPosition[pos]
-							<< "\t" << samplesCalled << std::endl;
-				}
-				if (njh::in(pos, insertionsFinalForVCF)) {
-					for (const auto & ins : insertionsFinalForVCF[pos]) {
-						alts.emplace_back(njh::pasteAsStr(baseForPosition[pos], ins.first));
-						altsCounts.emplace_back(ins.second);
-						altsFreqs.emplace_back(ins.second/static_cast<double>(varInfo.depthPerPosition[pos]));
-					}
-				}
-
-				vcfOut << njh::conToStr(alts, ",")
-				<< "\t40\tPASS\t";
-				vcfOut
-						<< "DP=" << varInfo.depthPerPosition[pos] << ";"
-						<< "NS=" << samplesCalled << ";"
-						<< "AC=" << njh::conToStr(altsCounts, ",") << ";"
-						<< "AF=" << njh::conToStr(altsFreqs, ",")
-				<< std::endl;
-			}
-			if (njh::in(pos, deletionsFinalForVCF)) {
-				for (const auto & d : deletionsFinalForVCF[pos]) {
-					vcfOut <<  refRegion.chrom_
-							<< "\t" << pos + 1
-							<< "\t" << "."
-							<< "\t";
-					vcfOut << baseForPosition[pos] << d.first
-					<< "\t" << baseForPosition[pos] << "\t";
-					vcfOut << "40\tPASS\t";
-					vcfOut
-							<< "DP=" << varInfo.depthPerPosition[pos] << ";"
-							<< "NS=" << samplesCalled << ";"
-							<< "AC=" << d.second << ";"
-							<< "AF=" << d.second/static_cast<double>(varInfo.depthPerPosition[pos])
-					<< std::endl;
-				}
-			}
-		}
 	}
 	return 0;
 }

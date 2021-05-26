@@ -59,9 +59,14 @@ int genExpRunner::translateSeqsBasedOnGFF(const njh::progutils::CmdArgs & inputC
 	TranslatorByAlignment translator(transPars);
 	SeqInput seqReader(setUp.pars_.ioOptions_);
 	auto input = seqReader.readAllReads<seqInfo>();
-	std::unordered_map<std::string, uint32_t> counts;
+	std::unordered_map<std::string, std::unordered_set<std::string>> counts;
+	uint32_t ongoingCount = 0;
 	for(const auto & seq : input ){
-		counts[seq.name_] = std::ceil(seq.cnt_);
+		auto seqCount = std::ceil(seq.cnt_);
+		for(const auto count : iter::range(seqCount)){
+			counts[seq.name_].emplace(njh::pasteAsStr("samp.", ongoingCount + count));
+		}
+		ongoingCount += seqCount;
 	}
 	auto results = translator.run(setUp.pars_.ioOptions_, counts, variantCallerRunPars);
 
