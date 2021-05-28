@@ -87,6 +87,8 @@ class programWrapperRunner : public njh::progutils::ProgramRunner {
 	static int runDada2SingleSamplePaired(const njh::progutils::CmdArgs & inputCommands);
 
 
+	static int runHmmsearch(const njh::progutils::CmdArgs & inputCommands);
+
 };
 
 } /* namespace njhseq */

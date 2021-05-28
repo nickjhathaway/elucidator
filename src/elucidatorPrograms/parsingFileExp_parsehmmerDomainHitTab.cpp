@@ -30,6 +30,7 @@
 #include <njhseq/objects/BioDataObject/BioDataFileIO.hpp>
 
 #include <njhseq/objects/BioDataObject/HmmerDomainHitTab.hpp>
+#include <njhseq/objects/BioDataObject/BedRecordCore.hpp>
 
 namespace njhseq {
 
@@ -37,7 +38,7 @@ namespace njhseq {
 int parsingFileExpRunner::parsehmmerDomainHitTab(
 		const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path fnp = "";
-	OutOptions outOpts;
+	OutOptions outOpts(bfs::path(""), ".txt");
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
 	setUp.processVerbose();
@@ -49,11 +50,13 @@ int parsingFileExpRunner::parsehmmerDomainHitTab(
 	BioDataFileIO<HmmerDomainHitTab> reader{IoOptions(InOptions(fnp))};
 	HmmerDomainHitTab domain;
 	reader.openIn();
-	out << "[";
+	uint32_t count = 0;
+	out << njh::conToStr(HmmerDomainHitTab::toDelimStrHeader(), "\t") << std::endl;
 	while(reader.readNextRecord(domain)){
-		out << domain.toJson() << std::endl;
+		out << domain.toDelimStr() << std::endl;
+		++count;
 	}
-	out << "]" << std::endl;
+
 
 	return 0;
 }
