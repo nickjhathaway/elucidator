@@ -331,7 +331,7 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 	}
 
 
-	std::unordered_map<std::string, std::unordered_set<std::string>> samplesPerSeq;
+	std::unordered_map<std::string, std::unordered_set<std::string>> samplesPerSeqOrigninalOrientation;
 	// read in reads and collapse to unique
 	while(reader.readNextRead(seq)) {
 		if ("" != metaFnp) {
@@ -369,8 +369,7 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 			}
 		}
 		samples.emplace(sample);
-		samplesPerSeq[seq.seq_].emplace(sample);
-
+		samplesPerSeqOrigninalOrientation[seq.seq_].emplace(sample);
 		++totalInputSeqs;
 		bool found = false;
 		for (auto &cIter : originalOrientationClusters) {
@@ -385,6 +384,7 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 		}
 	}
 	std::vector<identicalCluster> forwardStrandClusters;
+	std::unordered_map<std::string, std::unordered_set<std::string>> samplesPerSeqForward;
 
 
 	uint32_t samplesCalled = totalInputSeqs;
@@ -396,6 +396,9 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 		for(const auto & clus : originalOrientationClusters){
 			forwardStrandClusters.emplace_back(clus);
 			forwardStrandClusters.back().seqBase_.reverseComplementRead(false, true);
+		}
+		for(const auto & seq : samplesPerSeqOrigninalOrientation){
+			samplesPerSeqForward[seqUtil::reverseComplement(seq.first, "DNA")] = seq.second;
 		}
 	}else{
 		forwardStrandClusters = originalOrientationClusters;
@@ -412,7 +415,7 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 		popMeta.addMeta("HapPopUIDCount", static_cast<uint32_t>(std::round(cIter.seqBase_.cnt_)));
 		cIter.seqBase_.name_ = njh::pasteAsStr(identifier, ".", leftPadNumStr<uint32_t>(seqId, forwardStrandClusters.size()),popMeta.createMetaName());
 		sampCountsForPopHaps[cIter.seqBase_.name_] = cIter.seqBase_.cnt_;
-		sampNamesForPopHaps[cIter.seqBase_.name_] = samplesPerSeq[cIter.seqBase_.seq_];
+		sampNamesForPopHaps[cIter.seqBase_.name_] = samplesPerSeqForward[cIter.seqBase_.seq_];
 		nameLookUp[cIter.seqBase_.seq_] = cIter.seqBase_.name_;
 		++seqId;
 	}
@@ -464,14 +467,13 @@ int seqUtilsInfoRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs 
 	TranslatorByAlignment::VariantsInfo varInfo(refRegion.genBed3RecordCore(), idSeq);
 
 	for(const auto & seq : forwardStrandClusters){
-
 		alignerObj.alignCacheGlobal(forwardStrandRefSeq, seq);
 		alignerObj.profileAlignment(forwardStrandRefSeq, seq, false, false, false);
 		varInfo.addVariantInfo(
 				alignerObj.alignObjectA_.seqBase_.seq_,
 				alignerObj.alignObjectB_.seqBase_.seq_,
 				seq.seqBase_.cnt_,
-				samplesPerSeq[seq.seqBase_.seq_],
+				samplesPerSeqForward[seq.seqBase_.seq_],
 				alignerObj.comp_,
 				refRegion.start_);
 	}
