@@ -37,6 +37,7 @@ class statsExpRunner : public njh::progutils::ProgramRunner {
 	statsExpRunner();
 
 
+	static int boost_normal_dist_example(const njh::progutils::CmdArgs & inputCommands);
 
 	static int pnorm(const njh::progutils::CmdArgs & inputCommands);
 	static int tajimatest(const njh::progutils::CmdArgs & inputCommands);
