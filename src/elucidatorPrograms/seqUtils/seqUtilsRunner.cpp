@@ -221,6 +221,7 @@ int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommand
   setUp.processVerbose();
   setUp.processDebug();
   setUp.processDefaultReader(true);
+  setUp.pars_.colOpts_.kmerOpts_.kLength_ = 5;
   setUp.pars_.ioOptions_.out_.outExtention_ = ".tab.txt";
 	setUp.setOption(numThreads, "--numThreads", "Number of Threads to Use");
 	setUp.setOption(diagonal,   "--diagonal",   "Just solve a global diagonal");
@@ -247,11 +248,15 @@ int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommand
   //read in
   SeqInput reader(setUp.pars_.ioOptions_);
 	reader.openIn();
-	auto inReads = reader.readAllReads<seqInfo>();
+	std::vector<seqWithKmerInfo> seqs;
+	seqInfo seq;
+	while(reader.readNextRead(seq)){
+		seqs.emplace_back(seqWithKmerInfo(seq, setUp.pars_.colOpts_.kmerOpts_.kLength_ , false));
+	}
 
 	// set up aligner object
   uint64_t maxSize = 0;
-  readVec::getMaxLength(inReads, maxSize);
+  readVec::getMaxLength(seqs, maxSize);
 
 	aligner alignerObj(maxSize, setUp.pars_.gapInfo_, setUp.pars_.scoring_,
 			KmerMaps(setUp.pars_.colOpts_.kmerOpts_.kLength_),
@@ -272,11 +277,11 @@ int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommand
 				};
 	}
 
-	double total = std::accumulate(inReads.begin(), inReads.end(), 0.0, [](double tots, const seqInfo & seq){
-		return tots + seq.cnt_;
+	double total = std::accumulate(seqs.begin(), seqs.end(), 0.0, [](double tots, const seqWithKmerInfo & seq){
+		return tots + seq.seqBase_.cnt_;
 	});
-	njh::for_each(inReads, [&total](seqInfo & seq){
-		seq.frac_ = seq.cnt_/total;
+	njh::for_each(seqs, [&total](seqWithKmerInfo & seq){
+		seq.seqBase_.frac_ = seq.seqBase_.cnt_/total;
 	});
 
   std::ofstream profileInfoFile;
@@ -287,12 +292,12 @@ int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommand
     openTextFile(tempFile, "tempFilealns.fasta", ".fasta", setUp.pars_.ioOptions_.out_);
   }
   profileInfoFile
-      << "ReadId\tReadFraction\tOtherReadId\talnScore\tperId\t1bIndel\t2bI"
+      << "ReadId\tReadFraction\tOtherReadId\talnScore\tperId\tk" << setUp.pars_.colOpts_.kmerOpts_.kLength_ << "Dist\t1bIndel\t2bI"
          "ndel\t>2bIndel\tlqMismatch\thqMismatch\ttotalDiffs" << std::endl;
-  readVec::handelLowerCaseBases(inReads, setUp.pars_.ioOptions_.lowerCaseBases_);
-	PairwisePairFactory pairFac(len(inReads));
+  readVec::handelLowerCaseBases(seqs, setUp.pars_.ioOptions_.lowerCaseBases_);
+	PairwisePairFactory pairFac(len(seqs));
 	if (setUp.pars_.verbose_) {
-		std::cout << "Read in " << inReads.size() << " reads to compare" << std::endl;
+		std::cout << "Read in " << seqs.size() << " reads to compare" << std::endl;
 		std::cout << "Total number of compares to do: " << pairFac.totalCompares_ << std::endl;
 	}
 	concurrent::AlignerPool alnPool(alignerObj, numThreads);
@@ -302,7 +307,7 @@ int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommand
 	std::mutex fileMut;
 	njh::ProgressBar pbar(pairFac.totalCompares_);
 
-	std::function<void()> runCompare = [&pairFac,&fileMut,&profileInfoFile, &tempFile,&setUp,&inReads, &alnPool,&pbar,&alignFunc](){
+	std::function<void()> runCompare = [&pairFac,&fileMut,&profileInfoFile, &tempFile,&setUp,&seqs, &alnPool,&pbar,&alignFunc](){
 
 		auto threadId = estd::to_string(std::this_thread::get_id());
 		PairwisePairFactory::PairwisePair pair;
@@ -313,22 +318,23 @@ int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommand
 			if(setUp.pars_.verbose_){
 				pbar.outputProgAdd(std::cout, 1, true);
 			}
-			const auto & ref = inReads[pair.row_];
-			const auto & input = inReads[pair.col_];
+			const auto & ref = seqs[pair.row_];
+			const auto & input = seqs[pair.col_];
 			//currentAligner->alignCache(ref, input, setUp.pars_.local_);
-			alignFunc(*currentAligner, ref, input, setUp.pars_.local_);
+			alignFunc(*currentAligner, ref.seqBase_, input.seqBase_, setUp.pars_.local_);
       if(setUp.pars_.debug_){
-      	ssTempFile << ">" << ref.name_ << std::endl;
+      	ssTempFile << ">" << ref.seqBase_.name_ << std::endl;
       	ssTempFile << currentAligner->alignObjectA_.seqBase_.seq_ << std::endl;
-      	ssTempFile << ">" << input.name_ << std::endl;
+      	ssTempFile << ">" << input.seqBase_.name_ << std::endl;
       	ssTempFile << currentAligner->alignObjectB_.seqBase_.seq_ << std::endl;
       }
       currentAligner->profilePrimerAlignment(ref, input);
-      ssProfile << input.name_
-					<< "\t" << input.frac_
-					<< "\t" << ref.name_
+      ssProfile << input.seqBase_.name_
+					<< "\t" << input.seqBase_.frac_
+					<< "\t" << ref.seqBase_.name_
 					<< "\t" << currentAligner->comp_.alnScore_
 					<< "\t" << currentAligner->comp_.distances_.eventBasedIdentity_
+					<< "\t" << ref.compareKmers(input).second
 					<< "\t" << currentAligner->comp_.oneBaseIndel_
 					<< "\t" << currentAligner->comp_.twoBaseIndel_
 					<< "\t" << currentAligner->comp_.largeBaseIndel_

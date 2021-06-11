@@ -53,7 +53,7 @@
 
 #include "elucidatorPrograms/seqSearching.hpp"
 #include "elucidatorPrograms/genomeExp.hpp"
-
+#include "elucidatorPrograms/statsExp.hpp"
 
 #include <njhcpp/progutils/oneRing.hpp>
 
@@ -97,6 +97,7 @@ elucidatorRunner::elucidatorRunner() :
 					addRing<seqSearchingRunner>(),
 					addRing<pairProcessingRunner>(),
 					addRing<genomeExpRunner>(),
+					addRing<statsExpRunner>(),
 
 
 				},//

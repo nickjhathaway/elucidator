@@ -68,7 +68,9 @@ int geneExpRunner::gffRecordIDToGeneInfo(const njh::progutils::CmdArgs & inputCo
 	}
 
 	GeneFromGffs::gffRecordIDsToGeneInfo(pars);
-
+	if("./" != setUp.pars_.directoryName_){
+		setUp.startARunLog(setUp.pars_.directoryName_);
+	}
 	return 0;
 }
 
