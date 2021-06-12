@@ -32,7 +32,6 @@ namespace njhseq {
 seqUtilsInfoRunner::seqUtilsInfoRunner()
     : njh::progutils::ProgramRunner({
 
-	addFunc("callVariantsAgainstRefSeq", callVariantsAgainstRefSeq, false),
 
 	addFunc("getHpProfile", getHpProfile, false),
   addFunc("profileReadsToReference", profileReadsToReference, false),
@@ -57,16 +56,11 @@ seqUtilsInfoRunner::seqUtilsInfoRunner()
 	addFunc("genPsuedoMismatchMinTree", genPsuedoMismatchMinTree, false),
 	addFunc("qualCounts", qualCounts, false),
 	addFunc("printSeqs", printSeqs, false),
-	addFunc("quickHaplotypeInformation", quickHaplotypeInformation, false),
-	addFunc("oldQuickHaplotypeInformationAndVariants", oldQuickHaplotypeInformationAndVariants, false),
 	addFunc("getGCContent", getGCContent, false),
-	addFunc("quickHaplotypeVariantsWithRegion", quickHaplotypeVariantsWithRegion, false),
 	addFunc("readLengthDistribution", readLengthDistribution, false),
 	addFunc("getReadLens", getReadLens, false),
 	addFunc("multipleAlnProteinToPcaInput", multipleAlnProteinToPcaInput, false),
-	addFunc("getHapPopDifAndVariantsInfo", getHapPopDifAndVariantsInfo, false),
 	addFunc("getSlidingEntropy", getSlidingEntropy, false),
-	addFunc("callVariantsAgainstRefSeqIndividual", callVariantsAgainstRefSeqIndividual, false),
 	},
                     "seqUtilsInfo") {}
 //

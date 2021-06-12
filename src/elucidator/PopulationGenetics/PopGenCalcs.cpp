@@ -27,6 +27,57 @@
 
 namespace njhseq {
 
+PopGenCalculator::TajimaTestRes PopGenCalculator::calcTajimaTest(uint32_t nInputSeqs, uint32_t nSegragtingSites, double meanPairwiseDifferences){
+	double n = nInputSeqs;
+  if (n < 4) {
+  	std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << "Tajima test requires at least 4 sequences"<< "\n";
+		throw std::runtime_error{ss.str()};
+  }
+
+  if (nSegragtingSites < 1) {
+  	std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << "No segrating sites"<< "\n";
+		throw std::runtime_error{ss.str()};
+  }
+  std::vector<uint32_t> tmp(n-1);njh::iota<uint32_t>(tmp, 1);
+  double a1 = 0;
+  double a2 = 0;
+  for(const auto & t : tmp){
+  	a1 += 1/static_cast<double>(t);
+  	a2 += 1/std::pow(static_cast<double>(t), 2);
+  }
+  double b1 = (n + 1)/(3 * (n - 1));
+  double b2 = 2 * (std::pow(n,2) + n + 3)/(9 * n * (n - 1));
+  double c1 = b1 - 1/a1;
+  double c2 = b2 - (n + 2)/(a1 * n) + a2/std::pow(a1,2);
+  double e1 = c1/a1;
+  double e2 = c2/(std::pow(a1,2) + a2);
+  double D = (meanPairwiseDifferences - nSegragtingSites/a1)/std::sqrt(e1 * nSegragtingSites + e2 * nSegragtingSites * (nSegragtingSites - 1));
+  double Dmin = (2/n - 1/a1)/std::sqrt(e2);
+  double Dmax = ((n + 1)/(2 * n) - 1/a1)/std::sqrt(e2);
+  double tmp1 = 1 + Dmin * Dmax;
+  double tmp2 = Dmax - Dmin;
+  double a = -tmp1 * Dmax/tmp2;
+  double b = tmp1 * Dmin/tmp2;
+  boost::math::beta_distribution<double> betadist(b, a);
+  double p = boost::math::cdf(betadist,(D - Dmin)/tmp2);
+  if (p < 0.5){
+  	p =  2 * p;
+  }else{
+  	p =  2 * (1 - p);
+  }
+  boost::math::normal ndist;
+  double Pval_normal = 2 * boost::math::cdf(ndist, -std::abs(D));
+  double Pval_beta = p;
+  return TajimaTestRes(D, Pval_normal, Pval_beta);
+}
+
+
+
+
+
+
 PopGenCalculator::PopDifferentiationMeasures PopGenCalculator::getOverallPopDiff(std::unordered_map<std::string, std::vector<PopHapInfo> > hapsForPopulations){
 
 	if(hapsForPopulations.size() < 2){

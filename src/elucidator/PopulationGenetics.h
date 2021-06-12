@@ -26,6 +26,7 @@
 
 
 #include "elucidator/PopulationGenetics/PopGenCalcs.hpp"
+#include "elucidator/PopulationGenetics/HapsEncodedMatrix.hpp"
 
 
 

@@ -26,11 +26,36 @@
 #include "elucidator/common.h"
 #include <njhseq/objects/seqObjects/BaseObjects/seqInfo.hpp>
 
+#include <random>
+#include <boost/math/distributions/normal.hpp>
+#include <boost/math/distributions/beta.hpp>
+
 namespace njhseq {
 
 
 class PopGenCalculator{
 public:
+
+	struct TajimaTestRes{
+		TajimaTestRes(double d, double pvalnorm, double pvalbeta):d_(d), pval_normal_(pvalnorm), pval_beta_(pvalbeta){
+
+		}
+		double d_{std::numeric_limits<double>::max()};
+		double pval_normal_{std::numeric_limits<double>::max()};
+		double pval_beta_{std::numeric_limits<double>::max()};
+	};
+
+
+	/**@brief Calculate tajima's test for neutrality
+	 *
+	 * @param nInputSeqs The number of input sequences
+	 * @param nSegragtingSites The number of segregating sites
+	 * @param meanPairwiseDifferences The average number of difference between input sequences
+	 * @return
+	 */
+	static TajimaTestRes calcTajimaTest(uint32_t nInputSeqs, uint32_t nSegragtingSites, double meanPairwiseDifferences);
+
+
 	struct DiversityMeasures{
 
 		uint32_t alleleNumber_ = 0; //number of unique alleles

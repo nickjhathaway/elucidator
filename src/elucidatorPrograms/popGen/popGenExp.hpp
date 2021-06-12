@@ -1,6 +1,6 @@
 #pragma once
 /*
- * statsExp.hpp
+ * popGenExp.hpp
  *
  *  Created on: Jun 11, 2021
  *      Author: nicholas hathaway
@@ -32,15 +32,22 @@
 
 namespace njhseq {
 
-class statsExpRunner : public njh::progutils::ProgramRunner {
+class popGenExpRunner : public njh::progutils::ProgramRunner {
  public:
-	statsExpRunner();
+	popGenExpRunner();
+
+	static int doPairwiseComparisonOnHapsSharing(const njh::progutils::CmdArgs & inputCommands);
+	static int tajimatest_testingExample(const njh::progutils::CmdArgs & inputCommands);
+	static int tajimatest(const njh::progutils::CmdArgs & inputCommands);
 
 
-	static int boost_normal_dist_example(const njh::progutils::CmdArgs & inputCommands);
-	static int stats_pbeta(const njh::progutils::CmdArgs & inputCommands);
-	static int stats_pnorm(const njh::progutils::CmdArgs & inputCommands);
+  static int callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & inputCommands);
+  static int callVariantsAgainstRefSeqIndividual(const njh::progutils::CmdArgs & inputCommands);
 
+  static int quickHaplotypeInformation(const njh::progutils::CmdArgs & inputCommands);
+  static int getHapPopDifAndVariantsInfo(const njh::progutils::CmdArgs & inputCommands);
+  static int oldQuickHaplotypeInformationAndVariants(const njh::progutils::CmdArgs & inputCommands);
+  static int quickHaplotypeVariantsWithRegion(const njh::progutils::CmdArgs & inputCommands);
 
 };
 
