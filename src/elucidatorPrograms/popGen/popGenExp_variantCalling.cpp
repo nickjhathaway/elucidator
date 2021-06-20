@@ -312,6 +312,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 			samplesPerSeqForward[seqUtil::reverseComplement(seq.first, "DNA")] = seq.second;
 		}
 	}else{
+		samplesPerSeqForward = samplesPerSeqOrigninalOrientation;
 		forwardStrandClusters = originalOrientationClusters;
 	}
 
@@ -387,6 +388,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 				samplesPerSeqForward[seq.seqBase_.seq_],
 				alignerObj.comp_,
 				refRegion.start_);
+		//std::cout << "samplesPerSeqForward[seq.seqBase_.seq_]: " << samplesPerSeqForward[seq.seqBase_.seq_].size() << std::endl;
 	}
 	varInfo.setFinals(variantCallerRunPars);
 
@@ -685,7 +687,6 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 	if(!varInfo.snpsFinal.empty() || ! varInfo.deletionsFinal.empty() || !varInfo.insertionsFinal.empty()){
 		varInfo.writeVCF(njh::files::make_path(variantCallsDir, "allVariants.vcf"));
 		varInfo.writeSNPTable(njh::files::make_path(variantCallsDir, "allSNPs.tab.txt"));
-
 	}
 	return 0;
 }
