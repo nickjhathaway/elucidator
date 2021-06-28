@@ -8,6 +8,8 @@
 
 #include "CollapsedHaps.hpp"
 
+#include <njhseq/concurrency/PairwisePairFactory.hpp>
+
 namespace njhseq {
 
 
@@ -43,6 +45,10 @@ uint32_t CollapsedHaps::getTotalHapCount() const{
 	return ret;
 }
 
+uint32_t CollapsedHaps::getTotalUniqueHapCount() const{
+	return seqs_.size();
+}
+
 std::vector<uint32_t> CollapsedHaps::getReadLenVec() const{
 	std::vector<uint32_t> ret;
 	for(const auto & seq : seqs_){
@@ -61,7 +67,8 @@ std::unordered_map<uint32_t, uint32_t> CollapsedHaps::getReadLenMap() const{
 	return ret;
 }
 
-CollapsedHaps CollapsedHaps::readInReads(const SeqIOOptions & inOpts){
+CollapsedHaps CollapsedHaps::readInReads(const SeqIOOptions & inOpts, std::unique_ptr<MultipleGroupMetaData> meta,
+		std::unordered_map<std::string, std::string> metaValuesToAvoid){
 	CollapsedHaps ret;
 	SeqInput reader(inOpts);
 	reader.openIn();
@@ -70,6 +77,24 @@ CollapsedHaps CollapsedHaps::readInReads(const SeqIOOptions & inOpts){
 	std::unordered_set<std::string> allNames;
 
 	while(reader.readNextRead(seq)) {
+		if(nullptr != meta) {
+			meta->attemptToAddSeqMeta(seq);
+		}
+		//get meta keys if available
+		if(MetaDataInName::nameHasMetaData(getSeqBase(seq).name_)){
+			MetaDataInName metaData(getSeqBase(seq).name_);
+			bool skip = false;
+			for(const auto & ignoreField : metaValuesToAvoid){
+				if(metaData.containsMeta(ignoreField.first) && metaData.getMeta(ignoreField.first) == ignoreField.second){
+					skip = true;
+					break;
+					//skip this seq
+				}
+			}
+			if(skip){
+				continue;
+			}
+		}
 		if(njh::in(seq.name_, allNames)){
 			std::stringstream ss;
 			ss << __PRETTY_FUNCTION__ << ", error " << "can't have seqs with the same name in input"<< "\n";
@@ -107,6 +132,7 @@ CollapsedHaps CollapsedHaps::readInReads(const SeqIOOptions & inOpts){
 std::vector<comparison> CollapsedHaps::getCompsAgainstRef(const seqInfo & refSeq, aligner & alignerObj, uint32_t numThreads) const {
 	std::vector<comparison> ret(seqs_.size());
 	concurrent::AlignerPool alnPool(alignerObj, numThreads);
+	alnPool.initAligners();
 	std::vector<uint32_t> positions;
 	njh::concurrent::LockableQueue<uint32_t> posQueue(positions);
 
@@ -125,6 +151,61 @@ std::vector<comparison> CollapsedHaps::getCompsAgainstRef(const seqInfo & refSeq
 		}
 	};
 	njh::concurrent::runVoidFunctionThreaded(alignComp, numThreads);
+	return ret;
+}
+
+std::vector<std::vector<comparison>> CollapsedHaps::getPairwiseComps(aligner & alignerObj, uint32_t numThreads) const{
+	PairwisePairFactory pFac(seqs_.size());
+	std::vector<std::vector<comparison>> ret;
+	for(const auto pos : iter::range(seqs_.size())){
+		ret.emplace_back(std::vector<comparison>(pos));
+	}
+	concurrent::AlignerPool alnPool(alignerObj, numThreads);
+	alnPool.initAligners();
+	njh::ProgressBar pBar(pFac.totalCompares_);
+	std::mutex mut;
+	std::function<void()> alignComp = [this,&pFac,&alnPool,&ret,&mut,&alignerObj,&pBar](){
+		auto currentAligner = alnPool.popAligner();
+		PairwisePairFactory::PairwisePair pair;
+		while(pFac.setNextPair(pair)){
+			currentAligner->alignCacheGlobal(seqs_[pair.row_], seqs_[pair.col_]);
+			currentAligner->profileAlignment(seqs_[pair.row_], seqs_[pair.col_], false, false, false);
+			ret[pair.row_][pair.col_] = currentAligner->comp_;
+			if(verbose_){
+				pBar.outputProgAdd(std::cout, 1, true);
+			}
+		}
+		{
+			std::lock_guard<std::mutex> lock(mut);
+			alignerObj.alnHolder_.mergeOtherHolder(currentAligner->alnHolder_);
+		}
+	};
+	njh::concurrent::runVoidFunctionThreaded(alignComp, numThreads);
+	return ret;
+}
+
+CollapsedHaps::AvgPairwiseMeasures CollapsedHaps::getAvgPairwiseMeasures(const std::vector<std::vector<comparison>> & allComps) const{
+	AvgPairwiseMeasures ret;
+	PairwisePairFactory pFac(seqs_.size());
+	PairwisePairFactory::PairwisePair pair;
+	while(pFac.setNextPair(pair)){
+		uint32_t toalSeqInComp = seqs_[pair.row_]->cnt_ + seqs_[pair.col_]->cnt_;
+
+		uint32_t totalBetweenComps =
+				  PairwisePairFactory::getTotalPairwiseComps(toalSeqInComp)
+				- PairwisePairFactory::getTotalPairwiseComps(seqs_[pair.row_]->cnt_)
+				- PairwisePairFactory::getTotalPairwiseComps(seqs_[pair.col_]->cnt_);
+
+		ret.avgPercentId  += allComps[pair.row_][pair.col_].distances_.eventBasedIdentityHq_ * totalBetweenComps;
+		ret.avgNumOfDiffs += allComps[pair.row_][pair.col_].distances_.getNumOfEvents(true) * totalBetweenComps;
+	}
+	uint64_t total = getTotalHapCount();
+	for(const auto pos : iter::range(getTotalUniqueHapCount() )){
+		//add in the 100% percent matches between the same exact seqs for the pairwise comps
+		ret.avgPercentId += PairwisePairFactory::getTotalPairwiseComps(seqs_[pos]->cnt_);
+	}
+	ret.avgPercentId  /= PairwisePairFactory::getTotalPairwiseComps(total);
+	ret.avgNumOfDiffs /= PairwisePairFactory::getTotalPairwiseComps(total);
 	return ret;
 }
 
