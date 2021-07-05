@@ -744,7 +744,7 @@ int kmerExpRunner::getKmerSharedBlocksBetweenGenomes(const njh::progutils::CmdAr
 
 	setUp.setOption(pars.numThreads_, "--numThreads", "Number of CPUs to utilize");
 	setUp.setOption(pars.genomeDir_, "--genomeDir", "Name of the genome file fnp", true);
-	setUp.setOption(pars.primaryGenome_, "--primaryGenome", "The primary reference genome");
+	setUp.setOption(pars.primaryGenome_, "--primaryGenome", "The primary reference genome", true);
   setUp.setOption(pars.selectedGenomes_, "--selectedGenomes", "Name of the other genomes in --genomeDir to be read in, leave blank to just do all fastas");
 
 
@@ -771,7 +771,6 @@ int kmerExpRunner::getKmerSharedBlocksBetweenGenomes(const njh::progutils::CmdAr
 	gMapper->init();
 
 	auto genomeNames = getVectorOfMapKeys(gMapper->genomes_);
-
 	std::unordered_map<std::string, std::unordered_map<std::string, std::shared_ptr<KmersSharedBlocks>>> uniqueKmersPerGenomePerRecord;
 	std::mutex uniqKsMut;
 
@@ -826,10 +825,8 @@ int kmerExpRunner::getKmerSharedBlocksBetweenGenomes(const njh::progutils::CmdAr
 	watch.startNewLap("Get unique kmers for all genomes");
 	njh::concurrent::runVoidFunctionThreaded(indexGenomeForUniqueKmers, gMapper->pars_.numThreads_);
 
-
 	auto perGenomeUniCountsDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{"uniqueKmersCounts"});
 	watch.startNewLap("Outputing info per genome");
-
 	for(const auto & genome : uniqueKmersPerGenomePerRecord){
 		OutputStream out(njh::files::make_path(perGenomeUniCountsDir, genome.first + "_uniqueKmerNumbers.tab.txt"));
 		out << "record1\tnumberOfUniqueKmers" << std::endl;
@@ -872,7 +869,6 @@ int kmerExpRunner::getKmerSharedBlocksBetweenGenomes(const njh::progutils::CmdAr
 		}
 	}
 	watch.startNewLap("Compare Against Ref");
-
 	auto refRecNames = getVectorOfMapKeys(uniqueKmersPerGenomePerRecord[pars.primaryGenome_]);
 	struct UniKmersCompRes {
 		UniKmersCompRes(const std::string &gRec, const std::string &rRec,
@@ -898,7 +894,6 @@ int kmerExpRunner::getKmerSharedBlocksBetweenGenomes(const njh::progutils::CmdAr
 	};
 	std::unordered_map<std::string, std::vector<UniKmersCompRes>> compsAgainstRef;
 	std::unordered_map<std::string, std::vector<std::shared_ptr<KmersSharedBlocks>>> blocksByRefRecord;
-
 	for(const auto & genome : uniqueKmersPerGenomePerRecord){
 		//if(genome.first != pars.primaryGenome_){
 		if(true){
@@ -983,7 +978,6 @@ int kmerExpRunner::getKmerSharedBlocksBetweenGenomes(const njh::progutils::CmdAr
 		};
 		njh::concurrent::runVoidFunctionThreaded(profileRecord, gMapper->pars_.numThreads_);
 	}
-
 
 	{
 		watch.startNewLap("Count Shared Kmers");

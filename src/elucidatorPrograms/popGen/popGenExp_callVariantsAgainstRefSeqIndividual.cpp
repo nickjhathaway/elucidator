@@ -91,7 +91,7 @@ int popGenExpRunner::callVariantsAgainstRefSeqIndividual(const njh::progutils::C
 	auto cmps = inputSeqs.getCompsAgainstRef(refSeq, alignerObj, numThreads);
 	for(const auto pos : iter::range(inputSeqs.seqs_.size())){
 		for(const auto & name : inputSeqs.names_[pos]){
-			cmps[pos].distances_.writeBasicInfo(out, *gPos, name);
+			cmps[pos].comp_.distances_.writeBasicInfo(out, *gPos, name);
 		}
 	}
 	alignerObj.processAlnInfoOutput(setUp.pars_.outAlnInfoDirName_, setUp.pars_.verbose_);

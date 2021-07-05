@@ -438,18 +438,17 @@ int bedExpRunner::bedCoordSort(const njh::progutils::CmdArgs & inputCommands) {
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 
-	BioDataFileIO<Bed6RecordCore> reader{IoOptions(InOptions(bedFile), outOpts)};
-	reader.openIn();
-	reader.openOut();
-	std::vector<Bed6RecordCore> allBeds;
-	Bed6RecordCore record;
-	while(reader.readNextRecord(record)){
-		allBeds.emplace_back(record);
-	}
+	if(useStrandInfo){
+		BioDataFileIO<Bed6RecordCore> reader{IoOptions(InOptions(bedFile), outOpts)};
+		reader.openIn();
+		reader.openOut();
+		std::vector<Bed6RecordCore> allBeds;
+		Bed6RecordCore record;
+		while(reader.readNextRecord(record)){
+			allBeds.emplace_back(record);
+		}
 
-	std::function<bool(const Bed6RecordCore &, const Bed6RecordCore &)> bedCoordSorterFunc;
-	if (useStrandInfo) {
-		bedCoordSorterFunc =
+		std::function<bool(const Bed6RecordCore &, const Bed6RecordCore &)> bedCoordSorterFunc =
 				[](const Bed6RecordCore & reg1, const Bed6RecordCore & reg2) {
 					if(reg1.chrom_ == reg2.chrom_) {
 						uint32_t reg1Start = ('+' == reg1.strand_ ? reg1.chromStart_ : reg1.chromEnd_);
@@ -467,9 +466,27 @@ int bedExpRunner::bedCoordSort(const njh::progutils::CmdArgs & inputCommands) {
 						return reg1.chrom_ < reg2.chrom_;
 					}
 				};
+		if(decending){
+			std::sort(allBeds.rbegin(), allBeds.rend(), bedCoordSorterFunc);
+		}else{
+			njh::sort(allBeds, bedCoordSorterFunc);
+		}
+
+		reader.write(allBeds, [](const Bed6RecordCore & bed, std::ostream & out){
+			out << bed.toDelimStrWithExtra() << std::endl;
+		});
 	}else{
-		bedCoordSorterFunc =
-				[](const Bed6RecordCore & reg1, const Bed6RecordCore & reg2) {
+		BioDataFileIO<Bed3RecordCore> reader{IoOptions(InOptions(bedFile), outOpts)};
+		reader.openIn();
+		reader.openOut();
+		std::vector<Bed3RecordCore> allBeds;
+		Bed3RecordCore record;
+		while(reader.readNextRecord(record)){
+			allBeds.emplace_back(record);
+		}
+
+		std::function<bool(const Bed3RecordCore &, const Bed3RecordCore &)> bedCoordSorterFunc=
+				[](const Bed3RecordCore & reg1, const Bed3RecordCore & reg2) {
 					if(reg1.chrom_ == reg2.chrom_) {
 						if(reg1.chromStart_ == reg2.chromStart_) {
 							return reg1.chromEnd_ < reg2.chromEnd_;
@@ -480,16 +497,16 @@ int bedExpRunner::bedCoordSort(const njh::progutils::CmdArgs & inputCommands) {
 						return reg1.chrom_ < reg2.chrom_;
 					}
 				};
-	}
-	if(decending){
-		std::sort(allBeds.rbegin(), allBeds.rend(), bedCoordSorterFunc);
-	}else{
-		njh::sort(allBeds, bedCoordSorterFunc);
-	}
+		if(decending){
+			std::sort(allBeds.rbegin(), allBeds.rend(), bedCoordSorterFunc);
+		}else{
+			njh::sort(allBeds, bedCoordSorterFunc);
+		}
 
-	reader.write(allBeds, [](const Bed6RecordCore & bed, std::ostream & out){
-		out << bed.toDelimStrWithExtra() << std::endl;
-	});
+		reader.write(allBeds, [](const Bed3RecordCore & bed, std::ostream & out){
+			out << bed.toDelimStrWithExtra() << std::endl;
+		});
+	}
 	return 0;
 }
 

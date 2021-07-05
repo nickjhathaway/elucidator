@@ -24,6 +24,8 @@
 namespace njhseq {
 
 
+
+
 int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & inputCommands) {
 
 	/**@todo should add the following 1) average pairwise difference, 2) make into a function, 3) generate connected hap map, 4) unique haps to region count, 5) doing multiple pop fields at once */
@@ -39,6 +41,8 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 	bfs::path bedFnp = "";
 	uint32_t outwardsExpand = 5;
 
+	uint32_t numThreads = 1;
+	bool getPairwiseComps = false;
 	bfs::path metaFnp;
 	bool keepNonFieldSamples = false;
 	std::set<std::string> ignoreSubFields;
@@ -49,6 +53,9 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 	setUp.processReadInNames(true);
 	setUp.processDirectoryOutputName(true);
 	setUp.processAlnInfoInput();
+	setUp.setOption(numThreads, "--numThreads", "number of threads");
+	setUp.setOption(getPairwiseComps, "--getPairwiseComps", "get Pairwise comparison metrics");
+
 	setUp.setOption(variantCallerRunPars.occurrenceCutOff, "--occurrenceCutOff", "Occurrence Cut Off, don't report variants below this count");
 	setUp.setOption(variantCallerRunPars.lowVariantCutOff, "--lowVariantCutOff", "Low Variant Cut Off, don't report variants below this fraction");
 	setUp.setOption(outwardsExpand, "--outwardsExpand", "The amount to expand outwards from given region when determining variants positions with extracted ref seq");
@@ -77,8 +84,14 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 
 	njh::files::checkExistenceThrow(bedFnp, __PRETTY_FUNCTION__);
 	njh::files::checkExistenceThrow(transPars.lzPars_.genomeFnp, __PRETTY_FUNCTION__);
-
 	std::unique_ptr<TranslatorByAlignment> translator;
+	if("" != knownAminoAcidChangesFnp){
+		if("" == transPars.gffFnp_){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "if supplying known amino acid positions than must also supply --gffFnp file"<< "\n";
+			throw std::runtime_error{ss.str()};
+		}
+	}
 	if("" != transPars.gffFnp_){
 		translator = std::make_unique<TranslatorByAlignment>(transPars);
 		if("" == transPars.lzPars_.genomeFnp){
@@ -87,30 +100,9 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 			throw std::runtime_error{ss.str()};
 		}
 	}
-	table knownAminoAcidChanges;
-	if("" != knownAminoAcidChangesFnp){
-		if("" == transPars.gffFnp_){
-			std::stringstream ss;
-			ss << __PRETTY_FUNCTION__ << ", error " << "if supplying known amino acid positions than must also supply --gffFnp file"<< "\n";
-			throw std::runtime_error{ss.str()};
-		}
-		knownAminoAcidChanges = table(knownAminoAcidChangesFnp, "\t", true);
-		njh::for_each(knownAminoAcidChanges.columnNames_, [](std::string & col){
-			njh::strToLower(col);
-		});
-		knownAminoAcidChanges.setColNamePositions();
-		knownAminoAcidChanges.checkForColumnsThrow(VecStr{"transcriptid", "aaposition"}, __PRETTY_FUNCTION__);
-	}
 	std::unordered_map<std::string, std::set<uint32_t>> knownMutationsLocationsMap;
-	if(knownAminoAcidChanges.nRow() > 0){
-		for(const auto & row : knownAminoAcidChanges){
-			if(std::all_of(row.begin(), row.end(), [](const std::string & element){
-				return "" ==element;
-			})){
-				continue;
-			}
-			knownMutationsLocationsMap[row[knownAminoAcidChanges.getColPos("transcriptid")]].emplace(njh::StrToNumConverter::stoToNum<uint32_t>(row[knownAminoAcidChanges.getColPos("aaposition")]));
-		}
+	if("" != knownAminoAcidChangesFnp){
+		knownMutationsLocationsMap = TranslatorByAlignment::readInAAPositions(knownAminoAcidChangesFnp);
 	}
 	auto beds = getBeds(bedFnp);
 	if(beds.empty()){
@@ -127,123 +119,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 	if("" == identifier){
 		identifier = gPos->name_;
 	}
-	uint64_t maxLen = 0;
-	SeqInput reader(setUp.pars_.ioOptions_);
-	reader.openIn();
-
-	std::unique_ptr<MultipleGroupMetaData> meta;
-	if("" != metaFnp){
-		meta = std::make_unique<MultipleGroupMetaData>(metaFnp);
-	}
-
-	std::vector<identicalCluster> originalOrientationClusters;
-	seqInfo seq;
-	uint32_t totalInputSeqs = 0;
-	std::set<std::string> samples;
-
-	std::unordered_map<std::string, std::string> metaValuesToAvoid;
-	for(const auto & fieldValue : ignoreSubFields){
-		auto toks = tokenizeString(fieldValue, ":");
-		if(2 != toks.size()){
-			std::stringstream ss;
-			ss << __PRETTY_FUNCTION__ << ", error " << "meta field values to ignore need to be in format of METAFIELD:VALUE not " << fieldValue<< "\n";
-			throw std::runtime_error{ss.str()};
-		}
-		metaValuesToAvoid[toks[0]] = toks[1];
-	}
-
-
-	std::unordered_map<std::string, std::unordered_set<std::string>> samplesPerSeqOrigninalOrientation;
-	// read in reads and collapse to unique
-	while(reader.readNextRead(seq)) {
-		if ("" != metaFnp) {
-			meta->attemptToAddSeqMeta(seq);
-		}
-		//get meta keys if available
-		if(MetaDataInName::nameHasMetaData(getSeqBase(seq).name_)){
-			MetaDataInName metaData(getSeqBase(seq).name_);
-			bool skip = false;
-			for(const auto & ignoreField : metaValuesToAvoid){
-				if(metaData.containsMeta(ignoreField.first) && metaData.getMeta(ignoreField.first) == ignoreField.second){
-					skip = true;
-					break;
-					//skip this seq
-				}
-			}
-			if(skip){
-				continue;
-			}
-		}
-
-		readVec::handelLowerCaseBases(seq, setUp.pars_.ioOptions_.lowerCaseBases_);
-		if(setUp.pars_.ioOptions_.removeGaps_){
-			seq.removeGaps();
-		}
-		readVec::getMaxLength(seq, maxLen);
-		std::string sample = seq.name_;
-
-		if(seq.nameHasMetaData()){
-			MetaDataInName seqMeta(seq.name_);
-			if(seqMeta.containsMeta("sample")){
-				sample = seqMeta.getMeta("sample");
-			}else if(seqMeta.containsMeta("BiologicalSample")){
-				sample = seqMeta.getMeta("BiologicalSample");
-			}
-		}
-		samples.emplace(sample);
-		samplesPerSeqOrigninalOrientation[seq.seq_].emplace(sample);
-		++totalInputSeqs;
-		bool found = false;
-		for (auto &cIter : originalOrientationClusters) {
-			if (cIter.seqBase_.seq_ == seq.seq_) {
-				cIter.addRead(seq);
-				found = true;
-				break;
-			}
-		}
-		if (!found) {
-			originalOrientationClusters.emplace_back(seq);
-		}
-	}
-	std::vector<identicalCluster> forwardStrandClusters;
-	std::unordered_map<std::string, std::unordered_set<std::string>> samplesPerSeqForward;
-
-
-	uint32_t samplesCalled = totalInputSeqs;
-	if(!samples.empty()){
-		samplesCalled = samples.size();
-	}
-
-	if(gPos->reverseStrand()){
-		for(const auto & clus : originalOrientationClusters){
-			forwardStrandClusters.emplace_back(clus);
-			forwardStrandClusters.back().seqBase_.reverseComplementRead(false, true);
-		}
-		for(const auto & seq : samplesPerSeqOrigninalOrientation){
-			samplesPerSeqForward[seqUtil::reverseComplement(seq.first, "DNA")] = seq.second;
-		}
-	}else{
-		samplesPerSeqForward = samplesPerSeqOrigninalOrientation;
-		forwardStrandClusters = originalOrientationClusters;
-	}
-
-	njh::sort(forwardStrandClusters);
-	uint32_t seqId = 0;
-	std::unordered_map<std::string, std::string> nameLookUp;
-	std::unordered_map<std::string, uint32_t> sampCountsForPopHaps;
-	std::unordered_map<std::string, std::unordered_set<std::string>> sampNamesForPopHaps;
-
-	for (auto &cIter : forwardStrandClusters) {
-		MetaDataInName popMeta;
-		popMeta.addMeta("HapPopUIDCount", static_cast<uint32_t>(std::round(cIter.seqBase_.cnt_)));
-		cIter.seqBase_.name_ = njh::pasteAsStr(identifier, ".", leftPadNumStr<uint32_t>(seqId, forwardStrandClusters.size()),popMeta.createMetaName());
-		sampCountsForPopHaps[cIter.seqBase_.name_] = cIter.seqBase_.cnt_;
-		sampNamesForPopHaps[cIter.seqBase_.name_] = samplesPerSeqForward[cIter.seqBase_.seq_];
-		nameLookUp[cIter.seqBase_.seq_] = cIter.seqBase_.name_;
-		++seqId;
-	}
-
-
+	//get reference seq
 	//get region and ref seq for mapping of variants
 	OutputStream inputRegionBeforeExpandOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "inputRegionBeforeExpand.bed")));
 	inputRegionBeforeExpandOut << gPos->toDelimStrWithExtra() << std::endl;
@@ -260,102 +136,141 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 	bedOut << gPos->toDelimStrWithExtra() << std::endl;
 
 	GenomicRegion refRegion(*gPos);
+	refRegion.reverseSrand_ = false;
+	TwoBit::TwoBitFile tReader(gMapper.genomes_.at(gPars.primaryGenome_)->fnpTwoBit_);
+	auto refSeq = refRegion.extractSeq(tReader);
 
-	TwoBit::TwoBitFile tReader(
-			gMapper.genomes_.at(gPars.primaryGenome_)->fnpTwoBit_);
-	auto regionOrientationReferenceSeq = refRegion.extractSeq(tReader);
-	auto forwardStrandRefSeq = regionOrientationReferenceSeq;
-	std::unordered_map<uint32_t, char> baseForPosition;
-	if(refRegion.reverseSrand_){
-		forwardStrandRefSeq = regionOrientationReferenceSeq	;
-		forwardStrandRefSeq.reverseComplementRead(false, true);
-	}
-
-	for(uint32_t seqPos = 0; seqPos < forwardStrandRefSeq.seq_.size(); ++ seqPos){
-		baseForPosition[refRegion.start_ + seqPos] = forwardStrandRefSeq.seq_[seqPos];
-	}
-
-	SeqOutput::write(std::vector<seqInfo> { regionOrientationReferenceSeq },
+	SeqOutput::write(std::vector<seqInfo> { refSeq },
 			SeqIOOptions::genFastaOut(
 					njh::files::make_path(setUp.pars_.directoryName_,
 							"inputRegion.fasta")));
 
-	readVec::getMaxLength(forwardStrandRefSeq, maxLen);
+	//read in meta if available
+	std::unique_ptr<MultipleGroupMetaData> meta;
+	if("" != metaFnp){
+		meta = std::make_unique<MultipleGroupMetaData>(metaFnp);
+	}
+
+	std::unordered_map<std::string, std::string> metaValuesToAvoid = njh::progutils::CmdArgs::sepSubArgs<std::string, std::string>(ignoreSubFields);
+
+
+	auto inputSeqs = CollapsedHaps::readInReads(setUp.pars_.ioOptions_, meta, metaValuesToAvoid);
+	uint64_t maxLen = readVec::getMaxLength(inputSeqs.seqs_);
+	inputSeqs.setFrequencies();
+	if (gPos->reverseStrand()) {
+		inputSeqs.revCompSeqs();
+	}
+	//samples names
+	auto sampNamesPerSeq = inputSeqs.getSampleNamesPerSeqs();
+	auto allSamples = inputSeqs.getAllSampleNames();
+	//rename based on freq
+	std::vector<uint32_t> orderByCnt = inputSeqs.getOrderByTopCnt();
+	uint32_t seqId = 0;
+	for(const auto pos : orderByCnt){
+		MetaDataInName popMeta;
+		popMeta.addMeta("HapPopUIDCount", static_cast<uint32_t>(std::round(inputSeqs.seqs_[pos]->cnt_)));
+		inputSeqs.seqs_[pos]->name_ = njh::pasteAsStr(identifier, ".", leftPadNumStr<uint32_t>(seqId, inputSeqs.size()),popMeta.createMetaName());
+		++seqId;
+	}
+	readVec::getMaxLength(refSeq, maxLen);
 	aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 	alignerObj.weighHomopolymers_ = false;
 	alignerObj.processAlnInfoInput(setUp.pars_.alnInfoDirName_, setUp.pars_.verbose_);
 
-	auto idSeq = forwardStrandRefSeq;
+	//set up variant info
+	auto idSeq = refSeq;
 	idSeq.name_ = identifier;
 	TranslatorByAlignment::VariantsInfo varInfo(refRegion.genBed3RecordCore(), idSeq);
-
-	for(const auto & seq : forwardStrandClusters){
-		alignerObj.alignCacheGlobal(forwardStrandRefSeq, seq);
-		alignerObj.profileAlignment(forwardStrandRefSeq, seq, false, false, false);
+	//get variant info
+	auto refComps = inputSeqs.getCompsAgainstRef(refSeq, alignerObj, numThreads);
+	for(const auto pos :  iter::range(inputSeqs.size())){
 		varInfo.addVariantInfo(
-				alignerObj.alignObjectA_.seqBase_.seq_,
-				alignerObj.alignObjectB_.seqBase_.seq_,
-				seq.seqBase_.cnt_,
-				samplesPerSeqForward[seq.seqBase_.seq_],
-				alignerObj.comp_,
+				refComps[pos].refAlnSeq_,
+				refComps[pos].queryAlnSeq_,
+				inputSeqs.seqs_[pos]->cnt_,
+				sampNamesPerSeq[pos],
+				refComps[pos].comp_,
 				refRegion.start_);
-		//std::cout << "samplesPerSeqForward[seq.seqBase_.seq_]: " << samplesPerSeqForward[seq.seqBase_.seq_].size() << std::endl;
 	}
 	varInfo.setFinals(variantCallerRunPars);
-
-
-
-
+	//variable location
 	std::string variableRegionID = "";
 	if(!varInfo.variablePositons_.empty()){
-		uint32_t variableStart = vectorMinimum(std::vector<uint32_t>(varInfo.variablePositons_.begin(), varInfo.variablePositons_.end()));
-		uint32_t variableStop = vectorMaximum(std::vector<uint32_t>(varInfo.variablePositons_.begin(), varInfo.variablePositons_.end()));
-
-		size_t genomeVarStart = variableStart;
-		size_t genomeVarStop = variableStop;
-
-		GenomicRegion variableRegion = refRegion;
-		variableRegion.start_ = genomeVarStart;
-		variableRegion.end_ = genomeVarStop + 1;
+		GenomicRegion variableRegion(varInfo.getVariableRegion());
 		OutputStream bedVariableRegionOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "variableRegion.bed")));
 		bedVariableRegionOut << variableRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
 		variableRegionID = njh::pasteAsStr(variableRegion.chrom_, "::", variableRegion.start_, "::", variableRegion.end_);
 	}
-
-
+	auto variantCallsDir = njh::files::make_path(setUp.pars_.directoryName_, "variantCalls");
+	njh::files::makeDir(njh::files::MkdirPar{variantCallsDir});
+	if(!varInfo.snpsFinal.empty() || ! varInfo.deletionsFinal.empty() || !varInfo.insertionsFinal.empty()){
+		varInfo.writeVCF(njh::files::make_path(variantCallsDir, "allVariants.vcf"));
+		varInfo.writeSNPTable(njh::files::make_path(variantCallsDir, "allSNPs.tab.txt"));
+	}
 
 	{
-//		uint32_t numVariants = varInfo.snpsFinal.size() + varInfo.insertionsFinal.size() + varInfo.deletionsFinal.size();
-//		OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "basicInfo.tab.txt"));
-//		out << "id\ttotalHaplotypes\tuniqueHaplotypes\tnsamples\tsingletons\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism\tnvariantsAbove"
-//				<< variantCallerRunPars.lowVariantCutOff * 100 << "%" << "\tvariableRegionID\t" << "avgGCContent";
-		//out << "\tAvgPairwiseDistWeighted";
-//		out << std::endl;
-		std::map<uint32_t, uint32_t> readLens;
-		//writing out unique sequences
+		OutputStream divMeasuresOut(njh::files::make_path(setUp.pars_.directoryName_, "divMeasures.tab.txt"));
+		CollapsedHaps::AvgPairwiseMeasures avgPMeasures;
+		if(getPairwiseComps){
+			auto allComps = inputSeqs.getPairwiseComps(alignerObj, numThreads);
+			avgPMeasures = inputSeqs.getAvgPairwiseMeasures(allComps);
+		}
+		divMeasuresOut << "id\tname\ttotalHaplotypes\tuniqueHaplotypes\tsinglets\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism" ;
+		if(getPairwiseComps){
+			divMeasuresOut << "\tavgPercentID\tavgNumOfDiffs";
+			divMeasuresOut << "\tnSegratingSites";
+
+			divMeasuresOut << "\tTajimaD\tTajimaDPVal";
+		}
+		divMeasuresOut << std::endl;
+		std::unordered_map<uint32_t, uint32_t> readLens = inputSeqs.getReadLenMap();
+		inputSeqs.setFrequencies();
+		auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversity(inputSeqs.seqs_);
+		divMeasuresOut << identifier
+				<< "\t" << bfs::basename(setUp.pars_.ioOptions_.firstName_)
+				<< "\t" << inputSeqs.getTotalHapCount()
+				<< "\t" << inputSeqs.seqs_.size()
+				<< "\t" << divMeasures.singlets_
+				<< "\t" << divMeasures.doublets_
+				<< "\t" << divMeasures.expShannonEntropy_
+				<< "\t" << divMeasures.ShannonEntropyE_
+				<< "\t" << divMeasures.effectiveNumOfAlleles_
+				<< "\t" << divMeasures.heterozygostiy_
+				<< "\t" << (readLens.size() > 1 ? "true" : "false");
+		if(getPairwiseComps){
+			auto tajimad = PopGenCalculator::calcTajimaTest(inputSeqs.getTotalHapCount(), varInfo.getFinalNumberOfSegratingSites(), avgPMeasures.avgNumOfDiffs);
+			divMeasuresOut << "\t" << avgPMeasures.avgPercentId
+					<< "\t" << avgPMeasures.avgNumOfDiffs
+					<< "\t" << varInfo.getFinalNumberOfSegratingSites()
+					<< "\t" << tajimad.d_
+					<< "\t" << tajimad.pval_beta_;
+		}
+		divMeasuresOut << std::endl;
+	}
+
+	{
+		//write out seqs
 		auto uniqueSeqsOpts = SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs.fasta"));
-		OutputStream nameOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs_names.tab.txt")));
-		nameOut << "name\tnumber\treads"	<< std::endl;
 		{
 			SeqOutput uniqueWriter(uniqueSeqsOpts);
 			uniqueWriter.openOut();
-			uniqueWriter.write(originalOrientationClusters);
+			for(const auto pos : orderByCnt){
+				uniqueWriter.write(inputSeqs.seqs_[pos]);
+			}
 			uniqueWriter.closeOut();
 		}
 
-
+		OutputStream nameOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs_names.tab.txt")));
+		nameOut << "name\tnumber\tinputNames"	<< std::endl;
 		OutputStream metaLabNamesOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs_nonFieldSampleNames.tab.txt")));
 		metaLabNamesOut << "name\tsamples" << std::endl;
-		for(const auto & cIter : forwardStrandClusters){
-			auto inputNames = readVec::getNames(cIter.reads_);
-			nameOut << cIter.seqBase_.name_
-					<< "\t" << cIter.seqBase_.cnt_
-					<< "\t" << njh::conToStr(inputNames, ",") << std::endl;
-			readLens[len(cIter.seqBase_)]+= cIter.seqBase_.cnt_;
-			VecStr nonFieldSampleNames{};
-			for(const auto & name : inputNames){
-				//std::cout << name << std::endl;
 
+		for(const auto pos : orderByCnt){
+			nameOut << inputSeqs.seqs_[pos]->name_
+					<< "\t" << inputSeqs.seqs_[pos]->cnt_
+					<< "\t" << njh::conToStr(inputSeqs.names_[pos], ",") << std::endl;
+			VecStr nonFieldSampleNames{};
+			for(const auto & name : inputSeqs.names_[pos]){
 				if(MetaDataInName::nameHasMetaData(name)){
 					MetaDataInName meta(name);
 					std::string sampleField = "sample";
@@ -369,7 +284,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 					}
 				}
 			}
-			metaLabNamesOut << cIter.seqBase_.name_ << "\t" << njh::conToStr(nonFieldSampleNames, ",") << std::endl;
+			metaLabNamesOut << inputSeqs.seqs_[pos]->name_ << "\t" << njh::conToStr(nonFieldSampleNames, ",") << std::endl;
 		}
 
 		std::map<std::string, std::map<std::string, MetaDataInName>> knownAAMeta;
@@ -383,6 +298,11 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 			njh::files::makeDir(njh::files::MkdirPar{variantInfoDir});
 			translator->pars_.keepTemporaryFiles_ = true;
 			translator->pars_.workingDirtory_ = variantInfoDir;
+			std::unordered_map<std::string, std::unordered_set<std::string>> sampNamesForPopHaps;
+			uint32_t samplesCalled = allSamples.size();
+			for(const auto pos : iter::range(inputSeqs.size())){
+				sampNamesForPopHaps[inputSeqs.seqs_[pos]->name_] = sampNamesPerSeq[pos];
+			}
 			auto translatedRes = translator->run(uniqueSeqInOpts, sampNamesForPopHaps, variantCallerRunPars);
 			SeqOutput transwriter(SeqIOOptions::genFastaOut(njh::files::make_path(variantInfoDir, "translatedInput.fasta")));
 			for(const auto & seqName : translatedRes.translations_){
@@ -587,8 +507,6 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 		}
 	}
 
-	auto variantCallsDir = njh::files::make_path(setUp.pars_.directoryName_, "variantCalls");
-	njh::files::makeDir(njh::files::MkdirPar{variantCallsDir});
 
 
 	alignerObj.processAlnInfoOutput(setUp.pars_.outAlnInfoDirName_, setUp.pars_.verbose_);
@@ -597,10 +515,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 //	std::cout << "varInfo.insertionsFinal.size(): " << varInfo.insertionsFinal.size() << std::endl;
 //
 
-	if(!varInfo.snpsFinal.empty() || ! varInfo.deletionsFinal.empty() || !varInfo.insertionsFinal.empty()){
-		varInfo.writeVCF(njh::files::make_path(variantCallsDir, "allVariants.vcf"));
-		varInfo.writeSNPTable(njh::files::make_path(variantCallsDir, "allSNPs.tab.txt"));
-	}
+
 	return 0;
 }
 

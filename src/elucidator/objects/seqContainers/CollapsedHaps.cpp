@@ -49,6 +49,12 @@ uint32_t CollapsedHaps::getTotalUniqueHapCount() const{
 	return seqs_.size();
 }
 
+size_t CollapsedHaps::size() const{
+	return seqs_.size();
+}
+
+
+
 std::vector<uint32_t> CollapsedHaps::getReadLenVec() const{
 	std::vector<uint32_t> ret;
 	for(const auto & seq : seqs_){
@@ -67,8 +73,63 @@ std::unordered_map<uint32_t, uint32_t> CollapsedHaps::getReadLenMap() const{
 	return ret;
 }
 
-CollapsedHaps CollapsedHaps::readInReads(const SeqIOOptions & inOpts, std::unique_ptr<MultipleGroupMetaData> meta,
-		std::unordered_map<std::string, std::string> metaValuesToAvoid){
+std::vector<uint32_t> CollapsedHaps::getOrder(const std::function<bool(const seqInfo &,const seqInfo&)> & comparator) const{
+	std::vector<uint32_t> order(seqs_.size());
+	njh::iota<uint32_t>(order, 0);
+	njh::sort(order,[&comparator,this](uint32_t idx1, uint32_t idx2){
+		return comparator(*seqs_[idx1], *seqs_[idx2]);
+	});
+	return order;
+}
+
+std::vector<uint32_t> CollapsedHaps::getOrderByTopCnt() const {
+	std::function<bool(const seqInfo &,const seqInfo&)> byCnt = [](const seqInfo & seq1, const seqInfo & seq2){
+		return seq1.cnt_ > seq2.cnt_;
+	};
+	return getOrder(byCnt);
+}
+
+std::string CollapsedHaps::getSampleNameFromSeqName(const std::string &name,
+		const std::vector<std::string> &possibleSampleMetaFields) {
+	std::string sample = name;
+	if (MetaDataInName::nameHasMetaData(name)) {
+		MetaDataInName seqMeta(name);
+		for (const auto &metaField : possibleSampleMetaFields) {
+			if (seqMeta.containsMeta(metaField)) {
+				sample = seqMeta.getMeta(metaField);
+				break;
+			}
+		}
+	}
+	return sample;
+}
+
+std::set<std::string> CollapsedHaps::getAllSampleNames(){
+	std::set<std::string> ret;
+	for(const auto & subNames : names_){
+		for(const auto & name : subNames){
+			ret.emplace(getSampleNameFromSeqName(name, possibleSampleMetaFields_));
+		}
+	}
+	return ret;
+}
+
+std::vector<std::unordered_set<std::string>> CollapsedHaps::getSampleNamesPerSeqs(){
+	std::vector<std::unordered_set<std::string>> ret;
+	for(const auto & subNames : names_){
+		std::unordered_set<std::string> samps;
+		for(const auto & name : subNames){
+			samps.emplace(getSampleNameFromSeqName(name, possibleSampleMetaFields_));
+		}
+		ret.emplace_back(samps);
+	}
+	return ret;
+}
+
+
+
+CollapsedHaps CollapsedHaps::readInReads(const SeqIOOptions & inOpts, const std::unique_ptr<MultipleGroupMetaData> & meta,
+		const std::unordered_map<std::string, std::string> & metaValuesToAvoid){
 	CollapsedHaps ret;
 	SeqInput reader(inOpts);
 	reader.openIn();
@@ -128,12 +189,20 @@ CollapsedHaps CollapsedHaps::readInReads(const SeqIOOptions & inOpts, std::uniqu
 	ret.setSubNamesToMainSeqPos();
 	return ret;
 }
+CollapsedHaps::CompWithAlnSeqs::CompWithAlnSeqs(){
 
-std::vector<comparison> CollapsedHaps::getCompsAgainstRef(const seqInfo & refSeq, aligner & alignerObj, uint32_t numThreads) const {
-	std::vector<comparison> ret(seqs_.size());
+}
+
+CollapsedHaps::CompWithAlnSeqs::CompWithAlnSeqs(const comparison & comp, const std::string & refAln, const std::string & queryAln):comp_(comp), refAlnSeq_(refAln), queryAlnSeq_(queryAln){
+
+}
+
+std::vector<CollapsedHaps::CompWithAlnSeqs> CollapsedHaps::getCompsAgainstRef(const seqInfo & refSeq, aligner & alignerObj, uint32_t numThreads) const {
+	std::vector<CompWithAlnSeqs> ret(seqs_.size());
 	concurrent::AlignerPool alnPool(alignerObj, numThreads);
 	alnPool.initAligners();
-	std::vector<uint32_t> positions;
+	std::vector<uint32_t> positions(seqs_.size());
+	njh::iota<uint32_t>(positions, 0);
 	njh::concurrent::LockableQueue<uint32_t> posQueue(positions);
 
 	std::mutex mut;
@@ -143,7 +212,7 @@ std::vector<comparison> CollapsedHaps::getCompsAgainstRef(const seqInfo & refSeq
 		while(posQueue.getVal(pos)){
 			currentAligner->alignCacheGlobal(refSeq, seqs_[pos]);
 			currentAligner->profileAlignment(refSeq, seqs_[pos], false, false, false);
-			ret[pos] = currentAligner->comp_;
+			ret[pos] = CompWithAlnSeqs(currentAligner->comp_, currentAligner->alignObjectA_.seqBase_.seq_, currentAligner->alignObjectB_.seqBase_.seq_);
 		}
 		{
 			std::lock_guard<std::mutex> lock(mut);

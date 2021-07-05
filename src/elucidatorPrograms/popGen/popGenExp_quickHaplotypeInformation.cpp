@@ -43,7 +43,6 @@ int popGenExpRunner::quickHaplotypeInformation(const njh::progutils::CmdArgs & i
 		alignerObj.processAlnInfoInput(setUp.pars_.alnInfoDirName_, setUp.pars_.verbose_);
 		auto allComps = inputSeqs.getPairwiseComps(alignerObj, numThreads);
 		alignerObj.processAlnInfoOutput(setUp.pars_.outAlnInfoDirName_, setUp.pars_.verbose_);
-
 		avgPMeasures = inputSeqs.getAvgPairwiseMeasures(allComps);
 	}
 

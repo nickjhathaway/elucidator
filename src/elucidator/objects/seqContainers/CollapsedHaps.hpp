@@ -24,40 +24,125 @@ public:
 
 	std::vector<std::shared_ptr<seqInfo>> seqs_;
 	std::vector<std::unordered_set<std::string>> names_;
+	std::vector<std::string> possibleSampleMetaFields_{"sample", "BiologicalSample"};
 
-	std::unordered_map<std::string, uint32_t> subNamesToMainSeqPos_;
+	std::unordered_map<std::string, uint32_t> subNamesToMainSeqPos_; /**< The position of the sub seqs in the collapsed unique seq vector */
 
 	bool verbose_{false};
 
+	//post processing
 	void setSubNamesToMainSeqPos();
-
 	void revCompSeqs();
-
 	void setFrequencies(uint32_t total);
-
 	void setFrequencies();
 
+
+	////getting info
 	uint32_t getTotalHapCount() const; /**< The total number of input haplotypes */
 	uint32_t getTotalUniqueHapCount() const; /**< the total number of unique haplotypes */
+	size_t size() const;
+	// getting reads lengths
 	std::vector<uint32_t> getReadLenVec() const;
-
 	std::unordered_map<uint32_t, uint32_t> getReadLenMap() const;
 
-	static CollapsedHaps readInReads(const SeqIOOptions & inOpts,
-			std::unique_ptr<MultipleGroupMetaData> meta = nullptr,
-			std::unordered_map<std::string, std::string> metaValuesToAvoid = std::unordered_map<std::string, std::string>{});
 
-	std::vector<comparison> getCompsAgainstRef(const seqInfo & refSeq, aligner & alignerObj, uint32_t numThreads = 1) const;
+	std::vector<uint32_t> getOrder(const std::function<bool(const seqInfo &,const seqInfo&)> & comparator) const;
+	std::vector<uint32_t> getOrderByTopCnt() const;
+
+	//sample names
+	static std::string getSampleNameFromSeqName(const std::string & name, const std::vector<std::string> & possibleSampleMetaFields=VecStr{"sample", "BiologicalSample"});
+	std::set<std::string> getAllSampleNames();
+	std::vector<std::unordered_set<std::string>> getSampleNamesPerSeqs();
+
+	//comparisons
+	struct CompWithAlnSeqs {
+		CompWithAlnSeqs();
+		CompWithAlnSeqs(const comparison &comp, const std::string &refAln,
+				const std::string &queryAln);
+		comparison comp_;
+		std::string refAlnSeq_;
+		std::string queryAlnSeq_;
+	};
+	std::vector<CompWithAlnSeqs> getCompsAgainstRef(const seqInfo & refSeq, aligner & alignerObj, uint32_t numThreads = 1) const;
 	std::vector<std::vector<comparison>> getPairwiseComps(aligner & alignerObj, uint32_t numThreads = 1) const;
 
 	struct AvgPairwiseMeasures{
 		double avgPercentId {0};
 		double avgNumOfDiffs {0};
 	};
-
 	AvgPairwiseMeasures getAvgPairwiseMeasures(const std::vector<std::vector<comparison>> & allComps) const;
 
+
+	//factories
+	static CollapsedHaps readInReads(const SeqIOOptions & inOpts,
+			const std::unique_ptr<MultipleGroupMetaData> & meta = nullptr,
+			const std::unordered_map<std::string, std::string> & metaValuesToAvoid = std::unordered_map<std::string, std::string>{});
+
+	template<typename SEQTYPE>
+	static CollapsedHaps collapseReads(const std::vector<SEQTYPE> & seqs,
+			const std::unique_ptr<MultipleGroupMetaData> & meta = nullptr,
+			const std::unordered_map<std::string, std::string> & metaValuesToAvoid = std::unordered_map<std::string, std::string>{}){
+
+
+		CollapsedHaps ret;
+		uint32_t seqCount = 0;
+		std::unordered_set<std::string> allNames;
+
+		for(const auto & seqObj : seqs) {
+			seqInfo seq = getSeqBase(seqObj);
+			if(nullptr != meta) {
+				meta->attemptToAddSeqMeta(seq);
+			}
+			//get meta keys if available
+			if(MetaDataInName::nameHasMetaData(getSeqBase(seq).name_)){
+				MetaDataInName metaData(getSeqBase(seq).name_);
+				bool skip = false;
+				for(const auto & ignoreField : metaValuesToAvoid){
+					if(metaData.containsMeta(ignoreField.first) && metaData.getMeta(ignoreField.first) == ignoreField.second){
+						skip = true;
+						break;
+						//skip this seq
+					}
+				}
+				if(skip){
+					continue;
+				}
+			}
+			if(njh::in(seq.name_, allNames)){
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "can't have seqs with the same name in input"<< "\n";
+				ss << seq.name_ << " found more than once" << "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			allNames.emplace(seq.name_);
+
+			seqCount+= std::round(seq.cnt_);
+			bool found = false;
+			for (const auto & pos : iter::range(ret.seqs_.size())) {
+				const auto & otherSeq = ret.seqs_[pos];
+				if (otherSeq->seq_ == seq.seq_) {
+					otherSeq->cnt_ += 1;
+					ret.names_[pos].emplace(seq.name_);
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				//since we are considering counts here as haplotypes, will make sure cnt_ is set to 1
+				seq.cnt_ = 1;
+				ret.seqs_.emplace_back(std::make_shared<seqInfo>(seq));
+				ret.names_.emplace_back(std::unordered_set<std::string>{seq.name_});
+			}
+		}
+		ret.setFrequencies();
+		ret.setSubNamesToMainSeqPos();
+		return ret;
+
+	}
+
+
 };
+
 
 
 
