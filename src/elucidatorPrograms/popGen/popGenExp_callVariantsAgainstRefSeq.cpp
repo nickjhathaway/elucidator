@@ -288,9 +288,9 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 		}
 
 		std::map<std::string, std::map<std::string, MetaDataInName>> knownAAMeta;
-
 		std::map<std::string, MetaDataInName> fullAATyped;
 		std::map<std::string, std::vector<TranslatorByAlignment::AAInfo>> fullAATypedWithCodonInfo;
+
 		if("" != transPars.gffFnp_){
 			auto uniqueSeqInOpts = SeqIOOptions::genFastaIn(uniqueSeqsOpts.out_.outName());
 			auto variantInfoDir =  njh::files::make_path(setUp.pars_.directoryName_, "proteinVariantInfo");

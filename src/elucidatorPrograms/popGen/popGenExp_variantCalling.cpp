@@ -725,27 +725,11 @@ int popGenExpRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArgs &
 			metaLabNamesOut << cIter.seqBase_.name_ << "\t" << njh::conToStr(nonFieldSampleNames, ",") << std::endl;
 		}
 
-//		PairwisePairFactory pFac(clusters.size());
-//		PairwisePairFactory::PairwisePair pPair;
-//		double sumOfPairwiseDist = 0;
-//		double sumOfPairwiseDistWeighted = 0;
-//
-//		while (pFac.setNextPair(pPair)) {
-//			alignerObj.alignCacheGlobal(clusters[pPair.col_], clusters[pPair.row_]);
-//			alignerObj.profileAlignment(clusters[pPair.col_], clusters[pPair.row_],
-//					false, false, false);
-//			sumOfPairwiseDist += alignerObj.comp_.distances_.eventBasedIdentity_;
-//			sumOfPairwiseDistWeighted +=
-//					alignerObj.comp_.distances_.eventBasedIdentity_
-//							* (clusters[pPair.col_].seqBase_.cnt_
-//									* clusters[pPair.row_].seqBase_.cnt_);
-//		}
 
-		std::map<std::string, std::map<std::string, MetaDataInName>> knownAAMeta;
 		//       seqName               transcript   amino acid positions and amino acid
 		//std::map<std::string, std::map<std::string, MetaDataInName>> fullAATyped;
 		//seqname meta
-
+		std::map<std::string, std::map<std::string, MetaDataInName>> knownAAMeta;
 		std::map<std::string, MetaDataInName> fullAATyped;
 		std::map<std::string, std::vector<TranslatorByAlignment::AAInfo>> fullAATypedWithCodonInfo;
 		if("" != transPars.gffFnp_){
@@ -756,6 +740,7 @@ int popGenExpRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArgs &
 			translator->pars_.keepTemporaryFiles_ = true;
 			translator->pars_.workingDirtory_ = variantInfoDir;
 			auto translatedRes = translator->run(uniqueSeqInOpts, sampNamesForPopHaps, variantCallerRunPars);
+			//write out the translation
 			SeqOutput transwriter(SeqIOOptions::genFastaOut(njh::files::make_path(variantInfoDir, "translatedInput.fasta")));
 			for(const auto & seqName : translatedRes.translations_){
 				for(const auto & transcript : seqName.second){
@@ -764,10 +749,6 @@ int popGenExpRunner::getHapPopDifAndVariantsInfo(const njh::progutils::CmdArgs &
 			}
 			SeqInput popReader(uniqueSeqInOpts);
 			auto popSeqs = popReader.readAllReads<seqInfo>();
-			std::unordered_map<std::string, uint32_t> popSeqsPosition;
-			for(const auto popPos : iter::range(popSeqs.size())){
-				popSeqsPosition[popSeqs[popPos].name_] = popPos;
-			}
 			OutputStream popBedLocs(njh::files::make_path(variantInfoDir, "uniqueSeqs.bed"));
 			for(const auto & seqLocs : translatedRes.seqAlns_){
 				for(const auto & loc : seqLocs.second){
