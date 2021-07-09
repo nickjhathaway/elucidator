@@ -299,7 +299,6 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 			translator->pars_.keepTemporaryFiles_ = true;
 			translator->pars_.workingDirtory_ = variantInfoDir;
 			std::unordered_map<std::string, std::unordered_set<std::string>> sampNamesForPopHaps;
-			uint32_t samplesCalled = allSamples.size();
 			for(const auto pos : iter::range(inputSeqs.size())){
 				sampNamesForPopHaps[inputSeqs.seqs_[pos]->name_] = sampNamesPerSeq[pos];
 			}
@@ -310,51 +309,16 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 					transwriter.openWrite(transcript.second.translation_);
 				}
 			}
-			SeqInput popReader(uniqueSeqInOpts);
-			auto popSeqs = popReader.readAllReads<seqInfo>();
-			std::unordered_map<std::string, uint32_t> popSeqsPosition;
-			for(const auto popPos : iter::range(popSeqs.size())){
-				popSeqsPosition[popSeqs[popPos].name_] = popPos;
-			}
 			OutputStream popBedLocs(njh::files::make_path(variantInfoDir, "uniqueSeqs.bed"));
-			for(const auto & seqLocs : translatedRes.seqAlns_){
-				for(const auto & loc : seqLocs.second){
-					popBedLocs << loc.gRegion_.genBedRecordCore().toDelimStrWithExtra() << std::endl;
-				}
-			}
-			for(const auto & pop : popSeqs){
-				if(!njh::in(pop.name_, translatedRes.seqAlns_)){
-					popBedLocs << "*"
-							<< "\t" << "*"
-							<< "\t" << "*"
-							<< "\t" << pop.name_
-							<< "\t" << "*"
-							<< "\t" << "*" << std::endl;
-				}
-			}
+			translatedRes.writeSeqLocations(popBedLocs);
 			std::unordered_map<std::string, std::set<uint32_t>> knownAAMutsChromPositions;
 			{
 				//protein
 				for(auto & varPerTrans : translatedRes.proteinVariants_){
-					auto snpsPositions = getVectorOfMapKeys(varPerTrans.second.snpsFinal);
-					njh::sort(snpsPositions);
 					OutputStream snpTabOut(OutOptions(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein_aminoAcidVariable.tab.txt"))));
-					snpTabOut << "transcript\tposition(1-based)\trefAA\tAA\tcount\tfraction\talleleDepth\tsamples" << std::endl;
-					for(const auto & snpPos : snpsPositions){
-						for(const auto & aa : varPerTrans.second.allBases[snpPos]){
-							snpTabOut << varPerTrans.first
-									<< "\t" << snpPos + 1
-									<< "\t" << translatedRes.proteinForTranscript_[varPerTrans.first][snpPos]
-									<< "\t" << aa.first
-									<< "\t" << aa.second
-									<< "\t" << aa.second/static_cast<double>(varPerTrans.second.depthPerPosition[snpPos])
-									<< "\t" << varPerTrans.second.depthPerPosition[snpPos]
-									<< "\t" << samplesCalled << std::endl;
-						}
-					}
+					snpTabOut << njh::conToStr(TranslatorByAlignment::VariantsInfo::SNPHeaderAminoAcid(), "\t") << std::endl;
+					varPerTrans.second.writeOutSNPsFinalInfo(snpTabOut, varPerTrans.first, true);
 					std::set<uint32_t> knownMutationsLocations;
-					OutputStream allAATabOut(OutOptions(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein_aminoAcidsAll.tab.txt"))));
-					allAATabOut << "transcript\tposition(1-based)\trefAA\tAA\tcount\tfraction\talleleDepth\tsamples" << std::endl;
 					for(const auto & snpPos : varPerTrans.second.allBases){
 						if(njh::in(snpPos.first + 1, knownMutationsLocationsMap[varPerTrans.first])){
 							knownMutationsLocations.emplace(snpPos.first);
@@ -363,17 +327,11 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 								knownAAMutsChromPositions[genomicLocationForAAPos.chrom_].emplace(gPos);
 							}
 						}
-						for(const auto & aa : snpPos.second){
-							allAATabOut << varPerTrans.first
-									<< "\t" << snpPos.first + 1
-									<< "\t" << translatedRes.proteinForTranscript_[varPerTrans.first][snpPos.first]
-									<< "\t" << aa.first
-									<< "\t" << aa.second
-									<< "\t" << aa.second/static_cast<double>(varPerTrans.second.depthPerPosition[snpPos.first])
-									<< "\t" << varPerTrans.second.depthPerPosition[snpPos.first]
-									<< "\t" << samplesCalled << std::endl;
-						}
 					}
+					OutputStream allAATabOut(OutOptions(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein_aminoAcidsAll.tab.txt"))));
+					allAATabOut << njh::conToStr(TranslatorByAlignment::VariantsInfo::SNPHeaderAminoAcid(), "\t") << std::endl;
+					varPerTrans.second.writeOutSNPsAllInfo(allAATabOut, varPerTrans.first, true);
+
 					if(!varPerTrans.second.variablePositons_.empty()){
 						GenomicRegion variableRegion = varPerTrans.second.getVariableRegion();
 						variableRegion.start_ += 1; //do one based positioning
@@ -387,7 +345,6 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 
 					for (auto & seqName : translatedRes.translations_) {
 						if (njh::in(varPerTrans.first, seqName.second)) {
-							VecStr allAAPosCoded;
 							std::string popName = seqName.first.substr(0, seqName.first.rfind("_f"));
 							std::string transcript = varPerTrans.first;
 							for (const auto & loc : allLocations) {
@@ -395,108 +352,36 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 								if(loc < std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).aaPos_ || loc > std::get<0>(seqName.second[varPerTrans.first].lastAminoInfo_).aaPos_){
 									continue;
 								}
-								auto aa = seqName.second[varPerTrans.first].queryAlnTranslation_.seq_[getAlnPosForRealPos(seqName.second[varPerTrans.first].refAlnTranslation_.seq_,loc)];
-								fullAATyped[popName].addMeta(njh::pasteAsStr(varPerTrans.first, "-", loc + 1), aa);
-//								std::cout << "loc: " << loc << std::endl;
-								uint32_t refCDnaPos = loc * 3;
-//								std::cout << "cDnaPos: " << cDnaPos << std::endl;
-//								std::cout << "std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).cDNAPos_: " << std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).cDNAPos_ << std::endl;
-								//subtract off the start location
-								refCDnaPos -= std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).cDNAPos_;
-//								seqName.second[varPerTrans.first].cDna_.outPutSeqAnsi(std::cout);
-//								seqName.second[varPerTrans.first].refAlnTranslation_.outPutSeq(std::cout);
-//								seqName.second[varPerTrans.first].queryAlnTranslation_.outPutSeq(std::cout);
-//								std::cout << "std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).cDNAPos_;: " << std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).cDNAPos_ << std::endl;
-//								std::cout << "std::get<0>(seqName.second[varPerTrans.first].lastAminoInfo_).cDNAPos_;: " << std::get<0>(seqName.second[varPerTrans.first].lastAminoInfo_).cDNAPos_ << std::endl;
-//								std::cout << "std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).aaPos_;: " << std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).aaPos_ << std::endl;
-//								std::cout << "std::get<0>(seqName.second[varPerTrans.first].lastAminoInfo_).aaPos_;: " << std::get<0>(seqName.second[varPerTrans.first].lastAminoInfo_).aaPos_ << std::endl;
-								uint32_t alnPosForLoc = getAlnPosForRealPos(seqName.second[varPerTrans.first].refAlnTranslation_.seq_,loc);
-								uint32_t queryCDNAPos = getRealPosForAlnPos(seqName.second[varPerTrans.first].queryAlnTranslation_.seq_,alnPosForLoc ) * 3;
-
-								if(queryCDNAPos +2 >=seqName.second[varPerTrans.first].cDna_.seq_.size()){
-									std::stringstream ss;
-									ss << __PRETTY_FUNCTION__ << ", error " << "" << queryCDNAPos +2 << " is greater than seqName.second[varPerTrans.first].cDna_.seq_.size(): " << seqName.second[varPerTrans.first].cDna_.seq_.size()<< "\n";
-									throw std::runtime_error{ss.str()};
-								}
+								auto codon = seqName.second[varPerTrans.first].getCodonForAARefPos(loc);
+								fullAATyped[popName].addMeta(njh::pasteAsStr(varPerTrans.first, "-", loc + 1), codon.aa_);
 								fullAATypedWithCodonInfo[popName].emplace_back(
-										TranslatorByAlignment::AAInfo(varPerTrans.first, aa, loc,
-												std::tie(
-														seqName.second[varPerTrans.first].cDna_.seq_[queryCDNAPos+ 0],
-														seqName.second[varPerTrans.first].cDna_.seq_[queryCDNAPos+ 1],
-														seqName.second[varPerTrans.first].cDna_.seq_[queryCDNAPos+ 2]),
-														njh::in(loc, knownMutationsLocations)));
+										TranslatorByAlignment::AAInfo(varPerTrans.first, loc, codon,
+												njh::in(loc, knownMutationsLocations)));
 							}
 						}
 					}
 					if(!knownMutationsLocations.empty()){
 						OutputStream knownTabOut(OutOptions(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein_aminoAcidKnownMutations.tab.txt"))));
-						knownTabOut << "transcript\tposition(1-based)\trefAA\tAA\tcount\tfraction\talleleDepth\tsamples" << std::endl;
-						for(const auto & snpPos : knownMutationsLocations){
-							for(const auto & aa : varPerTrans.second.allBases[snpPos]){
-								knownTabOut << varPerTrans.first
-										<< "\t" << snpPos + 1
-										<< "\t" << translatedRes.proteinForTranscript_[varPerTrans.first][snpPos]
-										<< "\t" << aa.first
-										<< "\t" << aa.second
-										<< "\t" << aa.second/static_cast<double>(varPerTrans.second.depthPerPosition[snpPos])
-										<< "\t" << varPerTrans.second.depthPerPosition[snpPos]
-										<< "\t" << samplesCalled << std::endl;
-							}
-						}
+						knownTabOut << njh::conToStr(TranslatorByAlignment::VariantsInfo::SNPHeaderAminoAcid(), "\t") << std::endl;
+						varPerTrans.second.writeOutSNPsInfo(knownTabOut, varPerTrans.first, knownMutationsLocations, true);
 					}
 				}
 			}
-
 			{
 				//snps
 				for( auto & varPerChrom : translatedRes.seqVariants_){
-					auto snpsPositions = getVectorOfMapKeys(varPerChrom.second.snpsFinal);
-					njh::sort(snpsPositions);
 					OutputStream snpTabOut(OutOptions(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-SNPs.tab.txt"))));
-					snpTabOut << "chromosome\tposition(0-based)\trefBase\tbase\tcount\tfraction\talleleDepth\tsamples" << std::endl;
-					for(const auto & snpPos : snpsPositions){
-						for(const auto & base : varPerChrom.second.allBases[snpPos]){
-							snpTabOut << varPerChrom.first
-									<< "\t" << snpPos
-									<< "\t" << translatedRes.baseForPosition_[varPerChrom.first][snpPos]
-									<< "\t" << base.first
-									<< "\t" << base.second
-									<< "\t" << base.second/static_cast<double>(varPerChrom.second.depthPerPosition[snpPos])
-									<< "\t" << varPerChrom.second.depthPerPosition[snpPos]
-									<< "\t" << samplesCalled << std::endl;
-						}
-					}
+					snpTabOut << njh::conToStr(TranslatorByAlignment::VariantsInfo::SNPHeaderGenomic(), "\t") << std::endl;
+					varPerChrom.second.writeOutSNPsFinalInfo(snpTabOut, varPerChrom.first);
+
 					if(!knownAAMutsChromPositions[varPerChrom.first].empty()){
 						OutputStream knownAASNPTabOut(OutOptions(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-knownAA_SNPs.tab.txt"))));
-						knownAASNPTabOut << "chromosome\tposition(0-based)\trefBase\tbase\tcount\tfraction\talleleDepth\tsamples" << std::endl;
-						for(const auto & snpPos : knownAAMutsChromPositions[varPerChrom.first]){
-							for(const auto & base : varPerChrom.second.allBases[snpPos]){
-								knownAASNPTabOut << varPerChrom.first
-										<< "\t" << snpPos
-//<< "\t" <<
-										<< "\t" << translatedRes.baseForPosition_[varPerChrom.first][snpPos]
-										<< "\t" << base.first
-										<< "\t" << base.second
-										<< "\t" << base.second/static_cast<double>(varPerChrom.second.depthPerPosition[snpPos])
-										<< "\t" << varPerChrom.second.depthPerPosition[snpPos]
-										<< "\t" << samplesCalled << std::endl;
-							}
-						}
+						knownAASNPTabOut << njh::conToStr(TranslatorByAlignment::VariantsInfo::SNPHeaderGenomic(), "\t") << std::endl;
+						varPerChrom.second.writeOutSNPsInfo(knownAASNPTabOut, varPerChrom.first, knownAAMutsChromPositions[varPerChrom.first], true);
 					}
 					OutputStream allBasesTabOut(OutOptions(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-allBases.tab.txt"))));
-					allBasesTabOut << "chromosome\tposition(0-based)\trefBase\tbase\tcount\tfraction\talleleDepth\tsamples" << std::endl;
-					for(const auto & snpPos : varPerChrom.second.allBases){
-						for(const auto & base : snpPos.second){
-							allBasesTabOut << varPerChrom.first
-									<< "\t" << snpPos.first
-									<< "\t" << translatedRes.baseForPosition_[varPerChrom.first][snpPos.first]
-									<< "\t" << base.first
-									<< "\t" << base.second
-									<< "\t" << base.second/static_cast<double>(varPerChrom.second.depthPerPosition[snpPos.first])
-									<< "\t" << varPerChrom.second.depthPerPosition[snpPos.first]
-									<< "\t" << samplesCalled << std::endl;
-						}
-					}
+					allBasesTabOut << njh::conToStr(TranslatorByAlignment::VariantsInfo::SNPHeaderGenomic(), "\t") << std::endl;
+					varPerChrom.second.writeOutSNPsAllInfo(snpTabOut, varPerChrom.first);
 					if(!varPerChrom.second.variablePositons_.empty()){
 						GenomicRegion variableRegion = varPerChrom.second.getVariableRegion();
 						OutputStream bedVariableRegionOut(OutOptions(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-chromosome_variableRegion.bed"))));
