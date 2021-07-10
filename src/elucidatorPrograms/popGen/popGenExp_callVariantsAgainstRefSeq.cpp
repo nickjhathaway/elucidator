@@ -62,12 +62,8 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 	setUp.setOption(metaFnp,    "--metaFnp",    "Meta data to add to sequences");
 
 	setUp.setOption(bedFnp,    "--bed",    "A bed file of the location for the extraction", true);
-	setUp.setOption(transPars.lzPars_.genomeFnp, "--genome", "A reference genome to compare against", true);
-	setUp.setOption(transPars.gffFnp_,    "--gff", "A gff3 file for genome file");
-	if(!bfs::is_regular_file(transPars.lzPars_.genomeFnp)){
-		setUp.failed_ = true;
-		setUp.addWarning(njh::pasteAsStr(transPars.lzPars_.genomeFnp, " should be a file, not a directory"));
-	}
+	transPars.setOptions(setUp);
+
 	gPars.genomeDir_ = njh::files::normalize(transPars.lzPars_.genomeFnp.parent_path());
 	gPars.primaryGenome_ = bfs::basename(transPars.lzPars_.genomeFnp);
 	gPars.primaryGenome_ = gPars.primaryGenome_.substr(0, gPars.primaryGenome_.rfind("."));
@@ -78,7 +74,6 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 	setUp.setOption(identifier, "--identifier", "Give a identifier name for info");
 	setUp.setOption(knownAminoAcidChangesFnp, "--proteinMutantTypingFnp", "Protein Mutant Typing Fnp, columns should be ID=gene id in gff, AAPosition=amino acid position", false);
 	setUp.setOption(keepNonFieldSamples, "--keepNonFieldSamples", "Keep Non Field Samples for population stats");
-
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
 
@@ -337,7 +332,6 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 						}
 					}
 					varPerTrans.second.writeOutSNPsAllInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein_aminoAcidsAll.tab.txt")), varPerTrans.first, true);
-
 					if(!varPerTrans.second.variablePositons_.empty()){
 						GenomicRegion variableRegion = varPerTrans.second.getVariableRegion();
 						variableRegion.start_ += 1; //do one based positioning
@@ -348,7 +342,6 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 					for(const auto & variablePos : varPerTrans.second.snpsFinal){
 						allLocations.emplace(variablePos.first);
 					}
-
 					for (auto & seqName : translatedRes.translations_) {
 						if (njh::in(varPerTrans.first, seqName.second)) {
 							std::string popName = seqName.first.substr(0, seqName.first.rfind("_f"));
@@ -389,9 +382,6 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 			}
 		}
 	}
-
-
-
 	alignerObj.processAlnInfoOutput(setUp.pars_.outAlnInfoDirName_, setUp.pars_.verbose_);
 //	std::cout << "varInfo.snpsFinal.size(): " << varInfo.snpsFinal.size() << std::endl;
 //	std::cout << "varInfo.deletionsFinal.size(): " << varInfo.deletionsFinal.size() << std::endl;
