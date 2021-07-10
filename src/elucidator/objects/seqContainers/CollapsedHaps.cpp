@@ -129,7 +129,7 @@ std::vector<std::unordered_set<std::string>> CollapsedHaps::getSampleNamesPerSeq
 
 
 CollapsedHaps CollapsedHaps::readInReads(const SeqIOOptions & inOpts, const std::unique_ptr<MultipleGroupMetaData> & meta,
-		const std::unordered_map<std::string, std::string> & metaValuesToAvoid){
+		const std::unordered_map<std::string, std::set<std::string>> & metaValuesToAvoid){
 	CollapsedHaps ret;
 	SeqInput reader(inOpts);
 	reader.openIn();
@@ -146,7 +146,7 @@ CollapsedHaps CollapsedHaps::readInReads(const SeqIOOptions & inOpts, const std:
 			MetaDataInName metaData(getSeqBase(seq).name_);
 			bool skip = false;
 			for(const auto & ignoreField : metaValuesToAvoid){
-				if(metaData.containsMeta(ignoreField.first) && metaData.getMeta(ignoreField.first) == ignoreField.second){
+				if(metaData.containsMeta(ignoreField.first) && njh::in(metaData.getMeta(ignoreField.first), ignoreField.second)){
 					skip = true;
 					break;
 					//skip this seq

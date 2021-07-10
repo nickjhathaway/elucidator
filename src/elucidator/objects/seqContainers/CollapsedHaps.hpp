@@ -76,12 +76,12 @@ public:
 	//factories
 	static CollapsedHaps readInReads(const SeqIOOptions & inOpts,
 			const std::unique_ptr<MultipleGroupMetaData> & meta = nullptr,
-			const std::unordered_map<std::string, std::string> & metaValuesToAvoid = std::unordered_map<std::string, std::string>{});
+			const std::unordered_map<std::string, std::set<std::string>> & metaValuesToAvoid = std::unordered_map<std::string, std::set<std::string>>{});
 
 	template<typename SEQTYPE>
 	static CollapsedHaps collapseReads(const std::vector<SEQTYPE> & seqs,
 			const std::unique_ptr<MultipleGroupMetaData> & meta = nullptr,
-			const std::unordered_map<std::string, std::string> & metaValuesToAvoid = std::unordered_map<std::string, std::string>{}){
+			const std::unordered_map<std::string, std::set<std::string>> & metaValuesToAvoid = std::unordered_map<std::string, std::set<std::string>>{}){
 
 
 		CollapsedHaps ret;
@@ -98,7 +98,7 @@ public:
 				MetaDataInName metaData(getSeqBase(seq).name_);
 				bool skip = false;
 				for(const auto & ignoreField : metaValuesToAvoid){
-					if(metaData.containsMeta(ignoreField.first) && metaData.getMeta(ignoreField.first) == ignoreField.second){
+					if(metaData.containsMeta(ignoreField.first) && njh::in(metaData.getMeta(ignoreField.first), ignoreField.second)){
 						skip = true;
 						break;
 						//skip this seq
