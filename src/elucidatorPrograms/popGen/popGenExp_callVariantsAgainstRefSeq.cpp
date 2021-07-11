@@ -210,7 +210,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 	{
 		OutputStream divMeasuresOut(njh::files::make_path(setUp.pars_.directoryName_, "divMeasures.tab.txt"));
 		CollapsedHaps::AvgPairwiseMeasures avgPMeasures;
-		if(getPairwiseComps){
+		if(getPairwiseComps && inputSeqs.size() > 1 ){
 			auto allComps = inputSeqs.getPairwiseComps(alignerObj, numThreads);
 			avgPMeasures = inputSeqs.getAvgPairwiseMeasures(allComps);
 		}
@@ -237,18 +237,34 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 				<< "\t" << divMeasures.heterozygostiy_
 				<< "\t" << (readLens.size() > 1 ? "true" : "false");
 		if(getPairwiseComps){
-			divMeasuresOut << "\t" << avgPMeasures.avgPercentId
-									<< "\t" << avgPMeasures.avgNumOfDiffs
-									<< "\t" << varInfo.getFinalNumberOfSegratingSites();
-			if(0 == varInfo.getFinalNumberOfSegratingSites()){
+			if(inputSeqs.size() > 1){
+				divMeasuresOut << "\t" << avgPMeasures.avgPercentId
+										<< "\t" << avgPMeasures.avgNumOfDiffs
+										<< "\t" << varInfo.getFinalNumberOfSegratingSites();
+				if(0 == varInfo.getFinalNumberOfSegratingSites()){
+					divMeasuresOut
+							<< "\t" << 0
+							<< "\t" << 1;
+				}else{
+					try {
+						auto tajimad = PopGenCalculator::calcTajimaTest(inputSeqs.getTotalHapCount(), varInfo.getFinalNumberOfSegratingSites(), avgPMeasures.avgNumOfDiffs);
+						divMeasuresOut
+								<< "\t" << tajimad.d_
+								<< "\t" << tajimad.pval_beta_;
+					} catch (std::exception & e) {
+						divMeasuresOut
+								<< "\t" << "NA"
+								<< "\t" << "NA";
+					}
+
+				}
+			}else{
+				divMeasuresOut << "\t" << 1
+										<< "\t" << avgPMeasures.avgNumOfDiffs
+										<< "\t" << 0;
 				divMeasuresOut
 						<< "\t" << 0
 						<< "\t" << 1;
-			}else{
-				auto tajimad = PopGenCalculator::calcTajimaTest(inputSeqs.getTotalHapCount(), varInfo.getFinalNumberOfSegratingSites(), avgPMeasures.avgNumOfDiffs);
-				divMeasuresOut
-						<< "\t" << tajimad.d_
-						<< "\t" << tajimad.pval_beta_;
 			}
 		}
 		divMeasuresOut << std::endl;
