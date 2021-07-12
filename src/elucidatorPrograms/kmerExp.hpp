@@ -99,6 +99,7 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int findUniqKmersBetweenSeqs(const njh::progutils::CmdArgs & inputCommands);
 
 	static int findUniqKmersBetweenSeqSets(const njh::progutils::CmdArgs & inputCommands);
+	static int findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands);
 
 
 	static int kmerTestingGround(const njh::progutils::CmdArgs & inputCommands);
