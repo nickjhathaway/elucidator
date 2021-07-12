@@ -133,6 +133,88 @@ public:
 		njh::concurrent::runVoidFunctionThreaded(gatherKmers, pars_.numThreads_);
 		return ret;
 	}
+	std::set<std::string> getUniqueKmersSet(const bfs::path & genomeFnp) const {
+		std::set<std::string> ret;
+		SeqInput reader(SeqIOOptions::genFastaIn(genomeFnp));
+		reader.openIn();
+		std::mutex genomeKmersMut;
+		std::function<void()> gatherKmers =[&reader,this,&genomeKmersMut,&ret](){
+			seqInfo seq;
+			while(reader.readNextReadLock(seq)){
+				std::set<std::string>  genomeKmersCurrent;
+				if(len(seq) > pars_.kmerLength_){
+					for(uint32_t pos = 0; pos < len(seq) - pars_.kmerLength_ + 1; ++pos){
+						genomeKmersCurrent.emplace(seq.seq_.substr(pos, pars_.kmerLength_));
+					}
+					if(!pars_.noRevComp_){
+						seq.reverseComplementRead(false, true);
+						for(uint32_t pos = 0; pos < len(seq) - pars_.kmerLength_ + 1; ++pos){
+							genomeKmersCurrent.emplace(seq.seq_.substr(pos, pars_.kmerLength_));
+						}
+					}
+				}
+				{
+					std::lock_guard<std::mutex> lock(genomeKmersMut);
+					ret.insert(genomeKmersCurrent.begin(), genomeKmersCurrent.end());
+				}
+			}
+		};
+		njh::concurrent::runVoidFunctionThreaded(gatherKmers, pars_.numThreads_);
+		return ret;
+	}
+
+	std::unordered_map<std::string, std::set<std::string>> getUniqueKmersSet(const std::vector<bfs::path> & twobitFnps) const {
+
+		struct TwobitFnpSeqNamePair{
+			TwobitFnpSeqNamePair(const bfs::path twoBit, const std::string & seqName):twoBit_(twoBit), seqName_(seqName){
+
+			}
+			TwobitFnpSeqNamePair(){
+
+			}
+			bfs::path twoBit_;
+			std::string seqName_;
+		};
+
+		std::vector<TwobitFnpSeqNamePair> pairs;
+
+		for(const auto & twoBit : twobitFnps){
+			TwoBit::TwoBitFile tReader(twoBit);
+			auto seqNames = tReader.sequenceNames();
+			for(const auto & seqName : seqNames){
+				pairs.emplace_back(TwobitFnpSeqNamePair(twoBit, seqName));
+			}
+		}
+		njh::concurrent::LockableQueue<TwobitFnpSeqNamePair> pairsQueue(pairs);
+
+		std::unordered_map<std::string, std::set<std::string>> ret;
+		std::mutex mut;
+
+		std::function<void()> gatherKmers=[&pairsQueue,this,&ret,&mut](){
+			TwobitFnpSeqNamePair pair;
+			while(pairsQueue.getVal(pair)){
+				std::set<std::string>  genomeKmersCurrent;
+				TwoBit::TwoBitFile tReader(pair.twoBit_);
+				std::string buffer;
+				tReader[pair.seqName_]->getSequence(buffer);
+				for(uint32_t pos = 0; pos < len(buffer) - pars_.kmerLength_ + 1; ++pos){
+					genomeKmersCurrent.emplace(buffer.substr(pos, pars_.kmerLength_));
+				}
+				if(!pars_.noRevComp_){
+					buffer = seqUtil::reverseComplement(buffer, "DNA");
+					for(uint32_t pos = 0; pos < len(buffer) - pars_.kmerLength_ + 1; ++pos){
+						genomeKmersCurrent.emplace(buffer.substr(pos, pars_.kmerLength_));
+					}
+				}
+				{
+					std::lock_guard<std::mutex> lock(mut);
+					ret[pair.twoBit_.string()].insert(genomeKmersCurrent.begin(), genomeKmersCurrent.end());
+				}
+			}
+		};
+		njh::concurrent::runVoidFunctionThreaded(gatherKmers, pars_.numThreads_);
+		return ret;
+	}
 };
 
 
@@ -155,66 +237,76 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 
 	std::unordered_map<std::string, std::set<std::string>> fastasForSet;
 	table input(seqSetTableFnp, "\t", true);
-	input.checkForColumnsThrow(VecStr{"set", "fasta"}, __PRETTY_FUNCTION__);
+	input.checkForColumnsThrow(VecStr{"set", "2bit"}, __PRETTY_FUNCTION__);
 	for(const auto & row : input){
-		fastasForSet[row[input.getColPos("set")]].emplace(row[input.getColPos("fasta")]);
+		fastasForSet[row[input.getColPos("set")]].emplace(row[input.getColPos("2bit")]);
 	}
 	setUp.rLog_.setCurrentLapName("initial");
 
-	std::unordered_map<std::string, std::set<std::string>> uniqueKmersWithInSets;
+	std::vector<bfs::path> twoBitFiles;
 	for(const auto & seqSet : fastasForSet){
-		std::set<std::string> kmersForSeqSet;
-		setUp.rLog_.logCurrentTime(bfs::basename(seqSet.first));
-		setUp.rLog_.runLogFile_.flush();
-		for(const auto & fasta : iter::enumerate(seqSet.second)){
-			auto currentSet = njh::uosetToSet(kGather.getUniqueKmers(fasta.element));
-			if(0 == fasta.first){
-				kmersForSeqSet = currentSet;
-			}else{
-				std::vector<std::string> shared;
-				std::set_intersection(kmersForSeqSet.begin(), kmersForSeqSet.end(),
-						currentSet.begin(), currentSet.end(), std::back_insert_iterator(shared));
-				kmersForSeqSet = njh::vecToSet(shared);
-			}
+		for(const auto & fnp : seqSet.second){
+			twoBitFiles.emplace_back(fnp);
 		}
-		uniqueKmersWithInSets[seqSet.first] = kmersForSeqSet;
 	}
+	setUp.rLog_.setCurrentLapName("count_all");
+	auto allKmers = kGather.getUniqueKmersSet(twoBitFiles);
 
-	std::map<std::string, std::set<std::string>> uniqueKmersFinal;
-
-	for(const auto & kmersForSet : uniqueKmersWithInSets){
-		std::set<std::string> uniqueKmers;
-		uint32_t count = 0;
-		for(const auto & otherSet : uniqueKmersWithInSets){
-			if(otherSet.first == kmersForSet.first){
-				continue;
-			}
-			if(0 == count){
-				std::vector<std::string> notShared;
-				std::set_difference(
-						kmersForSet.second.begin(), kmersForSet.second.end(),
-						otherSet.second.begin(), otherSet.second.end(),
-						std::back_inserter(notShared));
-				uniqueKmers = njh::vecToSet(notShared);
-			}else{
-				std::vector<std::string> notShared;
-				std::set_difference(
-						uniqueKmers.begin(), uniqueKmers.end(),
-						otherSet.second.begin(), otherSet.second.end(),
-						std::back_inserter(notShared));
-				uniqueKmers = njh::vecToSet(notShared);
-			}
-			++count;
-		}
-		uniqueKmersFinal[kmersForSet.first] = uniqueKmers;
-	}
-	OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "uniqueKmers.tab.txt"));
-	for(const auto & kmersForSet : uniqueKmersFinal){
-		for(const auto & kmer : kmersForSet.second){
-			out << kmersForSet.first
-					<< "\t" << kmer << "\n";
-		}
-	}
+//
+//	std::unordered_map<std::string, std::set<std::string>> uniqueKmersWithInSets;
+//	for(const auto & seqSet : fastasForSet){
+//		std::set<std::string> kmersForSeqSet;
+//		setUp.rLog_.logCurrentTime(bfs::basename(seqSet.first));
+//		setUp.rLog_.runLogFile_.flush();
+//		for(const auto & fasta : iter::enumerate(seqSet.second)){
+//			auto currentSet = njh::uosetToSet(kGather.getUniqueKmers(fasta.element));
+//			if(0 == fasta.first){
+//				kmersForSeqSet = currentSet;
+//			}else{
+//				std::vector<std::string> shared;
+//				std::set_intersection(kmersForSeqSet.begin(), kmersForSeqSet.end(),
+//						currentSet.begin(), currentSet.end(), std::back_insert_iterator(shared));
+//				kmersForSeqSet = njh::vecToSet(shared);
+//			}
+//		}
+//		uniqueKmersWithInSets[seqSet.first] = kmersForSeqSet;
+//	}
+//
+//	std::map<std::string, std::set<std::string>> uniqueKmersFinal;
+//
+//	for(const auto & kmersForSet : uniqueKmersWithInSets){
+//		std::set<std::string> uniqueKmers;
+//		uint32_t count = 0;
+//		for(const auto & otherSet : uniqueKmersWithInSets){
+//			if(otherSet.first == kmersForSet.first){
+//				continue;
+//			}
+//			if(0 == count){
+//				std::vector<std::string> notShared;
+//				std::set_difference(
+//						kmersForSet.second.begin(), kmersForSet.second.end(),
+//						otherSet.second.begin(), otherSet.second.end(),
+//						std::back_inserter(notShared));
+//				uniqueKmers = njh::vecToSet(notShared);
+//			}else{
+//				std::vector<std::string> notShared;
+//				std::set_difference(
+//						uniqueKmers.begin(), uniqueKmers.end(),
+//						otherSet.second.begin(), otherSet.second.end(),
+//						std::back_inserter(notShared));
+//				uniqueKmers = njh::vecToSet(notShared);
+//			}
+//			++count;
+//		}
+//		uniqueKmersFinal[kmersForSet.first] = uniqueKmers;
+//	}
+//	OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "uniqueKmers.tab.txt"));
+//	for(const auto & kmersForSet : uniqueKmersFinal){
+//		for(const auto & kmer : kmersForSet.second){
+//			out << kmersForSet.first
+//					<< "\t" << kmer << "\n";
+//		}
+//	}
 	return 0;
 }
 
