@@ -255,6 +255,11 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 	}
 	std::map<std::string, std::set<std::string>> kmersPerSet;
 
+	std::function<bool(const std::string&)> seqCheck = [&countPars](const std::string & k){
+		return std::all_of(k.begin(), k.end(), [&countPars](char base){return njh::in(base, countPars.allowableCharacters_);});
+	};
+
+
 	{
 		setUp.rLog_.logCurrentTime("count_all");
 		auto allKmers = kGather.getUniqueKmersSet(twoBitFiles);
@@ -264,12 +269,16 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 		for(const auto & name : fastasForSet){
 			kmersPerSet[name.first] = std::set<std::string>{};
 		}
-		std::function<void()> condenseKmers = [&seqSetNamesQueue,&allKmers,&fastasForSet,&kmersPerSet](){
+		std::function<void()> condenseKmers = [&seqSetNamesQueue,&allKmers,&fastasForSet,&kmersPerSet,&seqCheck](){
 			std::string name;
 			while(seqSetNamesQueue.getVal(name)){
 
 				for(const auto & twobit : fastasForSet.at(name)){
-					kmersPerSet[name].insert(allKmers.at(twobit).begin(), allKmers.at(twobit).end());
+					for(const auto & k : allKmers.at(twobit)){
+						if(seqCheck(k)){
+							kmersPerSet[name].emplace(k);
+						}
+					}
 				}
 			}
 		};
