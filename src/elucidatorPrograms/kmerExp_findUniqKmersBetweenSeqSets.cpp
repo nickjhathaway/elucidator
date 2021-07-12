@@ -254,7 +254,6 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 		}
 	}
 	std::map<std::string, std::set<std::string>> kmersPerSet;
-	std::map<std::string, std::set<std::string>> uniqueKmersFinal;
 
 	{
 		setUp.rLog_.logCurrentTime("count_all");
@@ -265,7 +264,7 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 		for(const auto & name : fastasForSet){
 			kmersPerSet[name.first] = std::set<std::string>{};
 		}
-		std::function<void()> condenseKmers = [&setMut,&seqSetNamesQueue,&allKmers,&fastasForSet,&kmersPerSet](){
+		std::function<void()> condenseKmers = [&seqSetNamesQueue,&allKmers,&fastasForSet,&kmersPerSet](){
 			std::string name;
 			while(seqSetNamesQueue.getVal(name)){
 
