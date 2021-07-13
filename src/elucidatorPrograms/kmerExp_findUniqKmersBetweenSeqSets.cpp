@@ -222,8 +222,192 @@ public:
 };
 
 
+class SimpleKmerHash{
+
+public:
+	SimpleKmerHash(){
+		hasher_ = std::vector<char>(255, '5');
+		hasher_['A'] = '1';
+		hasher_['C'] = '2';
+		hasher_['G'] = '3';
+		hasher_['T'] = '4';
+		hasher_['N'] = '5';
+		reverseHasher_ = std::vector(255, 'N');
+		reverseHasher_['1'] = 'A';
+		reverseHasher_['2'] = 'C';
+		reverseHasher_['3'] = 'G';
+		reverseHasher_['4'] = 'T';
+		reverseHasher_['5'] = 'N';
+	}
+	std::vector<char> hasher_;
+
+	std::vector<char> reverseHasher_;
+
+
+	uint64_t hash(const std::string & str){
+		std::string convert;
+		for(size_t pos = 0; pos < std::min<size_t>(20, str.size()); ++pos){
+//			std::cout << "pos: " << pos << std::endl;
+//			std::cout << "convert: " << convert << std::endl;
+//			std::cout << "str[pos]]: " << str[pos] << std::endl;
+//			std::cout << "hasher_[str[pos]]: " << hasher_[str[pos]] << std::endl;
+			convert.push_back(hasher_[str[pos]]);
+//			std::cout << "convert: " << convert << std::endl << std::endl;
+
+		}
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		std::cout << convert << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(convert) << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>("13313441321414125") << std::endl;
+		std::cout << std::endl;
+		std::string testStr = "13313441321414125";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		return njh::StrToNumConverter::stoToNum<uint64_t>(convert);
+	}
+
+	std::string reverseHash(uint64_t hash){
+
+		std::string hashStr = estd::to_string(hash);
+		std::string back;
+		std::cout << hashStr << std::endl;
+		back.reserve(hashStr.size());
+		for(const auto pos : iter::range(hashStr.size())){
+			back.push_back(reverseHasher_[hashStr[pos]]);
+		}
+		return back;
+	}
+};
+
 
 int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands){
+	std::cout << std::endl;
+	{
+		std::string testStr = "13313441321414121";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "13313441321414122";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "13313441321414123";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "13313441321414124";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "13313441321414125";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "13313441321414126";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "13313441321414127";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "13313441321414128";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "13313441321414129";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+
+	std::cout << __FILE__ << " " << __LINE__ << std::endl;
+
+	std::cout << std::endl;
+	{
+		std::string testStr = "1";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "2";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "3";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "4";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "5";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "6";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "7";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "8";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "9";
+		std::cout << testStr << std::endl;
+		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+	}
+
+
+	SimpleKmerHash hashifier;
+
+	{
+		std::string kmerTest = "AGGAGTTAGCATATACN";
+		uint64_t hash = hashifier.hash(kmerTest);
+		std::string hashback = hashifier.reverseHash(hash);
+		std::cout << "hash    : " << hash << std::endl;
+		std::cout << "original: " << kmerTest << std::endl;
+		std::cout << "convert : " << hashback << std::endl;
+
+	}
+
+	return 0;
+
 	KmerGatherer::KmerGathererPars countPars;
 	bfs::path seqSetTableFnp = "";
 	seqSetUp setUp(inputCommands);
