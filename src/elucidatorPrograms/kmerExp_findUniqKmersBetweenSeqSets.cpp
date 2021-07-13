@@ -777,9 +777,10 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMultiDev(const njh::progutils::Cmd
 
 	{
 		setUp.rLog_.logCurrentTime("count_all");
+		setUp.rLog_.runLogFile_.flush();
 		auto allKmers = kGather.getUniqueKmersSetHash(twoBitFiles);
 		setUp.rLog_.logCurrentTime("condense");
-		std::mutex setMut;
+		setUp.rLog_.runLogFile_.flush();
 		njh::concurrent::LockableQueue<std::string> seqSetNamesQueue(getVectorOfMapKeys(fastasForSet));
 		for(const auto & name : fastasForSet){
 			kmersPerSet[name.first] = std::set<uint64_t>{};
@@ -800,42 +801,54 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMultiDev(const njh::progutils::Cmd
 		njh::concurrent::runVoidFunctionThreaded(condenseKmers, countPars.numThreads_);
 
 	}
-		std::map<std::string, std::set<uint64_t>> uniqueKmersFinal;
+	std::map<std::string, std::set<uint64_t>> uniqueKmersFinal;
+	setUp.rLog_.logCurrentTime("compare");
+	setUp.rLog_.runLogFile_.flush();
+	for(const auto & kmersForSet : kmersPerSet){
+		uniqueKmersFinal[kmersForSet.first] = std::set<uint64_t>{};
+	}
+	{
+		njh::concurrent::LockableQueue<std::string> seqSetNamesQueue(getVectorOfMapKeys(kmersPerSet));
+		std::function<void()> compareKmers = [&seqSetNamesQueue,&kmersPerSet,&uniqueKmersFinal](){
+			std::string name;
+			while(seqSetNamesQueue.getVal(name)){
+				std::set<uint64_t> uniqueKmers;
+				uint32_t count = 0;
+				for(const auto & otherSet : kmersPerSet){
+					if(otherSet.first == name){
+						continue;
+					}
+					if(0 == count){
+						std::vector<uint64_t> notShared;
+						std::set_difference(
+								kmersPerSet.at(name).begin(), kmersPerSet.at(name).end(),
+								otherSet.second.begin(), otherSet.second.end(),
+								std::back_inserter(notShared));
+						uniqueKmers = njh::vecToSet(notShared);
+					}else{
+						std::vector<uint64_t> notShared;
+						std::set_difference(
+								uniqueKmers.begin(), uniqueKmers.end(),
+								otherSet.second.begin(), otherSet.second.end(),
+								std::back_inserter(notShared));
+						uniqueKmers = njh::vecToSet(notShared);
+					}
+					++count;
+				}
+				uniqueKmersFinal[name] = uniqueKmers;
+			}
+		};
+		njh::concurrent::runVoidFunctionThreaded(compareKmers, countPars.numThreads_);
+	}
 
-		for(const auto & kmersForSet : kmersPerSet){
-			std::set<uint64_t> uniqueKmers;
-			uint32_t count = 0;
-			for(const auto & otherSet : kmersPerSet){
-				if(otherSet.first == kmersForSet.first){
-					continue;
-				}
-				if(0 == count){
-					std::vector<uint64_t> notShared;
-					std::set_difference(
-							kmersForSet.second.begin(), kmersForSet.second.end(),
-							otherSet.second.begin(), otherSet.second.end(),
-							std::back_inserter(notShared));
-					uniqueKmers = njh::vecToSet(notShared);
-				}else{
-					std::vector<uint64_t> notShared;
-					std::set_difference(
-							uniqueKmers.begin(), uniqueKmers.end(),
-							otherSet.second.begin(), otherSet.second.end(),
-							std::back_inserter(notShared));
-					uniqueKmers = njh::vecToSet(notShared);
-				}
-				++count;
-			}
-			uniqueKmersFinal[kmersForSet.first] = uniqueKmers;
+	SimpleKmerHash hasher;
+	OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "uniqueKmers.tab.txt"));
+	for(const auto & kmersForSet : uniqueKmersFinal){
+		for(const auto & kmer : kmersForSet.second){
+			out << kmersForSet.first
+					<< "\t" << hasher.reverseHash(kmer) << "\n";
 		}
-		SimpleKmerHash hasher;
-		OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "uniqueKmers.tab.txt"));
-		for(const auto & kmersForSet : uniqueKmersFinal){
-			for(const auto & kmer : kmersForSet.second){
-				out << kmersForSet.first
-						<< "\t" << hasher.reverseHash(kmer) << "\n";
-			}
-		}
+	}
 	return 0;
 }
 
