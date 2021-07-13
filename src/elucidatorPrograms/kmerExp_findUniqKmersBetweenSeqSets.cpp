@@ -37,6 +37,49 @@
 
 namespace njhseq {
 
+class SimpleKmerHash{
+
+public:
+	SimpleKmerHash(){
+		hasher_ = std::vector<char>(255, '5');
+		hasher_['A'] = '1';
+		hasher_['C'] = '2';
+		hasher_['G'] = '3';
+		hasher_['T'] = '4';
+		hasher_['N'] = '5';
+		reverseHasher_ = std::vector(255, 'N');
+		reverseHasher_['1'] = 'A';
+		reverseHasher_['2'] = 'C';
+		reverseHasher_['3'] = 'G';
+		reverseHasher_['4'] = 'T';
+		reverseHasher_['5'] = 'N';
+	}
+	std::vector<char> hasher_;
+
+	std::vector<char> reverseHasher_;
+
+
+	uint64_t hash(const std::string & str) const{
+		std::string convert;
+		for(size_t pos = 0; pos < std::min<size_t>(20, str.size()); ++pos){
+			convert.push_back(hasher_[str[pos]]);
+		}
+		return njh::StrToNumConverter::stoToNum<uint64_t>(convert);
+	}
+
+	std::string reverseHash(uint64_t hash) const {
+
+		std::string hashStr = estd::to_string(hash);
+		std::string back;
+		back.reserve(hashStr.size());
+		for(const auto pos : iter::range(hashStr.size())){
+			back.push_back(reverseHasher_[hashStr[pos]]);
+		}
+		return back;
+	}
+};
+
+
 class KmerGatherer{
 public:
 	struct KmerGathererPars {
@@ -163,19 +206,17 @@ public:
 		return ret;
 	}
 
+	struct TwobitFnpSeqNamePair{
+		TwobitFnpSeqNamePair(const bfs::path twoBit, const std::string & seqName):twoBit_(twoBit), seqName_(seqName){
+
+		}
+		TwobitFnpSeqNamePair(){
+
+		}
+		bfs::path twoBit_;
+		std::string seqName_;
+	};
 	std::unordered_map<std::string, std::set<std::string>> getUniqueKmersSet(const std::vector<bfs::path> & twobitFnps) const {
-
-		struct TwobitFnpSeqNamePair{
-			TwobitFnpSeqNamePair(const bfs::path twoBit, const std::string & seqName):twoBit_(twoBit), seqName_(seqName){
-
-			}
-			TwobitFnpSeqNamePair(){
-
-			}
-			bfs::path twoBit_;
-			std::string seqName_;
-		};
-
 		std::vector<TwobitFnpSeqNamePair> pairs;
 
 		for(const auto & twoBit : twobitFnps){
@@ -191,6 +232,7 @@ public:
 		std::mutex mut;
 
 		std::function<void()> gatherKmers=[&pairsQueue,this,&ret,&mut](){
+
 			TwobitFnpSeqNamePair pair;
 			std::unordered_map<std::string, std::set<std::string>> current;
 			while(pairsQueue.getVal(pair)){
@@ -205,6 +247,56 @@ public:
 					buffer = seqUtil::reverseComplement(buffer, "DNA");
 					for(uint32_t pos = 0; pos < len(buffer) - pars_.kmerLength_ + 1; ++pos){
 						genomeKmersCurrent.emplace(buffer.substr(pos, pars_.kmerLength_));
+					}
+				}
+				current[pair.twoBit_.string()].insert(genomeKmersCurrent.begin(), genomeKmersCurrent.end());
+			}
+			{
+				std::lock_guard<std::mutex> lock(mut);
+				for(const auto & kmerSet : current){
+					ret[kmerSet.first].insert(kmerSet.second.begin(), kmerSet.second.end());
+				}
+			}
+		};
+		njh::concurrent::runVoidFunctionThreaded(gatherKmers, pars_.numThreads_);
+		return ret;
+	}
+
+	std::unordered_map<std::string, std::set<uint64_t>> getUniqueKmersSetHash(const std::vector<bfs::path> & twobitFnps) const {
+		std::vector<TwobitFnpSeqNamePair> pairs;
+		if(pars_.kmerLength_ > 19){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "cannot do kmer lengths greater than 19" << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		for(const auto & twoBit : twobitFnps){
+			TwoBit::TwoBitFile tReader(twoBit);
+			auto seqNames = tReader.sequenceNames();
+			for(const auto & seqName : seqNames){
+				pairs.emplace_back(TwobitFnpSeqNamePair(twoBit, seqName));
+			}
+		}
+		njh::concurrent::LockableQueue<TwobitFnpSeqNamePair> pairsQueue(pairs);
+
+		std::unordered_map<std::string, std::set<uint64_t>> ret;
+		std::mutex mut;
+
+		std::function<void()> gatherKmers=[&pairsQueue,this,&ret,&mut](){
+			SimpleKmerHash hasher;
+			TwobitFnpSeqNamePair pair;
+			std::unordered_map<std::string, std::set<uint64_t>> current;
+			while(pairsQueue.getVal(pair)){
+				std::set<uint64_t>  genomeKmersCurrent;
+				TwoBit::TwoBitFile tReader(pair.twoBit_);
+				std::string buffer;
+				tReader[pair.seqName_]->getSequence(buffer);
+				for(uint32_t pos = 0; pos < len(buffer) - pars_.kmerLength_ + 1; ++pos){
+					genomeKmersCurrent.emplace(hasher.hash(buffer.substr(pos, pars_.kmerLength_)));
+				}
+				if(!pars_.noRevComp_){
+					buffer = seqUtil::reverseComplement(buffer, "DNA");
+					for(uint32_t pos = 0; pos < len(buffer) - pars_.kmerLength_ + 1; ++pos){
+						genomeKmersCurrent.emplace(hasher.hash(buffer.substr(pos, pars_.kmerLength_)));
 					}
 				}
 				current[pair.twoBit_.string()].insert(genomeKmersCurrent.begin(), genomeKmersCurrent.end());
@@ -286,194 +378,346 @@ namespace StrToNumConverter {
 }  // namespace StrToNumConverter
 
 
-class SimpleKmerHash{
-
-public:
-	SimpleKmerHash(){
-		hasher_ = std::vector<char>(255, '5');
-		hasher_['A'] = '1';
-		hasher_['C'] = '2';
-		hasher_['G'] = '3';
-		hasher_['T'] = '4';
-		hasher_['N'] = '5';
-		reverseHasher_ = std::vector(255, 'N');
-		reverseHasher_['1'] = 'A';
-		reverseHasher_['2'] = 'C';
-		reverseHasher_['3'] = 'G';
-		reverseHasher_['4'] = 'T';
-		reverseHasher_['5'] = 'N';
-	}
-	std::vector<char> hasher_;
-
-	std::vector<char> reverseHasher_;
 
 
-	uint64_t hash(const std::string & str){
-		std::string convert;
-		for(size_t pos = 0; pos < std::min<size_t>(20, str.size()); ++pos){
-//			std::cout << "pos: " << pos << std::endl;
-//			std::cout << "convert: " << convert << std::endl;
-//			std::cout << "str[pos]]: " << str[pos] << std::endl;
-//			std::cout << "hasher_[str[pos]]: " << hasher_[str[pos]] << std::endl;
-			convert.push_back(hasher_[str[pos]]);
-//			std::cout << "convert: " << convert << std::endl << std::endl;
+int testingOfWeirdStod(){
 
-		}
+	{
+		std::cout << "13313441321414123" << std::endl;
+		double testDoub = 13313441321414123;
+		std::cout << std::setprecision(20) << testDoub << std::endl;
+		std::cout << "13313441321414124" << std::endl;
+		double testDoub2 = 13313441321414124;
+		std::cout << std::setprecision(20) << testDoub2 << std::endl;
+		std::cout << njh::colorBool(testDoub == testDoub2) << std::endl;
 		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-		std::cout << convert << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(convert) << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>("13313441321414125") << std::endl;
-		std::cout << std::endl;
-		std::string testStr = "13313441321414125";
+	}
+	{
+		std::cout << "13313441321414125" << std::endl;
+		double testDoub = 13313441321414125;
+		std::cout << std::setprecision(20) << testDoub << std::endl;
+		std::cout << "13313441321414126" << std::endl;
+		double testDoub2 = 13313441321414126;
+		std::cout << std::setprecision(20) << testDoub2 << std::endl;
+		std::cout << njh::colorBool(testDoub == testDoub2) << std::endl;
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+	}
+	{
+		std::cout << "13313441321414127" << std::endl;
+		double testDoub = 13313441321414127;
+		std::cout << std::setprecision(20) << testDoub << std::endl;
+		std::cout << "13313441321414128" << std::endl;
+		double testDoub2 = 13313441321414128;
+		std::cout << std::setprecision(20) << testDoub2 << std::endl;
+		std::cout << njh::colorBool(testDoub == testDoub2) << std::endl;
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+	}
+
+
+	std::cout << std::endl;
+
+	{
+		std::string testStr = "3313441321414121";
+		std::cout << "places: " << testStr.size() << std::endl;
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		return njh::StrToNumConverter::stoToNum<uint64_t>(convert);
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
-
-	std::string reverseHash(uint64_t hash){
-
-		std::string hashStr = estd::to_string(hash);
-		std::string back;
-		std::cout << hashStr << std::endl;
-		back.reserve(hashStr.size());
-		for(const auto pos : iter::range(hashStr.size())){
-			back.push_back(reverseHasher_[hashStr[pos]]);
-		}
-		return back;
-	}
-};
-
-
-
-
-int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands){
 	std::cout << std::endl;
 	{
-		std::string testStr = "13313441321414121";
+		std::string testStr = "3313441321414122";
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "3313441321414123";
+		std::cout << testStr << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "3313441321414124";
+		std::cout << testStr << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "3313441321414125";
+		std::cout << testStr << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "3313441321414126";
+		std::cout << testStr << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "3313441321414127";
+		std::cout << testStr << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "3313441321414129";
+		std::cout << testStr << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "3313441321414129";
+		std::cout << testStr << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+	}
+
+	std::cout << __FILE__ << " " << __LINE__ << std::endl;
+
+	{
+		std::string testStr = "13313441321414121";
+		std::cout << "places: " << testStr.size() << std::endl;
+		std::cout << testStr << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
 	std::cout << std::endl;
 	{
 		std::string testStr = "13313441321414122";
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
 	std::cout << std::endl;
 	{
 		std::string testStr = "13313441321414123";
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
 	std::cout << std::endl;
 	{
 		std::string testStr = "13313441321414124";
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
 	std::cout << std::endl;
 	{
 		std::string testStr = "13313441321414125";
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
 	std::cout << std::endl;
 	{
 		std::string testStr = "13313441321414126";
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
 	std::cout << std::endl;
 	{
 		std::string testStr = "13313441321414127";
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
 	std::cout << std::endl;
 	{
 		std::string testStr = "13313441321414128";
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
 	std::cout << std::endl;
 	{
 		std::string testStr = "13313441321414129";
 		std::cout << testStr << std::endl;
-		uint64_t firstCon = njh::StrToNumConverter::stoToNum<uint64_t>(testStr);
-		uint64_t secondCon = StrToNumConverter::stoToNum<uint64_t>(testStr);
-		std::cout << "std::stod(testStr)                                  :" << std::stod(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
 		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
 		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-		std::cout << "std::setprecision(40) std::stod(testStr)            :" << std::setprecision(40)  << stod(testStr) << std::endl;
-
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << firstCon << std::endl;
-		std::cout << "StrToNumConverter::stoToNum<uint64_t>(testStr)      :" << secondCon << std::endl;
-		std::cout << "std::stoul(testStr)                                 :" << std::stoul(testStr) << std::endl;
-
-		std::stringstream ss;
-		ss << testStr << std::endl;
-		uint64_t thirdCon;
-		ss >> thirdCon;
-		std::cout << "std::stringstream                                   :" << thirdCon << std::endl;
 	}
-
+	std::cout << std::endl;
 	std::cout << __FILE__ << " " << __LINE__ << std::endl;
 
 	std::cout << std::endl;
+
 	{
-		std::string testStr = "1";
+		std::string testStr = "113313441321414121";
+		std::cout << "places: " << testStr.size() << std::endl;
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
 	std::cout << std::endl;
 	{
-		std::string testStr = "2";
+		std::string testStr = "113313441321414122";
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
 	std::cout << std::endl;
 	{
-		std::string testStr = "3";
+		std::string testStr = "113313441321414123";
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
 	std::cout << std::endl;
 	{
-		std::string testStr = "4";
+		std::string testStr = "113313441321414124";
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
 	std::cout << std::endl;
 	{
-		std::string testStr = "5";
+		std::string testStr = "113313441321414125";
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
 	std::cout << std::endl;
 	{
-		std::string testStr = "6";
+		std::string testStr = "113313441321414126";
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
 	std::cout << std::endl;
 	{
-		std::string testStr = "7";
+		std::string testStr = "113313441321414127";
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
 	std::cout << std::endl;
 	{
-		std::string testStr = "8";
+		std::string testStr = "113313441321414128";
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
 	std::cout << std::endl;
 	{
-		std::string testStr = "9";
+		std::string testStr = "113313441321414129";
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
 	}
 
+
+
+	std::cout << __FILE__ << " " << __LINE__ << std::endl;
+
+	{
+		std::string testStr = "1213313441321414121";
+		std::cout << "places: " << testStr.size() << std::endl;
+		std::cout << testStr << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "1213313441321414122";
+		std::cout << testStr << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "1213313441321414123";
+		std::cout << testStr << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "1213313441321414124";
+		std::cout << testStr << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "1213313441321414125";
+		std::cout << testStr << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "1213313441321414126";
+		std::cout << testStr << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "1213313441321414127";
+		std::cout << testStr << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "1213313441321414128";
+		std::cout << testStr << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+	}
+	std::cout << std::endl;
+	{
+		std::string testStr = "1213313441321414129";
+		std::cout << testStr << std::endl;
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+	}
+	std::cout << __FILE__ << " " << __LINE__ << std::endl;
 
 
 	SimpleKmerHash hashifier;
@@ -490,6 +734,112 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 
 	return 0;
 
+}
+
+
+
+int kmerExpRunner::findUniqKmersBetweenSeqSetsMultiDev(const njh::progutils::CmdArgs & inputCommands){
+	KmerGatherer::KmerGathererPars countPars;
+	bfs::path seqSetTableFnp = "";
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.description_ = "Get kmers that appear within all the sequences supplied and are unique to that set";
+	setUp.setOption(seqSetTableFnp, "--seqSetTableFnp", "Seq Set Table, 2 columns, 1)set,2)fasta", true);
+	countPars.setOptions(setUp);
+
+	setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(seqSetTableFnp), "_TODAY"), true);
+	setUp.finishSetUp(std::cout);
+	setUp.startARunLog(setUp.pars_.directoryName_);
+
+	KmerGatherer kGather(countPars);
+
+	std::unordered_map<std::string, std::set<std::string>> fastasForSet;
+	table input(seqSetTableFnp, "\t", true);
+	input.checkForColumnsThrow(VecStr{"set", "2bit"}, __PRETTY_FUNCTION__);
+	for(const auto & row : input){
+		fastasForSet[row[input.getColPos("set")]].emplace(row[input.getColPos("2bit")]);
+	}
+	setUp.rLog_.setCurrentLapName("initial");
+
+	std::vector<bfs::path> twoBitFiles;
+	for(const auto & seqSet : fastasForSet){
+		for(const auto & fnp : seqSet.second){
+			twoBitFiles.emplace_back(fnp);
+		}
+	}
+	std::map<std::string, std::set<uint64_t>> kmersPerSet;
+
+	std::function<bool(const std::string&)> seqCheck = [&countPars](const std::string & k){
+		return std::all_of(k.begin(), k.end(), [&countPars](char base){return njh::in(base, countPars.allowableCharacters_);});
+	};
+
+
+	{
+		setUp.rLog_.logCurrentTime("count_all");
+		auto allKmers = kGather.getUniqueKmersSetHash(twoBitFiles);
+		setUp.rLog_.logCurrentTime("condense");
+		std::mutex setMut;
+		njh::concurrent::LockableQueue<std::string> seqSetNamesQueue(getVectorOfMapKeys(fastasForSet));
+		for(const auto & name : fastasForSet){
+			kmersPerSet[name.first] = std::set<uint64_t>{};
+		}
+		std::function<void()> condenseKmers = [&seqSetNamesQueue,&allKmers,&fastasForSet,&kmersPerSet,&seqCheck](){
+			std::string name;
+			while(seqSetNamesQueue.getVal(name)){
+				SimpleKmerHash hasher;
+				for(const auto & twobit : fastasForSet.at(name)){
+					for(const auto & k : allKmers.at(twobit)){
+						if(seqCheck(hasher.reverseHash(k))){
+							kmersPerSet[name].emplace(k);
+						}
+					}
+				}
+			}
+		};
+		njh::concurrent::runVoidFunctionThreaded(condenseKmers, countPars.numThreads_);
+
+	}
+		std::map<std::string, std::set<uint64_t>> uniqueKmersFinal;
+
+		for(const auto & kmersForSet : kmersPerSet){
+			std::set<uint64_t> uniqueKmers;
+			uint32_t count = 0;
+			for(const auto & otherSet : kmersPerSet){
+				if(otherSet.first == kmersForSet.first){
+					continue;
+				}
+				if(0 == count){
+					std::vector<uint64_t> notShared;
+					std::set_difference(
+							kmersForSet.second.begin(), kmersForSet.second.end(),
+							otherSet.second.begin(), otherSet.second.end(),
+							std::back_inserter(notShared));
+					uniqueKmers = njh::vecToSet(notShared);
+				}else{
+					std::vector<uint64_t> notShared;
+					std::set_difference(
+							uniqueKmers.begin(), uniqueKmers.end(),
+							otherSet.second.begin(), otherSet.second.end(),
+							std::back_inserter(notShared));
+					uniqueKmers = njh::vecToSet(notShared);
+				}
+				++count;
+			}
+			uniqueKmersFinal[kmersForSet.first] = uniqueKmers;
+		}
+		SimpleKmerHash hasher;
+		OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "uniqueKmers.tab.txt"));
+		for(const auto & kmersForSet : uniqueKmersFinal){
+			for(const auto & kmer : kmersForSet.second){
+				out << kmersForSet.first
+						<< "\t" << hasher.reverseHash(kmer) << "\n";
+			}
+		}
+	return 0;
+}
+
+int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands){
 	KmerGatherer::KmerGathererPars countPars;
 	bfs::path seqSetTableFnp = "";
 	seqSetUp setUp(inputCommands);
@@ -586,61 +936,6 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 						<< "\t" << kmer << "\n";
 			}
 		}
-//
-//	std::unordered_map<std::string, std::set<std::string>> uniqueKmersWithInSets;
-//	for(const auto & seqSet : fastasForSet){
-//		std::set<std::string> kmersForSeqSet;
-//		setUp.rLog_.logCurrentTime(bfs::basename(seqSet.first));
-//		setUp.rLog_.runLogFile_.flush();
-//		for(const auto & fasta : iter::enumerate(seqSet.second)){
-//			auto currentSet = njh::uosetToSet(kGather.getUniqueKmers(fasta.element));
-//			if(0 == fasta.first){
-//				kmersForSeqSet = currentSet;
-//			}else{
-//				std::vector<std::string> shared;
-//				std::set_intersection(kmersForSeqSet.begin(), kmersForSeqSet.end(),
-//						currentSet.begin(), currentSet.end(), std::back_insert_iterator(shared));
-//				kmersForSeqSet = njh::vecToSet(shared);
-//			}
-//		}
-//		uniqueKmersWithInSets[seqSet.first] = kmersForSeqSet;
-//	}
-//
-//	std::map<std::string, std::set<std::string>> uniqueKmersFinal;
-//
-//	for(const auto & kmersForSet : uniqueKmersWithInSets){
-//		std::set<std::string> uniqueKmers;
-//		uint32_t count = 0;
-//		for(const auto & otherSet : uniqueKmersWithInSets){
-//			if(otherSet.first == kmersForSet.first){
-//				continue;
-//			}
-//			if(0 == count){
-//				std::vector<std::string> notShared;
-//				std::set_difference(
-//						kmersForSet.second.begin(), kmersForSet.second.end(),
-//						otherSet.second.begin(), otherSet.second.end(),
-//						std::back_inserter(notShared));
-//				uniqueKmers = njh::vecToSet(notShared);
-//			}else{
-//				std::vector<std::string> notShared;
-//				std::set_difference(
-//						uniqueKmers.begin(), uniqueKmers.end(),
-//						otherSet.second.begin(), otherSet.second.end(),
-//						std::back_inserter(notShared));
-//				uniqueKmers = njh::vecToSet(notShared);
-//			}
-//			++count;
-//		}
-//		uniqueKmersFinal[kmersForSet.first] = uniqueKmers;
-//	}
-//	OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "uniqueKmers.tab.txt"));
-//	for(const auto & kmersForSet : uniqueKmersFinal){
-//		for(const auto & kmer : kmersForSet.second){
-//			out << kmersForSet.first
-//					<< "\t" << kmer << "\n";
-//		}
-//	}
 	return 0;
 }
 
