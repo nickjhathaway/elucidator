@@ -222,6 +222,70 @@ public:
 };
 
 
+
+namespace StrToNumConverter {
+
+/**@brief Function for converting a string to a number, which is just njh::lexical_cast by default and then several specific int conversions are defined for faster converting
+ *
+ * @param str the string to convert
+ * @return the string convert to a number
+ */
+	template<typename T>
+	T stoToNum(const std::string & str){
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		return njh::lexical_cast<T>(str);
+	}
+
+	template<>
+	unsigned short stoToNum(const std::string & str){
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		return estd::stous(str);
+	}
+
+	template<>
+	unsigned stoToNum(const std::string & str){
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		return estd::stou(str);
+	}
+
+	template<>
+	unsigned long stoToNum(const std::string & str){
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		return std::stoul(str);
+	}
+
+	template<>
+	unsigned long long stoToNum(const std::string & str){
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		return std::stoull(str);
+	}
+
+	template<>
+	short stoToNum(const std::string & str){
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		return estd::stos(str);
+	}
+
+	template<>
+	int stoToNum(const std::string & str){
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		return std::stoi(str);
+	}
+
+	template<>
+	long int stoToNum(const std::string & str){
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		return std::stol(str);
+	}
+
+	template<>
+	long long int stoToNum(const std::string & str){
+		return std::stoll(str);
+	}
+
+}  // namespace StrToNumConverter
+
+
 class SimpleKmerHash{
 
 public:
@@ -280,6 +344,8 @@ public:
 };
 
 
+
+
 int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands){
 	std::cout << std::endl;
 	{
@@ -333,7 +399,22 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 	{
 		std::string testStr = "13313441321414129";
 		std::cout << testStr << std::endl;
-		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
+		uint64_t firstCon = njh::StrToNumConverter::stoToNum<uint64_t>(testStr);
+		uint64_t secondCon = StrToNumConverter::stoToNum<uint64_t>(testStr);
+		std::cout << "std::stod(testStr)                                  :" << std::stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
+		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
+		std::cout << "std::setprecision(40) std::stod(testStr)            :" << std::setprecision(40)  << stod(testStr) << std::endl;
+
+		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << firstCon << std::endl;
+		std::cout << "StrToNumConverter::stoToNum<uint64_t>(testStr)      :" << secondCon << std::endl;
+		std::cout << "std::stoul(testStr)                                 :" << std::stoul(testStr) << std::endl;
+
+		std::stringstream ss;
+		ss << testStr << std::endl;
+		uint64_t thirdCon;
+		ss >> thirdCon;
+		std::cout << "std::stringstream                                   :" << thirdCon << std::endl;
 	}
 
 	std::cout << __FILE__ << " " << __LINE__ << std::endl;
@@ -392,6 +473,7 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 		std::cout << testStr << std::endl;
 		std::cout <<  njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
 	}
+
 
 
 	SimpleKmerHash hashifier;
