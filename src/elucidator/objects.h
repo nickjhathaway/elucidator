@@ -31,6 +31,7 @@
 #include "elucidator/objects/seqObjects.h"
 #include "elucidator/objects/SlimCounter.h"
 
+#include "elucidator/objects/kmerUtils.h"
 
 
 

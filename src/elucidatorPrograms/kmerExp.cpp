@@ -84,7 +84,10 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("filterPerSeqAvgKmerPosition", filterPerSeqAvgKmerPosition, false),
 					 addFunc("findUniqKmersBetweenSeqSets", findUniqKmersBetweenSeqSets, false),
 					 addFunc("findUniqKmersBetweenSeqSetsMulti", findUniqKmersBetweenSeqSetsMulti, false),
-					 addFunc("findUniqKmersBetweenSeqSetsMultiDev", findUniqKmersBetweenSeqSetsMultiDev, false),
+					 //addFunc("findUniqKmersBetweenSeqSetsMultiDev", findUniqKmersBetweenSeqSetsMultiDev, false),
+					 addFunc("countingUniqKmersFromSets", countingUniqKmersFromSets, false),
+					 addFunc("filterUniqueKmerSetForEntropy", filterUniqueKmerSetForEntropy, false),
+					 addFunc("testingSimpleKmerHasher", testingSimpleKmerHasher, false),
 					 //
            },
           "kmerExp") {}

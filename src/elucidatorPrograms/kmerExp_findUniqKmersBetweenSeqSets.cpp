@@ -34,718 +34,295 @@
 
 #include "elucidator/objects/MiscUtility/GenomeSeqSearch.hpp"
 
+#include <njhseq/objects/dataContainers/tables/TableReader.hpp>
+
+#include "elucidator/objects/kmerUtils.h"
+
+#include <njhseq/IO/SeqIO/MultiSeqOutCache.hpp>
 
 namespace njhseq {
 
-class SimpleKmerHash{
-
-public:
-	SimpleKmerHash(){
-		hasher_ = std::vector<char>(255, '5');
-		hasher_['A'] = '1';
-		hasher_['C'] = '2';
-		hasher_['G'] = '3';
-		hasher_['T'] = '4';
-		hasher_['N'] = '5';
-		reverseHasher_ = std::vector(255, 'N');
-		reverseHasher_['1'] = 'A';
-		reverseHasher_['2'] = 'C';
-		reverseHasher_['3'] = 'G';
-		reverseHasher_['4'] = 'T';
-		reverseHasher_['5'] = 'N';
-	}
-	std::vector<char> hasher_;
-
-	std::vector<char> reverseHasher_;
 
 
-	uint64_t hash(const std::string & str) const{
-		std::string convert;
-		for(size_t pos = 0; pos < std::min<size_t>(20, str.size()); ++pos){
-			convert.push_back(hasher_[str[pos]]);
-		}
-		return njh::StrToNumConverter::stoToNum<uint64_t>(convert);
-	}
-
-	std::string reverseHash(uint64_t hash) const {
-
-		std::string hashStr = estd::to_string(hash);
-		std::string back;
-		back.reserve(hashStr.size());
-		for(const auto pos : iter::range(hashStr.size())){
-			back.push_back(reverseHasher_[hashStr[pos]]);
-		}
-		return back;
-	}
-};
 
 
-class KmerGatherer{
-public:
-	struct KmerGathererPars {
-		KmerGathererPars(uint32_t kmerLength,
-				bool noRevComp, uint32_t numThreads,
-				std::vector<char> allowableCharacters) :
-				kmerLength_(kmerLength), noRevComp_(noRevComp), numThreads_(
-						numThreads),
-						allowableCharacters_(allowableCharacters){
 
-		}
-		KmerGathererPars(){
 
-		}
-		uint32_t kmerLength_{21};
-		bool noRevComp_{false};
-		uint32_t numThreads_{1};
-		std::vector<char> allowableCharacters_{'A', 'C', 'G', 'T'};
 
-		void setOptions(seqSetUp & setUp){
-			setUp.setOption(kmerLength_, "--kmerLength", "kmer Length");
-			setUp.setOption(numThreads_, "--numThreads", "number of threads");
-			setUp.setOption(allowableCharacters_, "--allowableCharacters", "Only count kmers with these allowable Characters");
-			setUp.setOption(noRevComp_, "--noRevComp", "noRevComp");
-		}
-	};
 
-	KmerGatherer(const KmerGathererPars & pars):pars_(pars){
+int kmerExpRunner::filterUniqueKmerSetForEntropy(const njh::progutils::CmdArgs & inputCommands){
+	bfs::path countTable = "";
+	double entropyCutOff = 1;
+	OutOptions outOpts(bfs::path(""), ".tab.txt.gz");
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(countTable, "--countTable", "countTable, 1)set,2)kmer", true);
+	setUp.setOption(entropyCutOff, "--entropyCutOff", "entropy Cut Off to keep kmers (exclusive)");
 
-	}
-	KmerGathererPars pars_;
+	setUp.processWritingOptions(outOpts);
+	//setUp.processDirectoryOutputName("true");
+	setUp.finishSetUp(std::cout);
+	//setUp.startARunLog(setUp.pars_.directoryName_);
+	njh::stopWatch watch;
+	watch.setLapName("initial");
+	watch.startNewLap("reading in unique kmer table");
+	OutputStream out(outOpts);
 
-	std::unordered_map<std::string, uint32_t> countGenomeKmers(const bfs::path & genomeFnp) const {
-		std::unordered_map<std::string, uint32_t> ret;
-		SeqInput reader(SeqIOOptions::genFastaIn(genomeFnp));
-		reader.openIn();
-		std::mutex genomeCountsMut;
-		std::function<void()> countKmers =[&reader,this,&genomeCountsMut,&ret](){
-			seqInfo seq;
-
-			while(reader.readNextReadLock(seq)){
-				std::unordered_map<std::string, uint32_t> genomeCountsCurrent;
-				if(len(seq) > pars_.kmerLength_){
-					for(uint32_t pos = 0; pos < len(seq) - pars_.kmerLength_ + 1; ++pos){
-						++genomeCountsCurrent[seq.seq_.substr(pos, pars_.kmerLength_)];
-					}
-					if(!pars_.noRevComp_){
-						seq.reverseComplementRead(false, true);
-						for(uint32_t pos = 0; pos < len(seq) - pars_.kmerLength_ + 1; ++pos){
-							++genomeCountsCurrent[seq.seq_.substr(pos, pars_.kmerLength_)];
-						}
-					}
-				}
-				{
-					std::lock_guard<std::mutex> lock(genomeCountsMut);
-					for(const auto & count : genomeCountsCurrent){
-						ret[count.first] += count.second;
-					}
-				}
-			}
-		};
-		njh::concurrent::runVoidFunctionThreaded(countKmers, pars_.numThreads_);
-
-		return ret;
-	}
-
-	std::unordered_set<std::string> getUniqueKmers(const bfs::path & genomeFnp) const {
-		std::unordered_set<std::string> ret;
-		SeqInput reader(SeqIOOptions::genFastaIn(genomeFnp));
-		reader.openIn();
-		std::mutex genomeKmersMut;
-		std::function<void()> gatherKmers =[&reader,this,&genomeKmersMut,&ret](){
-			seqInfo seq;
-
-			while(reader.readNextReadLock(seq)){
-				std::unordered_set<std::string>  genomeKmersCurrent;
-				if(len(seq) > pars_.kmerLength_){
-					for(uint32_t pos = 0; pos < len(seq) - pars_.kmerLength_ + 1; ++pos){
-						genomeKmersCurrent.emplace(seq.seq_.substr(pos, pars_.kmerLength_));
-					}
-					if(!pars_.noRevComp_){
-						seq.reverseComplementRead(false, true);
-						for(uint32_t pos = 0; pos < len(seq) - pars_.kmerLength_ + 1; ++pos){
-							genomeKmersCurrent.emplace(seq.seq_.substr(pos, pars_.kmerLength_));
-						}
-					}
-				}
-				{
-					std::lock_guard<std::mutex> lock(genomeKmersMut);
-					ret.insert(genomeKmersCurrent.begin(), genomeKmersCurrent.end());
-				}
-			}
-		};
-		njh::concurrent::runVoidFunctionThreaded(gatherKmers, pars_.numThreads_);
-		return ret;
-	}
-	std::set<std::string> getUniqueKmersSet(const bfs::path & genomeFnp) const {
-		std::set<std::string> ret;
-		SeqInput reader(SeqIOOptions::genFastaIn(genomeFnp));
-		reader.openIn();
-		std::mutex genomeKmersMut;
-		std::function<void()> gatherKmers =[&reader,this,&genomeKmersMut,&ret](){
-			seqInfo seq;
-			while(reader.readNextReadLock(seq)){
-				std::set<std::string>  genomeKmersCurrent;
-				if(len(seq) > pars_.kmerLength_){
-					for(uint32_t pos = 0; pos < len(seq) - pars_.kmerLength_ + 1; ++pos){
-						genomeKmersCurrent.emplace(seq.seq_.substr(pos, pars_.kmerLength_));
-					}
-					if(!pars_.noRevComp_){
-						seq.reverseComplementRead(false, true);
-						for(uint32_t pos = 0; pos < len(seq) - pars_.kmerLength_ + 1; ++pos){
-							genomeKmersCurrent.emplace(seq.seq_.substr(pos, pars_.kmerLength_));
-						}
-					}
-				}
-				{
-					std::lock_guard<std::mutex> lock(genomeKmersMut);
-					ret.insert(genomeKmersCurrent.begin(), genomeKmersCurrent.end());
-				}
-			}
-		};
-		njh::concurrent::runVoidFunctionThreaded(gatherKmers, pars_.numThreads_);
-		return ret;
-	}
-
-	struct TwobitFnpSeqNamePair{
-		TwobitFnpSeqNamePair(const bfs::path twoBit, const std::string & seqName):twoBit_(twoBit), seqName_(seqName){
-
-		}
-		TwobitFnpSeqNamePair(){
-
-		}
-		bfs::path twoBit_;
-		std::string seqName_;
-	};
-	std::unordered_map<std::string, std::set<std::string>> getUniqueKmersSet(const std::vector<bfs::path> & twobitFnps) const {
-		std::vector<TwobitFnpSeqNamePair> pairs;
-
-		for(const auto & twoBit : twobitFnps){
-			TwoBit::TwoBitFile tReader(twoBit);
-			auto seqNames = tReader.sequenceNames();
-			for(const auto & seqName : seqNames){
-				pairs.emplace_back(TwobitFnpSeqNamePair(twoBit, seqName));
-			}
-		}
-		njh::concurrent::LockableQueue<TwobitFnpSeqNamePair> pairsQueue(pairs);
-
-		std::unordered_map<std::string, std::set<std::string>> ret;
-		std::mutex mut;
-
-		std::function<void()> gatherKmers=[&pairsQueue,this,&ret,&mut](){
-
-			TwobitFnpSeqNamePair pair;
-			std::unordered_map<std::string, std::set<std::string>> current;
-			while(pairsQueue.getVal(pair)){
-				std::set<std::string>  genomeKmersCurrent;
-				TwoBit::TwoBitFile tReader(pair.twoBit_);
-				std::string buffer;
-				tReader[pair.seqName_]->getSequence(buffer);
-				for(uint32_t pos = 0; pos < len(buffer) - pars_.kmerLength_ + 1; ++pos){
-					genomeKmersCurrent.emplace(buffer.substr(pos, pars_.kmerLength_));
-				}
-				if(!pars_.noRevComp_){
-					buffer = seqUtil::reverseComplement(buffer, "DNA");
-					for(uint32_t pos = 0; pos < len(buffer) - pars_.kmerLength_ + 1; ++pos){
-						genomeKmersCurrent.emplace(buffer.substr(pos, pars_.kmerLength_));
-					}
-				}
-				current[pair.twoBit_.string()].insert(genomeKmersCurrent.begin(), genomeKmersCurrent.end());
-			}
-			{
-				std::lock_guard<std::mutex> lock(mut);
-				for(const auto & kmerSet : current){
-					ret[kmerSet.first].insert(kmerSet.second.begin(), kmerSet.second.end());
-				}
-			}
-		};
-		njh::concurrent::runVoidFunctionThreaded(gatherKmers, pars_.numThreads_);
-		return ret;
-	}
-
-	std::unordered_map<std::string, std::set<uint64_t>> getUniqueKmersSetHash(const std::vector<bfs::path> & twobitFnps) const {
-		std::vector<TwobitFnpSeqNamePair> pairs;
-		if(pars_.kmerLength_ > 19){
+	{
+		TableReader uniqKmers(TableIOOpts::genTabFileIn(countTable, false));
+		if(uniqKmers.header_.nCol() != 2){
 			std::stringstream ss;
-			ss << __PRETTY_FUNCTION__ << ", error " << "cannot do kmer lengths greater than 19" << "\n";
+			ss << __PRETTY_FUNCTION__ << ", error " << "need to have 2 columns" << "\n";
 			throw std::runtime_error{ss.str()};
 		}
-		for(const auto & twoBit : twobitFnps){
-			TwoBit::TwoBitFile tReader(twoBit);
-			auto seqNames = tReader.sequenceNames();
-			for(const auto & seqName : seqNames){
-				pairs.emplace_back(TwobitFnpSeqNamePair(twoBit, seqName));
+		VecStr row;
+		while(uniqKmers.getNextRow(row)){
+			DNABaseCounter counter;
+			counter.increase(row[1]);
+			if(counter.computeEntrophy() >entropyCutOff){
+				out << row[0]
+					 << "\t" << row[1]
+					 << "\t" << counter.computeEntrophy()
+					 << std::endl;
 			}
 		}
-		njh::concurrent::LockableQueue<TwobitFnpSeqNamePair> pairsQueue(pairs);
+	}
 
-		std::unordered_map<std::string, std::set<uint64_t>> ret;
-		std::mutex mut;
+	return 0;
+}
 
-		std::function<void()> gatherKmers=[&pairsQueue,this,&ret,&mut](){
+int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands){
+	uint32_t numThreads = 1;
+	bfs::path countTable = "";
+	bool includeRevComp = false;
+	OutOptions outOpts(bfs::path(""), ".tab.txt.gz");
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.processReadInNames(true);
+	setUp.setOption(countTable, "--countTable", "countTable, 1)set,2)kmer", true);
+	setUp.setOption(numThreads, "--numThreads", "numThreads");
+	setUp.setOption(includeRevComp, "--includeRevComp", "include Rev Comp of the input seqs");
+
+
+
+	setUp.processWritingOptions(outOpts);
+	//setUp.processDirectoryOutputName("true");
+	setUp.finishSetUp(std::cout);
+	//setUp.startARunLog(setUp.pars_.directoryName_);
+	njh::stopWatch watch;
+	watch.setLapName("initial");
+	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet;
+	std::unordered_map<std::string, std::unordered_map<uint64_t, uint64_t>> uniqueKmersFoundPerSet;
+	std::unordered_map<std::string, std::vector<uint64_t>> kmersFoundPerSeq;
+
+	std::mutex mut;
+	uint32_t klen = 0;
+	watch.startNewLap("reading in unique kmer table");
+	{
+		SimpleKmerHash hasher;
+		TableReader uniqKmers(TableIOOpts::genTabFileIn(countTable, false));
+		if(uniqKmers.header_.nCol() < 2){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "need to have 2 columns" << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		VecStr row;
+		while(uniqKmers.getNextRow(row)){
+			klen = row[1].size();
+			uniqueKmersPerSet[row[0]].emplace(hasher.hash(row[1]));
+		}
+	}
+	if(setUp.pars_.verbose_){
+		std::cout << watch.getLapName() << "\t" << watch.timeLapFormatted() <<std::endl;
+	}
+	SeqInput reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+
+	OutputStream out(outOpts);
+	std::function<void()> readInComp;
+	VecStr names = getVectorOfMapKeys(uniqueKmersPerSet);
+
+	if (setUp.pars_.ioOptions_.isPairedIn()) {
+		MultiSeqIO seqOut;
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		for(const auto & name : names){
+			auto seqOutOpts = SeqIOOptions::genPairedOutGz(name);
+			seqOutOpts.out_.overWriteFile_ = true;
+			std::cout << __FILE__ << " " << __LINE__ << std::endl;
+			seqOut.addReader(name, seqOutOpts);
+			std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		}
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		std::cout << njh::colorBool(seqOut.containsReader("human")) << std::endl;
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		std::cout << njh::colorBool(seqOut.containsReader("human")) << std::endl;
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+
+		readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp,&seqOut]() {
+			std::cout << __FILE__ << " " << __LINE__ << std::endl;
+			std::cout << njh::colorBool(seqOut.containsReader("human")) << std::endl;
+			std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			SimpleKmerHash hasher;
-			TwobitFnpSeqNamePair pair;
-			std::unordered_map<std::string, std::set<uint64_t>> current;
-			while(pairsQueue.getVal(pair)){
-				std::set<uint64_t>  genomeKmersCurrent;
-				TwoBit::TwoBitFile tReader(pair.twoBit_);
-				std::string buffer;
-				tReader[pair.seqName_]->getSequence(buffer);
-				for(uint32_t pos = 0; pos < len(buffer) - pars_.kmerLength_ + 1; ++pos){
-					genomeKmersCurrent.emplace(hasher.hash(buffer.substr(pos, pars_.kmerLength_)));
+			PairedRead pseq;
+			std::unordered_map<std::string, std::unordered_map<uint64_t, uint64_t>> uniqueKmersFoundPerSetCurrent;
+			std::unordered_map<std::string, std::vector<uint64_t>> kmersFoundPerSeqCurrent;
+
+			while(reader.readNextReadLock(pseq)){
+				std::unordered_map<uint64_t, uint64_t> hashedInputKmers;
+
+				std::unordered_set<uint64_t> hashedInputKmersInFirstMate;
+
+				for(uint32_t pos = 0; pos < len(pseq.seqBase_.seq_) - klen + 1; ++pos){
+					auto hash = hasher.hash(pseq.seqBase_.seq_.substr(pos, klen));
+					hashedInputKmersInFirstMate.emplace(hash);
+					++hashedInputKmers[hash];
 				}
-				if(!pars_.noRevComp_){
-					buffer = seqUtil::reverseComplement(buffer, "DNA");
-					for(uint32_t pos = 0; pos < len(buffer) - pars_.kmerLength_ + 1; ++pos){
-						genomeKmersCurrent.emplace(hasher.hash(buffer.substr(pos, pars_.kmerLength_)));
+
+				for(uint32_t pos = 0; pos < len(pseq.mateSeqBase_.seq_) - klen + 1; ++pos){
+					auto hash = hasher.hash(pseq.mateSeqBase_.seq_.substr(pos, klen));
+					if(!njh::in(hash, hashedInputKmersInFirstMate)){
+						++hashedInputKmers[hash];
 					}
 				}
-				current[pair.twoBit_.string()].insert(genomeKmersCurrent.begin(), genomeKmersCurrent.end());
+				if(includeRevComp){
+					//pseq.seqBase_.seq_ = seqUtil::reverseComplement(pseq.seqBase_.seq_, "DNA");
+					for(uint32_t pos = 0; pos < len(pseq.seqBase_.seq_) - klen + 1; ++pos){
+						auto hash = hasher.revCompHash(pseq.seqBase_.seq_.substr(pos, klen));
+						hashedInputKmersInFirstMate.emplace(hash);
+						++hashedInputKmers[hash];
+					}
+					//pseq.mateSeqBase_.seq_ = seqUtil::reverseComplement(pseq.mateSeqBase_.seq_, "DNA");
+					for(uint32_t pos = 0; pos < len(pseq.mateSeqBase_.seq_) - klen + 1; ++pos){
+						auto hash = hasher.revCompHash(pseq.mateSeqBase_.seq_.substr(pos, klen));
+						if(!njh::in(hash, hashedInputKmersInFirstMate)){
+							++hashedInputKmers[hash];
+						}
+					}
+				}
+				std::unordered_map<std::string, uint32_t> foundPerSet;
+				for(const auto & hashedKmer : hashedInputKmers){
+					for(const auto & uniqueKmers : uniqueKmersPerSet){
+						if(njh::in(hashedKmer.first, uniqueKmers.second)){
+							uniqueKmersFoundPerSetCurrent[uniqueKmers.first][hashedKmer.first]+= hashedKmer.second;
+							++foundPerSet[uniqueKmers.first];
+							break;
+						}
+					}
+				}
+				for(const auto & found : foundPerSet){
+					kmersFoundPerSeqCurrent[found.first].emplace_back(found.second);
+					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+					seqOut.openWrite(found.first, pseq);
+					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+				}
 			}
 			{
 				std::lock_guard<std::mutex> lock(mut);
-				for(const auto & kmerSet : current){
-					ret[kmerSet.first].insert(kmerSet.second.begin(), kmerSet.second.end());
+				for(const auto & foundPerSet : uniqueKmersFoundPerSetCurrent){
+					for(const auto & count : foundPerSet.second){
+						uniqueKmersFoundPerSet[foundPerSet.first][count.first] += count.second;
+					}
+				}
+				for(const auto & foundPerSeq : kmersFoundPerSeqCurrent){
+					addOtherVec(kmersFoundPerSeq[foundPerSeq.first], foundPerSeq.second);
 				}
 			}
 		};
-		njh::concurrent::runVoidFunctionThreaded(gatherKmers, pars_.numThreads_);
-		return ret;
+	} else {
+		readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&mut,&klen]() {
+			SimpleKmerHash hasher;
+			seqInfo seq;
+			std::unordered_map<uint64_t, uint64_t> hashedInputKmers;
+			while(reader.readNextReadLock(seq)){
+				for(uint32_t pos = 0; pos < len(seq.seq_) - klen + 1; ++pos){
+					++hashedInputKmers[hasher.hash(seq.seq_.substr(pos, klen))];
+				}
+				//seq.seq_ = seqUtil::reverseComplement(seq.seq_, "DNA");
+				for(uint32_t pos = 0; pos < len(seq.seq_) - klen + 1; ++pos){
+					++hashedInputKmers[hasher.revCompHash(seq.seq_.substr(pos, klen))];
+				}
+			}
+			std::unordered_map<std::string, std::unordered_map<uint64_t, uint64_t>> uniqueKmersFoundPerSetCurrent;
+			for(const auto & hashedKmer : hashedInputKmers){
+				for(const auto & uniqueKmers : uniqueKmersPerSet){
+					if(njh::in(hashedKmer.first, uniqueKmers.second)){
+						uniqueKmersFoundPerSetCurrent[uniqueKmers.first][hashedKmer.first]+= hashedKmer.second;
+						break;
+					}
+				}
+			}
+			{
+				std::lock_guard<std::mutex> lock(mut);
+				for(const auto & foundPerSet : uniqueKmersFoundPerSetCurrent){
+					for(const auto & count : foundPerSet.second){
+						uniqueKmersFoundPerSet[foundPerSet.first][count.first] += count.second;
+					}
+				}
+			}
+		};
 	}
-};
+	njh::concurrent::runVoidFunctionThreaded(readInComp, numThreads);
+	out << "set\treads\tmeanPerRead\ttotal\ttotal1\ttotal2\tunique\tunique1\tunique2\tuniqueInSet\tmeanOccurence\tmeanOccurence1\tmeanOccurence2\tfracUniqFound\tfracUniqFound1\tfracUniqFound2" << std::endl;
+	njh::sort(names);
+	for(const auto & name : names){
+		uint64_t total = 0;
+		uint64_t totalMoreThanOnce = 0;
+		uint64_t totalMoreThanTwice = 0;
+		std::unordered_set<uint64_t> moreThanOnce;
+		std::unordered_set<uint64_t> moreThanTwice;
+		for(const auto & countPerSet : uniqueKmersFoundPerSet[name]){
+			total += countPerSet.second;
+			if(countPerSet.second>1){
+				totalMoreThanOnce += countPerSet.second;
+				moreThanOnce.emplace(countPerSet.first);
+			}
+			if(countPerSet.second>2){
+				totalMoreThanTwice += countPerSet.second;
+				moreThanTwice.emplace(countPerSet.first);
+			}
+		}
+		uint64_t readCount = kmersFoundPerSeq[name].size();
+		long double meanPerSeq = vectorMean(kmersFoundPerSeq[name]);
+		auto occMean =  static_cast<long double>(total)/uniqueKmersFoundPerSet[name].size();
+		auto occMean1 = static_cast<long double>(totalMoreThanOnce)/moreThanOnce.size();
+		auto occMean2 = static_cast<long double>(totalMoreThanTwice)/moreThanTwice.size();
 
-
-
-namespace StrToNumConverter {
-
-/**@brief Function for converting a string to a number, which is just njh::lexical_cast by default and then several specific int conversions are defined for faster converting
- *
- * @param str the string to convert
- * @return the string convert to a number
- */
-	template<typename T>
-	T stoToNum(const std::string & str){
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-		return njh::lexical_cast<T>(str);
-	}
-
-	template<>
-	unsigned short stoToNum(const std::string & str){
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-		return estd::stous(str);
-	}
-
-	template<>
-	unsigned stoToNum(const std::string & str){
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-		return estd::stou(str);
-	}
-
-	template<>
-	unsigned long stoToNum(const std::string & str){
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-		return std::stoul(str);
-	}
-
-	template<>
-	unsigned long long stoToNum(const std::string & str){
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-		return std::stoull(str);
-	}
-
-	template<>
-	short stoToNum(const std::string & str){
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-		return estd::stos(str);
-	}
-
-	template<>
-	int stoToNum(const std::string & str){
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-		return std::stoi(str);
-	}
-
-	template<>
-	long int stoToNum(const std::string & str){
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-		return std::stol(str);
-	}
-
-	template<>
-	long long int stoToNum(const std::string & str){
-		return std::stoll(str);
-	}
-
-}  // namespace StrToNumConverter
-
-
-
-
-int testingOfWeirdStod(){
-
-	{
-		std::cout << "13313441321414123" << std::endl;
-		double testDoub = 13313441321414123;
-		std::cout << std::setprecision(20) << testDoub << std::endl;
-		std::cout << "13313441321414124" << std::endl;
-		double testDoub2 = 13313441321414124;
-		std::cout << std::setprecision(20) << testDoub2 << std::endl;
-		std::cout << njh::colorBool(testDoub == testDoub2) << std::endl;
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-	}
-	{
-		std::cout << "13313441321414125" << std::endl;
-		double testDoub = 13313441321414125;
-		std::cout << std::setprecision(20) << testDoub << std::endl;
-		std::cout << "13313441321414126" << std::endl;
-		double testDoub2 = 13313441321414126;
-		std::cout << std::setprecision(20) << testDoub2 << std::endl;
-		std::cout << njh::colorBool(testDoub == testDoub2) << std::endl;
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-	}
-	{
-		std::cout << "13313441321414127" << std::endl;
-		double testDoub = 13313441321414127;
-		std::cout << std::setprecision(20) << testDoub << std::endl;
-		std::cout << "13313441321414128" << std::endl;
-		double testDoub2 = 13313441321414128;
-		std::cout << std::setprecision(20) << testDoub2 << std::endl;
-		std::cout << njh::colorBool(testDoub == testDoub2) << std::endl;
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-	}
-
-
-	std::cout << std::endl;
-
-	{
-		std::string testStr = "3313441321414121";
-		std::cout << "places: " << testStr.size() << std::endl;
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "3313441321414122";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "3313441321414123";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "3313441321414124";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "3313441321414125";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "3313441321414126";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "3313441321414127";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "3313441321414129";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "3313441321414129";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-
-	std::cout << __FILE__ << " " << __LINE__ << std::endl;
-
-	{
-		std::string testStr = "13313441321414121";
-		std::cout << "places: " << testStr.size() << std::endl;
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "13313441321414122";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "13313441321414123";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "13313441321414124";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "13313441321414125";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "13313441321414126";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "13313441321414127";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "13313441321414128";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "13313441321414129";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	std::cout << __FILE__ << " " << __LINE__ << std::endl;
-
-	std::cout << std::endl;
-
-	{
-		std::string testStr = "113313441321414121";
-		std::cout << "places: " << testStr.size() << std::endl;
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "113313441321414122";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "113313441321414123";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "113313441321414124";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "113313441321414125";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "113313441321414126";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "113313441321414127";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "113313441321414128";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "113313441321414129";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-
-
-
-	std::cout << __FILE__ << " " << __LINE__ << std::endl;
-
-	{
-		std::string testStr = "1213313441321414121";
-		std::cout << "places: " << testStr.size() << std::endl;
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "1213313441321414122";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "1213313441321414123";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "1213313441321414124";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "1213313441321414125";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "1213313441321414126";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "1213313441321414127";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "1213313441321414128";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << std::endl;
-	{
-		std::string testStr = "1213313441321414129";
-		std::cout << testStr << std::endl;
-		std::cout << "njh::StrToNumConverter::stoToNum<uint64_t>(testStr) :" << njh::StrToNumConverter::stoToNum<uint64_t>(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stod(testStr)            :" << std::setprecision(20)  << stod(testStr) << std::endl;
-		std::cout << "std::setprecision(20) std::stold(testStr)           :" << std::setprecision(20)  << std::stold(testStr) << std::endl;
-	}
-	std::cout << __FILE__ << " " << __LINE__ << std::endl;
-
-
-	SimpleKmerHash hashifier;
-
-	{
-		std::string kmerTest = "AGGAGTTAGCATATACN";
-		uint64_t hash = hashifier.hash(kmerTest);
-		std::string hashback = hashifier.reverseHash(hash);
-		std::cout << "hash    : " << hash << std::endl;
-		std::cout << "original: " << kmerTest << std::endl;
-		std::cout << "convert : " << hashback << std::endl;
-
+		out << name
+				<< "\t" << readCount
+				<< "\t" << meanPerSeq
+				<< "\t" << total
+				<< "\t" << totalMoreThanOnce
+				<< "\t" << totalMoreThanTwice
+				<< "\t" << uniqueKmersFoundPerSet[name].size()
+				<< "\t" << moreThanOnce.size()
+				<< "\t" << moreThanTwice.size()
+				<< "\t" << uniqueKmersPerSet[name].size()
+				<< "\t" << occMean
+				<< "\t" << occMean1
+				<< "\t" << occMean2
+				<< "\t" << static_cast<long double>(uniqueKmersFoundPerSet[name].size())/uniqueKmersPerSet[name].size()
+				<< "\t" << static_cast<long double>(moreThanOnce.size())/uniqueKmersPerSet[name].size()
+				<< "\t" << static_cast<long double>(moreThanTwice.size())/uniqueKmersPerSet[name].size()
+				<< std::endl;
 	}
 
 	return 0;
 
 }
-
-
-
-int kmerExpRunner::findUniqKmersBetweenSeqSetsMultiDev(const njh::progutils::CmdArgs & inputCommands){
+int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands){
 	KmerGatherer::KmerGathererPars countPars;
 	bfs::path seqSetTableFnp = "";
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.description_ = "Get kmers that appear within all the sequences supplied and are unique to that set";
-	setUp.setOption(seqSetTableFnp, "--seqSetTableFnp", "Seq Set Table, 2 columns, 1)set,2)fasta", true);
+	setUp.setOption(seqSetTableFnp, "--seqSetTableFnp", "Seq Set Table, 2 columns, 1)set,2)2bit", true);
 	countPars.setOptions(setUp);
 
 	setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(seqSetTableFnp), "_TODAY"), true);
@@ -754,16 +331,16 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMultiDev(const njh::progutils::Cmd
 
 	KmerGatherer kGather(countPars);
 
-	std::unordered_map<std::string, std::set<std::string>> fastasForSet;
+	std::unordered_map<std::string, std::set<std::string>> twobitsForSet;
 	table input(seqSetTableFnp, "\t", true);
 	input.checkForColumnsThrow(VecStr{"set", "2bit"}, __PRETTY_FUNCTION__);
 	for(const auto & row : input){
-		fastasForSet[row[input.getColPos("set")]].emplace(row[input.getColPos("2bit")]);
+		twobitsForSet[row[input.getColPos("set")]].emplace(row[input.getColPos("2bit")]);
 	}
 	setUp.rLog_.setCurrentLapName("initial");
 
 	std::vector<bfs::path> twoBitFiles;
-	for(const auto & seqSet : fastasForSet){
+	for(const auto & seqSet : twobitsForSet){
 		for(const auto & fnp : seqSet.second){
 			twoBitFiles.emplace_back(fnp);
 		}
@@ -781,15 +358,15 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMultiDev(const njh::progutils::Cmd
 		auto allKmers = kGather.getUniqueKmersSetHash(twoBitFiles);
 		setUp.rLog_.logCurrentTime("condense");
 		setUp.rLog_.runLogFile_.flush();
-		njh::concurrent::LockableQueue<std::string> seqSetNamesQueue(getVectorOfMapKeys(fastasForSet));
-		for(const auto & name : fastasForSet){
+		njh::concurrent::LockableQueue<std::string> seqSetNamesQueue(getVectorOfMapKeys(twobitsForSet));
+		for(const auto & name : twobitsForSet){
 			kmersPerSet[name.first] = std::set<uint64_t>{};
 		}
-		std::function<void()> condenseKmers = [&seqSetNamesQueue,&allKmers,&fastasForSet,&kmersPerSet,&seqCheck](){
+		std::function<void()> condenseKmers = [&seqSetNamesQueue,&allKmers,&twobitsForSet,&kmersPerSet,&seqCheck](){
 			std::string name;
 			while(seqSetNamesQueue.getVal(name)){
 				SimpleKmerHash hasher;
-				for(const auto & twobit : fastasForSet.at(name)){
+				for(const auto & twobit : twobitsForSet.at(name)){
 					for(const auto & k : allKmers.at(twobit)){
 						if(seqCheck(hasher.reverseHash(k))){
 							kmersPerSet[name].emplace(k);
@@ -842,7 +419,7 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMultiDev(const njh::progutils::Cmd
 	}
 
 	SimpleKmerHash hasher;
-	OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "uniqueKmers.tab.txt"));
+	OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "uniqueKmers.tab.txt.gz"));
 	for(const auto & kmersForSet : uniqueKmersFinal){
 		for(const auto & kmer : kmersForSet.second){
 			out << kmersForSet.first
@@ -852,105 +429,6 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMultiDev(const njh::progutils::Cmd
 	return 0;
 }
 
-int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands){
-	KmerGatherer::KmerGathererPars countPars;
-	bfs::path seqSetTableFnp = "";
-	seqSetUp setUp(inputCommands);
-	setUp.processVerbose();
-	setUp.processDebug();
-	setUp.description_ = "Get kmers that appear within all the sequences supplied and are unique to that set";
-	setUp.setOption(seqSetTableFnp, "--seqSetTableFnp", "Seq Set Table, 2 columns, 1)set,2)fasta", true);
-	countPars.setOptions(setUp);
-
-	setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(seqSetTableFnp), "_TODAY"), true);
-	setUp.finishSetUp(std::cout);
-	setUp.startARunLog(setUp.pars_.directoryName_);
-
-	KmerGatherer kGather(countPars);
-
-	std::unordered_map<std::string, std::set<std::string>> fastasForSet;
-	table input(seqSetTableFnp, "\t", true);
-	input.checkForColumnsThrow(VecStr{"set", "2bit"}, __PRETTY_FUNCTION__);
-	for(const auto & row : input){
-		fastasForSet[row[input.getColPos("set")]].emplace(row[input.getColPos("2bit")]);
-	}
-	setUp.rLog_.setCurrentLapName("initial");
-
-	std::vector<bfs::path> twoBitFiles;
-	for(const auto & seqSet : fastasForSet){
-		for(const auto & fnp : seqSet.second){
-			twoBitFiles.emplace_back(fnp);
-		}
-	}
-	std::map<std::string, std::set<std::string>> kmersPerSet;
-
-	std::function<bool(const std::string&)> seqCheck = [&countPars](const std::string & k){
-		return std::all_of(k.begin(), k.end(), [&countPars](char base){return njh::in(base, countPars.allowableCharacters_);});
-	};
-
-
-	{
-		setUp.rLog_.logCurrentTime("count_all");
-		auto allKmers = kGather.getUniqueKmersSet(twoBitFiles);
-		setUp.rLog_.logCurrentTime("condense");
-		std::mutex setMut;
-		njh::concurrent::LockableQueue<std::string> seqSetNamesQueue(getVectorOfMapKeys(fastasForSet));
-		for(const auto & name : fastasForSet){
-			kmersPerSet[name.first] = std::set<std::string>{};
-		}
-		std::function<void()> condenseKmers = [&seqSetNamesQueue,&allKmers,&fastasForSet,&kmersPerSet,&seqCheck](){
-			std::string name;
-			while(seqSetNamesQueue.getVal(name)){
-
-				for(const auto & twobit : fastasForSet.at(name)){
-					for(const auto & k : allKmers.at(twobit)){
-						if(seqCheck(k)){
-							kmersPerSet[name].emplace(k);
-						}
-					}
-				}
-			}
-		};
-		njh::concurrent::runVoidFunctionThreaded(condenseKmers, countPars.numThreads_);
-
-	}
-		std::map<std::string, std::set<std::string>> uniqueKmersFinal;
-
-		for(const auto & kmersForSet : kmersPerSet){
-			std::set<std::string> uniqueKmers;
-			uint32_t count = 0;
-			for(const auto & otherSet : kmersPerSet){
-				if(otherSet.first == kmersForSet.first){
-					continue;
-				}
-				if(0 == count){
-					std::vector<std::string> notShared;
-					std::set_difference(
-							kmersForSet.second.begin(), kmersForSet.second.end(),
-							otherSet.second.begin(), otherSet.second.end(),
-							std::back_inserter(notShared));
-					uniqueKmers = njh::vecToSet(notShared);
-				}else{
-					std::vector<std::string> notShared;
-					std::set_difference(
-							uniqueKmers.begin(), uniqueKmers.end(),
-							otherSet.second.begin(), otherSet.second.end(),
-							std::back_inserter(notShared));
-					uniqueKmers = njh::vecToSet(notShared);
-				}
-				++count;
-			}
-			uniqueKmersFinal[kmersForSet.first] = uniqueKmers;
-		}
-		OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "uniqueKmers.tab.txt"));
-		for(const auto & kmersForSet : uniqueKmersFinal){
-			for(const auto & kmer : kmersForSet.second){
-				out << kmersForSet.first
-						<< "\t" << kmer << "\n";
-			}
-		}
-	return 0;
-}
 
 int kmerExpRunner::findUniqKmersBetweenSeqSets(const njh::progutils::CmdArgs & inputCommands){
 	KmerGatherer::KmerGathererPars countPars;
