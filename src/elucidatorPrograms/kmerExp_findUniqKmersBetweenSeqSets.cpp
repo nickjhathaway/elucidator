@@ -350,9 +350,9 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 			while(seqSetNamesQueue.getVal(name)){
 				SimpleKmerHash hasher;
 				for(const auto & twobit : twobitsForSet.at(name)){
-					std::cout << __FILE__ << " " << __LINE__ << std::endl;
-					std::cout << "twobit: " << twobit << std::endl;
-					std::cout << allKmers.at(twobit).size() << std::endl;
+//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//					std::cout << "twobit: " << twobit << std::endl;
+//					std::cout << allKmers.at(twobit).size() << std::endl;
 					for(const auto & k : allKmers.at(twobit)){
 						kmersPerSet[name].emplace(k);
 //						if(seqCheck(hasher.reverseHash(k))){

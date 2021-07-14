@@ -237,6 +237,7 @@ std::unordered_map<std::string, std::set<uint64_t>> KmerGatherer::getUniqueKmers
 				auto k = buffer.substr(pos, pars_.kmerLength_);
 				if(seqCheck(k)){
 					DNABaseCounter counter(pars_.allowableCharacters_);
+					counter.increase(k);
 					if(counter.computeEntrophy() > pars_.entropyFilter_){
 						genomeKmersCurrent.emplace(hasher.hash(k));
 					}
@@ -249,6 +250,7 @@ std::unordered_map<std::string, std::set<uint64_t>> KmerGatherer::getUniqueKmers
 					auto k = buffer.substr(pos, pars_.kmerLength_);
 					if(seqCheck(k)){
 						DNABaseCounter counter(pars_.allowableCharacters_);
+						counter.increase(k);
 						if(counter.computeEntrophy() > pars_.entropyFilter_){
 							genomeKmersCurrent.emplace(hasher.revCompHash(k));
 						}
