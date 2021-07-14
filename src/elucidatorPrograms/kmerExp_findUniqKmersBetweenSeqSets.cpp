@@ -95,6 +95,7 @@ int kmerExpRunner::filterUniqueKmerSetForEntropy(const njh::progutils::CmdArgs &
 int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
 	bfs::path countTable = "";
+	std::string sampleName = "";
 	bool includeRevComp = false;
 	OutOptions outOpts(bfs::path(""), ".tab.txt.gz");
 	seqSetUp setUp(inputCommands);
@@ -102,6 +103,8 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 	setUp.processDebug();
 	setUp.processReadInNames(true);
 	setUp.setOption(countTable, "--countTable", "countTable, 1)set,2)kmer", true);
+	setUp.setOption(sampleName, "--sampleName", "Name to add to output file", true);
+
 	setUp.setOption(numThreads, "--numThreads", "numThreads");
 	setUp.setOption(includeRevComp, "--includeRevComp", "include Rev Comp of the input seqs");
 
@@ -259,7 +262,7 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 		};
 	}
 	njh::concurrent::runVoidFunctionThreaded(readInComp, numThreads);
-	out << "set\treads\tmeanPerRead\ttotal\ttotal1\ttotal2\tunique\tunique1\tunique2\tuniqueInSet\tmeanOccurence\tmeanOccurence1\tmeanOccurence2\tfracUniqFound\tfracUniqFound1\tfracUniqFound2" << std::endl;
+	out << "sample\tset\treads\tmeanPerRead\ttotal\ttotal1\ttotal2\tunique\tunique1\tunique2\tuniqueInSet\tmeanOccurence\tmeanOccurence1\tmeanOccurence2\tfracUniqFound\tfracUniqFound1\tfracUniqFound2" << std::endl;
 	njh::sort(names);
 	for(const auto & name : names){
 		uint64_t total = 0;
@@ -284,7 +287,8 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 		auto occMean1 = static_cast<long double>(totalMoreThanOnce)/moreThanOnce.size();
 		auto occMean2 = static_cast<long double>(totalMoreThanTwice)/moreThanTwice.size();
 
-		out << name
+		out << sampleName
+				<< "\t" << name
 				<< "\t" << readCount
 				<< "\t" << meanPerSeq
 				<< "\t" << total
