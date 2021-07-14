@@ -143,16 +143,18 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 	OutputStream out(outOpts);
 	std::function<void()> readInComp;
 	VecStr names = getVectorOfMapKeys(uniqueKmersPerSet);
-	MultiSeqIO seqOut;
+//	MultiSeqIO seqOut;
 
 
 	if (setUp.pars_.ioOptions_.isPairedIn()) {
-		for(const auto & name : names){
-			auto seqOutOpts = SeqIOOptions::genPairedOutGz(name);
-			seqOutOpts.out_.overWriteFile_ = true;
-			seqOut.addReader(name, seqOutOpts);
-		}
-		readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp,&seqOut]() {
+//		for(const auto & name : names){
+//			auto seqOutOpts = SeqIOOptions::genPairedOutGz(name);
+//			seqOutOpts.out_.overWriteFile_ = true;
+//			seqOut.addReader(name, seqOutOpts);
+//		}
+//		readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp,&seqOut]() {
+		readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp]() {
+
 			SimpleKmerHash hasher;
 			PairedRead pseq;
 			std::unordered_map<std::string, std::unordered_map<uint64_t, uint64_t>> uniqueKmersFoundPerSetCurrent;
@@ -202,7 +204,7 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 				}
 				for(const auto & found : foundPerSet){
 					kmersFoundPerSeqCurrent[found.first].emplace_back(found.second);
-					seqOut.openWrite(found.first, pseq);
+//					seqOut.openWrite(found.first, pseq);
 				}
 			}
 			{
@@ -350,9 +352,9 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 			while(seqSetNamesQueue.getVal(name)){
 				SimpleKmerHash hasher;
 				for(const auto & twobit : twobitsForSet.at(name)){
-//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
-//					std::cout << "twobit: " << twobit << std::endl;
-//					std::cout << allKmers.at(twobit).size() << std::endl;
+					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+					std::cout << "twobit: " << twobit << std::endl;
+					std::cout << allKmers.at(twobit).size() << std::endl;
 					for(const auto & k : allKmers.at(twobit)){
 						kmersPerSet[name].emplace(k);
 //						if(seqCheck(hasher.reverseHash(k))){
@@ -372,37 +374,43 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 		uniqueKmersFinal[kmersForSet.first] = std::set<uint64_t>{};
 	}
 	{
-		njh::concurrent::LockableQueue<std::string> seqSetNamesQueue(getVectorOfMapKeys(kmersPerSet));
-		std::function<void()> compareKmers = [&seqSetNamesQueue,&kmersPerSet,&uniqueKmersFinal](){
-			std::string name;
-			while(seqSetNamesQueue.getVal(name)){
-				std::set<uint64_t> uniqueKmers;
-				uint32_t count = 0;
-				for(const auto & otherSet : kmersPerSet){
-					if(otherSet.first == name){
-						continue;
+
+		auto namesFound = getVectorOfMapKeys(kmersPerSet);
+		if(namesFound.size() > 1){
+			njh::concurrent::LockableQueue<std::string> seqSetNamesQueue(namesFound);
+			std::function<void()> compareKmers = [&seqSetNamesQueue,&kmersPerSet,&uniqueKmersFinal](){
+				std::string name;
+				while(seqSetNamesQueue.getVal(name)){
+					std::set<uint64_t> uniqueKmers;
+					uint32_t count = 0;
+					for(const auto & otherSet : kmersPerSet){
+						if(otherSet.first == name){
+							continue;
+						}
+						if(0 == count){
+							std::vector<uint64_t> notShared;
+							std::set_difference(
+									kmersPerSet.at(name).begin(), kmersPerSet.at(name).end(),
+									otherSet.second.begin(), otherSet.second.end(),
+									std::back_inserter(notShared));
+							uniqueKmers = njh::vecToSet(notShared);
+						}else{
+							std::vector<uint64_t> notShared;
+							std::set_difference(
+									uniqueKmers.begin(), uniqueKmers.end(),
+									otherSet.second.begin(), otherSet.second.end(),
+									std::back_inserter(notShared));
+							uniqueKmers = njh::vecToSet(notShared);
+						}
+						++count;
 					}
-					if(0 == count){
-						std::vector<uint64_t> notShared;
-						std::set_difference(
-								kmersPerSet.at(name).begin(), kmersPerSet.at(name).end(),
-								otherSet.second.begin(), otherSet.second.end(),
-								std::back_inserter(notShared));
-						uniqueKmers = njh::vecToSet(notShared);
-					}else{
-						std::vector<uint64_t> notShared;
-						std::set_difference(
-								uniqueKmers.begin(), uniqueKmers.end(),
-								otherSet.second.begin(), otherSet.second.end(),
-								std::back_inserter(notShared));
-						uniqueKmers = njh::vecToSet(notShared);
-					}
-					++count;
+					uniqueKmersFinal[name] = uniqueKmers;
 				}
-				uniqueKmersFinal[name] = uniqueKmers;
-			}
-		};
-		njh::concurrent::runVoidFunctionThreaded(compareKmers, countPars.numThreads_);
+			};
+			njh::concurrent::runVoidFunctionThreaded(compareKmers, countPars.numThreads_);
+		}else if( namesFound.size() == 1){
+			uniqueKmersFinal[namesFound.front()] = kmersPerSet[namesFound.front()];
+		}
 	}
 
 	SimpleKmerHash hasher;
