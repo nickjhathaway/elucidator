@@ -164,31 +164,37 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 				std::unordered_map<uint64_t, uint64_t> hashedInputKmers;
 
 				std::unordered_set<uint64_t> hashedInputKmersInFirstMate;
-
-				for(uint32_t pos = 0; pos < len(pseq.seqBase_.seq_) - klen + 1; ++pos){
-					auto hash = hasher.hash(pseq.seqBase_.seq_.substr(pos, klen));
-					hashedInputKmersInFirstMate.emplace(hash);
-					++hashedInputKmers[hash];
-				}
-
-				for(uint32_t pos = 0; pos < len(pseq.mateSeqBase_.seq_) - klen + 1; ++pos){
-					auto hash = hasher.hash(pseq.mateSeqBase_.seq_.substr(pos, klen));
-					if(!njh::in(hash, hashedInputKmersInFirstMate)){
+				if(len(pseq.seqBase_.seq_) > klen){
+					for(uint32_t pos = 0; pos < len(pseq.seqBase_.seq_) - klen + 1; ++pos){
+						auto hash = hasher.hash(pseq.seqBase_.seq_.substr(pos, klen));
+						hashedInputKmersInFirstMate.emplace(hash);
 						++hashedInputKmers[hash];
+					}
+				}
+				if(len(pseq.mateSeqBase_.seq_) > klen){
+					for(uint32_t pos = 0; pos < len(pseq.mateSeqBase_.seq_) - klen + 1; ++pos){
+						auto hash = hasher.hash(pseq.mateSeqBase_.seq_.substr(pos, klen));
+						if(!njh::in(hash, hashedInputKmersInFirstMate)){
+							++hashedInputKmers[hash];
+						}
 					}
 				}
 				if(includeRevComp){
 					//pseq.seqBase_.seq_ = seqUtil::reverseComplement(pseq.seqBase_.seq_, "DNA");
-					for(uint32_t pos = 0; pos < len(pseq.seqBase_.seq_) - klen + 1; ++pos){
-						auto hash = hasher.revCompHash(pseq.seqBase_.seq_.substr(pos, klen));
-						hashedInputKmersInFirstMate.emplace(hash);
-						++hashedInputKmers[hash];
+					if(len(pseq.seqBase_.seq_) > klen){
+						for(uint32_t pos = 0; pos < len(pseq.seqBase_.seq_) - klen + 1; ++pos){
+							auto hash = hasher.revCompHash(pseq.seqBase_.seq_.substr(pos, klen));
+							hashedInputKmersInFirstMate.emplace(hash);
+							++hashedInputKmers[hash];
+						}
 					}
 					//pseq.mateSeqBase_.seq_ = seqUtil::reverseComplement(pseq.mateSeqBase_.seq_, "DNA");
-					for(uint32_t pos = 0; pos < len(pseq.mateSeqBase_.seq_) - klen + 1; ++pos){
-						auto hash = hasher.revCompHash(pseq.mateSeqBase_.seq_.substr(pos, klen));
-						if(!njh::in(hash, hashedInputKmersInFirstMate)){
-							++hashedInputKmers[hash];
+					if(len(pseq.mateSeqBase_.seq_) > klen){
+						for(uint32_t pos = 0; pos < len(pseq.mateSeqBase_.seq_) - klen + 1; ++pos){
+							auto hash = hasher.revCompHash(pseq.mateSeqBase_.seq_.substr(pos, klen));
+							if(!njh::in(hash, hashedInputKmersInFirstMate)){
+								++hashedInputKmers[hash];
+							}
 						}
 					}
 				}
