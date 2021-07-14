@@ -309,11 +309,14 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands){
 	KmerGatherer::KmerGathererPars countPars;
 	bfs::path seqSetTableFnp = "";
+	bfs::path seqSetSuppFastaTableFnp = "";
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.description_ = "Get kmers that appear within all the sequences supplied and are unique to that set";
 	setUp.setOption(seqSetTableFnp, "--seqSetTableFnp", "Seq Set Table, 2 columns, 1)set,2)2bit", true);
+	setUp.setOption(seqSetSuppFastaTableFnp, "--seqSetSuppFastaTableFnp", "Seq Set Table supplement small fasta files, 2 columns, 1)set,2)fasta");
+
 	countPars.setOptions(setUp);
 
 	setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(seqSetTableFnp), "_TODAY"), true);
@@ -323,11 +326,20 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 	KmerGatherer kGather(countPars);
 
 	std::unordered_map<std::string, std::set<std::string>> twobitsForSet;
-	table input(seqSetTableFnp, "\t", true);
-	input.checkForColumnsThrow(VecStr{"set", "2bit"}, __PRETTY_FUNCTION__);
-	for(const auto & row : input){
-		twobitsForSet[row[input.getColPos("set")]].emplace(row[input.getColPos("2bit")]);
+	{
+		table input(seqSetTableFnp, "\t", true);
+		input.checkForColumnsThrow(VecStr{"set", "2bit"}, __PRETTY_FUNCTION__);
+		for(const auto & row : input){
+			twobitsForSet[row[input.getColPos("set")]].emplace(row[input.getColPos("2bit")]);
+		}
 	}
+
+	table inputFastaSupp;
+	if("" != seqSetSuppFastaTableFnp){
+		inputFastaSupp= table(seqSetSuppFastaTableFnp, "\t", true);
+		inputFastaSupp.checkForColumnsThrow(VecStr{"set", "fasta"}, __PRETTY_FUNCTION__);
+	}
+
 	setUp.rLog_.setCurrentLapName("initial");
 
 	std::vector<bfs::path> twoBitFiles;
@@ -347,6 +359,17 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 		setUp.rLog_.logCurrentTime("count_all");
 		setUp.rLog_.runLogFile_.flush();
 		auto allKmers = kGather.getUniqueKmersSetHashWithFilters(twoBitFiles);
+		if("" != seqSetSuppFastaTableFnp){
+			std::vector<bfs::path> fastaFiles;
+			for(const auto & row : inputFastaSupp){
+				twobitsForSet[row[inputFastaSupp.getColPos("set")]].emplace(row[inputFastaSupp.getColPos("fasta")]);
+				fastaFiles.emplace_back(row[inputFastaSupp.getColPos("fasta")]);
+			}
+			auto suppKmers = kGather.getUniqueKmersSetHashWithFiltersFromFastas(fastaFiles);
+			for(const auto & supp : suppKmers){
+				allKmers.emplace(supp);
+			}
+		}
 		setUp.rLog_.logCurrentTime("condense");
 		setUp.rLog_.runLogFile_.flush();
 		njh::concurrent::LockableQueue<std::string> seqSetNamesQueue(getVectorOfMapKeys(twobitsForSet));
@@ -358,9 +381,9 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 			while(seqSetNamesQueue.getVal(name)){
 				SimpleKmerHash hasher;
 				for(const auto & twobit : twobitsForSet.at(name)){
-					std::cout << __FILE__ << " " << __LINE__ << std::endl;
-					std::cout << "twobit: " << twobit << std::endl;
-					std::cout << allKmers.at(twobit).size() << std::endl;
+//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//					std::cout << "twobit: " << twobit << std::endl;
+//					std::cout << allKmers.at(twobit).size() << std::endl;
 					for(const auto & k : allKmers.at(twobit)){
 						kmersPerSet[name].emplace(k);
 //						if(seqCheck(hasher.reverseHash(k))){

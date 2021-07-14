@@ -52,7 +52,7 @@ public:
 
 	std::unordered_map<std::string, std::set<uint64_t>> getUniqueKmersSetHash(const std::vector<bfs::path> & twobitFnps) const;
 	std::unordered_map<std::string, std::set<uint64_t>> getUniqueKmersSetHashWithFilters(const std::vector<bfs::path> & twobitFnps) const;
-
+	std::unordered_map<std::string, std::set<uint64_t>> getUniqueKmersSetHashWithFiltersFromFastas(const std::vector<bfs::path> & fastaTwoBit) const;
 
 };
 

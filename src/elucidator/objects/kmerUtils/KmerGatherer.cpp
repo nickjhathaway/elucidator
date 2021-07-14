@@ -200,6 +200,75 @@ std::unordered_map<std::string, std::set<std::string>> KmerGatherer::getUniqueKm
 
 
 
+
+std::unordered_map<std::string, std::set<uint64_t>> KmerGatherer::getUniqueKmersSetHashWithFiltersFromFastas(
+		const std::vector<bfs::path> &fastaFnps) const {
+	if (pars_.kmerLength_ > 19) {
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error "
+				<< "cannot do kmer lengths greater than 19" << "\n";
+		throw std::runtime_error { ss.str() };
+	}
+
+
+	njh::concurrent::LockableQueue < bfs::path > fastaQueue(fastaFnps);
+
+	std::unordered_map<std::string, std::set<uint64_t>> ret;
+	std::mutex mut;
+	std::function<bool(const std::string&)> seqCheck = [this](const std::string & k){
+		return std::all_of(k.begin(), k.end(), [this](char base){return njh::in(base, pars_.allowableCharacters_);});
+	};
+
+	std::function < void() > gatherKmers = [&fastaQueue, this, &ret, &mut,&seqCheck]() {
+		SimpleKmerHash hasher;
+		bfs::path fasta;
+		std::unordered_map<std::string, std::set<uint64_t>> current;
+
+		while (fastaQueue.getVal(fasta)) {
+			seqInfo seq;
+			SeqInput reader(SeqIOOptions::genFastaIn(fasta));
+			reader.openIn();
+			std::set < uint64_t > genomeKmersCurrent;
+//			uint32_t count = 0;
+			while(reader.readNextRead(seq)){
+				for (uint32_t pos = 0; pos < len(seq) - pars_.kmerLength_ + 1; ++pos) {
+					auto k = seq.seq_.substr(pos, pars_.kmerLength_);
+					if(seqCheck(k)){
+						DNABaseCounter counter(pars_.allowableCharacters_);
+						counter.increase(k);
+						if(counter.computeEntrophy() > pars_.entropyFilter_){
+							genomeKmersCurrent.emplace(hasher.hash(k));
+						}
+					}
+				}
+				if (!pars_.noRevComp_) {
+					//buffer = seqUtil::reverseComplement(buffer, "DNA");
+					for (uint32_t pos = 0; pos < len(seq) - pars_.kmerLength_ + 1;
+							++pos) {
+						auto k = seq.seq_.substr(pos, pars_.kmerLength_);
+						if(seqCheck(k)){
+							DNABaseCounter counter(pars_.allowableCharacters_);
+							counter.increase(k);
+							if(counter.computeEntrophy() > pars_.entropyFilter_){
+								genomeKmersCurrent.emplace(hasher.revCompHash(k));
+							}
+						}
+					}
+				}
+			}
+			current[fasta.string()].insert(genomeKmersCurrent.begin(),genomeKmersCurrent.end());
+		}
+		{
+			std::lock_guard < std::mutex > lock(mut);
+			for (const auto &kmerSet : current) {
+				ret[kmerSet.first].insert(kmerSet.second.begin(), kmerSet.second.end());
+			}
+		}
+	};
+	njh::concurrent::runVoidFunctionThreaded(gatherKmers, pars_.numThreads_);
+	return ret;
+}
+
 std::unordered_map<std::string, std::set<uint64_t>> KmerGatherer::getUniqueKmersSetHashWithFilters(
 		const std::vector<bfs::path> &twobitFnps) const {
 	std::vector < TwobitFnpSeqNamePair > pairs;
