@@ -143,31 +143,16 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 	OutputStream out(outOpts);
 	std::function<void()> readInComp;
 	VecStr names = getVectorOfMapKeys(uniqueKmersPerSet);
+	MultiSeqIO seqOut;
+
 
 	if (setUp.pars_.ioOptions_.isPairedIn()) {
-		MultiSeqIO seqOut;
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		for(const auto & name : names){
 			auto seqOutOpts = SeqIOOptions::genPairedOutGz(name);
 			seqOutOpts.out_.overWriteFile_ = true;
-			std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			seqOut.addReader(name, seqOutOpts);
-			std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		}
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-		std::cout << njh::colorBool(seqOut.containsReader("human")) << std::endl;
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-		std::cout << njh::colorBool(seqOut.containsReader("human")) << std::endl;
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-
 		readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp,&seqOut]() {
-			std::cout << __FILE__ << " " << __LINE__ << std::endl;
-			std::cout << njh::colorBool(seqOut.containsReader("human")) << std::endl;
-			std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			SimpleKmerHash hasher;
 			PairedRead pseq;
 			std::unordered_map<std::string, std::unordered_map<uint64_t, uint64_t>> uniqueKmersFoundPerSetCurrent;
@@ -217,9 +202,7 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 				}
 				for(const auto & found : foundPerSet){
 					kmersFoundPerSeqCurrent[found.first].emplace_back(found.second);
-					std::cout << __FILE__ << " " << __LINE__ << std::endl;
 					seqOut.openWrite(found.first, pseq);
-					std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				}
 			}
 			{
@@ -355,7 +338,7 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 	{
 		setUp.rLog_.logCurrentTime("count_all");
 		setUp.rLog_.runLogFile_.flush();
-		auto allKmers = kGather.getUniqueKmersSetHash(twoBitFiles);
+		auto allKmers = kGather.getUniqueKmersSetHashWithFilters(twoBitFiles);
 		setUp.rLog_.logCurrentTime("condense");
 		setUp.rLog_.runLogFile_.flush();
 		njh::concurrent::LockableQueue<std::string> seqSetNamesQueue(getVectorOfMapKeys(twobitsForSet));
@@ -368,9 +351,10 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 				SimpleKmerHash hasher;
 				for(const auto & twobit : twobitsForSet.at(name)){
 					for(const auto & k : allKmers.at(twobit)){
-						if(seqCheck(hasher.reverseHash(k))){
-							kmersPerSet[name].emplace(k);
-						}
+						kmersPerSet[name].emplace(k);
+//						if(seqCheck(hasher.reverseHash(k))){
+//							kmersPerSet[name].emplace(k);
+//						}
 					}
 				}
 			}

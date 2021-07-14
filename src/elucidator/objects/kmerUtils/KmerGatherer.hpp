@@ -19,13 +19,13 @@ public:
 	struct KmerGathererPars {
 		KmerGathererPars(uint32_t kmerLength,
 				bool noRevComp, uint32_t numThreads,
-				std::vector<char> allowableCharacters);
+				std::set<char> allowableCharacters);
 		KmerGathererPars();
 		uint32_t kmerLength_{19};
 		bool noRevComp_{false};
 		uint32_t numThreads_{1};
-		std::vector<char> allowableCharacters_{'A', 'C', 'G', 'T'};
-
+		std::set<char> allowableCharacters_{'A', 'C', 'G', 'T'};
+		double entropyFilter_{1.95};
 		void setOptions(seqSetUp & setUp);
 	};
 
@@ -49,7 +49,11 @@ public:
 	};
 	std::unordered_map<std::string, std::set<std::string>> getUniqueKmersSet(const std::vector<bfs::path> & twobitFnps) const;
 
+
 	std::unordered_map<std::string, std::set<uint64_t>> getUniqueKmersSetHash(const std::vector<bfs::path> & twobitFnps) const;
+	std::unordered_map<std::string, std::set<uint64_t>> getUniqueKmersSetHashWithFilters(const std::vector<bfs::path> & twobitFnps) const;
+
+
 };
 
 
