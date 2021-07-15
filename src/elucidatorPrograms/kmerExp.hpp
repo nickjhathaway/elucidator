@@ -104,6 +104,7 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int testingSimpleKmerHasher(const njh::progutils::CmdArgs & inputCommands);
 
 	static int countingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands);
+	static int countingUniqKmersFromSetsInUnmappedAlns(const njh::progutils::CmdArgs & inputCommands);
 
 	static int kmerTestingGround(const njh::progutils::CmdArgs & inputCommands);
 

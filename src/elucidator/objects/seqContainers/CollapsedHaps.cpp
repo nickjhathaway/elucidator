@@ -204,7 +204,6 @@ std::vector<CollapsedHaps::CompWithAlnSeqs> CollapsedHaps::getCompsAgainstRef(co
 	std::vector<uint32_t> positions(seqs_.size());
 	njh::iota<uint32_t>(positions, 0);
 	njh::concurrent::LockableQueue<uint32_t> posQueue(positions);
-
 	std::mutex mut;
 	std::function<void()> alignComp = [this,&posQueue,&refSeq,&alnPool,&ret,&mut,&alignerObj](){
 		auto currentAligner = alnPool.popAligner();

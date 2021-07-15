@@ -121,7 +121,6 @@ int bedExpRunner::bedFilterRegionsCompletelyInOther(const njh::progutils::CmdArg
 
 	OutputStream out(outOpts);
 	auto regions = getBeds(bedFile);
-
 	if(bedFile == intersectWithBed){
 		//internal filtration
 		auto bedCoordSorterFunc =

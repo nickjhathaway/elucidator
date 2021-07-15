@@ -171,7 +171,6 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 	aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 	alignerObj.weighHomopolymers_ = false;
 	alignerObj.processAlnInfoInput(setUp.pars_.alnInfoDirName_, setUp.pars_.verbose_);
-
 	//set up variant info
 	auto idSeq = refSeq;
 	idSeq.name_ = identifier;
@@ -198,14 +197,9 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 	}
 	auto variantCallsDir = njh::files::make_path(setUp.pars_.directoryName_, "variantCalls");
 	njh::files::makeDir(njh::files::MkdirPar{variantCallsDir});
-	//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 	if(!varInfo.snpsFinal.empty() || ! varInfo.deletionsFinal.empty() || !varInfo.insertionsFinal.empty()){
-		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		varInfo.writeVCF(njh::files::make_path(variantCallsDir, "allVariants.vcf"));
-		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-		varInfo.writeSNPTable(njh::files::make_path(variantCallsDir, "allSNPs.tab.txt"));
 	}
-	//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 
 	{
 		OutputStream divMeasuresOut(njh::files::make_path(setUp.pars_.directoryName_, "divMeasures.tab.txt"));
@@ -273,7 +267,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 
 	{
 		//write out seqs
-		auto uniqueSeqsOpts = SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs.fasta"));
+		auto uniqueSeqsOpts = SeqIOOptions::genFastaOutGz(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs.fasta.gz"));
 		{
 			SeqOutput uniqueWriter(uniqueSeqsOpts);
 			uniqueWriter.openOut();
@@ -283,9 +277,9 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 			uniqueWriter.closeOut();
 		}
 
-		OutputStream nameOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs_names.tab.txt")));
+		OutputStream nameOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs_names.tab.txt.gz")));
 		nameOut << "name\tnumber\tinputNames"	<< std::endl;
-		OutputStream metaLabNamesOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs_nonFieldSampleNames.tab.txt")));
+		OutputStream metaLabNamesOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs_nonFieldSampleNames.tab.txt.gz")));
 		metaLabNamesOut << "name\tsamples" << std::endl;
 
 		for(const auto pos : orderByCnt){
@@ -330,100 +324,103 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			auto translatedRes = translator->run(uniqueSeqInOpts, sampNamesForPopHaps, variantCallerRunPars);
 			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-			SeqOutput transwriter(SeqIOOptions::genFastaOut(njh::files::make_path(variantInfoDir, "translatedInput.fasta")));
-			for(const auto & seqName : translatedRes.translations_){
-				for(const auto & transcript : seqName.second){
-					transwriter.openWrite(transcript.second.translation_);
-				}
-			}
-			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			OutputStream popBedLocs(njh::files::make_path(variantInfoDir, "inputSeqs.bed"));
 			translatedRes.writeSeqLocations(popBedLocs);
-			OutputStream transBedLocs(njh::files::make_path(variantInfoDir, "translatedInput.bed"));
-			translatedRes.writeSeqLocationsTranslation(transBedLocs);
-			std::unordered_map<std::string, std::set<uint32_t>> knownAAMutsChromPositions;
-			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-			{
-				//protein
-				for(auto & varPerTrans : translatedRes.proteinVariants_){
-					//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-
-					varPerTrans.second.writeVCF(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein.vcf")));
-					//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-					varPerTrans.second.writeOutSNPsFinalInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein_aminoAcidVariable.tab.txt")), varPerTrans.first, true);
-					//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-					std::set<uint32_t> knownMutationsLocations;
-					for(const auto & snpPos : varPerTrans.second.allBases){
-						if(njh::in(snpPos.first + 1, knownMutationsLocationsMap[varPerTrans.first])){
-							knownMutationsLocations.emplace(snpPos.first);
-							auto genomicLocationForAAPos = translatedRes.translationInfoForTranscirpt_.at(varPerTrans.first)->genBedFromAAPositions(snpPos.first, snpPos.first + 1);
-							for(const auto gPos : iter::range(genomicLocationForAAPos.chromStart_, genomicLocationForAAPos.chromEnd_)){
-								knownAAMutsChromPositions[genomicLocationForAAPos.chrom_].emplace(gPos);
-							}
-						}
-					}
-					//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-					varPerTrans.second.writeOutSNPsAllInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein_aminoAcidsAll.tab.txt")), varPerTrans.first, true);
-					//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-					if(!varPerTrans.second.variablePositons_.empty()){
-						GenomicRegion variableRegion = varPerTrans.second.getVariableRegion();
-						variableRegion.start_ += 1; //do one based positioning
-						OutputStream bedVariableRegionOut(OutOptions(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein_variableRegion.bed"))));
-						bedVariableRegionOut << variableRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
-					}
-					std::set<uint32_t> allLocations(knownMutationsLocations.begin(), knownMutationsLocations.end());
-					for(const auto & variablePos : varPerTrans.second.snpsFinal){
-						allLocations.emplace(variablePos.first);
-					}
-					//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-					for (auto & seqName : translatedRes.translations_) {
-						if (njh::in(varPerTrans.first, seqName.second)) {
-							std::string popName = seqName.first.substr(0, seqName.first.rfind("_f"));
-							std::string transcript = varPerTrans.first;
-							for (const auto & loc : allLocations) {
-								//location is not within the aligned translation
-								if(loc < std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).aaPos_ || loc > std::get<0>(seqName.second[varPerTrans.first].lastAminoInfo_).aaPos_){
-									continue;
-								}
-
-								auto codon = seqName.second[varPerTrans.first].getCodonForAARefPos(loc);
-
-								fullAATyped[popName].addMeta(njh::pasteAsStr(varPerTrans.first, "-", loc + 1), codon.aa_);
-								fullAATypedWithCodonInfo[popName].emplace_back(
-										TranslatorByAlignment::AAInfo(varPerTrans.first, loc, codon,
-												njh::in(loc, knownMutationsLocations)));
-							}
-						}
-					}
-					if(!knownMutationsLocations.empty()){
-						varPerTrans.second.writeOutSNPsInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein_aminoAcidKnownMutations.tab.txt")), varPerTrans.first, knownMutationsLocations, true);
+			if(!translatedRes.translations_.empty()){
+				//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+				SeqOutput transwriter(SeqIOOptions::genFastaOut(njh::files::make_path(variantInfoDir, "translatedInput.fasta")));
+				for(const auto & seqName : translatedRes.translations_){
+					for(const auto & transcript : seqName.second){
+						transwriter.openWrite(transcript.second.translation_);
 					}
 				}
-			}
-			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-			{
-				//snps
-				for( auto & varPerChrom : translatedRes.seqVariants_){
-					//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-					varPerChrom.second.writeVCF(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-genomic.vcf")));
-					//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-					varPerChrom.second.writeOutSNPsFinalInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-SNPs.tab.txt")), varPerChrom.first);
-					//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-					if(!knownAAMutsChromPositions[varPerChrom.first].empty()){
-						varPerChrom.second.writeOutSNPsInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-knownAA_SNPs.tab.txt")), varPerChrom.first, knownAAMutsChromPositions[varPerChrom.first], true);
+
+				OutputStream transBedLocs(njh::files::make_path(variantInfoDir, "translatedInput.bed"));
+				translatedRes.writeSeqLocationsTranslation(transBedLocs);
+				std::unordered_map<std::string, std::set<uint32_t>> knownAAMutsChromPositions;
+				//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+				{
+					//protein
+					for(auto & varPerTrans : translatedRes.proteinVariants_){
+						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+
+						varPerTrans.second.writeVCF(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein.vcf")));
+						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+						varPerTrans.second.writeOutSNPsFinalInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein_aminoAcidVariable.tab.txt")), varPerTrans.first, true);
+						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+						std::set<uint32_t> knownMutationsLocations;
+						for(const auto & snpPos : varPerTrans.second.allBases){
+							if(njh::in(snpPos.first + 1, knownMutationsLocationsMap[varPerTrans.first])){
+								knownMutationsLocations.emplace(snpPos.first);
+								auto genomicLocationForAAPos = translatedRes.translationInfoForTranscirpt_.at(varPerTrans.first)->genBedFromAAPositions(snpPos.first, snpPos.first + 1);
+								for(const auto gPos : iter::range(genomicLocationForAAPos.chromStart_, genomicLocationForAAPos.chromEnd_)){
+									knownAAMutsChromPositions[genomicLocationForAAPos.chrom_].emplace(gPos);
+								}
+							}
+						}
+						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+						varPerTrans.second.writeOutSNPsAllInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein_aminoAcidsAll.tab.txt")), varPerTrans.first, true);
+						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+						if(!varPerTrans.second.variablePositons_.empty()){
+							GenomicRegion variableRegion = varPerTrans.second.getVariableRegion();
+							variableRegion.start_ += 1; //do one based positioning
+							OutputStream bedVariableRegionOut(OutOptions(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein_variableRegion.bed"))));
+							bedVariableRegionOut << variableRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+						}
+						std::set<uint32_t> allLocations(knownMutationsLocations.begin(), knownMutationsLocations.end());
+						for(const auto & variablePos : varPerTrans.second.snpsFinal){
+							allLocations.emplace(variablePos.first);
+						}
+						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+						for (auto & seqName : translatedRes.translations_) {
+							if (njh::in(varPerTrans.first, seqName.second)) {
+								std::string popName = seqName.first.substr(0, seqName.first.rfind("_f"));
+								std::string transcript = varPerTrans.first;
+								for (const auto & loc : allLocations) {
+									//location is not within the aligned translation
+									if(loc < std::get<0>(seqName.second[varPerTrans.first].firstAminoInfo_).aaPos_ || loc > std::get<0>(seqName.second[varPerTrans.first].lastAminoInfo_).aaPos_){
+										continue;
+									}
+
+									auto codon = seqName.second[varPerTrans.first].getCodonForAARefPos(loc);
+
+									fullAATyped[popName].addMeta(njh::pasteAsStr(varPerTrans.first, "-", loc + 1), codon.aa_);
+									fullAATypedWithCodonInfo[popName].emplace_back(
+											TranslatorByAlignment::AAInfo(varPerTrans.first, loc, codon,
+													njh::in(loc, knownMutationsLocations)));
+								}
+							}
+						}
+						if(!knownMutationsLocations.empty()){
+							varPerTrans.second.writeOutSNPsInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein_aminoAcidKnownMutations.tab.txt")), varPerTrans.first, knownMutationsLocations, true);
+						}
 					}
-					//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-					varPerChrom.second.writeOutSNPsAllInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-allBases.tab.txt")), varPerChrom.first);
-					//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-					if(!varPerChrom.second.variablePositons_.empty()){
+				}
+				//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+				{
+					//snps
+					for( auto & varPerChrom : translatedRes.seqVariants_){
 						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-						GenomicRegion variableRegion = varPerChrom.second.getVariableRegion();
+						varPerChrom.second.writeVCF(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-genomic.vcf")));
 						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-						OutputStream bedVariableRegionOut(OutOptions(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-chromosome_variableRegion.bed"))));
+						varPerChrom.second.writeOutSNPsFinalInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-SNPs.tab.txt")), varPerChrom.first);
 						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-						bedVariableRegionOut << variableRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+						if(!knownAAMutsChromPositions[varPerChrom.first].empty()){
+							varPerChrom.second.writeOutSNPsInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-knownAA_SNPs.tab.txt")), varPerChrom.first, knownAAMutsChromPositions[varPerChrom.first], true);
+						}
+						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+						varPerChrom.second.writeOutSNPsAllInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-allBases.tab.txt")), varPerChrom.first);
+						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+						if(!varPerChrom.second.variablePositons_.empty()){
+							//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+							GenomicRegion variableRegion = varPerChrom.second.getVariableRegion();
+							//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+							OutputStream bedVariableRegionOut(OutOptions(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-chromosome_variableRegion.bed"))));
+							//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+							bedVariableRegionOut << variableRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+						}
+						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 					}
-					//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				}
 			}
 			//std::cout << __FILE__ << " " << __LINE__ << std::endl;

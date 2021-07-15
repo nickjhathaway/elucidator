@@ -92,6 +92,202 @@ int kmerExpRunner::filterUniqueKmerSetForEntropy(const njh::progutils::CmdArgs &
 	return 0;
 }
 
+
+
+int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlns(const njh::progutils::CmdArgs & inputCommands){
+	uint32_t numThreads = 1;
+	bfs::path countTable = "";
+	std::string sampleName = "";
+	bool includeRevComp = false;
+	OutOptions outOpts(bfs::path(""), ".tab.txt.gz");
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.pars_.ioOptions_.revComplMate_ = true;
+	setUp.processReadInNames(VecStr{"--bam"}, true);
+	setUp.setOption(countTable, "--countTable", "countTable, 1)set,2)kmer", true);
+	setUp.setOption(sampleName, "--sampleName", "Name to add to output file", true);
+
+	setUp.setOption(numThreads, "--numThreads", "numThreads");
+	setUp.setOption(includeRevComp, "--includeRevComp", "include Rev Comp of the input seqs");
+
+
+
+
+	setUp.processWritingOptions(outOpts);
+	//setUp.processDirectoryOutputName("true");
+	setUp.finishSetUp(std::cout);
+	//setUp.startARunLog(setUp.pars_.directoryName_);
+	njh::stopWatch watch;
+	watch.setLapName("initial");
+	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet;
+	std::unordered_map<std::string, std::unordered_map<uint64_t, uint64_t>> uniqueKmersFoundPerSet;
+	std::unordered_map<std::string, std::vector<uint64_t>> kmersFoundPerSeq;
+
+	std::mutex mut;
+	uint32_t klen = 0;
+	watch.startNewLap("reading in unique kmer table");
+	{
+		SimpleKmerHash hasher;
+		TableReader uniqKmers(TableIOOpts::genTabFileIn(countTable, false));
+		if(uniqKmers.header_.nCol() < 2){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "need to have 2 columns" << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		VecStr row;
+		while(uniqKmers.getNextRow(row)){
+			klen = row[1].size();
+			uniqueKmersPerSet[row[0]].emplace(hasher.hash(row[1]));
+		}
+	}
+	if(setUp.pars_.verbose_){
+		std::cout << watch.getLapName() << "\t" << watch.timeLapFormatted() <<std::endl;
+	}
+	OutputStream out(outOpts);
+	VecStr names = getVectorOfMapKeys(uniqueKmersPerSet);
+//	MultiSeqIO seqOut;
+	struct LockedBamReader {
+
+		LockedBamReader(const bfs::path & bamFnp){
+			bReader_.Open(bamFnp.string());
+			checkBamOpenThrow(bReader_, bamFnp);
+		}
+		BamTools::BamReader bReader_;
+
+		std::mutex mut_;
+
+		bool readNextAlnLockFree(BamTools::BamAlignment & bAln){
+			return bReader_.GetNextAlignment(bAln);
+		}
+
+		bool readNextAlnLock(BamTools::BamAlignment & bAln){
+			std::lock_guard<std::mutex> lock(mut_);
+			return bReader_.GetNextAlignment(bAln);
+		}
+
+		bool readNextAlnLockBatch(std::vector<BamTools::BamAlignment> & alns, uint32_t batchSize){
+			std::lock_guard<std::mutex> lock(mut_);
+			alns.clear();
+			uint32_t count = 0;
+			BamTools::BamAlignment baln;
+			while(count < batchSize && readNextAlnLockFree(baln)){
+				alns.emplace_back(baln);
+				++count;
+			}
+			return !alns.empty();
+		}
+	};
+
+
+	LockedBamReader bamReader(setUp.pars_.ioOptions_.firstName_);
+
+	std::function<void()> readInComp = [&bamReader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp]() {
+		SimpleKmerHash hasher;
+		std::unordered_map<std::string, std::unordered_map<uint64_t, uint64_t>> uniqueKmersFoundPerSetCurrent;
+		std::unordered_map<std::string, std::vector<uint64_t>> kmersFoundPerSeqCurrent;
+		std::vector<BamTools::BamAlignment> alns;
+		while(bamReader.readNextAlnLockBatch(alns, 10000)){
+			for(const auto & bAln : alns){
+				if(bAln.IsPrimaryAlignment() && !bAln.IsMapped()){
+
+					std::unordered_map<uint64_t, uint64_t> hashedInputKmers;
+					//since unmapped reads are modifed can just take the query bases and don't have to worry about revComping
+					if(len(bAln.QueryBases) > klen){
+						for(uint32_t pos = 0; pos < len(bAln.QueryBases) - klen + 1; ++pos){
+							auto hash = hasher.hash(bAln.QueryBases.substr(pos, klen));
+							++hashedInputKmers[hash];
+						}
+					}
+					if(includeRevComp){
+						//bAln.QueryBases = seqUtil::reverseComplement(bAln.QueryBases, "DNA");
+						if(len(bAln.QueryBases) > klen){
+							for(uint32_t pos = 0; pos < len(bAln.QueryBases) - klen + 1; ++pos){
+								auto hash = hasher.revCompHash(bAln.QueryBases.substr(pos, klen));
+								++hashedInputKmers[hash];
+							}
+						}
+					}
+					std::unordered_map<std::string, uint32_t> foundPerSet;
+					for(const auto & hashedKmer : hashedInputKmers){
+						for(const auto & uniqueKmers : uniqueKmersPerSet){
+							if(njh::in(hashedKmer.first, uniqueKmers.second)){
+								uniqueKmersFoundPerSetCurrent[uniqueKmers.first][hashedKmer.first]+= hashedKmer.second;
+								++foundPerSet[uniqueKmers.first];
+								break;
+							}
+						}
+					}
+					for(const auto & found : foundPerSet){
+						kmersFoundPerSeqCurrent[found.first].emplace_back(found.second);
+		//					seqOut.openWrite(found.first, pseq);
+					}
+				}
+			}
+		}
+		{
+			std::lock_guard<std::mutex> lock(mut);
+			for(const auto & foundPerSet : uniqueKmersFoundPerSetCurrent){
+				for(const auto & count : foundPerSet.second){
+					uniqueKmersFoundPerSet[foundPerSet.first][count.first] += count.second;
+				}
+			}
+			for(const auto & foundPerSeq : kmersFoundPerSeqCurrent){
+				addOtherVec(kmersFoundPerSeq[foundPerSeq.first], foundPerSeq.second);
+			}
+		}
+	};
+	njh::concurrent::runVoidFunctionThreaded(readInComp, numThreads);
+	out << "sample\tset\treads\tmeanPerRead\ttotal\ttotal1\ttotal2\tunique\tunique1\tunique2\tuniqueInSet\tmeanOccurence\tmeanOccurence1\tmeanOccurence2\tfracUniqFound\tfracUniqFound1\tfracUniqFound2" << std::endl;
+	njh::sort(names);
+	for(const auto & name : names){
+		uint64_t total = 0;
+		uint64_t totalMoreThanOnce = 0;
+		uint64_t totalMoreThanTwice = 0;
+		std::unordered_set<uint64_t> moreThanOnce;
+		std::unordered_set<uint64_t> moreThanTwice;
+		for(const auto & countPerSet : uniqueKmersFoundPerSet[name]){
+			total += countPerSet.second;
+			if(countPerSet.second>1){
+				totalMoreThanOnce += countPerSet.second;
+				moreThanOnce.emplace(countPerSet.first);
+			}
+			if(countPerSet.second>2){
+				totalMoreThanTwice += countPerSet.second;
+				moreThanTwice.emplace(countPerSet.first);
+			}
+		}
+		uint64_t readCount = kmersFoundPerSeq[name].size();
+		long double meanPerSeq = vectorMean(kmersFoundPerSeq[name]);
+		auto occMean =  static_cast<long double>(total)/uniqueKmersFoundPerSet[name].size();
+		auto occMean1 = static_cast<long double>(totalMoreThanOnce)/moreThanOnce.size();
+		auto occMean2 = static_cast<long double>(totalMoreThanTwice)/moreThanTwice.size();
+
+		out << sampleName
+				<< "\t" << name
+				<< "\t" << readCount
+				<< "\t" << meanPerSeq
+				<< "\t" << total
+				<< "\t" << totalMoreThanOnce
+				<< "\t" << totalMoreThanTwice
+				<< "\t" << uniqueKmersFoundPerSet[name].size()
+				<< "\t" << moreThanOnce.size()
+				<< "\t" << moreThanTwice.size()
+				<< "\t" << uniqueKmersPerSet[name].size()
+				<< "\t" << occMean
+				<< "\t" << occMean1
+				<< "\t" << occMean2
+				<< "\t" << static_cast<long double>(uniqueKmersFoundPerSet[name].size())/uniqueKmersPerSet[name].size()
+				<< "\t" << static_cast<long double>(moreThanOnce.size())/uniqueKmersPerSet[name].size()
+				<< "\t" << static_cast<long double>(moreThanTwice.size())/uniqueKmersPerSet[name].size()
+				<< std::endl;
+	}
+
+	return 0;
+
+}
+
+
 int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
 	bfs::path countTable = "";
@@ -101,12 +297,14 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
+	setUp.pars_.ioOptions_.revComplMate_ = true;
 	setUp.processReadInNames(true);
 	setUp.setOption(countTable, "--countTable", "countTable, 1)set,2)kmer", true);
 	setUp.setOption(sampleName, "--sampleName", "Name to add to output file", true);
 
 	setUp.setOption(numThreads, "--numThreads", "numThreads");
 	setUp.setOption(includeRevComp, "--includeRevComp", "include Rev Comp of the input seqs");
+
 
 
 
@@ -229,26 +427,42 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 			}
 		};
 	} else {
-		readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&mut,&klen]() {
+		readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp]() {
 			SimpleKmerHash hasher;
 			seqInfo seq;
-			std::unordered_map<uint64_t, uint64_t> hashedInputKmers;
-			while(reader.readNextReadLock(seq)){
-				for(uint32_t pos = 0; pos < len(seq.seq_) - klen + 1; ++pos){
-					++hashedInputKmers[hasher.hash(seq.seq_.substr(pos, klen))];
-				}
-				//seq.seq_ = seqUtil::reverseComplement(seq.seq_, "DNA");
-				for(uint32_t pos = 0; pos < len(seq.seq_) - klen + 1; ++pos){
-					++hashedInputKmers[hasher.revCompHash(seq.seq_.substr(pos, klen))];
-				}
-			}
 			std::unordered_map<std::string, std::unordered_map<uint64_t, uint64_t>> uniqueKmersFoundPerSetCurrent;
-			for(const auto & hashedKmer : hashedInputKmers){
-				for(const auto & uniqueKmers : uniqueKmersPerSet){
-					if(njh::in(hashedKmer.first, uniqueKmers.second)){
-						uniqueKmersFoundPerSetCurrent[uniqueKmers.first][hashedKmer.first]+= hashedKmer.second;
-						break;
+			std::unordered_map<std::string, std::vector<uint64_t>> kmersFoundPerSeqCurrent;
+
+			while(reader.readNextReadLock(seq)){
+				std::unordered_map<uint64_t, uint64_t> hashedInputKmers;
+				if(len(seq.seq_) > klen){
+					for(uint32_t pos = 0; pos < len(seq.seq_) - klen + 1; ++pos){
+						auto hash = hasher.hash(seq.seq_.substr(pos, klen));
+						++hashedInputKmers[hash];
 					}
+				}
+				if(includeRevComp){
+					//seq.seq_ = seqUtil::reverseComplement(seq.seq_, "DNA");
+					if(len(seq.seq_) > klen){
+						for(uint32_t pos = 0; pos < len(seq.seq_) - klen + 1; ++pos){
+							auto hash = hasher.revCompHash(seq.seq_.substr(pos, klen));
+							++hashedInputKmers[hash];
+						}
+					}
+				}
+				std::unordered_map<std::string, uint32_t> foundPerSet;
+				for(const auto & hashedKmer : hashedInputKmers){
+					for(const auto & uniqueKmers : uniqueKmersPerSet){
+						if(njh::in(hashedKmer.first, uniqueKmers.second)){
+							uniqueKmersFoundPerSetCurrent[uniqueKmers.first][hashedKmer.first]+= hashedKmer.second;
+							++foundPerSet[uniqueKmers.first];
+							break;
+						}
+					}
+				}
+				for(const auto & found : foundPerSet){
+					kmersFoundPerSeqCurrent[found.first].emplace_back(found.second);
+//					seqOut.openWrite(found.first, pseq);
 				}
 			}
 			{
@@ -257,6 +471,9 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 					for(const auto & count : foundPerSet.second){
 						uniqueKmersFoundPerSet[foundPerSet.first][count.first] += count.second;
 					}
+				}
+				for(const auto & foundPerSeq : kmersFoundPerSeqCurrent){
+					addOtherVec(kmersFoundPerSeq[foundPerSeq.first], foundPerSeq.second);
 				}
 			}
 		};
@@ -310,6 +527,7 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 	return 0;
 
 }
+
 int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands){
 	KmerGatherer::KmerGathererPars countPars;
 	bfs::path seqSetTableFnp = "";
