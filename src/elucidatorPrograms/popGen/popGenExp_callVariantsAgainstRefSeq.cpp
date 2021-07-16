@@ -43,6 +43,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 
 	uint32_t numThreads = 1;
 	bool getPairwiseComps = false;
+	bool noDiagAlnPairwiseComps = false;
 	bfs::path metaFnp;
 	bool keepNonFieldSamples = false;
 	std::set<std::string> ignoreSubFields;
@@ -55,6 +56,8 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 	setUp.processAlnInfoInput();
 	setUp.setOption(numThreads, "--numThreads", "number of threads");
 	setUp.setOption(getPairwiseComps, "--getPairwiseComps", "get Pairwise comparison metrics");
+	setUp.setOption(noDiagAlnPairwiseComps, "--noDiagAlnPairwiseComps", "Use diagonal Alignment for Pairwise Comparisons");
+	bool diagAlnPairwiseComps = !noDiagAlnPairwiseComps;
 
 	setUp.setOption(variantCallerRunPars.occurrenceCutOff, "--occurrenceCutOff", "Occurrence Cut Off, don't report variants below this count");
 	setUp.setOption(variantCallerRunPars.lowVariantCutOff, "--lowVariantCutOff", "Low Variant Cut Off, don't report variants below this fraction");
@@ -200,13 +203,24 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 	if(!varInfo.snpsFinal.empty() || ! varInfo.deletionsFinal.empty() || !varInfo.insertionsFinal.empty()){
 		varInfo.writeVCF(njh::files::make_path(variantCallsDir, "allVariants.vcf"));
 	}
+	std::unordered_map<uint32_t, uint32_t> readLens = inputSeqs.getReadLenMap();
+//	uint32_t longestLen = vectorMaximum(njh::getVecOfMapKeys(readLens));
+//	uint32_t shortestLen = vectorMinimum(njh::getVecOfMapKeys(readLens));
+//	uint32_t biggestLenDiff = longestLen-shortestLen;
 
 	{
 		OutputStream divMeasuresOut(njh::files::make_path(setUp.pars_.directoryName_, "divMeasures.tab.txt"));
 		CollapsedHaps::AvgPairwiseMeasures avgPMeasures;
 		if(getPairwiseComps && inputSeqs.size() > 1 ){
-			auto allComps = inputSeqs.getPairwiseComps(alignerObj, numThreads);
-			avgPMeasures = inputSeqs.getAvgPairwiseMeasures(allComps);
+			if(diagAlnPairwiseComps){
+				alignerObj.inputAlignmentBlockSize_ = 400;
+				alignerObj.inputAlignmentBlockWalkbackSize_ = 400;
+				auto allComps = inputSeqs.getPairwiseCompsDiagAln(alignerObj, numThreads);
+				avgPMeasures = inputSeqs.getAvgPairwiseMeasures(allComps);
+			}else{
+				auto allComps = inputSeqs.getPairwiseComps(alignerObj, numThreads);
+				avgPMeasures = inputSeqs.getAvgPairwiseMeasures(allComps);
+			}
 		}
 		divMeasuresOut << "id\tname\ttotalHaplotypes\tuniqueHaplotypes\tsinglets\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism" ;
 		if(getPairwiseComps){
@@ -216,7 +230,6 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 			divMeasuresOut << "\tTajimaD\tTajimaDPVal";
 		}
 		divMeasuresOut << std::endl;
-		std::unordered_map<uint32_t, uint32_t> readLens = inputSeqs.getReadLenMap();
 		inputSeqs.setFrequencies();
 		auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversity(inputSeqs.seqs_);
 		divMeasuresOut << identifier
@@ -264,15 +277,18 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 		divMeasuresOut << std::endl;
 	}
 	//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+	std::unordered_map<std::string, uint32_t> seqNameKey;
 
 	{
 		//write out seqs
 		auto uniqueSeqsOpts = SeqIOOptions::genFastaOutGz(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs.fasta.gz"));
 		{
+
 			SeqOutput uniqueWriter(uniqueSeqsOpts);
 			uniqueWriter.openOut();
 			for(const auto pos : orderByCnt){
 				uniqueWriter.write(inputSeqs.seqs_[pos]);
+				seqNameKey[inputSeqs.seqs_[pos]->name_] = pos;
 			}
 			uniqueWriter.closeOut();
 		}
@@ -329,10 +345,135 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 			if(!translatedRes.translations_.empty()){
 				//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				SeqOutput transwriter(SeqIOOptions::genFastaOut(njh::files::make_path(variantInfoDir, "translatedInput.fasta")));
+				std::vector<seqInfo> translatedSeqs;
+				std::vector<std::unordered_set<std::string>> translatedSeqInputNames;
 				for(const auto & seqName : translatedRes.translations_){
 					for(const auto & transcript : seqName.second){
 						transwriter.openWrite(transcript.second.translation_);
+						translatedSeqs.emplace_back(transcript.second.translation_);
+						translatedSeqs.back().cnt_ = inputSeqs.names_[seqNameKey[seqName.first]].size();
+						translatedSeqInputNames.emplace_back(inputSeqs.names_[seqNameKey[seqName.first]]);
 					}
+				}
+				auto inputTranslatedSeq = CollapsedHaps::collapseReads(translatedSeqs, translatedSeqInputNames);
+				{
+					//rename based on freq
+					std::vector<uint32_t> orderByCnt = inputTranslatedSeq.getOrderByTopCnt();
+					uint32_t seqId = 0;
+					for(const auto pos : orderByCnt){
+						MetaDataInName popMeta;
+						popMeta.addMeta("HapPopUIDCount", static_cast<uint32_t>(std::round(inputTranslatedSeq.seqs_[pos]->cnt_)));
+						inputTranslatedSeq.seqs_[pos]->name_ = njh::pasteAsStr(identifier, ".", leftPadNumStr<uint32_t>(seqId, inputTranslatedSeq.size()),popMeta.createMetaName());
+						++seqId;
+					}
+
+					//write out seqs
+					auto uniqueSeqsOpts = SeqIOOptions::genFastaOutGz(njh::files::make_path(variantInfoDir, "uniqueTranslatedSeqs.fasta.gz"));
+					{
+						SeqOutput uniqueWriter(uniqueSeqsOpts);
+						uniqueWriter.openOut();
+						for(const auto pos : orderByCnt){
+							uniqueWriter.write(inputTranslatedSeq.seqs_[pos]);
+							seqNameKey[inputTranslatedSeq.seqs_[pos]->name_] = pos;
+						}
+						uniqueWriter.closeOut();
+					}
+
+					OutputStream nameOut(OutOptions(njh::files::make_path(variantInfoDir, "uniqueTranslatedSeqs_names.tab.txt.gz")));
+					nameOut << "name\tnumber\tinputNames"	<< std::endl;
+					OutputStream metaLabNamesOut(OutOptions(njh::files::make_path(variantInfoDir, "uniqueTranslatedSeqs_nonFieldSampleNames.tab.txt.gz")));
+					metaLabNamesOut << "name\tsamples" << std::endl;
+
+					for(const auto pos : orderByCnt){
+						nameOut << inputTranslatedSeq.seqs_[pos]->name_
+								<< "\t" << inputTranslatedSeq.seqs_[pos]->cnt_
+								<< "\t" << njh::conToStr(inputTranslatedSeq.names_[pos], ",") << std::endl;
+						VecStr nonFieldSampleNames{};
+						for(const auto & name : inputTranslatedSeq.names_[pos]){
+							if(MetaDataInName::nameHasMetaData(name)){
+								MetaDataInName meta(name);
+								std::string sampleField = "sample";
+								if(meta.containsMeta("BiologicalSample")){
+									sampleField = "BiologicalSample";
+								}
+								if(meta.containsMeta(sampleField) && meta.containsMeta("IsFieldSample") && !meta.getMeta<bool>("IsFieldSample")){
+									if(meta.containsMeta("site") && "LabIsolate" == meta.getMeta("site")){
+										nonFieldSampleNames.emplace_back(meta.getMeta(sampleField));
+									}
+								}
+							}
+						}
+						metaLabNamesOut << inputTranslatedSeq.seqs_[pos]->name_ << "\t" << njh::conToStr(nonFieldSampleNames, ",") << std::endl;
+					}
+				}
+				{
+
+					OutputStream divMeasuresOut(njh::files::make_path(variantInfoDir, "trasnlatedDivMeasures.tab.txt"));
+					CollapsedHaps::AvgPairwiseMeasures avgPMeasures;
+					if(getPairwiseComps && inputTranslatedSeq.size() > 1 ){
+						if(diagAlnPairwiseComps){
+							alignerObj.inputAlignmentBlockSize_ = 400;
+							alignerObj.inputAlignmentBlockWalkbackSize_ = 400;
+							auto allComps = inputTranslatedSeq.getPairwiseCompsDiagAln(alignerObj, numThreads);
+							avgPMeasures = inputTranslatedSeq.getAvgPairwiseMeasures(allComps);
+						}else{
+							auto allComps = inputTranslatedSeq.getPairwiseComps(alignerObj, numThreads);
+							avgPMeasures = inputTranslatedSeq.getAvgPairwiseMeasures(allComps);
+						}
+					}
+					divMeasuresOut << "id\tname\ttotalHaplotypes\tuniqueHaplotypes\tsinglets\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism" ;
+					if(getPairwiseComps){
+						divMeasuresOut << "\tavgPercentID\tavgNumOfDiffs";
+						divMeasuresOut << "\tnSegratingSites";
+
+						divMeasuresOut << "\tTajimaD\tTajimaDPVal";
+					}
+					divMeasuresOut << std::endl;
+					inputTranslatedSeq.setFrequencies();
+					auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversity(inputTranslatedSeq.seqs_);
+					divMeasuresOut << identifier
+							<< "\t" << bfs::basename(setUp.pars_.ioOptions_.firstName_)
+							<< "\t" << inputTranslatedSeq.getTotalHapCount()
+							<< "\t" << inputTranslatedSeq.seqs_.size()
+							<< "\t" << divMeasures.singlets_
+							<< "\t" << divMeasures.doublets_
+							<< "\t" << divMeasures.expShannonEntropy_
+							<< "\t" << divMeasures.ShannonEntropyE_
+							<< "\t" << divMeasures.effectiveNumOfAlleles_
+							<< "\t" << divMeasures.heterozygostiy_
+							<< "\t" << (readLens.size() > 1 ? "true" : "false");
+					if(getPairwiseComps){
+						if(inputTranslatedSeq.size() > 1){
+							divMeasuresOut << "\t" << avgPMeasures.avgPercentId
+													<< "\t" << avgPMeasures.avgNumOfDiffs
+													<< "\t" << translatedRes.proteinVariants_.begin()->second.getFinalNumberOfSegratingSites();
+							if(0 == translatedRes.proteinVariants_.begin()->second.getFinalNumberOfSegratingSites()){
+								divMeasuresOut
+										<< "\t" << 0
+										<< "\t" << 1;
+							}else{
+								try {
+									auto tajimad = PopGenCalculator::calcTajimaTest(inputTranslatedSeq.getTotalHapCount(), translatedRes.proteinVariants_.begin()->second.getFinalNumberOfSegratingSites(), avgPMeasures.avgNumOfDiffs);
+									divMeasuresOut
+											<< "\t" << tajimad.d_
+											<< "\t" << tajimad.pval_beta_;
+								} catch (std::exception & e) {
+									divMeasuresOut
+											<< "\t" << "NA"
+											<< "\t" << "NA";
+								}
+
+							}
+						}else{
+							divMeasuresOut << "\t" << 1
+													<< "\t" << avgPMeasures.avgNumOfDiffs
+													<< "\t" << 0;
+							divMeasuresOut
+									<< "\t" << 0
+									<< "\t" << 1;
+						}
+					}
+					divMeasuresOut << std::endl;
 				}
 
 				OutputStream transBedLocs(njh::files::make_path(variantInfoDir, "translatedInput.bed"));

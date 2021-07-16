@@ -106,6 +106,7 @@ bedExpRunner::bedExpRunner()
 					 addFunc("getIntersectionBetweenTwoBedFiles", getIntersectionBetweenTwoBedFiles, false),
 					 addFunc("removeSubRegionsFromBedFile", removeSubRegionsFromBedFile, false),
 					 addFunc("getDegreeOfOverlappingBedRegions", getDegreeOfOverlappingBedRegions, false),
+					 addFunc("bedGetOverlappingRegionsFromPanels", bedGetOverlappingRegionsFromPanels, false),
 
            },//
           "bedExp") {}

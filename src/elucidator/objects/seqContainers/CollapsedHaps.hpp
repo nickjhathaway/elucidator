@@ -65,6 +65,7 @@ public:
 	};
 	std::vector<CompWithAlnSeqs> getCompsAgainstRef(const seqInfo & refSeq, aligner & alignerObj, uint32_t numThreads = 1) const;
 	std::vector<std::vector<comparison>> getPairwiseComps(aligner & alignerObj, uint32_t numThreads = 1) const;
+	std::vector<std::vector<comparison>> getPairwiseCompsDiagAln(aligner & alignerObj, uint32_t numThreads = 1) const;
 
 	struct AvgPairwiseMeasures{
 		double avgPercentId {0};
@@ -133,6 +134,55 @@ public:
 				ret.seqs_.emplace_back(std::make_shared<seqInfo>(seq));
 				ret.names_.emplace_back(std::unordered_set<std::string>{seq.name_});
 			}
+		}
+		ret.setFrequencies();
+		ret.setSubNamesToMainSeqPos();
+		return ret;
+
+	}
+
+	template<typename SEQTYPE>
+	static CollapsedHaps collapseReads(const std::vector<SEQTYPE> & seqs,
+			const std::vector<std::unordered_set<std::string>> & names
+	){
+		if(seqs.size() != names.size()){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "seqs and names must be same length; seqs.size(): " << seqs.size() << ", names.size():" << names.size()<< "\n";
+			throw std::runtime_error{ss.str()};
+		}
+
+		CollapsedHaps ret;
+		uint32_t seqCount = 0;
+		std::unordered_set<std::string> allNames;
+		uint32_t seqIndex = 0;
+		for(const auto & seqObj : seqs) {
+			seqInfo seq = getSeqBase(seqObj);
+			//get meta keys if available
+			if(njh::in(seq.name_, allNames)){
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "can't have seqs with the same name in input"<< "\n";
+				ss << seq.name_ << " found more than once" << "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			allNames.emplace(seq.name_);
+			seqCount+= std::round(seq.cnt_);
+			bool found = false;
+			for (const auto & pos : iter::range(ret.seqs_.size())) {
+				const auto & otherSeq = ret.seqs_[pos];
+				if (otherSeq->seq_ == seq.seq_) {
+					otherSeq->cnt_ += std::round(seq.cnt_);
+					ret.names_[pos].insert(names[seqIndex].begin(), names[seqIndex].end());
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				//since we are collapsing further already collapsed seqs, will add counts to total counts
+				seq.cnt_ = std::round(seq.cnt_);
+				ret.seqs_.emplace_back(std::make_shared<seqInfo>(seq));
+				ret.names_.emplace_back(names[seqIndex]);
+			}
+			++seqIndex;
 		}
 		ret.setFrequencies();
 		ret.setSubNamesToMainSeqPos();

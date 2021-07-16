@@ -252,6 +252,43 @@ std::vector<std::vector<comparison>> CollapsedHaps::getPairwiseComps(aligner & a
 	return ret;
 }
 
+std::vector<std::vector<comparison>> CollapsedHaps::getPairwiseCompsDiagAln(aligner & alignerObj, uint32_t numThreads) const{
+	PairwisePairFactory pFac(seqs_.size());
+	std::vector<std::vector<comparison>> ret;
+	for(const auto pos : iter::range(seqs_.size())){
+		ret.emplace_back(std::vector<comparison>(pos));
+	}
+
+	concurrent::AlignerPool alnPool(alignerObj, numThreads);
+	alnPool.initAligners();
+	njh::ProgressBar pBar(pFac.totalCompares_);
+	std::mutex mut;
+	std::function<void()> alignComp = [this,&pFac,&alnPool,&ret,&mut,&alignerObj,&pBar](){
+		auto currentAligner = alnPool.popAligner();
+		PairwisePairFactory::PairwisePair pair;
+		while(pFac.setNextPair(pair)){
+			currentAligner->inputAlignmentBlockSize_ = std::max<uint32_t>(100, 100 + uAbsdiff(len(*seqs_[pair.row_]), len(*seqs_[pair.col_])));
+			currentAligner->inputAlignmentBlockWalkbackSize_ = std::max<uint32_t>(100, 100 + uAbsdiff(len(*seqs_[pair.row_]), len(*seqs_[pair.col_])));
+			currentAligner->alignCacheGlobalDiag(seqs_[pair.row_], seqs_[pair.col_]);
+			currentAligner->profileAlignment(seqs_[pair.row_], seqs_[pair.col_], false, false, false);
+			ret[pair.row_][pair.col_] = currentAligner->comp_;
+			if(verbose_){
+				pBar.outputProgAdd(std::cout, 1, true);
+			}
+		}
+		{
+			std::lock_guard<std::mutex> lock(mut);
+			alignerObj.alnHolder_.mergeOtherHolder(currentAligner->alnHolder_);
+		}
+	};
+	njh::concurrent::runVoidFunctionThreaded(alignComp, numThreads);
+	return ret;
+}
+
+
+
+
+
 CollapsedHaps::AvgPairwiseMeasures CollapsedHaps::getAvgPairwiseMeasures(const std::vector<std::vector<comparison>> & allComps) const{
 	AvgPairwiseMeasures ret;
 	PairwisePairFactory pFac(seqs_.size());
