@@ -267,9 +267,14 @@ std::vector<std::vector<comparison>> CollapsedHaps::getPairwiseCompsDiagAln(alig
 		auto currentAligner = alnPool.popAligner();
 		PairwisePairFactory::PairwisePair pair;
 		while(pFac.setNextPair(pair)){
-			currentAligner->inputAlignmentBlockSize_ = std::max<uint32_t>(100, 100 + uAbsdiff(len(*seqs_[pair.row_]), len(*seqs_[pair.col_])));
-			currentAligner->inputAlignmentBlockWalkbackSize_ = std::max<uint32_t>(100, 100 + uAbsdiff(len(*seqs_[pair.row_]), len(*seqs_[pair.col_])));
-			currentAligner->alignCacheGlobalDiag(seqs_[pair.row_], seqs_[pair.col_]);
+			uint32_t blockSize = 100 + uAbsdiff(len(*seqs_[pair.row_]), len(*seqs_[pair.col_]));
+			currentAligner->inputAlignmentBlockSize_ = std::max<uint32_t>(100, blockSize);
+			currentAligner->inputAlignmentBlockWalkbackSize_ = std::max<uint32_t>(100, blockSize);
+			if(blockSize *2 > std::min(len(*seqs_[pair.row_]), len(*seqs_[pair.col_]))){
+				currentAligner->alignCacheGlobal(seqs_[pair.row_], seqs_[pair.col_]);
+			}else{
+				currentAligner->alignCacheGlobalDiag(seqs_[pair.row_], seqs_[pair.col_]);
+			}
 			currentAligner->profileAlignment(seqs_[pair.row_], seqs_[pair.col_], false, false, false);
 			ret[pair.row_][pair.col_] = currentAligner->comp_;
 			if(verbose_){
