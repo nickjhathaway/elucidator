@@ -213,8 +213,6 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 		CollapsedHaps::AvgPairwiseMeasures avgPMeasures;
 		if(getPairwiseComps && inputSeqs.size() > 1 ){
 			if(diagAlnPairwiseComps){
-				alignerObj.inputAlignmentBlockSize_ = 400;
-				alignerObj.inputAlignmentBlockWalkbackSize_ = 400;
 				auto allComps = inputSeqs.getPairwiseCompsDiagAln(alignerObj, numThreads);
 				avgPMeasures = inputSeqs.getAvgPairwiseMeasures(allComps);
 			}else{
@@ -412,8 +410,6 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 					CollapsedHaps::AvgPairwiseMeasures avgPMeasures;
 					if(getPairwiseComps && inputTranslatedSeq.size() > 1 ){
 						if(diagAlnPairwiseComps){
-							alignerObj.inputAlignmentBlockSize_ = 400;
-							alignerObj.inputAlignmentBlockWalkbackSize_ = 400;
 							auto allComps = inputTranslatedSeq.getPairwiseCompsDiagAln(alignerObj, numThreads);
 							avgPMeasures = inputTranslatedSeq.getAvgPairwiseMeasures(allComps);
 						}else{

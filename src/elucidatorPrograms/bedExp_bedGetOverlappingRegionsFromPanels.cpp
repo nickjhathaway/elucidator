@@ -94,6 +94,7 @@ int bedExpRunner::bedGetOverlappingRegionsFromPanels(const njh::progutils::CmdAr
 				}
 			}
 			double maxCov = 0;
+
 			for(const auto & overlap : overlappingRegions){
 				double cov = bed->getOverlapLen(overlap)/static_cast<double>(bed->length());
 				if(cov > maxCov){
