@@ -193,6 +193,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 	//variable location
 	std::string variableRegionID = "";
 	if(!varInfo.variablePositons_.empty()){
+
 		GenomicRegion variableRegion(varInfo.getVariableRegion());
 		OutputStream bedVariableRegionOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "variableRegion.bed")));
 		bedVariableRegionOut << variableRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;

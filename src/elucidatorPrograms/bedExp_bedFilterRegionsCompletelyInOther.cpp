@@ -68,7 +68,11 @@ int bedExpRunner::bedKeepRegionsCompletelyInOther(const njh::progutils::CmdArgs 
 				}
 			}
 			if(!overlappingRegions.empty()){
-				out << reg->toDelimStrWithExtra() << "\n";
+				VecStr overlappingRegonsNames;
+				for(const auto & reg : overlappingRegions){
+					overlappingRegonsNames.emplace_back(reg->name_);
+				}
+				out << reg->toDelimStrWithExtra() << "\t" << njh::conToStr(overlappingRegonsNames, ",")<< "\n";
 			}
 			++regPos;
 		}
@@ -99,9 +103,11 @@ int bedExpRunner::bedKeepRegionsCompletelyInOther(const njh::progutils::CmdArgs 
 					overlappingRegions.emplace_back(inter);
 				}
 			}
-			if(!overlappingRegions.empty()){
-				out << reg->toDelimStrWithExtra() << "\n";
+			VecStr overlappingRegonsNames;
+			for(const auto & reg : overlappingRegions){
+				overlappingRegonsNames.emplace_back(reg->name_);
 			}
+			out << reg->toDelimStrWithExtra() << "\t" << njh::conToStr(overlappingRegonsNames, ",")<< "\n";
 		}
 	}
 
