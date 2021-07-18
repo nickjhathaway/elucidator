@@ -301,7 +301,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 			nameOut << inputSeqs.seqs_[pos]->name_
 					<< "\t" << inputSeqs.seqs_[pos]->cnt_
 					<< "\t" << njh::conToStr(inputSeqs.names_[pos], ",") << std::endl;
-			VecStr nonFieldSampleNames{};
+			std::set<std::string> nonFieldSampleNames{};
 			for(const auto & name : inputSeqs.names_[pos]){
 				if(MetaDataInName::nameHasMetaData(name)){
 					MetaDataInName meta(name);
@@ -311,7 +311,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 					}
 					if(meta.containsMeta(sampleField) && meta.containsMeta("IsFieldSample") && !meta.getMeta<bool>("IsFieldSample")){
 						if(meta.containsMeta("site") && "LabIsolate" == meta.getMeta("site")){
-							nonFieldSampleNames.emplace_back(meta.getMeta(sampleField));
+							nonFieldSampleNames.emplace(meta.getMeta(sampleField));
 						}
 					}
 				}
@@ -387,7 +387,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 						nameOut << inputTranslatedSeq.seqs_[pos]->name_
 								<< "\t" << inputTranslatedSeq.seqs_[pos]->cnt_
 								<< "\t" << njh::conToStr(inputTranslatedSeq.names_[pos], ",") << std::endl;
-						VecStr nonFieldSampleNames{};
+						std::set<std::string> nonFieldSampleNames{};
 						for(const auto & name : inputTranslatedSeq.names_[pos]){
 							if(MetaDataInName::nameHasMetaData(name)){
 								MetaDataInName meta(name);
@@ -397,7 +397,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 								}
 								if(meta.containsMeta(sampleField) && meta.containsMeta("IsFieldSample") && !meta.getMeta<bool>("IsFieldSample")){
 									if(meta.containsMeta("site") && "LabIsolate" == meta.getMeta("site")){
-										nonFieldSampleNames.emplace_back(meta.getMeta(sampleField));
+										nonFieldSampleNames.emplace(meta.getMeta(sampleField));
 									}
 								}
 							}
