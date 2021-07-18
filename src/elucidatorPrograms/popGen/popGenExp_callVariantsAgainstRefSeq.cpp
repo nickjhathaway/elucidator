@@ -407,7 +407,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 				}
 				{
 
-					OutputStream divMeasuresOut(njh::files::make_path(variantInfoDir, "trasnlatedDivMeasures.tab.txt"));
+					OutputStream divMeasuresOut(njh::files::make_path(variantInfoDir, "translatedDivMeasures.tab.txt"));
 					CollapsedHaps::AvgPairwiseMeasures avgPMeasures;
 					if(getPairwiseComps && inputTranslatedSeq.size() > 1 ){
 						if(diagAlnPairwiseComps){
