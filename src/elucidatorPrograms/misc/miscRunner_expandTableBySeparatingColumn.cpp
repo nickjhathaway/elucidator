@@ -39,7 +39,7 @@ int miscRunner::expandTableBySeparatingColumn(const njh::progutils::CmdArgs & in
 	setUp.setOption(tabOpts.in_.inFilename_, "--fnp", "File path for the table", true);
 	setUp.setOption(tabOpts.hasHeader_, "--header", "Header is Present");
 	setUp.setOption(tabOpts.inDelim_, "--delim", "File Delimiter");
-	setUp.setOption(sep, "--sep", "separator to expand column on");
+	setUp.setOption(sep, "--sep", "separator to expand column on", true);
 	setUp.setOption(append, "--append", "append this onto the column elements");
 	setUp.setOption(prepend, "--prepend", "prepend this onto the column elements");
 	setUp.setOption(columnName, "--columnName", "Column Name to separate", true);

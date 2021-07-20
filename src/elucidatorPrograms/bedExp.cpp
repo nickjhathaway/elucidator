@@ -107,7 +107,7 @@ bedExpRunner::bedExpRunner()
 					 addFunc("removeSubRegionsFromBedFile", removeSubRegionsFromBedFile, false),
 					 addFunc("getDegreeOfOverlappingBedRegions", getDegreeOfOverlappingBedRegions, false),
 					 addFunc("bedGetOverlappingRegionsFromPanels", bedGetOverlappingRegionsFromPanels, false),
-
+					 addFunc("bedAddRegionsNonCompletelyInOther", bedAddRegionsNonCompletelyInOther, false),
            },//
           "bedExp") {}
 
@@ -290,38 +290,39 @@ int bedExpRunner::centerBedRegionWithFixSize(const njh::progutils::CmdArgs & inp
 			if(skipOutOfRangeRegions){
 				if(setUp.pars_.verbose_){
 					std::cerr << ss.str();
-					continue;
 				}
+				out << reg.toDelimStrWithExtra() << std::endl;
 			}else{
 				throw std::runtime_error{ss.str()};
 			}
-		}
-		uint32_t left = (windowSize - reg.length())/2;
-		uint32_t right = windowSize - reg.length() - left;
-		if(left > reg.chromStart_){
-			std::stringstream ss;
-			ss << __PRETTY_FUNCTION__ << ", error " << "can't extend region " <<reg.toDelimStr() << " to left by " << left << "\n";
-			if(skipOutOfRangeRegions){
-				if(setUp.pars_.verbose_){
-					std::cerr << ss.str();
+		}else{
+			uint32_t left = (windowSize - reg.length())/2;
+			uint32_t right = windowSize - reg.length() - left;
+			if(left > reg.chromStart_){
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "can't extend region " <<reg.toDelimStr() << " to left by " << left << "\n";
+				if(skipOutOfRangeRegions){
+					if(setUp.pars_.verbose_){
+						std::cerr << ss.str();
+					}
 					continue;
+				}else{
+					throw std::runtime_error{ss.str()};
 				}
-			}else{
-				throw std::runtime_error{ss.str()};
 			}
-		}
-		auto oldLength = reg.length();
 
-		reg.chromStart_ = reg.chromStart_ - left;
-		reg.chromEnd_ += right;
-		//reg.score_ = reg.length();
-		if(reg.extraFields_.size() >=3){
-			bool scoreIsLen = estd::to_string(oldLength) == reg.extraFields_[1];
-			if(scoreIsLen){
-				reg.extraFields_[1] = estd::to_string(reg.length());
+			auto oldLength = reg.length();
+			reg.chromStart_ = reg.chromStart_ - left;
+			reg.chromEnd_ += right;
+			//reg.score_ = reg.length();
+			if(reg.extraFields_.size() >=3){
+				bool scoreIsLen = estd::to_string(oldLength) == reg.extraFields_[1];
+				if(scoreIsLen){
+					reg.extraFields_[1] = estd::to_string(reg.length());
+				}
 			}
+			out << reg.toDelimStrWithExtra() << std::endl;
 		}
-		out << reg.toDelimStrWithExtra() << std::endl;
 	}
 	return 0;
 }
