@@ -390,7 +390,7 @@ int pairProcessingRunner::detectPossiblePrimers(
 			break;
 		}
 	}
-	std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//	std::cout << __FILE__ << " " << __LINE__ << std::endl;
 	Json::Value outVal;
 	outVal["overlapFail"] = overlapFail;
 	outVal["overlapFailPerc"] = (overlapFail/static_cast<double>(total)) * 100;

@@ -147,6 +147,17 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlns(const njh::progutils:
 	OutputStream out(outOpts);
 	VecStr names = getVectorOfMapKeys(uniqueKmersPerSet);
 //	MultiSeqIO seqOut;
+//	if(setUp.pars_.debug_){
+//		for (const auto &name : names) {
+//			auto seqOutOpts = SeqIOOptions::genPairedOutGz(njh::pasteAsStr(basename(setUp.pars_.ioOptions_.firstName_), "-", name, "-paired"));
+//			seqOutOpts.out_.overWriteFile_ = true;
+//			seqOut.addReader(name + "-paired", seqOutOpts);
+//
+//			auto seqOutOpts = SeqIOOptions::genFastqOutGz(njh::pasteAsStr(basename(setUp.pars_.ioOptions_.firstName_), "-", name, "-single"));
+//			seqOutOpts.out_.overWriteFile_ = true;
+//			seqOut.addReader(name+ "-single", seqOutOpts);
+//		}
+//	}
 	struct LockedBamReader {
 
 		LockedBamReader(const bfs::path & bamFnp){

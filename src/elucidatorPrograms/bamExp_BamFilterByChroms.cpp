@@ -417,12 +417,15 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	OutOptions outOpts(bfs::path("out"));
 	uint32_t allowableSoftClip = 10;
 	bool requireProperPair = false;
+	bool doNotWriteFilterOff = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.setOption(allowableSoftClip, "--allowableSoftClip", "Number of bases that can be soft clipped in order to be included in the filtered off sequences, keep this zero to be more conservative in what gets filtered");
 	setUp.setOption(chromFnp, "--chroms", "chromosomes to filter off", true);
 	setUp.setOption(requireProperPair, "--requireProperPair", "Require Proper Pair to be filtered off");
+	setUp.setOption(doNotWriteFilterOff, "--doNotWriteFilterOff", "do Not Write Filter Off");
+
 	setUp.processReadInNames({"--bam"}, true);
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
@@ -456,6 +459,7 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 
 	SeqOutput singlesWriter(singlesOpts);
 	SeqOutput pairedWriter(pairedOpts);
+
 	SeqOutput filteredSinglesWriter(filteredSinglesOpts);
 	SeqOutput filteredPairedWriter(filteredPairedOpts);
 
@@ -511,7 +515,9 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 			} else {
 				if (njh::in(refData[bAln.RefID].RefName, chroms)) {
 					if(getTotalSoftClippedBases(bAln)   <= allowableSoftClip){
-						filteredSinglesWriter.openWrite(bamAlnToSeqInfo(bAln));
+						if(!doNotWriteFilterOff){
+							filteredSinglesWriter.openWrite(bamAlnToSeqInfo(bAln));
+						}
 						++filteredCountsByChrom[refData[bAln.RefID].RefName].singles_;
 					}else{
 						++kept.singles_;
@@ -540,10 +546,12 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 							getTotalSoftClippedBases(bAln)   <= allowableSoftClip){
 						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
 						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
-						if (bAln.IsFirstMate()) {
-							filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
-						} else {
-							filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
+						if(!doNotWriteFilterOff){
+							if (bAln.IsFirstMate()) {
+								filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
+							} else {
+								filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
+							}
 						}
 					}else{
 						++kept.pairs_;++kept.pairs_;
@@ -594,7 +602,9 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 		for (const auto & name : names) {
 			++filteredOrphans_;
 			auto search = filterAlnCache.get(name);
-			filteredSinglesWriter.openWrite(bamAlnToSeqInfo(*search));
+			if(!doNotWriteFilterOff){
+				filteredSinglesWriter.openWrite(bamAlnToSeqInfo(*search));
+			}
 			filterAlnCache.remove(name);
 		}
 	}

@@ -79,4 +79,5 @@ int miscRunner::expandTableBySeparatingColumn(const njh::progutils::CmdArgs & in
 	}
 	return 0;
 }
+
 } // namespace njhseq
