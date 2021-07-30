@@ -616,7 +616,6 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	}
 
 
-
 	totalsCountsOut << "bam\tcondition\tcount\tfrac\ttotal" << std::endl;;
 	totalsCountsOut << bfs::basename(setUp.pars_.ioOptions_.firstName_.filename())
 			<< "\t" << "keptPairs"
