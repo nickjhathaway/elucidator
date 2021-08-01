@@ -327,8 +327,15 @@ int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & 
 	auto refData = bReader.GetReferenceData();
 	BamTools::BamAlignment bAln;
 	uint32_t count = 0;
+	auto genCigarStr = [](const BamTools::BamAlignment & baln){
+		std::string ret;
+		for(const auto & cig : baln.CigarData){
+			ret += njh::pasteAsStr(cig.Type, cig.Length);
+		}
+		return ret;
+	};
 	OutputStream out(outOpts);
-	out << "FileIndexPosition\tName\tPosition\tEndPosition\tQuerySize\tAlnSize\tRefId\tRefName\tMateRefID\tMatePosition\tIsMateMapped\tIsMapped\tIsPaired\tIsPrimaryAlignment\tIsFirstMate\tDuplicate\tRevComp\tProperPair\tMapQ" << "\n";
+	out << "FileIndexPosition\tName\tPosition\tEndPosition\tQuerySize\tAlnSize\tcigar\tRefId\tRefName\tMateRefID\tMatePosition\tIsMateMapped\tIsMapped\tIsPaired\tIsPrimaryAlignment\tIsFirstMate\tDuplicate\tRevComp\tProperPair\tMapQ" << "\n";
 	while(bReader.GetNextAlignment(bAln)){
 		if (njh::in(bAln.Name, names)) {
 			out << count
@@ -337,6 +344,7 @@ int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & 
 					<< "\t" << bAln.GetEndPosition()
 					<< "\t" << bAln.QueryBases.size()
 					<< "\t" << bAln.GetEndPosition() - bAln.Position
+					<< "\t" << genCigarStr(bAln)
 					<< "\t" << bAln.RefID
 					<< "\t" << (bAln.RefID < 0 || bAln.RefID >= refData.size() ? "*" : refData[bAln.RefID].RefName)
 					<< "\t" << (bAln.MateRefID < 0 || bAln.MateRefID >= refData.size() ? "*" : refData[bAln.MateRefID].RefName)
