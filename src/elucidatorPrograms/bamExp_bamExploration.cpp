@@ -327,13 +327,7 @@ int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & 
 	auto refData = bReader.GetReferenceData();
 	BamTools::BamAlignment bAln;
 	uint32_t count = 0;
-	auto genCigarStr = [](const BamTools::BamAlignment & baln){
-		std::string ret;
-		for(const auto & cig : baln.CigarData){
-			ret += njh::pasteAsStr(cig.Type, cig.Length);
-		}
-		return ret;
-	};
+
 	OutputStream out(outOpts);
 	out << "FileIndexPosition\tName\tPosition\tEndPosition\tQuerySize\tAlnSize\tcigar\tRefId\tRefName\tMateRefID\tMatePosition\tIsMateMapped\tIsMapped\tIsPaired\tIsPrimaryAlignment\tIsFirstMate\tDuplicate\tRevComp\tProperPair\tMapQ" << "\n";
 	while(bReader.GetNextAlignment(bAln)){
