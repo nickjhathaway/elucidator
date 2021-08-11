@@ -66,6 +66,8 @@ programWrapperRunner::programWrapperRunner()
 						addFunc("runDada2SingleSamplePaired", runDada2SingleSamplePaired, false),
 						addFunc("sraFasterqDump", sraFasterqDump, false),
 						addFunc("runHmmsearch", runHmmsearch, false),
+						addFunc("testPrimersWithPrimer3", testPrimersWithPrimer3, false),
+						addFunc("parsePrimer3OutputToTable", parsePrimer3OutputToTable, false),
            },//
           "programWrapper") {}
 int programWrapperRunner::generatingPrime3TemplatesBasedOnMALN(const njh::progutils::CmdArgs & inputCommands) {

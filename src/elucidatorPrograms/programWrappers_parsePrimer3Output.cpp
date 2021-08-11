@@ -28,136 +28,355 @@
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/BamToolsUtils.h"
 
+#include <SeekDeep/objects/TarAmpSetupUtils/PrimersAndMids.hpp>
 
 
 namespace njhseq {
 
 
-int programWrapperRunner::parsePrimer3OutputToPossibleMipArms(const njh::progutils::CmdArgs & inputCommands){
-	bfs::path extInput = "";
-	bfs::path ligInput = "";
-	uint32_t minLen = 100;
-	uint32_t maxLen = 400;
-	OutOptions outOpts(bfs::path(""));
+
+int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs & inputCommands){
+
+	bfs::path bedFnp;
+	bfs::path twoBitFnp;
+	bfs::path primersFnp;
+	bfs::path primer3ConfigPath = "/usr/local/Cellar/primer3/2.4.0/share/primer3/primer3_config/";
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
-	setUp.processWritingOptions(outOpts);
-	setUp.setOption(minLen, "--minLen", "Minimum length");
-	setUp.setOption(maxLen, "--maxLen", "Maximum length");
-	setUp.setOption(ligInput, "--ligInput", "input file for ligation arm", true);
-	setUp.setOption(extInput, "--extInput", "input file for extension arm", true);
+	setUp.setOption(bedFnp, "--bedFnp", "genomic locations", true);
+	setUp.setOption(twoBitFnp, "--twoBit", "two Bit file", true);
+	setUp.setOption(primersFnp, "--primers", "primers to test", true);
+	setUp.setOption(primer3ConfigPath, "--primer3ConfigPath", "primer3 Config Path", true);
+
+
+	setUp.processDirectoryOutputName("testPrimers_TODAY", true);
+
 	setUp.finishSetUp(std::cout);
+	setUp.startARunLog(setUp.pars_.directoryName_);
+	primer3ConfigPath = njh::appendAsNeededRet(primer3ConfigPath.string(), "/");
+
+	auto regions = getBeds(bedFnp);
+	PrimersAndMids primers(primersFnp);
+	TwoBit::TwoBitFile tReader(twoBitFnp);
+
+	std::set<std::string> targetNames = njh::getSetOfMapKeys(primers.targets_);
+	std::set<std::string> regionNames;
+	for(const auto & reg : regions){
+		regionNames.emplace(reg->name_);
+	}
+	VecStr missingFromTargetNames;
+	std::set_difference(
+			targetNames.begin(), targetNames.end(),
+			regionNames.begin(), regionNames.end(),
+			std::back_inserter(missingFromTargetNames));
+
+	VecStr missingFromRegionNames;
+	std::set_difference(
+			regionNames.begin(), regionNames.end(),
+			targetNames.begin(), targetNames.end(),
+			std::back_inserter(missingFromRegionNames));
+	if(!missingFromRegionNames.empty()){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << "missing the following targets from " << bedFnp << "\n";
+		ss << njh::conToStr(missingFromRegionNames, ",") << std::endl;
+		throw std::runtime_error{ss.str()};
+	}
+	if(!missingFromTargetNames.empty()){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << "missing the following regions from " << primersFnp << "\n";
+		ss << njh::conToStr(missingFromTargetNames, ",") << std::endl;
+
+		throw std::runtime_error{ss.str()};
+	}
 
 
-	OutputStream out(outOpts);
 
-	auto ligResults = Primer3Results::parsePrimer3OutputResults(ligInput);
-	auto ligRegions = ligResults.front()->genPrimersRegions();
+	{
+		OutputStream primer3Input(njh::files::make_path(setUp.pars_.directoryName_, "primer3File.txt"));
+		primer3Input << "PRIMER_THERMODYNAMIC_PARAMETERS_PATH=" << primer3ConfigPath.string() << std::endl;
 
-	auto extResults = Primer3Results::parsePrimer3OutputResults(extInput);
-	auto extRegions = extResults.front()->genPrimersRegions();
-
-	struct PrimerPair {
-		PrimerPair(const std::shared_ptr<Primer3Results::Primer> & extPrimer,
-				       const std::shared_ptr<Primer3Results::Primer> & ligPrimer) :
-				extPrimer_(extPrimer), ligPrimer_(ligPrimer) {
-		}
-
-		std::shared_ptr<Primer3Results::Primer> extPrimer_;
-		std::shared_ptr<Primer3Results::Primer> ligPrimer_;
-
-		GenomicRegion genRegion(const std::string & seqId) const{
-			MetaDataInName meta;
-			meta.addMeta("ext", extPrimer_->name_);
-			meta.addMeta("lig", ligPrimer_->name_);
-			meta.addMeta("seqId", seqId);
-			auto extRegion = extPrimer_->genRegion(seqId);
-			auto ligRegion = ligPrimer_->genRegion(seqId);
-			return GenomicRegion(meta.createMetaName(), seqId,
-					std::min(extRegion.start_, ligRegion.start_),
-					std::max(extRegion.end_, ligRegion.end_), extRegion.reverseSrand_);
-		}
-	};
-	std::vector<PrimerPair> pairs;
-	for(const auto & ext : extRegions){
-		for(const auto & lig : ligRegions){
-			if(!ext.second.reverseSrand_){
-				if(lig.second.reverseSrand_){
-					if(lig.second.start_ > ext.second.end_ &&
-							lig.second.end_ - ext.second.start_ > minLen &&
-							lig.second.end_ - ext.second.start_ < maxLen){
-						pairs.emplace_back(PrimerPair{extResults.front()->primers_.at(ext.first),
-																			   ligResults.front()->primers_.at(lig.first)});
+		for(const auto & reg : regions){
+			auto seqTemplate = GenomicRegion(*reg).extractSeq(tReader);
+			std::string seqID = reg->name_;
+			uint32_t seqCount = 0;
+			for(const auto & fwd : njh::mapAt(primers.targets_, reg->name_).info_.fwds_){
+				for(const auto & rev : njh::mapAt(primers.targets_, reg->name_).info_.revs_){
+					if(seqCount > 0){
+						seqID = njh::pasteAsStr(seqID, ".", seqCount);
 					}
-				}
-			}else{
-				if(!lig.second.reverseSrand_){
-					if(ext.second.start_ > lig.second.end_ &&
-							ext.second.end_ - lig.second.start_ > minLen &&
-							ext.second.end_ - lig.second.start_ < maxLen){
-						pairs.emplace_back(PrimerPair{extResults.front()->primers_.at(ext.first),
-																			   ligResults.front()->primers_.at(lig.first)});
-					}
+					std::string leftPrimer = fwd.primer_;
+					std::string rightPrimer = rev.primer_;
+					primer3Input << "SEQUENCE_TEMPLATE=" << seqTemplate.seq_<< std::endl;
+					primer3Input << "SEQUENCE_ID=" << seqID<< std::endl;
+					primer3Input << "SEQUENCE_PRIMER=" << leftPrimer<< std::endl;
+					primer3Input << "SEQUENCE_PRIMER_REVCOMP=" << rightPrimer<< std::endl;
+					primer3Input << "PRIMER_PICK_ANYWAY=1" << std::endl;
+					primer3Input << "PRIMER_PRODUCT_SIZE_RANGE=" << len(seqTemplate) << "-" << len(seqTemplate ) + 1 << std::endl;
+					primer3Input << "="<< std::endl;
+					++seqCount;
 				}
 			}
 		}
 	}
-	for(const auto & pair : pairs){
-		auto region = pair.genRegion(extResults.front()->sequence_id_);
-		out << region.genBedRecordCore().toDelimStr()
-				<< "\t" << (region.reverseSrand_ ? pair.extPrimer_->originalSeq_ : pair.extPrimer_->fowardOrientationSeq_ )
-				<< "\t" << (region.reverseSrand_ ? pair.ligPrimer_->fowardOrientationSeq_ : pair.ligPrimer_->originalSeq_)
-				<< std::endl;
+	std::string primer3Cmd = njh::pasteAsStr("cd ", setUp.pars_.directoryName_, " && ", "primer3_core ", "primer3File.txt > primer3_output.txt 2> primer3_error.txt");
+	auto runOutput = njh::sys::run({primer3Cmd});
+	OutputStream primer3RunLog(njh::files::make_path(setUp.pars_.directoryName_, "primer3RunLog.json"));
+	primer3RunLog << runOutput.toJson() << std::endl;
+
+	auto primer3ResultsFnp = njh::files::make_path(setUp.pars_.directoryName_, "primer3_output.txt");
+	auto results = Primer3Results::parsePrimer3OutputResults(primer3ResultsFnp, true);
+
+	OutputStream primer3ResultsOut(njh::files::make_path(setUp.pars_.directoryName_, "primer3_results.tab.txt"));
+
+	primer3ResultsOut << njh::conToStr(VecStr{"seqID", "primerPairName", "compl_any_th", "compl_end_th", "penalty", "product_size",
+	"left_name", "left_seq", "left_start", "left_end", "left_size", "left_end_stability", "left_gc_percent", "left_hairpin_th", "left_penalty", "left_self_any_th", "left_self_end_th", "left_tm", "left_tm_hairpin_diff", "left_problems",
+	"right_name", "right_seq", "right_start", "right_end", "right_size", "right_end_stability", "right_gc_percent", "right_hairpin_th", "right_penalty", "right_self_any_th", "right_self_end_th", "right_tm", "right_tm_hairpin_diff", "right_problems"
+	}, "\t") << std::endl;
+	for(const auto & res : results){
+		for(const auto & primerPair : res->primerPairs_){
+			primer3ResultsOut << njh::conToStr(toVecStr(
+				res->sequence_id_,
+				primerPair->name_,
+				primerPair->compl_any_th_,
+				primerPair->compl_end_th_,
+				primerPair->penalty_,
+				primerPair->product_size_,
+
+				primerPair->left_.name_,
+				primerPair->left_.seq_,
+				primerPair->left_.forwardOrientationPos_.start_,
+				primerPair->left_.forwardOrientationPos_.start_ + primerPair->left_.forwardOrientationPos_.size_,
+				primerPair->left_.forwardOrientationPos_.size_,
+				primerPair->left_.end_stability_,
+				primerPair->left_.gc_percent_,
+				primerPair->left_.hairpin_th_,
+				primerPair->left_.penalty_,
+				primerPair->left_.self_any_th_,
+				primerPair->left_.self_end_th_,
+				primerPair->left_.tm_,
+				primerPair->left_.tm_ - primerPair->left_.hairpin_th_,
+				njh::conToStr(primerPair->left_.problems_, ";"),
+
+				primerPair->right_.name_,
+				primerPair->right_.seq_,
+				primerPair->right_.forwardOrientationPos_.start_,
+				primerPair->right_.forwardOrientationPos_.start_ + primerPair->right_.forwardOrientationPos_.size_,
+				primerPair->right_.forwardOrientationPos_.size_,
+				primerPair->right_.end_stability_,
+				primerPair->right_.gc_percent_,
+				primerPair->right_.hairpin_th_,
+				primerPair->right_.penalty_,
+				primerPair->right_.self_any_th_,
+				primerPair->right_.self_end_th_,
+				primerPair->right_.tm_,
+				primerPair->right_.tm_ - primerPair->right_.hairpin_th_,
+				njh::conToStr(primerPair->right_.problems_, ";")
+			), "\t") << std::endl;
+		}
 	}
+	return 0;
+}
+
+
+int programWrapperRunner::parsePrimer3OutputToPossibleMipArms(const njh::progutils::CmdArgs & inputCommands){
+//	bfs::path extInput = "";
+//	bfs::path ligInput = "";
+//	uint32_t minLen = 100;
+//	uint32_t maxLen = 400;
+//	OutOptions outOpts(bfs::path(""));
+//	seqSetUp setUp(inputCommands);
+//	setUp.processVerbose();
+//	setUp.processDebug();
+//	setUp.processWritingOptions(outOpts);
+//	setUp.setOption(minLen, "--minLen", "Minimum length");
+//	setUp.setOption(maxLen, "--maxLen", "Maximum length");
+//	setUp.setOption(ligInput, "--ligInput", "input file for ligation arm", true);
+//	setUp.setOption(extInput, "--extInput", "input file for extension arm", true);
+//	setUp.finishSetUp(std::cout);
+//
+//
+//	OutputStream out(outOpts);
+//
+//	auto ligResults = Primer3Results::parsePrimer3OutputResults(ligInput);
+//	auto ligRegions = ligResults.front()->genPrimersRegions();
+//
+//	auto extResults = Primer3Results::parsePrimer3OutputResults(extInput);
+//	auto extRegions = extResults.front()->genPrimersRegions();
+//
+//	struct PrimerPair {
+//		PrimerPair(const std::shared_ptr<Primer3Results::Primer> & extPrimer,
+//				       const std::shared_ptr<Primer3Results::Primer> & ligPrimer) :
+//				extPrimer_(extPrimer), ligPrimer_(ligPrimer) {
+//		}
+//
+//		std::shared_ptr<Primer3Results::Primer> extPrimer_;
+//		std::shared_ptr<Primer3Results::Primer> ligPrimer_;
+//
+//		GenomicRegion genRegion(const std::string & seqId) const{
+//			MetaDataInName meta;
+//			meta.addMeta("ext", extPrimer_->name_);
+//			meta.addMeta("lig", ligPrimer_->name_);
+//			meta.addMeta("seqId", seqId);
+//			auto extRegion = extPrimer_->genRegion(seqId);
+//			auto ligRegion = ligPrimer_->genRegion(seqId);
+//			return GenomicRegion(meta.createMetaName(), seqId,
+//					std::min(extRegion.start_, ligRegion.start_),
+//					std::max(extRegion.end_, ligRegion.end_), extRegion.reverseSrand_);
+//		}
+//	};
+//	std::vector<PrimerPair> pairs;
+//	for(const auto & ext : extRegions){
+//		for(const auto & lig : ligRegions){
+//			if(!ext.second.reverseSrand_){
+//				if(lig.second.reverseSrand_){
+//					if(lig.second.start_ > ext.second.end_ &&
+//							lig.second.end_ - ext.second.start_ > minLen &&
+//							lig.second.end_ - ext.second.start_ < maxLen){
+//						pairs.emplace_back(PrimerPair{extResults.front()->primers_.at(ext.first),
+//																			   ligResults.front()->primers_.at(lig.first)});
+//					}
+//				}
+//			}else{
+//				if(!lig.second.reverseSrand_){
+//					if(ext.second.start_ > lig.second.end_ &&
+//							ext.second.end_ - lig.second.start_ > minLen &&
+//							ext.second.end_ - lig.second.start_ < maxLen){
+//						pairs.emplace_back(PrimerPair{extResults.front()->primers_.at(ext.first),
+//																			   ligResults.front()->primers_.at(lig.first)});
+//					}
+//				}
+//			}
+//		}
+//	}
+//	for(const auto & pair : pairs){
+//		auto region = pair.genRegion(extResults.front()->sequence_id_);
+//		out << region.genBedRecordCore().toDelimStr()
+//				<< "\t" << (region.reverseSrand_ ? pair.extPrimer_->originalSeq_ : pair.extPrimer_->fowardOrientationSeq_ )
+//				<< "\t" << (region.reverseSrand_ ? pair.ligPrimer_->fowardOrientationSeq_ : pair.ligPrimer_->originalSeq_)
+//				<< std::endl;
+//	}
 	return 0;
 }
 
 int programWrapperRunner::parsePrimer3OutputToJson(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path input = "STDIN";
+	bool ignoreUnexpected = false;
 	OutOptions outOpts(bfs::path(""));
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.processWritingOptions(outOpts);
 	setUp.setOption(input, "--input", "input file or STDIN for reading for standard in");
+	setUp.setOption(ignoreUnexpected, "--ignoreUnexpected", "ignore Unexpected");
+
 	setUp.finishSetUp(std::cout);
 
 
 	OutputStream out(outOpts);
 
-	auto results = Primer3Results::parsePrimer3OutputResults(input);
+	auto results = Primer3Results::parsePrimer3OutputResults(input, ignoreUnexpected);
 	out << njh::json::toJson(results) << std::endl;
 
 	return 0;
 }
 
-int programWrapperRunner::parsePrimer3OutputToBed(const njh::progutils::CmdArgs & inputCommands){
+int programWrapperRunner::parsePrimer3OutputToTable(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path input = "STDIN";
+	bool ignoreUnexpected = false;
 	OutOptions outOpts(bfs::path(""));
-	outOpts.outExtention_ = ".bed";
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.processWritingOptions(outOpts);
 	setUp.setOption(input, "--input", "input file or STDIN for reading for standard in");
+	setUp.setOption(ignoreUnexpected, "--ignoreUnexpected", "ignore Unexpected");
+
 	setUp.finishSetUp(std::cout);
 
 
 	OutputStream out(outOpts);
-	//addMetaBySampleName
-	auto results = Primer3Results::parsePrimer3OutputResults(input);
-	for(const auto & result : results){
-		for(const auto & primer : result->primers_){
-			out << result->sequence_id_
-					<< "\t" << primer.second->forwardOrientationPos_.start_
-					<< "\t" << primer.second->forwardOrientationPos_.start_ + primer.second->forwardOrientationPos_.size_
-					<< "\t" << primer.second->name_
-					<< "\t" << primer.second->forwardOrientationPos_.size_
-					<< "\t" << (primer.second->right_ ? '-' : '+')
-					<< std::endl;
+
+	auto results = Primer3Results::parsePrimer3OutputResults(input, ignoreUnexpected);
+
+	out << njh::conToStr(VecStr{"seqID", "primerPairName", "compl_any_th", "compl_end_th", "penalty", "product_size",
+	"left_name", "left_seq", "left_start", "left_end", "left_size", "left_end_stability", "left_gc_percent", "left_hairpin_th", "left_penalty", "left_self_any_th", "left_self_end_th", "left_tm", "left_tm_hairpin_diff", "left_problems",
+	"right_name", "right_seq", "right_start", "right_end", "right_size", "right_end_stability", "right_gc_percent", "right_hairpin_th", "right_penalty", "right_self_any_th", "right_self_end_th", "right_tm", "right_tm_hairpin_diff", "right_problems"
+	}, "\t") << std::endl;
+	for(const auto & res : results){
+		for(const auto & primerPair : res->primerPairs_){
+			out << njh::conToStr(toVecStr(
+				res->sequence_id_,
+				primerPair->name_,
+				primerPair->compl_any_th_,
+				primerPair->compl_end_th_,
+				primerPair->penalty_,
+				primerPair->product_size_,
+
+				primerPair->left_.name_,
+				primerPair->left_.seq_,
+				primerPair->left_.forwardOrientationPos_.start_,
+				primerPair->left_.forwardOrientationPos_.start_ + primerPair->left_.forwardOrientationPos_.size_,
+				primerPair->left_.forwardOrientationPos_.size_,
+				primerPair->left_.end_stability_,
+				primerPair->left_.gc_percent_,
+				primerPair->left_.hairpin_th_,
+				primerPair->left_.penalty_,
+				primerPair->left_.self_any_th_,
+				primerPair->left_.self_end_th_,
+				primerPair->left_.tm_,
+				primerPair->left_.tm_ - primerPair->left_.hairpin_th_,
+				njh::conToStr(primerPair->left_.problems_, ";"),
+
+				primerPair->right_.name_,
+				primerPair->right_.seq_,
+				primerPair->right_.forwardOrientationPos_.start_,
+				primerPair->right_.forwardOrientationPos_.start_ + primerPair->right_.forwardOrientationPos_.size_,
+				primerPair->right_.forwardOrientationPos_.size_,
+				primerPair->right_.end_stability_,
+				primerPair->right_.gc_percent_,
+				primerPair->right_.hairpin_th_,
+				primerPair->right_.penalty_,
+				primerPair->right_.self_any_th_,
+				primerPair->right_.self_end_th_,
+				primerPair->right_.tm_,
+				primerPair->right_.tm_ - primerPair->right_.hairpin_th_,
+				njh::conToStr(primerPair->right_.problems_, ";")
+			), "\t") << std::endl;
 		}
 	}
+	return 0;
+}
+
+
+
+
+int programWrapperRunner::parsePrimer3OutputToBed(const njh::progutils::CmdArgs & inputCommands){
+//	bfs::path input = "STDIN";
+//	OutOptions outOpts(bfs::path(""));
+//	outOpts.outExtention_ = ".bed";
+//	seqSetUp setUp(inputCommands);
+//	setUp.processVerbose();
+//	setUp.processDebug();
+//	setUp.processWritingOptions(outOpts);
+//	setUp.setOption(input, "--input", "input file or STDIN for reading for standard in");
+//	setUp.finishSetUp(std::cout);
+//
+//
+//	OutputStream out(outOpts);
+//	//addMetaBySampleName
+//	auto results = Primer3Results::parsePrimer3OutputResults(input);
+//	for(const auto & result : results){
+//		for(const auto & primer : result->primers_){
+//			out << result->sequence_id_
+//					<< "\t" << primer.second->forwardOrientationPos_.start_
+//					<< "\t" << primer.second->forwardOrientationPos_.start_ + primer.second->forwardOrientationPos_.size_
+//					<< "\t" << primer.second->name_
+//					<< "\t" << primer.second->forwardOrientationPos_.size_
+//					<< "\t" << (primer.second->right_ ? '-' : '+')
+//					<< std::endl;
+//		}
+//	}
 
 
 	return 0;

@@ -51,6 +51,9 @@ class programWrapperRunner : public njh::progutils::ProgramRunner {
 	static int runBwaOnTrimmomaticOutputPE(const njh::progutils::CmdArgs & inputCommands);
 
 
+	static int testPrimersWithPrimer3(const njh::progutils::CmdArgs & inputCommands);
+
+	static int parsePrimer3OutputToTable(const njh::progutils::CmdArgs & inputCommands);
 	static int parsePrimer3OutputToJson(const njh::progutils::CmdArgs & inputCommands);
 	static int parsePrimer3OutputToBed(const njh::progutils::CmdArgs & inputCommands);
 
