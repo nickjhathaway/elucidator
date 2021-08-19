@@ -30,13 +30,16 @@
 
 #include <SeekDeep/objects/TarAmpSetupUtils/PrimersAndMids.hpp>
 
+#include <njhseq/concurrency/PairwisePairFactory.hpp>
 
 namespace njhseq {
 
 
 
 int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs & inputCommands){
-
+	comparison allowablePairwisePrimerComps;
+	allowablePairwisePrimerComps.hqMismatches_ = 1;
+	bool getPairwisePrimerComps = false;
 	bfs::path bedFnp;
 	bfs::path twoBitFnp;
 	bfs::path primersFnp;
@@ -48,6 +51,8 @@ int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs &
 	setUp.setOption(twoBitFnp, "--twoBit", "two Bit file", true);
 	setUp.setOption(primersFnp, "--primers", "primers to test", true);
 	setUp.setOption(primer3ConfigPath, "--primer3ConfigPath", "primer3 Config Path", true);
+	setUp.setOption(getPairwisePrimerComps, "--getPairwisePrimerComps", "get Pairwise Primer Comps");
+	setUp.processComparison(allowablePairwisePrimerComps, "--pairwiseComp");
 
 
 	setUp.processDirectoryOutputName("testPrimers_TODAY", true);
@@ -58,6 +63,7 @@ int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs &
 
 	auto regions = getBeds(bedFnp);
 	PrimersAndMids primers(primersFnp);
+	primers.initPrimerDeterminator();
 	TwoBit::TwoBitFile tReader(twoBitFnp);
 
 	std::set<std::string> targetNames = njh::getSetOfMapKeys(primers.targets_);
@@ -92,12 +98,17 @@ int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs &
 
 
 
+	std::unordered_map<std::string, double> gcContentForRegion;
 	{
 		OutputStream primer3Input(njh::files::make_path(setUp.pars_.directoryName_, "primer3File.txt"));
 		primer3Input << "PRIMER_THERMODYNAMIC_PARAMETERS_PATH=" << primer3ConfigPath.string() << std::endl;
 
 		for(const auto & reg : regions){
 			auto seqTemplate = GenomicRegion(*reg).extractSeq(tReader);
+			DNABaseCounter counter;
+			counter.increase(seqTemplate.seq_);
+			counter.setFractions();
+			gcContentForRegion[reg->name_] = roundDecPlaces(counter.calcGcContent() * 100, 2);
 			std::string seqID = reg->name_;
 			uint32_t seqCount = 0;
 			for(const auto & fwd : njh::mapAt(primers.targets_, reg->name_).info_.fwds_){
@@ -129,7 +140,7 @@ int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs &
 
 	OutputStream primer3ResultsOut(njh::files::make_path(setUp.pars_.directoryName_, "primer3_results.tab.txt"));
 
-	primer3ResultsOut << njh::conToStr(VecStr{"seqID", "primerPairName", "compl_any_th", "compl_end_th", "penalty", "product_size",
+	primer3ResultsOut << njh::conToStr(VecStr{"seqID", "primerPairName", "compl_any_th", "compl_end_th", "penalty", "product_size", "product_gc_percent",
 	"left_name", "left_seq", "left_start", "left_end", "left_size", "left_end_stability", "left_gc_percent", "left_hairpin_th", "left_penalty", "left_self_any_th", "left_self_end_th", "left_tm", "left_tm_hairpin_diff", "left_problems",
 	"right_name", "right_seq", "right_start", "right_end", "right_size", "right_end_stability", "right_gc_percent", "right_hairpin_th", "right_penalty", "right_self_any_th", "right_self_end_th", "right_tm", "right_tm_hairpin_diff", "right_problems"
 	}, "\t") << std::endl;
@@ -138,10 +149,12 @@ int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs &
 			primer3ResultsOut << njh::conToStr(toVecStr(
 				res->sequence_id_,
 				primerPair->name_,
+
 				primerPair->compl_any_th_,
 				primerPair->compl_end_th_,
 				primerPair->penalty_,
 				primerPair->product_size_,
+				gcContentForRegion[res->sequence_id_],
 
 				primerPair->left_.name_,
 				primerPair->left_.seq_,
@@ -175,6 +188,99 @@ int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs &
 			), "\t") << std::endl;
 		}
 	}
+	if(getPairwisePrimerComps){
+
+	//  std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		auto maxPrimerLen = primers.pDeterminator_->getMaxPrimerSize();
+	//	std::cout << "maxPrimerLen: " << maxPrimerLen << std::endl;
+
+		aligner alnObject(maxPrimerLen, gapScoringParameters(5,1), substituteMatrix::createDegenScoreMatrixLessN(2, -2));
+		alnObject.countEndGaps_ = true;
+		PairwisePairFactory pFactor(primers.pDeterminator_->primers_.size());
+
+		auto primerNames = getVectorOfMapKeys(primers.pDeterminator_->primers_);
+
+		PairwisePairFactory::PairwisePair pair;
+
+		OutputStream primerPairWiseCompsOut(njh::files::make_path(setUp.pars_.directoryName_, "primerPairwiseComps.txt"));
+
+		primerPairWiseCompsOut << "target1\ttarget1Primer\ttarget2\ttarget2Primer\tscore\tidentities\tpass" << std::endl;
+
+		while(pFactor.setNextPair(pair)){
+			alnObject.alignCacheGlobalDiag(
+					primers.pDeterminator_->primers_.at(primerNames[pair.row_]).forwardPrimerRaw_,
+					primers.pDeterminator_->primers_.at(primerNames[pair.col_]).forwardPrimerRaw_);
+			alnObject.profilePrimerAlignment(
+					primers.pDeterminator_->primers_.at(primerNames[pair.row_]).forwardPrimerRaw_,
+					primers.pDeterminator_->primers_.at(primerNames[pair.col_]).forwardPrimerRaw_);
+			primerPairWiseCompsOut << primerNames[pair.row_] << "\t" << "forward-5-3" << "\t" << primerNames[pair.col_] << "\t" << "forward-5-3";
+			primerPairWiseCompsOut << "\t" << alnObject.comp_.distances_.eventBasedIdentity_ << "\t" <<  alnObject.comp_.distances_.query_.identities_ << "\t" << njh::boolToStr(allowablePairwisePrimerComps.passErrorProfile(alnObject.comp_))<< std::endl;
+
+			alnObject.alignCacheGlobalDiag(
+					primers.pDeterminator_->primers_.at(primerNames[pair.row_]).forwardPrimerRaw_,
+					seqUtil::reverseComplement(primers.pDeterminator_->primers_.at(primerNames[pair.col_]).forwardPrimerRaw_, "DNA"));
+			alnObject.profilePrimerAlignment(
+					primers.pDeterminator_->primers_.at(primerNames[pair.row_]).forwardPrimerRaw_,
+					seqUtil::reverseComplement(primers.pDeterminator_->primers_.at(primerNames[pair.col_]).forwardPrimerRaw_, "DNA"));
+			primerPairWiseCompsOut << primerNames[pair.row_] << "\t" << "forward-5-3" << "\t" << primerNames[pair.col_] << "\t" << "forward-3-5";
+			primerPairWiseCompsOut << "\t" << alnObject.comp_.distances_.eventBasedIdentity_ << "\t" <<  alnObject.comp_.distances_.query_.identities_ << "\t" << njh::boolToStr(allowablePairwisePrimerComps.passErrorProfile(alnObject.comp_)) << std::endl;
+
+			alnObject.alignCacheGlobalDiag(
+					primers.pDeterminator_->primers_.at(primerNames[pair.row_]).forwardPrimerRaw_,
+					primers.pDeterminator_->primers_.at(primerNames[pair.col_]).reversePrimerRaw_);
+			alnObject.profilePrimerAlignment(
+					primers.pDeterminator_->primers_.at(primerNames[pair.row_]).forwardPrimerRaw_,
+					primers.pDeterminator_->primers_.at(primerNames[pair.col_]).reversePrimerRaw_);
+			primerPairWiseCompsOut << primerNames[pair.row_] << "\t" << "forward-5-3" << "\t" << primerNames[pair.col_] << "\t" << "reverse-5-3";
+			primerPairWiseCompsOut << "\t" << alnObject.comp_.distances_.eventBasedIdentity_ << "\t" <<  alnObject.comp_.distances_.query_.identities_ << "\t" << njh::boolToStr(allowablePairwisePrimerComps.passErrorProfile(alnObject.comp_)) << std::endl;
+
+			alnObject.alignCacheGlobalDiag(
+					primers.pDeterminator_->primers_.at(primerNames[pair.row_]).forwardPrimerRaw_,
+					seqUtil::reverseComplement(primers.pDeterminator_->primers_.at(primerNames[pair.col_]).reversePrimerRaw_, "DNA"));
+			alnObject.profilePrimerAlignment(
+					primers.pDeterminator_->primers_.at(primerNames[pair.row_]).forwardPrimerRaw_,
+					seqUtil::reverseComplement(primers.pDeterminator_->primers_.at(primerNames[pair.col_]).reversePrimerRaw_, "DNA"));
+			primerPairWiseCompsOut << primerNames[pair.row_] << "\t" << "forward-5-3" << "\t" << primerNames[pair.col_] << "\t" << "reverse-3-5";
+			primerPairWiseCompsOut << "\t" << alnObject.comp_.distances_.eventBasedIdentity_ << "\t" <<  alnObject.comp_.distances_.query_.identities_ << "\t" << njh::boolToStr(allowablePairwisePrimerComps.passErrorProfile(alnObject.comp_)) << std::endl;
+
+			alnObject.alignCacheGlobalDiag(
+					primers.pDeterminator_->primers_.at(primerNames[pair.row_]).reversePrimerRaw_,
+					primers.pDeterminator_->primers_.at(primerNames[pair.col_]).forwardPrimerRaw_);
+			alnObject.profilePrimerAlignment(
+					primers.pDeterminator_->primers_.at(primerNames[pair.row_]).reversePrimerRaw_,
+					primers.pDeterminator_->primers_.at(primerNames[pair.col_]).forwardPrimerRaw_);
+			primerPairWiseCompsOut << primerNames[pair.row_] << "\t" << "reverse-5-3" << "\t" << primerNames[pair.col_] << "\t" << "forward-5-3";
+			primerPairWiseCompsOut << "\t" << alnObject.comp_.distances_.eventBasedIdentity_ << "\t" <<  alnObject.comp_.distances_.query_.identities_ << "\t" << njh::boolToStr(allowablePairwisePrimerComps.passErrorProfile(alnObject.comp_)) << std::endl;
+
+			alnObject.alignCacheGlobalDiag(
+					primers.pDeterminator_->primers_.at(primerNames[pair.row_]).reversePrimerRaw_,
+					seqUtil::reverseComplement(primers.pDeterminator_->primers_.at(primerNames[pair.col_]).forwardPrimerRaw_, "DNA"));
+			alnObject.profilePrimerAlignment(
+					primers.pDeterminator_->primers_.at(primerNames[pair.row_]).reversePrimerRaw_,
+					seqUtil::reverseComplement(primers.pDeterminator_->primers_.at(primerNames[pair.col_]).forwardPrimerRaw_, "DNA"));
+			primerPairWiseCompsOut << primerNames[pair.row_] << "\t" << "reverse-5-3" << "\t" << primerNames[pair.col_] << "\t" << "forward-3-5";
+			primerPairWiseCompsOut << "\t" << alnObject.comp_.distances_.eventBasedIdentity_ << "\t" <<  alnObject.comp_.distances_.query_.identities_ << "\t" << njh::boolToStr(allowablePairwisePrimerComps.passErrorProfile(alnObject.comp_)) << std::endl;
+
+			alnObject.alignCacheGlobalDiag(
+					primers.pDeterminator_->primers_.at(primerNames[pair.row_]).reversePrimerRaw_,
+					primers.pDeterminator_->primers_.at(primerNames[pair.col_]).reversePrimerRaw_);
+			alnObject.profilePrimerAlignment(
+					primers.pDeterminator_->primers_.at(primerNames[pair.row_]).reversePrimerRaw_,
+					primers.pDeterminator_->primers_.at(primerNames[pair.col_]).reversePrimerRaw_);
+			primerPairWiseCompsOut << primerNames[pair.row_] << "\t" << "reverse-5-3" << "\t" << primerNames[pair.col_] << "\t" << "reverse-5-3";
+			primerPairWiseCompsOut << "\t" << alnObject.comp_.distances_.eventBasedIdentity_ << "\t" <<  alnObject.comp_.distances_.query_.identities_ << "\t" << njh::boolToStr(allowablePairwisePrimerComps.passErrorProfile(alnObject.comp_)) << std::endl;
+
+			alnObject.alignCacheGlobalDiag(
+					primers.pDeterminator_->primers_.at(primerNames[pair.row_]).reversePrimerRaw_,
+					seqUtil::reverseComplement(primers.pDeterminator_->primers_.at(primerNames[pair.col_]).reversePrimerRaw_, "DNA"));
+			alnObject.profilePrimerAlignment(
+					primers.pDeterminator_->primers_.at(primerNames[pair.row_]).reversePrimerRaw_,
+					seqUtil::reverseComplement(primers.pDeterminator_->primers_.at(primerNames[pair.col_]).reversePrimerRaw_, "DNA"));
+			primerPairWiseCompsOut << primerNames[pair.row_] << "\t" << "reverse-5-3" << "\t" << primerNames[pair.col_] << "\t" << "reverse-3-5";
+			primerPairWiseCompsOut << "\t" << alnObject.comp_.distances_.eventBasedIdentity_ << "\t" <<  alnObject.comp_.distances_.query_.identities_ << "\t" << njh::boolToStr(allowablePairwisePrimerComps.passErrorProfile(alnObject.comp_)) << std::endl;
+		}
+	}
+
 	return 0;
 }
 

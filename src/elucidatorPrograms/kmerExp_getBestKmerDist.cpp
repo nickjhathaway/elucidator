@@ -38,6 +38,7 @@ int kmerExpRunner::getBestKmerDist(const njh::progutils::CmdArgs & inputCommands
 	uint32_t kmerLength = 7;
 	uint32_t numThreads = 1;
 	bool getRevComp = false;
+	bool doNotSkipSameName = false;
 	OutOptions outOpts(bfs::path(""), ".tab.txt");
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -45,6 +46,10 @@ int kmerExpRunner::getBestKmerDist(const njh::progutils::CmdArgs & inputCommands
 	setUp.processReadInNames(true);
 	setUp.processRefFilename(true);
 	setUp.processWritingOptions(outOpts);
+
+
+	setUp.setOption(doNotSkipSameName, "--doNotSkipSameName", "do Not Skip Same Name");
+
 	setUp.setOption(kmerLength, "--kmerLength", "kmer Length");
 	setUp.setOption(getRevComp, "--getRevComp", "Compare Reverse Complement as well");
 
@@ -62,7 +67,7 @@ int kmerExpRunner::getBestKmerDist(const njh::progutils::CmdArgs & inputCommands
 	std::mutex outMut;
 	std::function<void()> getBestDist = [&reader,&out,&outMut,
 																			 &getRevComp,&kmerLength,
-																			 &refSeqs](){
+																			 &refSeqs, &doNotSkipSameName](){
 		seqInfo seq;
 		while(reader.readNextReadLock(seq)){
 
@@ -72,6 +77,9 @@ int kmerExpRunner::getBestKmerDist(const njh::progutils::CmdArgs & inputCommands
 			std::string name = seq.name_;
 			for(const auto pos : iter::range(refSeqs.size())){
 				const auto & refSeq = refSeqs[pos];
+				if(!doNotSkipSameName && refSeq->seqBase_.name_ == name){
+					continue;
+				}
 				auto dist = refSeq->kInfo_.compareKmers(kInfo);
 				if(dist.second > bestKmerDist){
 					bestKmerDist = dist.second;
