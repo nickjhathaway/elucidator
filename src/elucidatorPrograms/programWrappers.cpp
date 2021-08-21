@@ -68,6 +68,7 @@ programWrapperRunner::programWrapperRunner()
 						addFunc("runHmmsearch", runHmmsearch, false),
 						addFunc("testPrimersWithPrimer3", testPrimersWithPrimer3, false),
 						addFunc("parsePrimer3OutputToTable", parsePrimer3OutputToTable, false),
+						addFunc("genPossiblePrimersWithPrimer3", genPossiblePrimersWithPrimer3, false),
            },//
           "programWrapper") {}
 int programWrapperRunner::generatingPrime3TemplatesBasedOnMALN(const njh::progutils::CmdArgs & inputCommands) {
