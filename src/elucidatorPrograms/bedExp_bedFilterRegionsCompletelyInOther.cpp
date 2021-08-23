@@ -103,11 +103,13 @@ int bedExpRunner::bedKeepRegionsCompletelyInOther(const njh::progutils::CmdArgs 
 					overlappingRegions.emplace_back(inter);
 				}
 			}
-			VecStr overlappingRegonsNames;
-			for(const auto & reg : overlappingRegions){
-				overlappingRegonsNames.emplace_back(reg->name_);
+			if(!overlappingRegions.empty()){
+				VecStr overlappingRegonsNames;
+				for(const auto & reg : overlappingRegions){
+					overlappingRegonsNames.emplace_back(reg->name_);
+				}
+				out << reg->toDelimStrWithExtra() << "\t" << njh::conToStr(overlappingRegonsNames, ",")<< "\n";
 			}
-			out << reg->toDelimStrWithExtra() << "\t" << njh::conToStr(overlappingRegonsNames, ",")<< "\n";
 		}
 	}
 

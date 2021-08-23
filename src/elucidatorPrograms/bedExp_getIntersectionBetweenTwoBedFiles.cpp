@@ -26,12 +26,16 @@ int bedExpRunner::getIntersectionBetweenTwoBedFiles(const njh::progutils::CmdArg
 	bfs::path bed2 = "";
 	uint32_t minOverlap = 1;
 	bool doNotSkipSameName = false;
+	bool mustMatchStrand = false;
 	seqSetUp setUp(inputCommands);
 	setUp.description_ = "Get regions that overlap between bed regions and output sub regions that only appear in both";
 	setUp.setOption(bed1, "--bed1", "bed1", true);
 	setUp.setOption(bed2, "--bed2", "bed2", true);
 	setUp.setOption(minOverlap, "--minOverlap", "minOverlap", njh::progutils::ProgramSetUp::CheckCase::NONZERO);
 	setUp.setOption(doNotSkipSameName, "--doNotSkipSameName", "do Not Skip Same Name regions, regions with same name are skipped by default so same bed file can be given to get distance from");
+
+	setUp.setOption(mustMatchStrand, "--mustMatchStrand", "When intersecting must match strand between regions, if this option is not used the strand will default to the --bed1 strand");
+
 
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
@@ -61,7 +65,7 @@ int bedExpRunner::getIntersectionBetweenTwoBedFiles(const njh::progutils::CmdArg
 			if(compRegion->name_ == inputRegion->name_ && !doNotSkipSameName){
 				continue;
 			}
-			if(compRegion->strand_ != inputRegion->strand_){
+			if(mustMatchStrand && compRegion->strand_ != inputRegion->strand_){
 				continue;
 			}
 			if(inputRegion->overlaps(*compRegion, minOverlap)){
@@ -96,6 +100,7 @@ int bedExpRunner::removeSubRegionsFromBedFile(const njh::progutils::CmdArgs & in
 	bfs::path bed1 = "";
 	bfs::path bed2 = "";
 	uint32_t minOverlap = 1;
+	//bool useStrand = false;
 	bool doNotSkipSameName = false;
 	seqSetUp setUp(inputCommands);
 	setUp.description_ = "Intersect Bed regions and remove the regions from the interesting bed";
@@ -131,9 +136,9 @@ int bedExpRunner::removeSubRegionsFromBedFile(const njh::progutils::CmdArgs & in
 			if(compRegion->name_ == inputRegion->name_ && !doNotSkipSameName){
 				continue;
 			}
-			if(compRegion->strand_ != inputRegion->strand_){
-				continue;
-			}
+//			if(compRegion->strand_ != inputRegion->strand_){
+//				continue;
+//			}
 			if(inputRegion->overlaps(*compRegion, minOverlap)){
 				overlappingRegions.emplace_back(compRegion);
 			}

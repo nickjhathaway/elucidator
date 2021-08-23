@@ -40,7 +40,7 @@ int programWrapperRunner::genPossiblePrimersWithPrimer3(const njh::progutils::Cm
 
 	uint32_t PRIMER_MAX_SIZE = 35;
 	uint32_t PRIMER_MIN_SIZE = 18;
-	uint32_t PRIMER_OPT_SIZE = 30;
+	uint32_t PRIMER_OPT_SIZE = 33;
 	uint32_t minSize = 175;
 	uint32_t maxSize = 290;
 	uint32_t PRIMER_NUM_RETURN = 50;
@@ -67,7 +67,7 @@ int programWrapperRunner::genPossiblePrimersWithPrimer3(const njh::progutils::Cm
 	setUp.setOption(task, "--task", "primer picking task, examples include:generic(default), pick_sequencing_primers, pick_primer_list");
 
 
-	uint32_t extendRegion = std::max(PRIMER_MAX_SIZE + 5, maxSize);
+	uint32_t extendRegion = std::max<uint32_t>(PRIMER_MAX_SIZE + 5, std::round(maxSize * 1.5));
 
 
 
@@ -146,7 +146,7 @@ int programWrapperRunner::genPossiblePrimersWithPrimer3(const njh::progutils::Cm
 					}
 				}
 			}
-			BedUtility::extendLeftRight(*reg, extendRegion, extendRegion, chromLens.at(reg->chrom_));
+			BedUtility::extendLeftRight(*reg, extendRegion, extendRegion, njh::mapAt(chromLens, reg->chrom_) );
 
 			inputRegionsExpanded << reg->toDelimStrWithExtra() << std::endl;
 			nameToRegion[reg->name_] = reg;
@@ -169,7 +169,17 @@ int programWrapperRunner::genPossiblePrimersWithPrimer3(const njh::progutils::Cm
 						continue;
 					}
 					if(reg->overlaps(*inter, 1)){
-						excludeRegions_withinRegion.emplace_back(*inter);
+						//check first if we already have this exact region for exclusion, this can happen if if input generated from variant calls and there is more than biallelic SNPs etc
+						bool alreadyHave = false;
+						for(const auto & already : excludeRegions_withinRegion){
+							if(already.genUIDFromCoords() == inter->genUIDFromCoords()){
+								alreadyHave = true;
+								break;
+							}
+						}
+						if(!alreadyHave){
+							excludeRegions_withinRegion.emplace_back(*inter);
+						}
 					}
 				}
 				//book end the exclusion regions
@@ -179,7 +189,7 @@ int programWrapperRunner::genPossiblePrimersWithPrimer3(const njh::progutils::Cm
 				}
 			}
 
-			//convert to regions releative to the template region
+			//convert to regions relative to the template region
 			for(const auto & roi : regionsOfInterest_withinRegion){
 				auto modRegion = roi;
 				modRegion.chromStart_ = modRegion.chromStart_ - reg->chromStart_;
@@ -201,6 +211,7 @@ int programWrapperRunner::genPossiblePrimersWithPrimer3(const njh::progutils::Cm
 			defaultPars << "PRIMER_FIRST_BASE_INDEX=0" << std::endl;
 			defaultPars << "PRIMER_TASK=" << task<< std::endl;
 			defaultPars << "PRIMER_SEQUENCING_LEAD=5" << std::endl;
+			defaultPars << "PRIMER_EXPLAIN_FLAG=1" << std::endl;
 			defaultPars << "PRIMER_PRODUCT_SIZE_RANGE=" << minSize << "-" << maxSize << std::endl;
 			defaultPars << "PRIMER_NUM_RETURN=" << PRIMER_NUM_RETURN << std::endl;
 			defaultPars << "PRIMER_MAX_SIZE=" << PRIMER_MAX_SIZE << std::endl;
@@ -239,9 +250,17 @@ int programWrapperRunner::genPossiblePrimersWithPrimer3(const njh::progutils::Cm
 	auto results = Primer3Results::parsePrimer3OutputResults(primer3ResultsFnp, true);
 
 	OutputStream primer3ResultsOut(njh::files::make_path(setUp.pars_.directoryName_, "primer3_results.tab.txt"));
+
 	OutputStream primer3ResultsPrimerLocs(njh::files::make_path(setUp.pars_.directoryName_, "primer3_results_primerLocs.bed"));
 	OutputStream primer3ResultsInsertLocs(njh::files::make_path(setUp.pars_.directoryName_, "primer3_results_insertLocs.bed"));
-	OutputStream primer3ResultsAmpLocs(njh::files::make_path(setUp.pars_.directoryName_, "primer3_results_ampLocs.bed"));
+	OutputStream primer3ResultsAmpLocs   (njh::files::make_path(setUp.pars_.directoryName_, "primer3_results_ampLocs.bed"));
+	auto bestDir = njh::files::make_path(setUp.pars_.directoryName_, "bestPrimerPerTarget");
+	njh::files::makeDir(njh::files::MkdirPar{bestDir});
+	OutputStream best_primer3ResultsPrimerLocs(njh::files::make_path(bestDir, "primer3_results_primerLocs.bed"));
+	OutputStream best_primer3ResultsInsertLocs(njh::files::make_path(bestDir, "primer3_results_insertLocs.bed"));
+	OutputStream best_primer3ResultsAmpLocs   (njh::files::make_path(bestDir, "primer3_results_ampLocs.bed"));
+	OutputStream best_primersTable   (njh::files::make_path(bestDir, "primer3_results_primers.tab.txt"));
+	best_primersTable << "target\tforward\treverse" << std::endl;
 
 	primer3ResultsOut << njh::conToStr(VecStr{"seqID", "chrom", "ampStart", "ampEnd", "primerPairName", "compl_any_th", "compl_end_th", "pair_penalty", "product_size", "product_gc_percent",
 	"left_name", "left_seq", "left_start", "left_end", "left_size", "left_end_stability", "left_gc_percent", "left_hairpin_th", "left_penalty", "left_self_any_th", "left_self_end_th", "left_tm", "left_tm_hairpin_diff", "left_problems",
@@ -250,11 +269,20 @@ int programWrapperRunner::genPossiblePrimersWithPrimer3(const njh::progutils::Cm
 	VecStr noTargetsFor;
 	std::stringstream noTargetsBed;
 
+	uint32_t maxChromLen = 0;
+	for(const auto & chrom : chromLens){
+		if(chrom.second > maxChromLen){
+			maxChromLen = chrom.second;
+		}
+	}
+
+	std::vector<std::shared_ptr<njhseq::Primer3Results::PrimerPair>> allBestPrimers;
+	std::unordered_set<std::string> alreadyHaveUID;
 	for(const auto & res : results){
 		const auto & region = nameToRegion[res->sequence_id_];
+		bool targeted = !res->sequence_target_.empty();
 		if(0 == res->primer_pair_num_returned_){
 			//should log which attempts had 0 returned
-			bool targeted = !res->sequence_target_.empty();
 			std::string targetedName = "";
 			if (targeted) {
 				targetedName = njh::pasteAsStr(region->chrom_, "-",
@@ -269,6 +297,124 @@ int programWrapperRunner::genPossiblePrimersWithPrimer3(const njh::progutils::Cm
 						<< "\t" << "+" << std::endl;
 			}
 			continue;
+		}
+
+		if(targeted){
+			auto bestPrimer = res->getLowestPenaltyPair();
+			bool passBestPrimer = true;
+			for(const auto & bestPrimerAlready :allBestPrimers){
+				if(bestPrimer->left_.seq_ == bestPrimerAlready->left_.seq_ &&
+					bestPrimer->right_.seq_ == bestPrimerAlready->right_.seq_){
+					passBestPrimer = false;
+					break;
+				}
+			}
+			if(passBestPrimer){
+				allBestPrimers.emplace_back(std::make_shared<njhseq::Primer3Results::PrimerPair>(*bestPrimer));
+			}else{
+				continue;
+			}
+			GenomicRegion insertRegion(
+					res->sequence_id_,
+					region->chrom_,
+					region->chromStart_ + bestPrimer->left_.forwardOrientationPos_.start_ + bestPrimer->left_.forwardOrientationPos_.size_,
+					region->chromStart_ + bestPrimer->right_.forwardOrientationPos_.start_,
+					false);
+			insertRegion.uid_ = njh::pasteAsStr(insertRegion.chrom_, "-",
+					njh::leftPadNumStr<size_t>(insertRegion.start_, maxChromLen), "-",
+					njh::leftPadNumStr<size_t>(insertRegion.end_, maxChromLen));
+			uint32_t uidCount = 0;
+			while(njh::in(insertRegion.uid_, alreadyHaveUID)){
+				++uidCount;
+				insertRegion.uid_ = njh::pasteAsStr(insertRegion.chrom_, "-",
+						njh::leftPadNumStr<size_t>(insertRegion.start_, maxChromLen), "-",
+						njh::leftPadNumStr<size_t>(insertRegion.end_, maxChromLen), "--", uidCount);
+			}
+			best_primer3ResultsInsertLocs << insertRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+			GenomicRegion ampRegion(insertRegion.uid_,
+					region->chrom_,
+					region->chromStart_ + bestPrimer->getStart(),
+					region->chromStart_ + bestPrimer->getEnd(),
+					false);
+			best_primer3ResultsAmpLocs << ampRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+
+			GenomicRegion leftPrimerRegion(
+					insertRegion.uid_ + "-forwardPrimer",
+					region->chrom_,
+					region->chromStart_ + bestPrimer->left_.forwardOrientationPos_.start_,
+					region->chromStart_ + bestPrimer->left_.forwardOrientationPos_.start_ + bestPrimer->left_.forwardOrientationPos_.size_,
+					false);
+			GenomicRegion rightPrimerRegion(
+					insertRegion.uid_ + "-reversePrimer",
+					region->chrom_,
+					region->chromStart_ + bestPrimer->right_.forwardOrientationPos_.start_,
+					region->chromStart_ + bestPrimer->right_.forwardOrientationPos_.start_ + bestPrimer->right_.forwardOrientationPos_.size_,
+					true);
+			best_primer3ResultsPrimerLocs << leftPrimerRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+			best_primer3ResultsPrimerLocs << rightPrimerRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+
+			best_primersTable << insertRegion.uid_
+					<< "\t" << bestPrimer->left_.seq_
+					<< "\t" << bestPrimer->right_.seq_ << std::endl;
+		}else{
+			auto bestPrimers = res->getLowestPenaltyNonOverlappingPairs();
+			for(const auto & bestPrimer : bestPrimers){
+				bool passBestPrimer = true;
+				for(const auto & bestPrimerAlready :allBestPrimers){
+					if(bestPrimer->left_.seq_ == bestPrimerAlready->left_.seq_ &&
+						bestPrimer->right_.seq_ == bestPrimerAlready->right_.seq_){
+						passBestPrimer = false;
+						break;
+					}
+				}
+				if(passBestPrimer){
+					allBestPrimers.emplace_back(std::make_shared<njhseq::Primer3Results::PrimerPair>(*bestPrimer));
+				}else{
+					continue;
+				}
+				GenomicRegion insertRegion(
+						res->sequence_id_,
+						region->chrom_,
+						region->chromStart_ + bestPrimer->left_.forwardOrientationPos_.start_ + bestPrimer->left_.forwardOrientationPos_.size_,
+						region->chromStart_ + bestPrimer->right_.forwardOrientationPos_.start_,
+						false);
+				insertRegion.uid_ = njh::pasteAsStr(insertRegion.chrom_, "-",
+						njh::leftPadNumStr<size_t>(insertRegion.start_, maxChromLen), "-",
+						njh::leftPadNumStr<size_t>(insertRegion.end_, maxChromLen));
+				uint32_t uidCount = 0;
+				while(njh::in(insertRegion.uid_, alreadyHaveUID)){
+					++uidCount;
+					insertRegion.uid_ = njh::pasteAsStr(insertRegion.chrom_, "-",
+							njh::leftPadNumStr<size_t>(insertRegion.start_, maxChromLen), "-",
+							njh::leftPadNumStr<size_t>(insertRegion.end_, maxChromLen), "--", uidCount);
+				}
+				best_primer3ResultsInsertLocs << insertRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+				GenomicRegion ampRegion(insertRegion.uid_,
+						region->chrom_,
+						region->chromStart_ + bestPrimer->getStart(),
+						region->chromStart_ + bestPrimer->getEnd(),
+						false);
+				best_primer3ResultsAmpLocs << ampRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+
+				GenomicRegion leftPrimerRegion(
+						insertRegion.uid_ + "-forwardPrimer",
+						region->chrom_,
+						region->chromStart_ + bestPrimer->left_.forwardOrientationPos_.start_,
+						region->chromStart_ + bestPrimer->left_.forwardOrientationPos_.start_ + bestPrimer->left_.forwardOrientationPos_.size_,
+						false);
+				GenomicRegion rightPrimerRegion(
+						insertRegion.uid_ + "-reversePrimer",
+						region->chrom_,
+						region->chromStart_ + bestPrimer->right_.forwardOrientationPos_.start_,
+						region->chromStart_ + bestPrimer->right_.forwardOrientationPos_.start_ + bestPrimer->right_.forwardOrientationPos_.size_,
+						true);
+				best_primer3ResultsPrimerLocs << leftPrimerRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+				best_primer3ResultsPrimerLocs << rightPrimerRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+
+				best_primersTable << insertRegion.uid_
+						<< "\t" << bestPrimer->left_.seq_
+						<< "\t" << bestPrimer->right_.seq_ << std::endl;
+			}
 		}
 
 		for(const auto & primerPair : res->primerPairs_){
@@ -354,6 +500,7 @@ int programWrapperRunner::genPossiblePrimersWithPrimer3(const njh::progutils::Cm
 						<< "\t" << primerPair->right_.forwardOrientationPos_.size_
 						<< "\t" << "-" << std::endl;
 			}
+
 			primer3ResultsOut << njh::conToStr(toVecStr(
 				res->sequence_id_ + (targeted ? "--" + targetedName : ""),
 				region->chrom_,
@@ -367,7 +514,7 @@ int programWrapperRunner::genPossiblePrimersWithPrimer3(const njh::progutils::Cm
 				primerPair->compl_end_th_,
 				primerPair->penalty_,
 				primerPair->product_size_,
-				counter.calcGcContent(),
+				roundDecPlaces(counter.calcGcContent() * 100, 2),
 				primerPair->left_.name_,
 				primerPair->left_.seq_,
 				region->chromStart_ + primerPair->left_.forwardOrientationPos_.start_,
@@ -404,6 +551,60 @@ int programWrapperRunner::genPossiblePrimersWithPrimer3(const njh::progutils::Cm
 		OutputStream noResultsForRegions(njh::files::make_path(setUp.pars_.directoryName_, "noTargetsForRegionsOfInterest.bed"));
 		noResultsForRegions << noTargetsBed.str();
 	}
+
+	OutputStream primer3ResultsSummaryOut(
+			njh::files::make_path(setUp.pars_.directoryName_,
+					"primer3_results_summary.tab.txt"));
+	primer3ResultsSummaryOut << njh::conToStr(VecStr { "seqID", "chrom", "start",
+			"end", "len", "targeted", "targetedID", "targetedChrom", "targetedStart",
+			"targetedEnd", "targetedSize", "excludedRegions", "excludedRegionsIDs", "primerTask",
+			"pairNumReturned", "leftNumReturned", "rightNumReurned", "pairExplained",
+			"leftExplained", "rightExplained", "warnings" }, "\t") << std::endl;
+
+	for (const auto &res : results) {
+		const auto &region = nameToRegion[res->sequence_id_];
+		bool targeted = !res->sequence_target_.empty();
+		std::string targetedName = "";
+		if (targeted) {
+			targetedName = njh::pasteAsStr(region->chrom_, "-",
+					region->chromStart_ + res->sequence_target_.front().start_, "-",
+					region->chromStart_ + res->sequence_target_.front().start_
+							+ res->sequence_target_.front().size_);
+		}
+		std::string seqExcludedRegions;
+		std::string seqExcludedRegionsIDs;
+		for (const auto &exclude : res->sequence_excluded_region_) {
+			std::string excludeRel = njh::pasteAsStr(exclude.start_, exclude.size_,";");
+			std::string excludeID = njh::pasteAsStr(region->chrom_, "-",
+					region->chromStart_ + exclude.start_, "-",
+					region->chromStart_ + exclude.start_ + exclude.size_, ";");
+			seqExcludedRegions += excludeRel;
+			seqExcludedRegionsIDs += excludeID;
+		}
+		primer3ResultsSummaryOut << njh::conToStr(toVecStr(
+			res->sequence_id_,
+			region->chrom_,
+			region->chromStart_,
+			region->chromEnd_,
+			region->length(),
+			njh::boolToStr(targeted),
+			(targeted ? targetedName: std::string("NA")),
+			region->chrom_,
+			region->chromStart_ + res->sequence_target_.front().start_,
+			region->chromStart_ + res->sequence_target_.front().start_ + res->sequence_target_.front().size_,
+			res->sequence_target_.front().size_,
+			seqExcludedRegions,
+			seqExcludedRegionsIDs,
+			res->primer_task_,
+			res->primer_pair_num_returned_,
+			res->primer_left_num_returned_,
+			res->primer_right_num_returned_,
+			res->primer_pair_explain_,
+			res->primer_left_explain_,
+			res->primer_right_explain_,
+			njh::conToStr(res->warnings_, ";")
+		), "\t") << std::endl;
+	}
 	return 0;
 }
 
@@ -413,6 +614,11 @@ int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs &
 	comparison allowablePairwisePrimerComps;
 	allowablePairwisePrimerComps.hqMismatches_ = 1;
 	bool getPairwisePrimerComps = false;
+	uint32_t PRIMER_MAX_SIZE = 35;
+	uint32_t PRIMER_MIN_SIZE = 18;
+	uint32_t PRIMER_OPT_SIZE = 33;
+	uint32_t PRIMER_OPT_GC_PERCENT = 50;
+
 	bfs::path bedFnp;
 	bfs::path twoBitFnp;
 	bfs::path primersFnp;
@@ -420,6 +626,11 @@ int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs &
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
+	setUp.setOption(PRIMER_MAX_SIZE, "--PRIMER_MAX_SIZE", "PRIMER MAX SIZE");
+	setUp.setOption(PRIMER_MIN_SIZE, "--PRIMER_MIN_SIZE", "PRIMER MIN SIZE");
+	setUp.setOption(PRIMER_OPT_SIZE, "--PRIMER_OPT_SIZE", "PRIMER OPT SIZE");
+	setUp.setOption(PRIMER_OPT_GC_PERCENT, "--PRIMER_OPT_GC_PERCENT", "PRIMER OPT GC PERCENT");
+
 	setUp.setOption(bedFnp, "--bedFnp", "genomic locations", true);
 	setUp.setOption(twoBitFnp, "--twoBit", "two Bit file", true);
 	setUp.setOption(primersFnp, "--primers", "primers to test", true);
@@ -498,7 +709,13 @@ int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs &
 					primer3Input << "PRIMER_PICK_ANYWAY=1" << std::endl;
 					primer3Input << "PRIMER_TASK=check_primers" << std::endl;
 					primer3Input << "PRIMER_FIRST_BASE_INDEX=0" << std::endl;
+					primer3Input << "PRIMER_EXPLAIN_FLAG=1" << std::endl;
+
 					primer3Input << "PRIMER_PRODUCT_SIZE_RANGE=" << len(seqTemplate) << "-" << len(seqTemplate ) + 1 << std::endl;
+					primer3Input << "PRIMER_OPT_GC_PERCENT=" << PRIMER_OPT_GC_PERCENT << std::endl;
+					primer3Input << "PRIMER_MAX_SIZE=" << PRIMER_MAX_SIZE << std::endl;
+					primer3Input << "PRIMER_MIN_SIZE=" << PRIMER_MIN_SIZE << std::endl;
+					primer3Input << "PRIMER_OPT_SIZE=" << PRIMER_OPT_SIZE << std::endl;
 					primer3Input << "="<< std::endl;
 					++seqCount;
 				}
@@ -515,12 +732,17 @@ int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs &
 
 	OutputStream primer3ResultsOut(njh::files::make_path(setUp.pars_.directoryName_, "primer3_results.tab.txt"));
 
-	primer3ResultsOut << njh::conToStr(VecStr{"seqID", "primerPairName", "compl_any_th", "compl_end_th", "penalty", "product_size", "product_gc_percent",
-	"left_name", "left_seq", "left_start", "left_end", "left_size", "left_end_stability", "left_gc_percent", "left_hairpin_th", "left_penalty", "left_self_any_th", "left_self_end_th", "left_tm", "left_tm_hairpin_diff", "left_problems",
-	"right_name", "right_seq", "right_start", "right_end", "right_size", "right_end_stability", "right_gc_percent", "right_hairpin_th", "right_penalty", "right_self_any_th", "right_self_end_th", "right_tm", "right_tm_hairpin_diff", "right_problems"
+	primer3ResultsOut << njh::conToStr(VecStr{"seqID", "primerPairName", "compl_any_th", "compl_end_th", "pair_penalty", "pair_penalty_noSize", "product_size", "product_gc_percent",
+	"left_name", "left_seq", "left_start", "left_end", "left_size", "left_end_stability", "left_gc_percent", "left_hairpin_th", "left_penalty", "left_penalty_noSize", "left_self_any_th", "left_self_end_th", "left_tm", "left_tm_hairpin_diff", "left_problems",
+	"right_name", "right_seq", "right_start", "right_end", "right_size", "right_end_stability", "right_gc_percent", "right_hairpin_th", "right_penalty","right_penalty_noSize", "right_self_any_th", "right_self_end_th", "right_tm", "right_tm_hairpin_diff", "right_problems"
 	}, "\t") << std::endl;
 	for(const auto & res : results){
 		for(const auto & primerPair : res->primerPairs_){
+
+			double leftPenaltyWithOutSize = primerPair->left_.penalty_ - uAbsdiff(primerPair->left_.forwardOrientationPos_.size_, PRIMER_OPT_SIZE);
+			double rightPenaltyWithOutSize = primerPair->right_.penalty_ - uAbsdiff(primerPair->right_.forwardOrientationPos_.size_, PRIMER_OPT_SIZE);
+			double pairPenaltyWithOutSize = leftPenaltyWithOutSize + rightPenaltyWithOutSize;
+
 			primer3ResultsOut << njh::conToStr(toVecStr(
 				res->sequence_id_,
 				primerPair->name_,
@@ -528,6 +750,7 @@ int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs &
 				primerPair->compl_any_th_,
 				primerPair->compl_end_th_,
 				primerPair->penalty_,
+				pairPenaltyWithOutSize,
 				primerPair->product_size_,
 				gcContentForRegion[res->sequence_id_],
 
@@ -540,6 +763,7 @@ int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs &
 				primerPair->left_.gc_percent_,
 				primerPair->left_.hairpin_th_,
 				primerPair->left_.penalty_,
+				leftPenaltyWithOutSize,
 				primerPair->left_.self_any_th_,
 				primerPair->left_.self_end_th_,
 				primerPair->left_.tm_,
@@ -555,6 +779,7 @@ int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs &
 				primerPair->right_.gc_percent_,
 				primerPair->right_.hairpin_th_,
 				primerPair->right_.penalty_,
+				rightPenaltyWithOutSize,
 				primerPair->right_.self_any_th_,
 				primerPair->right_.self_end_th_,
 				primerPair->right_.tm_,
@@ -655,6 +880,53 @@ int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs &
 			primerPairWiseCompsOut << "\t" << alnObject.comp_.distances_.eventBasedIdentity_ << "\t" <<  alnObject.comp_.distances_.query_.identities_ << "\t" << njh::boolToStr(allowablePairwisePrimerComps.passErrorProfile(alnObject.comp_)) << std::endl;
 		}
 	}
+
+
+	//5-3 and 3-5 first base counts
+
+	DNABaseCounter right53_counter;
+	DNABaseCounter left53_counter;
+	DNABaseCounter combined53_counter;
+	DNABaseCounter right35_counter;
+	DNABaseCounter left35_counter;
+	DNABaseCounter combined35_counter;
+
+	for(const auto & primer : primers.pDeterminator_->primers_){
+		left53_counter.increase(primer.second.forwardPrimerRaw_.front());
+		left35_counter.increase(primer.second.forwardPrimerRaw_.back());
+
+		right53_counter.increase(primer.second.reversePrimerRaw_.front());
+		right35_counter.increase(primer.second.reversePrimerRaw_.back());
+
+		combined53_counter.increase(primer.second.forwardPrimerRaw_.front());
+		combined53_counter.increase(primer.second.reversePrimerRaw_.front());
+		combined35_counter.increase(primer.second.forwardPrimerRaw_.back());
+		combined35_counter.increase(primer.second.reversePrimerRaw_.back());
+	}
+
+
+	OutputStream firstLastPrimerBaseCounts(njh::files::make_path(setUp.pars_.directoryName_, "firstAndLastPrimerBaseCounts.txt"));
+	firstLastPrimerBaseCounts << "label\tbase\tcount\tfreq" << std::endl;
+	auto writeCounts = [&firstLastPrimerBaseCounts](DNABaseCounter& counter, const std::string & label){
+		counter.setFractions();
+		std::vector<char> bases{'A', 'C', 'G','T'};
+
+		for(char base : bases){
+			firstLastPrimerBaseCounts << label
+					<< "\t" << base
+					<< "\t" << counter.bases_[base]
+					<< "\t" << counter.baseFracs_[base]
+					<< std::endl;
+		}
+	};
+	writeCounts(right53_counter, "5-3_right");
+	writeCounts(left53_counter, "5-3_left");
+	writeCounts(combined53_counter, "5-3_combined");
+
+	writeCounts(right35_counter, "3-5_right");
+	writeCounts(left35_counter, "3-5_left");
+	writeCounts(combined35_counter, "3-5_combined");
+
 
 	return 0;
 }
