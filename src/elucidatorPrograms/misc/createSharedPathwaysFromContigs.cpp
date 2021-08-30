@@ -339,6 +339,9 @@ int miscRunner::createSharedPathwaysFromRefSeqs(const njh::progutils::CmdArgs & 
 		reader.openIn();
 		std::unordered_set<std::string> readNames;
 		while(reader.readNextRead(seq)){
+			if(len(seq) <= klen){
+				continue;
+			}
 //			if(MetaDataInName::nameHasMetaData(seq.name_)){
 //				MetaDataInName meta(seq.name_);
 //				if(!meta.containsMeta("sample")){

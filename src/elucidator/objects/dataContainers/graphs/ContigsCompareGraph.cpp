@@ -201,11 +201,11 @@ bool ContigsCompareGraphDev::splitNodesWithRedundantKmers(){
 				}
 			}
 			VecStr readWithMultiHeadsTails;
-			if("GATC" == node.uid_){
-				std::cout << __FILE__ << " " << __LINE__ << std::endl;
-				std::cout << "GATC" << std::endl;
-				std::cout << "readNameCountsHeads: " << readNameCountsHeads.size() << std::endl;
-			}
+//			if("GATC" == node.uid_){
+//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//				std::cout << "GATC" << std::endl;
+//				std::cout << "readNameCountsHeads: " << readNameCountsHeads.size() << std::endl;
+//			}
 			for(const auto & readHead : readNameCountsHeads){
 				if(readHead.second.size() > 1 || readNameCountsTails[readHead.first].size() > 1){
 					readWithMultiHeadsTails.emplace_back(readHead.first);
@@ -352,9 +352,9 @@ bool ContigsCompareGraphDev::splitNodesWithRedundantKmers(){
 //			}
 			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			std::unordered_map<std::string, std::unordered_map<std::string, std::unordered_map<std::string, std::vector<ConnectorInfoPath>>>> paths;
-			if("AACAGAAGAAACAGAAGAAACAG" == nodes_[nodePos]->k_){
-				std::cout << njh::bashCT::cyan;
-			}
+//			if("AACAGAAGAAACAGAAGAAACAG" == nodes_[nodePos]->k_){
+//				std::cout << njh::bashCT::cyan;
+//			}
 //			if("TAAA" == nodes_[nodePos]->uid_){
 //				for(const auto & head : headConnectorInfos){
 //					for(const auto & hCon : head.second){
@@ -410,8 +410,10 @@ bool ContigsCompareGraphDev::splitNodesWithRedundantKmers(){
 			}
 			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			for(const auto & head : paths){
+				std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				std::cout << "head: " << head.first << std::endl;
-				std::cout << "      " << std::string(head.first.size() - klen_ + 1, ' ')<< nodes_[nodePos]->k_ << std::endl;
+				std::cout << "      " << std::string(head.first.size() - klen_ + 1, ' ') << nodes_[nodePos]->k_ << std::endl;
+				std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				for(const auto & tail : head.second){
 					std::cout << "      " << std::string(head.first.size() - klen_ + 1 + (nodes_[nodePos]->k_.size() - klen_ + 1), ' ') << tail.first << std::endl;
 					std::cout << "\ttail: " << std::endl;
@@ -421,6 +423,8 @@ bool ContigsCompareGraphDev::splitNodesWithRedundantKmers(){
 							allOne = false;
 						}
 						std::cout << "\t\tread: " << read.first << " " << read.second.size() << std::endl;
+						std::cout << "\t\tread size: " << read.second.size() << " " << read.second.size() << std::endl;
+						std::cout << "\t\tallOne: " << njh::colorBool(allOne) << std::endl;
 						for(const auto & readheadPos : read.second){
 							std::cout << "\t\t\t"<< readheadPos.head_.info_.headPos_ << ":" <<readheadPos.head_.info_.headPos_ + readheadPos.head_.head_.size() -klen_+ 1 << ":" << readheadPos.tail_.info_.tailPos_<< std::endl;
 							std::cout << "\t\t\t" << "readheadPos.head_.info_.headPos_" << ":" <<readheadPos.head_.info_.headPos_ << std::endl;
@@ -431,13 +435,13 @@ bool ContigsCompareGraphDev::splitNodesWithRedundantKmers(){
 						}
 					}
 					std::cout << "allOne: " << njh::colorBool(allOne) << std::endl;
-					if("AACAGAAGAAACAGAAGAAACAG" == nodes_[nodePos]->k_){
-						std::cout << njh::bashCT::reset;
-					}
-					if("GATC" == nodes_[nodePos]->uid_){
-						std::cout << __FILE__ << " " << __LINE__ << std::endl;
-						//exit(1);
-					}
+//					if("AACAGAAGAAACAGAAGAAACAG" == nodes_[nodePos]->k_){
+//						std::cout << njh::bashCT::reset;
+//					}
+//					if("GATC" == nodes_[nodePos]->uid_){
+//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//						//exit(1);
+//					}
 					if(allOne){
 						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 						//grab head node and tail edges
@@ -471,10 +475,11 @@ bool ContigsCompareGraphDev::splitNodesWithRedundantKmers(){
 						std::cout << "nodes_[nodePos]->visitCount_: " << nodes_[nodePos]->visitCount_ << std::endl;
 						std::cout << "headEdgeNode->visitCount_   : " << headEdgeNode->visitCount_ << std::endl;
 						std::cout << "tailEdgeNode->visitCount_   : " << tailEdgeNode->visitCount_ << std::endl;
-						if("GATC" == nodes_[nodePos]->uid_){
-							std::cout << __FILE__ << " " << __LINE__ << std::endl;
-							//exit(1);
-						}
+//						if("GATC" == nodes_[nodePos]->uid_){
+//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//							//exit(1);
+//						}
+
 						if(0 == nodes_[nodePos]->visitCount_ &&
 							 0 == headEdgeNode->visitCount_ &&
 							 0 == tailEdgeNode->visitCount_){

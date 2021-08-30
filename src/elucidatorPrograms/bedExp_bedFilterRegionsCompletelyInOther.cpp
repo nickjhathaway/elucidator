@@ -32,7 +32,7 @@ int bedExpRunner::bedKeepRegionsCompletelyInOther(const njh::progutils::CmdArgs 
 	setUp.finishSetUp(std::cout);
 
 	OutputStream out(outOpts);
-	auto regions = getBeds(bedFile);
+	auto regions = getBed3s(bedFile);
 
 	if(bedFile == intersectWithBed){
 		auto intersectingBeds = getBeds(intersectWithBed);
@@ -41,7 +41,7 @@ int bedExpRunner::bedKeepRegionsCompletelyInOther(const njh::progutils::CmdArgs 
 		uint32_t regPos = 0;
 
 		for(const auto & reg : regions){
-			std::vector<std::shared_ptr<Bed6RecordCore>> overlappingRegions;
+			std::vector<std::shared_ptr<Bed3RecordCore>> overlappingRegions;
 			uint32_t interPos = 0;
 			for(const auto & inter : intersectingBeds){
 				if(interPos == regPos){
@@ -70,19 +70,25 @@ int bedExpRunner::bedKeepRegionsCompletelyInOther(const njh::progutils::CmdArgs 
 			if(!overlappingRegions.empty()){
 				VecStr overlappingRegonsNames;
 				for(const auto & reg : overlappingRegions){
-					overlappingRegonsNames.emplace_back(reg->name_);
+					if(reg->extraFields_.size() > 0){
+						overlappingRegonsNames.emplace_back(reg->extraFields_[0]);
+					}
 				}
-				out << reg->toDelimStrWithExtra() << "\t" << njh::conToStr(overlappingRegonsNames, ",")<< "\n";
+				out << reg->toDelimStrWithExtra();
+				if(!overlappingRegonsNames.empty()){
+					out << "\t" << njh::conToStr(overlappingRegonsNames, ",");
+				}
+				out << "\n";
 			}
 			++regPos;
 		}
 	}else{
-		auto intersectingBeds = getBeds(intersectWithBed);
+		auto intersectingBeds = getBed3s(intersectWithBed);
 		BedUtility::coordSort(regions, false);
 		BedUtility::coordSort(intersectingBeds, false);
 
 		for(const auto & reg : regions){
-			std::vector<std::shared_ptr<Bed6RecordCore>> overlappingRegions;
+			std::vector<std::shared_ptr<Bed3RecordCore>> overlappingRegions;
 			for(const auto & inter : intersectingBeds){
 				if(inter->chrom_ < reg->chrom_){
 					//bother regions are sorted if we haven't reached this region's chromosome yet
@@ -106,9 +112,15 @@ int bedExpRunner::bedKeepRegionsCompletelyInOther(const njh::progutils::CmdArgs 
 			if(!overlappingRegions.empty()){
 				VecStr overlappingRegonsNames;
 				for(const auto & reg : overlappingRegions){
-					overlappingRegonsNames.emplace_back(reg->name_);
+					if(reg->extraFields_.size() > 0){
+						overlappingRegonsNames.emplace_back(reg->extraFields_[0]);
+					}
 				}
-				out << reg->toDelimStrWithExtra() << "\t" << njh::conToStr(overlappingRegonsNames, ",")<< "\n";
+				out << reg->toDelimStrWithExtra();
+				if(!overlappingRegonsNames.empty()){
+					out << "\t" << njh::conToStr(overlappingRegonsNames, ",");
+				}
+				out << "\n";
 			}
 		}
 	}
@@ -128,17 +140,21 @@ int bedExpRunner::bedFilterRegionsCompletelyInOther(const njh::progutils::CmdArg
 	setUp.finishSetUp(std::cout);
 
 	OutputStream out(outOpts);
-	auto regions = getBeds(bedFile);
+	auto regions = getBed3s(bedFile);
 	if(bedFile == intersectWithBed){
 		//internal filtration
 		auto bedCoordSorterFunc =
-				[](const std::shared_ptr<Bed6RecordCore> & reg1In, const std::shared_ptr<Bed6RecordCore> & reg2In) {
+				[](const std::shared_ptr<Bed3RecordCore> & reg1In, const std::shared_ptr<Bed3RecordCore> & reg2In) {
 					const auto & reg1 = getRef(reg1In);
 					const auto & reg2 = getRef(reg2In);
 					if(reg1.chrom_ == reg2.chrom_) {
 						if(reg1.chromStart_ == reg2.chromStart_) {
 							if(reg1.chromEnd_ == reg2.chromEnd_){
-								return reg1.name_ < reg2.name_;
+								if(reg1.extraFields_.size() > 0 && reg2.extraFields_.size() > 0){
+									return reg1.extraFields_[0] < reg2.extraFields_[0];
+								}else{
+									return true;
+								}
 							}else{
 								return reg1.chromEnd_ > reg2.chromEnd_;
 							}
@@ -150,9 +166,9 @@ int bedExpRunner::bedFilterRegionsCompletelyInOther(const njh::progutils::CmdArg
 					}
 		};
 		njh::sort(regions, bedCoordSorterFunc);
-		std::vector<std::shared_ptr<Bed6RecordCore>> intersectingBeds;
+		std::vector<std::shared_ptr<Bed3RecordCore>> intersectingBeds;
 		for(const auto & reg : regions){
-			std::vector<std::shared_ptr<Bed6RecordCore>> overlappingRegions;
+			std::vector<std::shared_ptr<Bed3RecordCore>> overlappingRegions;
 			for(const auto & inter : intersectingBeds){
 				if(inter->chrom_ < reg->chrom_){
 					//bother regions are sorted if we haven't reached this region's chromosome yet
@@ -180,12 +196,12 @@ int bedExpRunner::bedFilterRegionsCompletelyInOther(const njh::progutils::CmdArg
 			}
 		}
 	}else{
-		auto intersectingBeds = getBeds(intersectWithBed);
+		auto intersectingBeds = getBed3s(intersectWithBed);
 		BedUtility::coordSort(regions, false);
 		BedUtility::coordSort(intersectingBeds, false);
 
 		for(const auto & reg : regions){
-			std::vector<std::shared_ptr<Bed6RecordCore>> overlappingRegions;
+			std::vector<std::shared_ptr<Bed3RecordCore>> overlappingRegions;
 			for(const auto & inter : intersectingBeds){
 				if(inter->chrom_ < reg->chrom_){
 					//bother regions are sorted if we haven't reached this region's chromosome yet
@@ -233,7 +249,7 @@ int bedExpRunner::bedAddRegionsNonCompletelyInOther(const njh::progutils::CmdArg
 		throw std::runtime_error{ss.str()};
 	}
 
-	auto intersectingBeds = getBeds(intersectWithBed);
+	auto intersectingBeds = getBed3s(intersectWithBed);
 	BedUtility::coordSort(regions, false);
 	BedUtility::coordSort(intersectingBeds, false);
 	//first add the other bed regions
@@ -242,7 +258,7 @@ int bedExpRunner::bedAddRegionsNonCompletelyInOther(const njh::progutils::CmdArg
 	}
 	//now add the regions that don't completely fall within those regions
 	for(const auto & reg : regions){
-		std::vector<std::shared_ptr<Bed6RecordCore>> overlappingRegions;
+		std::vector<std::shared_ptr<Bed3RecordCore>> overlappingRegions;
 		for(const auto & inter : intersectingBeds){
 			if(inter->chrom_ < reg->chrom_){
 				//bother regions are sorted if we haven't reached this region's chromosome yet
@@ -292,12 +308,12 @@ int bedExpRunner::bedFilterRegionsStartingOrEndingInOther(const njh::progutils::
 	OutputStream out(outOpts);
 	auto regions = getBeds(bedFile);
 
-	auto intersectingBeds = getBeds(intersectWithBed);
+	auto intersectingBeds = getBed3s(intersectWithBed);
 	BedUtility::coordSort(regions, false);
 	BedUtility::coordSort(intersectingBeds, false);
 
 	for(const auto & reg : regions){
-		std::vector<std::shared_ptr<Bed6RecordCore>> overlappingRegions;
+		std::vector<std::shared_ptr<Bed3RecordCore>> overlappingRegions;
 		for(const auto & inter : intersectingBeds){
 			if(inter->chrom_ < reg->chrom_){
 				//bother regions are sorted if we haven't reached this region's chromosome yet
@@ -325,7 +341,7 @@ int bedExpRunner::bedFilterRegionsStartingOrEndingInOther(const njh::progutils::
 			}
 		}
 		if(overlappingRegions.empty()){
-			out << reg->toDelimStr() << "\n";
+			out << reg->toDelimStrWithExtra() << "\n";
 		}
 	}
 
@@ -353,12 +369,12 @@ int bedExpRunner::bedKeepRegionsStartingOrEndingInOther(const njh::progutils::Cm
 	OutputStream out(outOpts);
 	auto regions = getBeds(bedFile);
 
-	auto intersectingBeds = getBeds(intersectWithBed);
+	auto intersectingBeds = getBed3s(intersectWithBed);
 	BedUtility::coordSort(regions, false);
 	BedUtility::coordSort(intersectingBeds, false);
 
 	for(const auto & reg : regions){
-		std::vector<std::shared_ptr<Bed6RecordCore>> overlappingRegions;
+		std::vector<std::shared_ptr<Bed3RecordCore>> overlappingRegions;
 		for(const auto & inter : intersectingBeds){
 			if(inter->chrom_ < reg->chrom_){
 				//bother regions are sorted if we haven't reached this region's chromosome yet
@@ -386,7 +402,7 @@ int bedExpRunner::bedKeepRegionsStartingOrEndingInOther(const njh::progutils::Cm
 			}
 		}
 		if(!overlappingRegions.empty()){
-			out << reg->toDelimStr() << "\n";
+			out << reg->toDelimStrWithExtra() << "\n";
 		}
 	}
 
