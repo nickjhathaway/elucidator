@@ -713,9 +713,9 @@ int seqUtilsSplitRunner::SeqSplitOnLenBetween(const njh::progutils::CmdArgs & in
   defaultSplitSetUpOptions(setUp, dSplitPars);
 	setUp.setOption(maxLength, "--maxLen", "Exclude sequence with lengths above this maximum Length", true);
 	setUp.setOption(minLen, "--minLen", "Exclude sequence below this Minimum Length", true);
-	if(minLen >=maxLength){
+	if(minLen >maxLength){
 		setUp.failed_ = true;
-		setUp.addWarning(njh::pasteAsStr("Minimum length must be less than max length"));
+		setUp.addWarning(njh::pasteAsStr("Minimum length must be less than or equal to max length"));
 	}
   setUp.finishSetUp(std::cout);
 
