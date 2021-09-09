@@ -69,8 +69,11 @@ programWrapperRunner::programWrapperRunner()
 						addFunc("testPrimersWithPrimer3", testPrimersWithPrimer3, false),
 						addFunc("parsePrimer3OutputToTable", parsePrimer3OutputToTable, false),
 						addFunc("genPossiblePrimersWithPrimer3", genPossiblePrimersWithPrimer3, false),
+						addFunc("genPossiblePrimerPairsWithPrimer3", genPossiblePrimerPairsWithPrimer3, false),
            },//
           "programWrapper") {}
+
+
 int programWrapperRunner::generatingPrime3TemplatesBasedOnMALN(const njh::progutils::CmdArgs & inputCommands) {
 	bool muscle = false;
 	Muscler::TrimWithMusclePars mPars;

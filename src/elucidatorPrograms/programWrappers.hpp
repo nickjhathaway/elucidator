@@ -50,6 +50,7 @@ class programWrapperRunner : public njh::progutils::ProgramRunner {
 	static int runTrimmomatic(const njh::progutils::CmdArgs & inputCommands);
 	static int runBwaOnTrimmomaticOutputPE(const njh::progutils::CmdArgs & inputCommands);
 
+	static int genPossiblePrimerPairsWithPrimer3(const njh::progutils::CmdArgs & inputCommands);
 	static int genPossiblePrimersWithPrimer3(const njh::progutils::CmdArgs & inputCommands);
 	static int testPrimersWithPrimer3(const njh::progutils::CmdArgs & inputCommands);
 

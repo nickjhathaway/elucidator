@@ -35,6 +35,8 @@
 #include "elucidatorPrograms/misc.h"
 #include "elucidatorPrograms/pacbioExp.hpp"
 #include "elucidatorPrograms/printInfo.h"
+#include "elucidatorPrograms/programWrappersAssembleOnPathWeaver.h"
+
 #include "elucidatorPrograms/programWrappers.hpp"
 #include "elucidatorPrograms/readSimulator.h"
 #include "elucidatorPrograms/repelin.h"
@@ -98,7 +100,9 @@ elucidatorRunner::elucidatorRunner() :
 					addRing<seqSearchingRunner>(),
 					addRing<pairProcessingRunner>(),
 					addRing<genomeExpRunner>(),
-					addRing<statsExpRunner>(),addRing<popGenExpRunner>(),
+					addRing<statsExpRunner>(),
+					addRing<popGenExpRunner>(),
+					addRing<programWrappersAssembleOnPathWeaverRunner>(),
 
 
 				},//
