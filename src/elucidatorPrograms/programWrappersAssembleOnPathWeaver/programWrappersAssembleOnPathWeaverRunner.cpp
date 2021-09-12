@@ -915,7 +915,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 	setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(pwOutputDir), "_savage_TODAY"), true);
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
-	njh::sys::requireExternalProgramThrow("savage");
+	//njh::sys::requireExternalProgramThrow("savage");
 
 	auto inputRegions = gatherRegions(bedFile.string(), "", setUp.pars_.verbose_);
 	sortGRegionsByStart(inputRegions);
@@ -1090,11 +1090,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 						finalSeqs.emplace_back(seq);
 					}
 				}
-				double totalCoverage = 0;
-				for(auto & seq : finalSeqs){
-					//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
-					totalCoverage += 1;
-				}
+				double totalCoverage = finalSeqs.size();
 
 				for(auto & seq : finalSeqs){
 					//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
