@@ -20,6 +20,7 @@ class programWrappersAssembleOnPathWeaverRunner : public njh::progutils::Program
 	programWrappersAssembleOnPathWeaverRunner();
 
 	static int runSpadesOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
+	static int runMegahitOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 
 
 
