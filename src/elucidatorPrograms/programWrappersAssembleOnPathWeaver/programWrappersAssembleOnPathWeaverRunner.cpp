@@ -41,7 +41,8 @@ programWrappersAssembleOnPathWeaverRunner::programWrappersAssembleOnPathWeaverRu
 
 
 BamExtractor::ExtractCounts rawWriteExtractReadsFromBamOnlyMapped(const bfs::path & bamFnp,
-		const OutOptions & outOpts) {
+		const OutOptions & outOpts,
+		bool keepRefStrainDir = false) {
 	BamExtractor::ExtractCounts ret;
 	BamTools::BamReader bReader;
 	BamTools::BamAlignment bAln;
@@ -86,11 +87,11 @@ BamExtractor::ExtractCounts rawWriteExtractReadsFromBamOnlyMapped(const bfs::pat
 				auto search = alnCache.get(bAln.Name);
 				if (bAln.IsFirstMate()) {
 					pairWriter.openWrite(
-							PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),
+							PairedRead(bamAlnToSeqInfo(bAln, keepRefStrainDir), bamAlnToSeqInfo(*search, keepRefStrainDir),
 									false));
 				} else {
 					pairWriter.openWrite(
-							PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),
+							PairedRead(bamAlnToSeqInfo(*search, keepRefStrainDir), bamAlnToSeqInfo(bAln, keepRefStrainDir),
 									false));
 				}
 				++ret.pairedReads_;
@@ -103,10 +104,10 @@ BamExtractor::ExtractCounts rawWriteExtractReadsFromBamOnlyMapped(const bfs::pat
 			++ret.unpaiedReads_;
 			if (!bAln.IsMapped()) {
 				// do non-mapping operation
-				writer.openWrite(bamAlnToSeqInfo(bAln));
+				writer.openWrite(bamAlnToSeqInfo(bAln, keepRefStrainDir));
 			} else {
 				//do unpaired read operation
-				writer.openWrite(bamAlnToSeqInfo(bAln));
+				writer.openWrite(bamAlnToSeqInfo(bAln, keepRefStrainDir));
 			}
 		}
 	}
@@ -116,7 +117,7 @@ BamExtractor::ExtractCounts rawWriteExtractReadsFromBamOnlyMapped(const bfs::pat
 		for (const auto & name : names) {
 			++ret.orphans_;
 			auto search = alnCache.get(name);
-			writer.openWrite(bamAlnToSeqInfo(*search));
+			writer.openWrite(bamAlnToSeqInfo(*search, keepRefStrainDir));
 			alnCache.remove(name);
 		}
 	}
@@ -963,7 +964,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 			//first extract the reads
 			bfs::path extractBam = njh::files::make_path(pwOutputDir, regionUid, sample + "_extraction", "extracted.bam");
 			OutOptions outOpts(njh::files::make_path(regionOutputDir, "extracted"));
-			auto readCounts = rawWriteExtractReadsFromBamOnlyMapped(extractBam, outOpts);
+			auto readCounts = rawWriteExtractReadsFromBamOnlyMapped(extractBam, outOpts, true);
 			bfs::path pairedR1 = njh::files::make_path(regionOutputDir, "extracted_R1.fastq");
 			bfs::path pairedR2 = njh::files::make_path(regionOutputDir, "extracted_R2.fastq");
 			bfs::path singles =  njh::files::make_path(regionOutputDir, "extracted.fastq");
