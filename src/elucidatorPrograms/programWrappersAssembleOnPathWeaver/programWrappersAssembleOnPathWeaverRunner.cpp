@@ -540,7 +540,6 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegions(con
 	std::string extraMegahitOptions = "";
 	uint32_t reOrientingKmerLength = 9;
 	uint32_t minFinalLength = 40;
-	bool runMeta = false;
 	bfs::path megahitOutDir = "megahitOut";
 	uint32_t numThreads = 1;
 	seqSetUp setUp(inputCommands);
