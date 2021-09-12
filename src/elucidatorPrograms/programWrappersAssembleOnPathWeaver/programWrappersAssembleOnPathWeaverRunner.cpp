@@ -979,7 +979,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 					throw std::runtime_error{ss.str()};
 				}
 				std::stringstream savageCmdStream;
-				savageCmdStream << "cd " << regionOutputDir << " && " << haploconductPath << "savage ";
+				savageCmdStream << "cd " << regionOutputDir << " && " << haploconductPath << " savage ";
 
 				if(exists(pairedR1)){
 					if(!exists(pairedR2)){
