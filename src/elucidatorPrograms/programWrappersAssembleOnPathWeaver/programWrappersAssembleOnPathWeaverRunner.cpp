@@ -365,6 +365,11 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 						finalSeqs.emplace_back(seq);
 					}
 				}
+				double totalCoverage = 0;
+				for(auto & seq : finalSeqs){
+					auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_);
+					totalCoverage += assembleInfo.coverage_;
+				}
 
 				for(auto & seq : finalSeqs){
 					auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_);
@@ -375,6 +380,8 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 					seqMeta.addMeta("regionUID", regionUid);
 					seqMeta.addMeta("sample", sample);
 					seqMeta.resetMetaInName(seq->seqBase_.name_);
+					seq->seqBase_.cnt_ = (assembleInfo.coverage_/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
+					seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
 				}
 
 				OutOptions trimmedContigInfoOpts(njh::files::make_path(spadesFullOutputDir, "trimmed_reOriented_contigs_outputInfo.tab.txt"));

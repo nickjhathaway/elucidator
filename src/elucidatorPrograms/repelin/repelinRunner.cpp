@@ -657,6 +657,7 @@ int repelinRunner::TandemRepeatFinderOutputToBed(const njh::progutils::CmdArgs &
 
 int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
 	SimpleTRFinderLocsPars pars;
+	bfs::path genomicLocation;
 	pars.maxRepeatUnitSize = 6;
 	uint32_t match{2};
 	uint32_t mismatch{7};
@@ -681,6 +682,7 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
   setUp.setOption(PI,        "--PI", "PI");
   setUp.setOption(Minscore,  "--Minscore", "Minscore");
   setUp.setOption(MaxPeriod, "--MaxPeriod", "MaxPeriod");
+  setUp.setOption(genomicLocation, "--genomicLocation", "genomic Location of the template sequence to adjust to create genomic bed file location of ouput");
 
 
 
@@ -696,6 +698,13 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
   pars.outOpts = OutOptions(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr("repeats", pars.minRepeatUnitSize, "-", pars.maxRepeatUnitSize, ".bed")));
 
   njh::sys::requireExternalProgramThrow("trf");
+
+  GenomicRegion gRegion;
+  if("" != genomicLocation){
+  	auto regions = bedPtrsToGenomicRegs(getBeds(genomicLocation));
+  	gRegion = regions.front();//just use the very first region
+  }
+
 	{
 		SeqInput reader(setUp.pars_.ioOptions_);
 		auto fastaInputOut = SeqIOOptions::genFastaOut(
@@ -739,9 +748,15 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
 
 
   OutOptions outOpts{njh::files::make_path(setUp.pars_.directoryName_, "repeats.bed")};
+  OutOptions outGenomicOpts{njh::files::make_path(setUp.pars_.directoryName_, "repeats_genomic.bed")};
+
 	{
 	  bfs::path repeatFilename = njh::files::make_path(setUp.pars_.directoryName_, repeatFnpStream.str());
 	  OutputStream outFile(outOpts);
+	  std::unique_ptr<OutputStream> outGenomicLocationOut;
+	  if("" != genomicLocation){
+	  	outGenomicLocationOut = std::make_unique<OutputStream>(outGenomicOpts);
+	  }
 		BioDataFileIO<TandemRepeatFinderRecord> reader{IoOptions(InOptions(repeatFilename))};
 		reader.openIn();
 		std::string currentSeqName = "";
@@ -765,6 +780,15 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
 			std::shared_ptr<TandemRepeatFinderRecord> record = std::make_shared<TandemRepeatFinderRecord>(line);
 			record->setSeqName(currentSeqName);
 			outFile << GenomicRegion(*record).genBedRecordCore().toDelimStr() << std::endl;
+			if(outGenomicLocationOut){
+				auto relativeToTemplateLoc = GenomicRegion(*record).genBedRecordCore();
+				auto outRegion = relativeToTemplateLoc;
+				outRegion.chrom_ = gRegion.chrom_;
+				outRegion.strand_ = (gRegion.reverseSrand_ ? '-' : '+');
+				outRegion.chromStart_ = gRegion.getRelativePositionFromStartStrandAware(relativeToTemplateLoc.chromStart_);
+				outRegion.chromEnd_ = gRegion.getRelativePositionFromStartStrandAware(relativeToTemplateLoc.chromEnd_);
+				*outGenomicLocationOut << outRegion.toDelimStrWithExtra() << std::endl;
+			}
 		}
 	}
 
@@ -811,8 +835,23 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
 		BedUtility::coordSort(combinedRepeats);
 
 		OutputStream combinedOut(njh::files::make_path(setUp.pars_.directoryName_, "combined.bed"));
+
+		std::unique_ptr<OutputStream> combinedGenomicOut;
+
+
+		if("" != genomicLocation){
+			combinedGenomicOut = std::make_unique<OutputStream>((njh::files::make_path(setUp.pars_.directoryName_, "genomic_combined.bed")));
+		}
 		for(const auto & reg : combinedRepeats){
 			combinedOut << reg.toDelimStr() << std::endl;
+			if("" != genomicLocation){
+				auto outRegion = reg;
+				outRegion.chrom_ = gRegion.chrom_;
+				outRegion.strand_ = (gRegion.reverseSrand_ ? '-' : '+');
+				outRegion.chromStart_ = gRegion.getRelativePositionFromStartStrandAware(reg.chromStart_);
+				outRegion.chromEnd_ = gRegion.getRelativePositionFromStartStrandAware(reg.chromEnd_);
+				*combinedGenomicOut << outRegion.toDelimStrWithExtra() << std::endl;
+			}
 		}
 	}
 
