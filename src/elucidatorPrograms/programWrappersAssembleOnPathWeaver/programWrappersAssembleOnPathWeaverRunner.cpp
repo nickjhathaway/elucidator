@@ -1262,10 +1262,6 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	setUp.setOption(pwOutputDir, "--pwOutputDir", "The PathWeaver directory", true);
 	setUp.setOption(sample, "--sample", "sample name", true);
 
-	setUp.setOption(numThreads, "--numThreads", "num Threads");
-
-
-
 	setUp.setOption(velvetStartKmer, "--velvetStartKmer", "velvet Start Kmer Size");
 	setUp.setOption(velvetEndKmer, "--velvetEndKmer", "velvet End Kmer");
 	setUp.setOption(velvetKmerStep, "--velvetKmerStep", "velvet Kmer Step");
