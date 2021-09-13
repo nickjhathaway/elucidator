@@ -1240,7 +1240,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	uint32_t velvetEndKmer = 75;
 	uint32_t velvetKmerStep = 2;
 	std::string optFuncKmer = "n50";
-
+	uint32_t velvetNumOfThreads = 1;
 	VecStr optimizerFuncsAvail{"LNbp","Lbp","Lcon","max","n50","ncon","tbp"};
 
 	bool overWriteDir = false;
@@ -1277,6 +1277,9 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	setUp.setOption(minFinalLength, "--minFinalLength", "min Final Length");
 	setUp.setOption(reOrientingKmerLength, "--reOrientingKmerLength", "re-orienting K-mer Length");
 	setUp.setOption(numThreads, "--numThreads", "number of threads to use");
+	setUp.setOption(velvetNumOfThreads, "--velvetNumOfThreads", "velvet Num Of Threads");
+
+
 	setUp.setOption(extraVelvetOptimiserOptions, "--extraVelvetOptimiserOptions", "Extra options to give to spades");
 	setUp.setOption(VelvetOptimiserOutDir,     "--VelvetOptimiserOutDir",     "VelvetOptimiser.pl Out Directory name, will be relative to final pass directory");
 	if("VelvetOptimiserOutDir" == VelvetOptimiserOutDir){
@@ -1415,7 +1418,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 				vOptCmdStream << "'";
 				//VelvetOptimiser.pl  -x 2 -f ' '  --d withRevComp_optimize_n50
 
-				vOptCmdStream  << " -t " << numThreads
+				vOptCmdStream  << " -t " << velvetNumOfThreads
 											<< " -s " << velvetStartKmer
 											<< " -e " << velvetEndKmer
 											<< " -x " << velvetKmerStep
