@@ -119,7 +119,7 @@ public:
 
 			seqCount+= std::round(seq.cnt_);
 			bool found = false;
-			for (const auto & pos : iter::range(ret.seqs_.size())) {
+			for (const auto  pos : iter::range(ret.seqs_.size())) {
 				const auto & otherSeq = ret.seqs_[pos];
 				if (otherSeq->seq_ == seq.seq_) {
 					otherSeq->cnt_ += 1;
@@ -167,7 +167,7 @@ public:
 			allNames.emplace(seq.name_);
 			seqCount+= std::round(seq.cnt_);
 			bool found = false;
-			for (const auto & pos : iter::range(ret.seqs_.size())) {
+			for (const auto  pos : iter::range(ret.seqs_.size())) {
 				const auto & otherSeq = ret.seqs_[pos];
 				if (otherSeq->seq_ == seq.seq_) {
 					otherSeq->cnt_ += std::round(seq.cnt_);

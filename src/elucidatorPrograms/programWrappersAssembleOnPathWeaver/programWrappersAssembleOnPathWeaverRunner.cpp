@@ -32,6 +32,7 @@ programWrappersAssembleOnPathWeaverRunner::programWrappersAssembleOnPathWeaverRu
 					 addFunc("runSpadesOnPathWeaverRegions", runSpadesOnPathWeaverRegions, false),
 					 addFunc("runMegahitOnPathWeaverRegions", runMegahitOnPathWeaverRegions, false),
 					 addFunc("runSavageOnPathWeaverRegions", runSavageOnPathWeaverRegions, false),
+					 addFunc("runVelvetOptimizerAndMetaVelvetOnPathWeaverRegions", runVelvetOptimizerAndMetaVelvetOnPathWeaverRegions, false),
 
            },//
           "programWrappersAssembleOnPathWeaverRunner") {}
@@ -324,9 +325,9 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 
 				SeqInput refReader(SeqIOOptions::genFastaIn(refFnp));
 				auto refSeqs = refReader.readAllReads<seqInfo>();
-				std::vector<std::unique_ptr<seqWithKmerInfo>> refKmerReads;
+				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
 				for (const auto & seq : refSeqs) {
-					refKmerReads.emplace_back(std::make_unique<seqWithKmerInfo>(seq));
+					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
 				allSetKmers(refKmerReads, reOrientingKmerLength, true);
 
@@ -669,9 +670,9 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegions(con
 
 				SeqInput refReader(SeqIOOptions::genFastaIn(refFnp));
 				auto refSeqs = refReader.readAllReads<seqInfo>();
-				std::vector<std::unique_ptr<seqWithKmerInfo>> refKmerReads;
+				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
 				for (const auto & seq : refSeqs) {
-					refKmerReads.emplace_back(std::make_unique<seqWithKmerInfo>(seq));
+					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
 				allSetKmers(refKmerReads, reOrientingKmerLength, true);
 
@@ -1025,9 +1026,9 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 
 				SeqInput refReader(SeqIOOptions::genFastaIn(refFnp));
 				auto refSeqs = refReader.readAllReads<seqInfo>();
-				std::vector<std::unique_ptr<seqWithKmerInfo>> refKmerReads;
+				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
 				for (const auto & seq : refSeqs) {
-					refKmerReads.emplace_back(std::make_unique<seqWithKmerInfo>(seq));
+					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
 				allSetKmers(refKmerReads, reOrientingKmerLength, true);
 
@@ -1227,6 +1228,963 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 	return 0;
 }
 
+
+
+
+int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path bedFile = "";
+	bfs::path pwOutputDir = "";
+	std::string sample = "";
+
+	uint32_t velvetStartKmer = 53;
+	uint32_t velvetEndKmer = 75;
+	uint32_t velvetKmerStep = 2;
+	std::string optFuncKmer = "n50";
+
+	VecStr optimizerFuncsAvail{"LNbp","Lbp","Lcon","max","n50","ncon","tbp"};
+
+	bfs::path resultsDirectory = "./";
+	bool overWriteDir = false;
+	bool breakUpAmbigousContigs = true;
+	double coverageCutOff = 1.0;
+
+	std::string extraVelvetOptimiserOptions = "";
+	bfs::path VelvetOptimiserOutDir = "VelvetOptimiserOutDir";
+
+
+	uint32_t reOrientingKmerLength = 9;
+	uint32_t minFinalLength = 40;
+	uint32_t numThreads = 1;
+	seqSetUp setUp(inputCommands);
+	setUp.processDebug();
+	setUp.processVerbose();
+	setUp.setOption(bedFile, "--bed", "The Regions to analyze", true);
+	setUp.setOption(pwOutputDir, "--pwOutputDir", "The PathWeaver directory", true);
+	setUp.setOption(sample, "--sample", "sample name", true);
+
+	setUp.setOption(numThreads, "--numThreads", "num Threads");
+
+
+
+	setUp.setOption(velvetStartKmer, "--velvetStartKmer", "velvet Start Kmer Size");
+	setUp.setOption(velvetEndKmer, "--velvetEndKmer", "velvet End Kmer");
+	setUp.setOption(velvetKmerStep, "--velvetKmerStep", "velvet Kmer Step");
+	setUp.setOption(optFuncKmer, "--optFuncKmer", "optimizer Func Kmer");
+	bool doNotBreakUpAmbigousContigs = false;
+	setUp.setOption(doNotBreakUpAmbigousContigs, "--doBreakUpAmbigousContigs", "Do not Break Up Ambigous Contigs at Ns");
+	breakUpAmbigousContigs = !doNotBreakUpAmbigousContigs;
+
+	setUp.setOption(coverageCutOff, "--coverageCutOff", "Don't include these sequences in final output");
+	if(!njh::in(optFuncKmer, optimizerFuncsAvail)){
+		setUp.failed_ = true;
+		setUp.addWarning("Error for --optFuncKmer, value was set as " + optFuncKmer + " but doesn't match available options " + njh::conToStr(optimizerFuncsAvail, ", "));
+	}
+	setUp.setOption(minFinalLength, "--minFinalLength", "min Final Length");
+	setUp.setOption(resultsDirectory, "--resultsDirectory", "Results Directory", true);
+	setUp.setOption(reOrientingKmerLength, "--reOrientingKmerLength", "re-orienting K-mer Length");
+	setUp.setOption(numThreads, "--numThreads", "number of threads to use");
+	setUp.setOption(overWriteDir,     "--overWriteDir",     "Over Write Spades Results Directory");
+	setUp.setOption(extraVelvetOptimiserOptions, "--extraVelvetOptimiserOptions", "Extra options to give to spades");
+	setUp.setOption(VelvetOptimiserOutDir,     "--VelvetOptimiserOutDir",     "VelvetOptimiser.pl Out Directory name, will be relative to final pass directory");
+	if("VelvetOptimiserOutDir" == VelvetOptimiserOutDir){
+		VelvetOptimiserOutDir = VelvetOptimiserOutDir.string() + "_" + optFuncKmer;
+	}
+
+	setUp.setOption(minFinalLength, "--minFinalLength", "min Final Length");
+	setUp.setOption(reOrientingKmerLength, "--reOrientingKmerLength", "re-orienting K-mer Length");
+
+	setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(pwOutputDir), "_Velvet_TODAY"), true);
+	setUp.finishSetUp(std::cout);
+	setUp.startARunLog(setUp.pars_.directoryName_);
+
+	bfs::path metaVelvetFinalDir = njh::replaceString(setUp.pars_.directoryName_, "Velvet", "MetaVelvet");
+	njh::files::MkdirPar metaVelvetFinalDirPar(metaVelvetFinalDir, setUp.pars_.overWriteDir_);
+	njh::files::makeDir(metaVelvetFinalDirPar);
+
+	njh::sys::requireExternalProgramThrow("meta-velvetg");
+	njh::sys::requireExternalProgramThrow("velveth");
+	njh::sys::requireExternalProgramThrow("velvetg");
+	njh::sys::requireExternalProgramThrow("VelvetOptimiser.pl");
+
+
+	auto inputRegions = gatherRegions(bedFile.string(), "", setUp.pars_.verbose_);
+	sortGRegionsByStart(inputRegions);
+
+	VecStr regionNames;
+	for(const auto & reg : inputRegions){
+		regionNames.emplace_back(reg.uid_);
+	}
+	njh::sort(regionNames);
+	njh::concurrent::LockableQueue<std::string> regionsQueue(regionNames);
+
+	bfs::path finalDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("final"));
+	bfs::path partialDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("partial"));
+	auto allFinalSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(finalDirectory, "allFinal.fasta"));
+	auto allPartialSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(partialDirectory, "allPartial.fasta"));
+	SeqOutput allFinalWriter(allFinalSeqOpts);
+	SeqOutput allPartialWriter(allPartialSeqOpts);
+	allFinalWriter.openOut();
+	allPartialWriter.openOut();
+	std::mutex allFinalWriterMut;
+	std::mutex allPartialWriterMut;
+
+
+
+
+	bfs::path metav_finalDirectory = njh::files::makeDir(metaVelvetFinalDir, njh::files::MkdirPar("final"));
+	bfs::path metav_partialDirectory = njh::files::makeDir(metaVelvetFinalDir, njh::files::MkdirPar("partial"));
+	auto metav_allFinalSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(metav_finalDirectory, "allFinal.fasta"));
+	auto metav_allPartialSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(metav_partialDirectory, "allPartial.fasta"));
+	SeqOutput metav_allFinalWriter(metav_allFinalSeqOpts);
+	SeqOutput metav_allPartialWriter(metav_allPartialSeqOpts);
+	metav_allFinalWriter.openOut();
+	metav_allPartialWriter.openOut();
+	std::mutex metav_allFinalWriterMut;
+	std::mutex metav_allPartialWriterMut;
+
+
+
+
+	std::unordered_map<std::string,
+			std::vector<std::shared_ptr<BamRegionInvestigator::RegionInfo>> >regInfosByUID;
+
+	std::unordered_map<std::string,
+			std::vector<std::shared_ptr<BamRegionInvestigator::RegionInfo>> > metav_regInfosByUID;
+
+	for (const auto & reg : inputRegions) {
+		regInfosByUID[reg.uid_].emplace_back(std::make_shared<BamRegionInvestigator::RegionInfo>(reg));
+		metav_regInfosByUID[reg.uid_].emplace_back(std::make_shared<BamRegionInvestigator::RegionInfo>(reg));
+	}
+
+	std::unordered_map<std::string, std::string> exceptions;
+	std::unordered_map<std::string, std::string> metav_exceptions;
+
+	std::mutex exceptionsMut;
+
+	std::function<void()> runVelvetsOnRegion = [&](){
+		std::string regionUid = "";
+		while(regionsQueue.getVal(regionUid)){
+			const auto & metav_regInfo = njh::mapAt(metav_regInfosByUID, regionUid);
+
+			const auto & regInfo = njh::mapAt(regInfosByUID, regionUid);
+			auto regionOutputDir = njh::files::make_path(setUp.pars_.directoryName_, regionUid, sample);
+			njh::files::makeDirP(njh::files::MkdirPar{regionOutputDir});
+
+			//
+
+			bfs::path refFnp = njh::files::make_path(pwOutputDir, regionUid, "allRefs.fasta");
+
+
+			//first extract the reads
+			bfs::path extractBam = njh::files::make_path(pwOutputDir, regionUid, sample + "_extraction", "extracted.bam");
+			OutOptions outOpts(njh::files::make_path(regionOutputDir, "extracted"));
+			auto readCounts = rawWriteExtractReadsFromBamOnlyMapped(extractBam, outOpts);
+			bfs::path pairedR1 = njh::files::make_path(regionOutputDir, "extracted_R1.fastq");
+			bfs::path pairedR2 = njh::files::make_path(regionOutputDir, "extracted_R2.fastq");
+			bfs::path singles =  njh::files::make_path(regionOutputDir, "extracted.fastq");
+
+			for(auto & reg : regInfo){
+				reg->totalPairedReads_ = readCounts.pairedReads_;
+				reg->totalReads_ = readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_;
+				reg->totalFinalReads_ = readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_;
+			}
+			for(auto & reg : metav_regInfo){
+				reg->totalPairedReads_ = readCounts.pairedReads_;
+				reg->totalReads_ = readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_;
+				reg->totalFinalReads_ = readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_;
+			}
+
+
+			auto vOptFullOutputDir = njh::files::make_path(regionOutputDir, VelvetOptimiserOutDir);
+
+			try {
+
+				if(!exists(pairedR1) && !exists(singles)){
+					std::stringstream ss;
+					ss << __PRETTY_FUNCTION__ << ", couldn't find " << pairedR1 << " or " << singles << ", need to have at least one of them" << "\n";
+					throw std::runtime_error{ss.str()};
+				}
+
+				std::stringstream vOptCmdStream;
+				vOptCmdStream << "cd " << regionOutputDir << " && VelvetOptimiser.pl -f '";
+				if(exists(pairedR1)){
+					if(!exists(pairedR2)){
+						std::stringstream ss;
+						ss << __PRETTY_FUNCTION__ << ", found: " << pairedR1 << " but cound't find it's mate file: " << pairedR2 << "\n";
+						throw std::runtime_error{ss.str()};
+					}else{
+						vOptCmdStream << " -fastq -shortPaired -separate " << pairedR1.filename() << " " <<  pairedR2.filename() <<  " ";
+					}
+				}
+				if(exists(singles)){
+					vOptCmdStream << " -fastq -short " << singles.filename() << " " ;
+				}
+				vOptCmdStream << "'";
+				//VelvetOptimiser.pl  -x 2 -f ' '  --d withRevComp_optimize_n50
+
+				vOptCmdStream  << " -t " << numThreads
+											<< " -s " << velvetStartKmer
+											<< " -e " << velvetEndKmer
+											<< " -x " << velvetKmerStep
+											<< " -optFuncKmer '" << optFuncKmer << "'"
+											<< " " << extraVelvetOptimiserOptions
+											<< " --d " << VelvetOptimiserOutDir;
+				std::string vOptCmdPreCovCutOff = vOptCmdStream.str();
+				vOptCmdStream
+											<< " -m " << coverageCutOff
+											<< " > VelvetOptimzerRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
+				if(exists(vOptFullOutputDir)){
+					if(overWriteDir){
+						njh::files::rmDirForce(vOptFullOutputDir);
+					}else{
+						std::stringstream ss;
+						ss << __PRETTY_FUNCTION__ << ", error " << vOptFullOutputDir << " already exists, use --overWriteDir to overwrite" << "\n";
+						throw std::runtime_error{ss.str()};
+					}
+				}
+
+				auto vOptRunOutput = njh::sys::run({vOptCmdStream.str()});
+				auto firstRunOutputJson = njh::json::toJson(vOptRunOutput);
+				bool failedFirstRun = false;
+				if(!vOptRunOutput.success_){
+					failedFirstRun = true;
+					if(exists(vOptFullOutputDir)){
+						bfs::rename(vOptFullOutputDir, njh::files::prependFileBasename(vOptFullOutputDir, "failed_" +  njh::getCurrentDate() + "_"));
+					}
+					std::stringstream vOptCmdStreamAgain;
+					vOptCmdStreamAgain << 	vOptCmdPreCovCutOff
+							<< " > VelvetOptimzerRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
+					vOptRunOutput = njh::sys::run({vOptCmdStreamAgain.str()});
+				}
+
+				//failed a second time
+				auto secondRunOutputJson = njh::json::toJson(vOptRunOutput);
+				bool failedSecondRun = false;
+				if (!vOptRunOutput.success_) {
+					failedSecondRun = true;
+					if (exists(vOptFullOutputDir)) {
+						bfs::rename(vOptFullOutputDir,
+								njh::files::prependFileBasename(vOptFullOutputDir,
+										"failed2_" + njh::getCurrentDate() + "_"));
+					}
+					std::stringstream vOptCmdStreamAgain;
+					vOptCmdStreamAgain << 	vOptCmdPreCovCutOff
+							<< " -m " << "-1" << " > VelvetOptimzerRunLog_"
+							<< njh::getCurrentDate() << ".txt 2>&1";
+					vOptRunOutput = njh::sys::run( { vOptCmdStreamAgain.str() });
+				}
+
+
+				BioCmdsUtils::checkRunOutThrow(vOptRunOutput, __PRETTY_FUNCTION__);
+				setUp.startARunLog(vOptFullOutputDir.string());
+
+				OutOptions spadesRunOutputLogOpts(njh::files::make_path(vOptFullOutputDir, "VelvetOptimiserRunOutput.json"));
+				OutputStream spadesRunOutputLogOut(spadesRunOutputLogOpts);
+				spadesRunOutputLogOut << njh::json::toJson(vOptRunOutput) << std::endl;
+
+				if(failedFirstRun){
+					OutOptions failedVelvetRunOutputLogOpts(njh::files::make_path(vOptFullOutputDir, "failed_VelvetOptimiserRunOutput.json"));
+					OutputStream failedVelvetRunOutputLogOut(failedVelvetRunOutputLogOpts);
+					failedVelvetRunOutputLogOut << firstRunOutputJson << std::endl;
+				}
+
+				if(failedSecondRun){
+					OutOptions failedVelvetRunOutputLogOpts(njh::files::make_path(vOptFullOutputDir, "failed_VelvetOptimiserSecondTimeRunOutput.json"));
+					OutputStream failedVelvetRunOutputLogOut(failedVelvetRunOutputLogOpts);
+					failedVelvetRunOutputLogOut << secondRunOutputJson << std::endl;
+				}
+
+				{ //velvet optimizer run
+					auto contigsFnp = njh::files::make_path(vOptFullOutputDir, "contigs.fasta");
+					{
+						//make contigs upper case
+						auto originalContigsFnp = njh::files::make_path(vOptFullOutputDir, "contigs.fa");
+						auto originalContigsOpts = SeqIOOptions::genFastaInOut(originalContigsFnp, contigsFnp);
+						originalContigsOpts.lowerCaseBases_ = "upper";
+						SeqInput originalContigsReader(originalContigsOpts);
+						auto originalContigsSeqs = originalContigsReader.readAllReads<seqInfo>();
+						SeqOutput::write(originalContigsSeqs, originalContigsOpts);
+					}
+
+					if (breakUpAmbigousContigs) {
+						std::regex pat{"N+"};
+						bool mark = true;
+						//break up
+						auto beforeBreakupContigsFnp = njh::files::make_path(vOptFullOutputDir, "beforeBreakUp_contigs.fasta");
+						bfs::copy_file(contigsFnp, beforeBreakupContigsFnp);
+						auto contigsOpts = SeqIOOptions::genFastaInOut(beforeBreakupContigsFnp, contigsFnp);
+						contigsOpts.out_.overWriteFile_ = true;
+						SeqIO contigsReader(contigsOpts);
+						auto contigsSeqs = contigsReader.in_.readAllReads<seqInfo>();
+						contigsReader.out_.openOut();
+						struct PatPosSize{
+							PatPosSize(const std::string & pat, size_t pos): pat_(pat), pos_(pos){
+
+							}
+							std::string pat_;
+							size_t pos_;
+
+							size_t end(){
+								return pos_ + pat_.size();
+							}
+						};
+
+						for (const auto & seq : contigsSeqs) {
+							std::sregex_iterator iter(seq.seq_.begin(), seq.seq_.end(), pat);
+							std::sregex_iterator end;
+							std::vector<PatPosSize> pats;
+							while (iter != end) {
+								pats.emplace_back((*iter)[0], iter->position());
+								++iter;
+							}
+
+							if(!pats.empty()){
+								if(0 != pats.front().pos_ ){
+									size_t start = 0;
+									size_t end = pats.front().pos_;
+									auto subSeq = seq.getSubRead(start, end - start);
+									if(mark){
+										subSeq.name_.append(njh::pasteAsStr("-s", start, "-e", end));
+									}
+									contigsReader.write(subSeq);
+								}
+								if(pats.size() > 1){
+									for(const auto patPos : iter::range(pats.size() - 1)){
+										const auto & p = pats[patPos];
+										size_t start = p.pos_ + p.pat_.size();
+										size_t end = pats[patPos + 1].pos_;
+										auto subSeq = seq.getSubRead(start, end - start);
+										if(mark){
+											subSeq.name_.append(njh::pasteAsStr("-s", start, "-e", end));
+										}
+										contigsReader.write(subSeq);
+									}
+								}
+								if(seq.seq_.size() != pats.back().end()){
+									size_t start = pats.back().end();
+									size_t end = seq.seq_.size();
+									auto subSeq = seq.getSubRead(start, end - start);
+									if(mark){
+										subSeq.name_.append(njh::pasteAsStr("-s", start, "-e", end));
+									}
+									contigsReader.write(subSeq);
+								}
+							}else{
+								contigsReader.write(seq);
+							}
+						}
+					}
+
+
+					auto contigsOpts = SeqIOOptions::genFastaIn(contigsFnp);
+					SeqInput contigsReader(contigsOpts);
+					auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
+
+					std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+					for (const auto & seq : contigsSeqs) {
+						contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
+					}
+
+					allSetKmers(contigsKmerReads, reOrientingKmerLength, true);
+
+					SeqInput refReader(SeqIOOptions::genFastaIn( refFnp ) );
+					auto refSeqs = refReader.readAllReads<seqInfo>();
+					std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
+					for (const auto & seq : refSeqs) {
+						refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
+					}
+					allSetKmers(refKmerReads, reOrientingKmerLength, true);
+
+					for(const auto & seqKmer : contigsKmerReads) {
+						uint32_t forwardWinners = 0;
+						uint32_t revWinners = 0;
+						for (const auto & refSeq : refKmerReads) {
+							auto forDist = refSeq->compareKmers(*seqKmer);
+							auto revDist = refSeq->compareKmersRevComp(*seqKmer);
+							if (forDist.first < revDist.first) {
+								++revWinners;
+							} else {
+								++forwardWinners;
+							}
+						}
+						if (revWinners > forwardWinners) {
+							seqKmer->seqBase_.reverseComplementRead(true, true);
+						}
+					}
+
+					//sort by sequence length;
+					njh::sort(contigsKmerReads, [](const std::shared_ptr<seqWithKmerInfo> & seq1, const std::shared_ptr<seqWithKmerInfo> & seq2){
+						return len(seq1->seqBase_) > len(seq2->seqBase_);
+					});
+
+
+
+
+					OutOptions contigInfoOpts(njh::files::make_path(vOptFullOutputDir, "contigs_outputInfo.tab.txt"));
+					OutputStream contigInfoOut(contigInfoOpts);
+					contigInfoOut << "name\tlength\tcoverage" << std::endl;
+
+					for(const auto & contigsKmerRead : contigsKmerReads){
+						auto assembleInfo = DefaultAssembleNameInfo(contigsKmerRead->seqBase_.name_);
+						contigInfoOut << contigsKmerRead->seqBase_.name_
+								<< "\t" << len(contigsKmerRead->seqBase_)
+								<< "\t" << assembleInfo.coverage_ << std::endl;
+					}
+
+					auto reOrientedContigsFnp = njh::files::make_path(vOptFullOutputDir, "reOriented_contigs.fasta");
+
+					SeqOutput::write(contigsKmerReads, SeqIOOptions::genFastaOut(reOrientedContigsFnp));
+
+					uint64_t maxLen = 0;
+					readVec::getMaxLength(refSeqs, maxLen);
+					readVec::getMaxLength(contigsKmerReads, maxLen);
+					aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
+					//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
+					std::vector<kmerInfo> inputSeqsKmerInfos;
+					for(const auto & input : refSeqs){
+						inputSeqsKmerInfos.emplace_back(input.seq_, 7, false);
+					}
+					readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, inputSeqsKmerInfos, alignerObj	);
+					//alignerObj.processAlnInfoOutputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
+					std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs;
+					for(auto & seq : contigsKmerReads){
+						bool found = false;
+						for(const auto & finalSeq : finalSeqs){
+							if(finalSeq->seqBase_.seq_ == seq->seqBase_.seq_){
+								found = true;
+								break;
+							}
+						}
+						if(!found){
+							finalSeqs.emplace_back(seq);
+						}
+					}
+
+					double totalCoverage = 0;
+					for(auto & seq : finalSeqs){
+						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
+						totalCoverage += assembleInfo.coverage_;
+					}
+
+					for(auto & seq : finalSeqs){
+						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
+						MetaDataInName seqMeta;
+						seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
+						seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
+						seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
+						seqMeta.addMeta("regionUID", regionUid);
+						seqMeta.addMeta("sample", sample);
+						seqMeta.resetMetaInName(seq->seqBase_.name_);
+						seq->seqBase_.cnt_ = (assembleInfo.coverage_/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
+						seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
+					}
+
+					OutOptions trimmedContigInfoOpts(njh::files::make_path(vOptFullOutputDir, "trimmed_reOriented_contigs_outputInfo.tab.txt"));
+					OutputStream trimmedContigInfoOut(trimmedContigInfoOpts);
+					trimmedContigInfoOut << "name\tlength\tcoverage" << std::endl;
+					auto trimmkedReOrientedContigsFnp = njh::files::make_path(vOptFullOutputDir, "trimmed_reOriented_contigs.fasta");
+					SeqOutput outputWriter(SeqIOOptions::genFastaOut(trimmkedReOrientedContigsFnp));
+					auto trimmkedReOrientedContigsFnp_belowCutOff = njh::files::make_path(vOptFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
+					SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmkedReOrientedContigsFnp_belowCutOff));
+
+					uint32_t belowCutOff = 0;
+					uint32_t aboveCutOff = 0;
+					bool allPassTrim = true;
+					for (const auto & contigsKmerRead : finalSeqs) {
+						if (len(contigsKmerRead->seqBase_) < minFinalLength) {
+							++belowCutOff;
+							belowCutOffOutputWriter.openWrite(contigsKmerRead);
+							contigsKmerRead->seqBase_.on_ = false;
+						} else {
+							MetaDataInName seqMeta(contigsKmerRead->seqBase_.name_);
+							trimmedContigInfoOut << contigsKmerRead->seqBase_.name_
+									<< "\t" << len(contigsKmerRead->seqBase_)
+									<< "\t" << seqMeta.getMeta("estimatedPerBaseCoverage")
+									<< std::endl;
+							if(!contigsKmerRead->seqBase_.on_){
+								allPassTrim = false;
+							}else{
+								++aboveCutOff;
+							}
+							outputWriter.openWrite(contigsKmerRead);
+						}
+					}
+					if(allPassTrim){
+						std::lock_guard<std::mutex> lock(allFinalWriterMut);
+						for (const auto & contigsKmerRead : finalSeqs) {
+							if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
+								allFinalWriter.write(contigsKmerRead);
+							}
+						}
+						for(auto & reg : regInfo){
+							reg->infoCalled_ = true;
+							reg->uniqHaps_ = aboveCutOff;
+						}
+					}else{
+						std::lock_guard<std::mutex> lock(allPartialWriterMut);
+						for (const auto & contigsKmerRead : finalSeqs) {
+							if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
+								allPartialWriter.write(contigsKmerRead);
+							}
+						}
+					}
+				}
+			} catch (std::exception &e) {
+			std::lock_guard<std::mutex> lock(exceptionsMut);
+			exceptions[regionUid] = e.what();
+			for (auto &reg : regInfo) {
+				reg->infoCalled_ = false;
+				reg->uniqHaps_ = 0;
+			}
+			for (auto &reg : metav_regInfo) {
+				reg->infoCalled_ = false;
+				reg->uniqHaps_ = 0;
+			}
+		}
+
+			try {
+
+
+
+				// now run meta-velvetg
+				bfs::path MetaVelvetOutDir = njh::files::make_path(vOptFullOutputDir, "MetaVelvetOutDir");
+				njh::files::makeDir(njh::files::MkdirPar{MetaVelvetOutDir});
+				auto logfiles = njh::files::gatherFiles(vOptFullOutputDir, "_Logfile.txt");
+				if(logfiles.empty() || 1 != logfiles.size()){
+					std::stringstream ss;
+					ss << __PRETTY_FUNCTION__ << ", error " << "couldn't determine log file in " << vOptFullOutputDir << "\n";
+					if(logfiles.size() > 1){
+						ss << "Multiple log files found: " << njh::conToStr(logfiles, ", ") << "\n";
+					}
+					throw std::runtime_error{ss.str()};
+				}
+				InputStream logFileIn(InOptions(logfiles.front()));
+				std::string line;
+				bool encounteredFinalInfo = false;
+				std::string velvethArgs = "";
+				std::string velvetgArgs = "";
+				while(njh::files::crossPlatGetline(logFileIn, line)){
+					if(njh::beginsWith(line, "Final optimised assembly details")){
+						encounteredFinalInfo = true;
+					}
+					if(encounteredFinalInfo && std::string::npos != line.find(":")){
+						auto toks = tokenizeString(line, ":");
+						if(toks.size() == 2 && "Velveth parameter string" == toks[0]){
+							njh::trim(toks[1]);
+							velvethArgs = toks[1];
+						}
+						if(toks.size() == 2 && "Velvetg parameter string" == toks[0]){
+							njh::trim(toks[1]);
+							velvetgArgs = njh::replaceString(toks[1], "-clean yes ", "");
+						}
+					}
+				}
+
+				if("" == velvethArgs){
+					std::stringstream ss;
+					ss << __PRETTY_FUNCTION__ << ", error " << "couldn't determine velveth args from " << logfiles.front()<< "\n";
+					throw std::runtime_error{ss.str()};
+				}
+
+				if("" == velvetgArgs){
+					std::stringstream ss;
+					ss << __PRETTY_FUNCTION__ << ", error " << "couldn't determine velvetg args from " << logfiles.front()<< "\n";
+					throw std::runtime_error{ss.str()};
+				}
+			//	std::string velvetOutputDirStr = velvetgArgs;
+			//	trimAtFirstWhitespace(velvetOutputDirStr);
+				std::string velvetOutputDirStr = "optimized_velvet_run";
+				bfs::path velvetOutputDir = njh::files::make_path(VelvetOptimiserOutDir, "MetaVelvetOutDir", velvetOutputDirStr);
+
+				std::stringstream velvethCmd;
+				velvethCmd << "cd " << vOptFullOutputDir << "/../ && velveth " << velvetOutputDir << " " << velvethArgs.substr(velvethArgs.find(" "));
+
+				std::stringstream velvetgCmd;
+				velvetgCmd << "cd " << vOptFullOutputDir << "/../ && velvetg " << velvetOutputDir << " " << velvetgArgs.substr(velvetgArgs.find(" "));
+
+				std::stringstream metavelvetgCmd;
+				metavelvetgCmd << "cd " << vOptFullOutputDir << "/../ && meta-velvetg " << velvetOutputDir;
+
+				auto velvethCmdOutut = njh::sys::run(VecStr{velvethCmd.str()});
+				BioCmdsUtils::checkRunOutThrow(velvethCmdOutut, __PRETTY_FUNCTION__);
+
+				auto velvetgCmdOutut = njh::sys::run(VecStr{velvetgCmd.str()});
+				BioCmdsUtils::checkRunOutThrow(velvetgCmdOutut, __PRETTY_FUNCTION__);
+
+				auto metavelvetgCmdOutput = njh::sys::run(VecStr{metavelvetgCmd.str()});
+				BioCmdsUtils::checkRunOutThrow(metavelvetgCmdOutput, __PRETTY_FUNCTION__);
+
+				Json::Value runOutputs;
+				runOutputs["velvethCmd"] = velvethCmdOutut.toJson();
+				runOutputs["velvetgCmd"] = velvetgCmdOutut.toJson();
+				runOutputs["metavelvetgCmdOutput"] = metavelvetgCmdOutput.toJson();
+				{
+					OutputStream runOutputsLogOut(njh::files::make_path(vOptFullOutputDir, "MetaVelvetOutDir", velvetOutputDirStr, "runOutputsLog.json"));
+					runOutputsLogOut << runOutputs << std::endl;
+				}
+
+
+
+				{
+					auto metaVelvetDir = njh::files::make_path(vOptFullOutputDir, "MetaVelvetOutDir", velvetOutputDirStr);
+					bfs::path metaVelvetContigsfile = njh::files::make_path(metaVelvetDir, "meta-velvetg.contigs.fasta");
+					{
+						//make contigs upper case
+						auto originalContigsFnp = njh::files::make_path(metaVelvetDir, "meta-velvetg.contigs.fa");
+						auto originalContigsOpts = SeqIOOptions::genFastaInOut(originalContigsFnp, metaVelvetContigsfile);
+						originalContigsOpts.lowerCaseBases_ = "upper";
+						SeqInput originalContigsReader(originalContigsOpts);
+						auto originalContigsSeqs = originalContigsReader.readAllReads<seqInfo>();
+						SeqOutput::write(originalContigsSeqs, originalContigsOpts);
+					}
+
+					if (breakUpAmbigousContigs) {
+						std::regex pat{"N+"};
+						bool mark = true;
+						//break up
+						auto beforeBreakupContigsFnp = njh::files::make_path(metaVelvetDir, "beforeBreakUp_meta-velvetg.contigs.fasta");
+						bfs::copy_file(metaVelvetContigsfile, beforeBreakupContigsFnp);
+						auto contigsOpts = SeqIOOptions::genFastaInOut(beforeBreakupContigsFnp, metaVelvetContigsfile);
+						contigsOpts.out_.overWriteFile_ = true;
+						SeqIO contigsReader(contigsOpts);
+						auto contigsSeqs = contigsReader.in_.readAllReads<seqInfo>();
+						contigsReader.out_.openOut();
+						struct PatPosSize{
+							PatPosSize(const std::string & pat, size_t pos): pat_(pat), pos_(pos){
+
+							}
+							std::string pat_;
+							size_t pos_;
+
+							size_t end(){
+								return pos_ + pat_.size();
+							}
+						};
+
+						for (const auto & seq : contigsSeqs) {
+							std::sregex_iterator iter(seq.seq_.begin(), seq.seq_.end(), pat);
+							std::sregex_iterator end;
+							std::vector<PatPosSize> pats;
+							while (iter != end) {
+								pats.emplace_back((*iter)[0], iter->position());
+								++iter;
+							}
+
+							if(!pats.empty()){
+								if(0 != pats.front().pos_ ){
+									size_t start = 0;
+									size_t end = pats.front().pos_;
+									auto subSeq = seq.getSubRead(start, end - start);
+									if(mark){
+										subSeq.name_.append(njh::pasteAsStr("-s", start, "-e", end));
+									}
+									contigsReader.write(subSeq);
+								}
+								if(pats.size() > 1){
+									for(const auto patPos : iter::range(pats.size() - 1)){
+										const auto & p = pats[patPos];
+										size_t start = p.pos_ + p.pat_.size();
+										size_t end = pats[patPos + 1].pos_;
+										auto subSeq = seq.getSubRead(start, end - start);
+										if(mark){
+											subSeq.name_.append(njh::pasteAsStr("-s", start, "-e", end));
+										}
+										contigsReader.write(subSeq);
+									}
+								}
+								if(seq.seq_.size() != pats.back().end()){
+									size_t start = pats.back().end();
+									size_t end = seq.seq_.size();
+									auto subSeq = seq.getSubRead(start, end - start);
+									if(mark){
+										subSeq.name_.append(njh::pasteAsStr("-s", start, "-e", end));
+									}
+									contigsReader.write(subSeq);
+								}
+							}else{
+								contigsReader.write(seq);
+							}
+						}
+					}
+
+
+					auto contigsOpts = SeqIOOptions::genFastaIn(metaVelvetContigsfile);
+					SeqInput contigsReader(contigsOpts);
+					auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
+
+					std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+					for (const auto & seq : contigsSeqs) {
+						contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
+					}
+
+					allSetKmers(contigsKmerReads, reOrientingKmerLength, true);
+
+					SeqInput refReader(SeqIOOptions::genFastaIn(njh::files::make_path(resultsDirectory, "inputRegions.fasta")));
+					auto refSeqs = refReader.readAllReads<seqInfo>();
+					std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
+					for (const auto & seq : refSeqs) {
+						refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
+					}
+					allSetKmers(refKmerReads, reOrientingKmerLength, true);
+
+					for(const auto & seqKmer : contigsKmerReads) {
+						uint32_t forwardWinners = 0;
+						uint32_t revWinners = 0;
+						for (const auto & refSeq : refKmerReads) {
+							auto forDist = refSeq->compareKmers(*seqKmer);
+							auto revDist = refSeq->compareKmersRevComp(*seqKmer);
+							if (forDist.first < revDist.first) {
+								++revWinners;
+							} else {
+								++forwardWinners;
+							}
+						}
+						if (revWinners > forwardWinners) {
+							seqKmer->seqBase_.reverseComplementRead(true, true);
+						}
+					}
+
+					//sort by sequence length;
+					njh::sort(contigsKmerReads, [](const std::shared_ptr<seqWithKmerInfo> & seq1, const std::shared_ptr<seqWithKmerInfo> & seq2){
+						return len(seq1->seqBase_) > len(seq2->seqBase_);
+					});
+
+
+
+					OutOptions contigInfoOpts(njh::files::make_path(metaVelvetDir, "meta-velvetg.contigs_outputInfo.tab.txt"));
+					OutputStream contigInfoOut(contigInfoOpts);
+					contigInfoOut << "name\tlength\tcoverage" << std::endl;
+
+					for(const auto & contigsKmerRead : contigsKmerReads){
+						auto assembleInfo = DefaultAssembleNameInfo(contigsKmerRead->seqBase_.name_);
+						contigInfoOut << contigsKmerRead->seqBase_.name_
+								<< "\t" << len(contigsKmerRead->seqBase_)
+								<< "\t" << assembleInfo.coverage_ << std::endl;
+					}
+
+					auto reOrientedContigsFnp = njh::files::make_path(metaVelvetDir, "reOriented_meta-velvetg.contigs.fasta");
+
+					SeqOutput::write(contigsKmerReads, SeqIOOptions::genFastaOut(reOrientedContigsFnp));
+
+					uint64_t maxLen = 0;
+					readVec::getMaxLength(refSeqs, maxLen);
+					readVec::getMaxLength(contigsKmerReads, maxLen);
+					aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
+					//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
+					std::vector<kmerInfo> inputSeqsKmerInfos;
+					for(const auto & input : refSeqs){
+						inputSeqsKmerInfos.emplace_back(input.seq_, 7, false);
+					}
+					readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, inputSeqsKmerInfos, alignerObj	);
+					//alignerObj.processAlnInfoOutputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
+					std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs;
+					for(auto & seq : contigsKmerReads){
+						bool found = false;
+						for(const auto & finalSeq : finalSeqs){
+							if(finalSeq->seqBase_.seq_ == seq->seqBase_.seq_){
+								found = true;
+								break;
+							}
+						}
+						if(!found){
+							finalSeqs.emplace_back(seq);
+						}
+					}
+
+					double totalCoverage = 0;
+					for(auto & seq : finalSeqs){
+						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
+						totalCoverage += assembleInfo.coverage_;
+					}
+
+					for(auto & seq : finalSeqs){
+						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
+						MetaDataInName seqMeta;
+						seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
+						seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
+						seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
+						seqMeta.addMeta("regionUID", regionUid);
+						seqMeta.addMeta("sample", sample);
+						seqMeta.resetMetaInName(seq->seqBase_.name_);
+						seq->seqBase_.cnt_ = (assembleInfo.coverage_/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
+						seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
+					}
+
+					OutOptions trimmedContigInfoOpts(njh::files::make_path(metaVelvetDir, "trimmed_reOriented_meta-velvetg.contigs_outputInfo.tab.txt"));
+					OutputStream trimmedContigInfoOut(trimmedContigInfoOpts);
+					trimmedContigInfoOut << "name\tlength\tcoverage" << std::endl;
+					auto trimmkedReOrientedContigsFnp = njh::files::make_path(metaVelvetDir, "trimmed_reOriented_meta-velvetg.contigs.fasta");
+					SeqOutput outputWriter(SeqIOOptions::genFastaOut(trimmkedReOrientedContigsFnp));
+					auto trimmkedReOrientedContigsFnp_belowCutOff = njh::files::make_path(metaVelvetDir, "trimmed_reOriented_meta-velvetg.contigs_belowCutOff.fasta");
+					SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmkedReOrientedContigsFnp_belowCutOff));
+
+					uint32_t belowCutOff = 0;
+					uint32_t aboveCutOff = 0;
+					bool allPassTrim = true;
+					for (const auto & contigsKmerRead : finalSeqs) {
+						if (len(contigsKmerRead->seqBase_) < minFinalLength) {
+							++belowCutOff;
+							belowCutOffOutputWriter.openWrite(contigsKmerRead);
+							contigsKmerRead->seqBase_.on_ = false;
+						} else {
+							MetaDataInName seqMeta(contigsKmerRead->seqBase_.name_);
+							trimmedContigInfoOut << contigsKmerRead->seqBase_.name_
+									<< "\t" << len(contigsKmerRead->seqBase_)
+									<< "\t" << seqMeta.getMeta("estimatedPerBaseCoverage")
+									<< std::endl;
+							if(!contigsKmerRead->seqBase_.on_){
+								allPassTrim = false;
+							}else{
+								++aboveCutOff;
+							}
+							outputWriter.openWrite(contigsKmerRead);
+						}
+					}
+					if(allPassTrim){
+						std::lock_guard<std::mutex> lock(metav_allFinalWriterMut);
+						for (const auto & contigsKmerRead : finalSeqs) {
+							if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
+								metav_allFinalWriter.write(contigsKmerRead);
+							}
+						}
+						for(auto & reg : metav_regInfo){
+							reg->infoCalled_ = true;
+							reg->uniqHaps_ = aboveCutOff;
+						}
+					}else{
+						std::lock_guard<std::mutex> lock(metav_allPartialWriterMut);
+						for (const auto & contigsKmerRead : finalSeqs) {
+							if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
+								metav_allPartialWriter.write(contigsKmerRead);
+							}
+						}
+					}
+				}
+			} catch (std::exception & e) {
+				std::lock_guard<std::mutex> lock(exceptionsMut);
+				metav_exceptions[regionUid] = e.what();
+				for (auto &reg : metav_regInfo) {
+					reg->infoCalled_ = false;
+					reg->uniqHaps_ = 0;
+				}
+			}
+		}
+	};
+
+
+	njh::concurrent::runVoidFunctionThreaded(runVelvetsOnRegion, numThreads);
+	allFinalWriter.closeOut();
+	allPartialWriter.closeOut();
+
+	metav_allFinalWriter.closeOut();
+	metav_allPartialWriter.closeOut();
+	//sample,readTotal,readTotalUsed, success, name
+	//
+
+	{
+		OutputStream basicInfo(njh::files::make_path(finalDirectory, "basicInfoPerRegion.tab.txt"));
+		basicInfo << "#chrom\tstart\tend\tname\tlength\tstrand\tsuccess\tuniqHaps\treadTotal\treadTotalUsed\ttotalPairedReads";
+		basicInfo << "\tsample";
+		uint32_t maxExtraFields = 0;
+		for(const auto & p : inputRegions){
+
+			auto bedOut = p.genBedRecordCore();
+			if(bedOut.extraFields_.size() > maxExtraFields){
+				maxExtraFields = bedOut.extraFields_.size();
+			}
+		}
+		for(uint32_t t = 0; t < maxExtraFields; ++t){
+			basicInfo << "\textraField"<<t;
+		}
+		basicInfo << "\n";
+
+		std::map<uint32_t, uint32_t> coiCounts;
+
+		for (const auto & reg : inputRegions) {
+			const auto & regInfo = njh::mapAt(regInfosByUID, reg.uid_);
+			++coiCounts[regInfo.front()->uniqHaps_];
+			for(auto & reg : regInfo){
+				auto bedOut = reg->region_.genBedRecordCore();
+				basicInfo << bedOut.toDelimStr();
+				basicInfo << "\t" << njh::boolToStr(reg->infoCalled_)
+									<< "\t" << reg->uniqHaps_
+									<< "\t" << reg->totalReads_
+									<< "\t" << reg->totalFinalReads_
+									<< "\t" << reg->totalPairedReads_
+									<< "\t" << sample;
+				for(const auto & extra : bedOut.extraFields_){
+					basicInfo << "\t" << extra;
+				}
+				basicInfo << std::endl;
+			}
+		}
+
+		OutputStream coiOut(njh::files::make_path(finalDirectory, "coiCounts.tab.txt"));
+		coiOut << "coi\tcount" << std::endl;
+		for(const auto & count : coiCounts){
+			coiOut << count.first << "\t" << count.second << std::endl;
+		}
+
+		OutputStream exceptionsOut(njh::files::make_path(finalDirectory, "exceptionsMessages.tab.txt"));
+		exceptionsOut << "regionUID\tmessage" << std::endl;
+		for(const auto & exp : exceptions){
+			exceptionsOut << exp.first << "\t" << exp.second << std::endl;
+		}
+	}
+
+	{
+		OutputStream basicInfo(njh::files::make_path(metav_finalDirectory, "basicInfoPerRegion.tab.txt"));
+		basicInfo << "#chrom\tstart\tend\tname\tlength\tstrand\tsuccess\tuniqHaps\treadTotal\treadTotalUsed\ttotalPairedReads";
+		basicInfo << "\tsample";
+		uint32_t maxExtraFields = 0;
+		for(const auto & p : inputRegions){
+
+			auto bedOut = p.genBedRecordCore();
+			if(bedOut.extraFields_.size() > maxExtraFields){
+				maxExtraFields = bedOut.extraFields_.size();
+			}
+		}
+		for(uint32_t t = 0; t < maxExtraFields; ++t){
+			basicInfo << "\textraField"<<t;
+		}
+		basicInfo << "\n";
+
+		std::map<uint32_t, uint32_t> coiCounts;
+
+		for (const auto & reg : inputRegions) {
+			const auto & regInfo = njh::mapAt(metav_regInfosByUID, reg.uid_);
+			++coiCounts[regInfo.front()->uniqHaps_];
+			for(auto & reg : regInfo){
+				auto bedOut = reg->region_.genBedRecordCore();
+				basicInfo << bedOut.toDelimStr();
+				basicInfo << "\t" << njh::boolToStr(reg->infoCalled_)
+									<< "\t" << reg->uniqHaps_
+									<< "\t" << reg->totalReads_
+									<< "\t" << reg->totalFinalReads_
+									<< "\t" << reg->totalPairedReads_
+									<< "\t" << sample;
+				for(const auto & extra : bedOut.extraFields_){
+					basicInfo << "\t" << extra;
+				}
+				basicInfo << std::endl;
+			}
+		}
+
+		OutputStream coiOut(njh::files::make_path(metav_finalDirectory, "coiCounts.tab.txt"));
+		coiOut << "coi\tcount" << std::endl;
+		for(const auto & count : coiCounts){
+			coiOut << count.first << "\t" << count.second << std::endl;
+		}
+
+		OutputStream exceptionsOut(njh::files::make_path(metav_finalDirectory, "exceptionsMessages.tab.txt"));
+		exceptionsOut << "regionUID\tmessage" << std::endl;
+		for(const auto & exp : metav_exceptions){
+			exceptionsOut << exp.first << "\t" << exp.second << std::endl;
+		}
+	}
+
+	return 0;
+}
 
 
 

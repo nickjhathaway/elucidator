@@ -22,6 +22,7 @@ class programWrappersAssembleOnPathWeaverRunner : public njh::progutils::Program
 	static int runSpadesOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int runMegahitOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int runSavageOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
+	static int runVelvetOptimizerAndMetaVelvetOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 
 
 

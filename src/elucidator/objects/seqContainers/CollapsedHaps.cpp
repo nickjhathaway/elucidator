@@ -15,7 +15,7 @@ namespace njhseq {
 
 void CollapsedHaps::setSubNamesToMainSeqPos(){
 	subNamesToMainSeqPos_.clear();
-	for(const auto & names : iter::enumerate(names_)){
+	for(const auto  names : iter::enumerate(names_)){
 		for(const auto & name : names.second){
 			subNamesToMainSeqPos_[name] = names.first;
 		}
@@ -169,7 +169,7 @@ CollapsedHaps CollapsedHaps::readInReads(const SeqIOOptions & inOpts, const std:
 		}
 		seqCount+= std::round(seq.cnt_);
 		bool found = false;
-		for (const auto & pos : iter::range(ret.seqs_.size())) {
+		for (const auto pos : iter::range(ret.seqs_.size())) {
 			const auto & otherSeq = ret.seqs_[pos];
 			if (otherSeq->seq_ == seq.seq_) {
 				otherSeq->cnt_ += 1;
