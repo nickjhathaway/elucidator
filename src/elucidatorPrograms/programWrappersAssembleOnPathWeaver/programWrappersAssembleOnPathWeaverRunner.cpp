@@ -1469,7 +1469,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 
 
 				BioCmdsUtils::checkRunOutThrow(vOptRunOutput, __PRETTY_FUNCTION__);
-				setUp.startARunLog(vOptFullOutputDir.string());
+				//setUp.startARunLog(vOptFullOutputDir.string());
 
 				OutOptions spadesRunOutputLogOpts(njh::files::make_path(vOptFullOutputDir, "VelvetOptimiserRunOutput.json"));
 				OutputStream spadesRunOutputLogOut(spadesRunOutputLogOpts);
@@ -1655,12 +1655,12 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 
 					double totalCoverage = 0;
 					for(auto & seq : finalSeqs){
-						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
+						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_);
 						totalCoverage += assembleInfo.coverage_;
 					}
 
 					for(auto & seq : finalSeqs){
-						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
+						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_);
 						MetaDataInName seqMeta;
 						seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
 						seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
@@ -1986,12 +1986,12 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 
 					double totalCoverage = 0;
 					for(auto & seq : finalSeqs){
-						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
+						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_);
 						totalCoverage += assembleInfo.coverage_;
 					}
 
 					for(auto & seq : finalSeqs){
-						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
+						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_);
 						MetaDataInName seqMeta;
 						seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
 						seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
