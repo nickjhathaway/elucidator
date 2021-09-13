@@ -1243,7 +1243,6 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 
 	VecStr optimizerFuncsAvail{"LNbp","Lbp","Lcon","max","n50","ncon","tbp"};
 
-	bfs::path resultsDirectory = "./";
 	bool overWriteDir = false;
 	bool breakUpAmbigousContigs = true;
 	double coverageCutOff = 1.0;
@@ -1276,7 +1275,6 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 		setUp.addWarning("Error for --optFuncKmer, value was set as " + optFuncKmer + " but doesn't match available options " + njh::conToStr(optimizerFuncsAvail, ", "));
 	}
 	setUp.setOption(minFinalLength, "--minFinalLength", "min Final Length");
-	setUp.setOption(resultsDirectory, "--resultsDirectory", "Results Directory", true);
 	setUp.setOption(reOrientingKmerLength, "--reOrientingKmerLength", "re-orienting K-mer Length");
 	setUp.setOption(numThreads, "--numThreads", "number of threads to use");
 	setUp.setOption(extraVelvetOptimiserOptions, "--extraVelvetOptimiserOptions", "Extra options to give to spades");
@@ -1911,7 +1909,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 
 					allSetKmers(contigsKmerReads, reOrientingKmerLength, true);
 
-					SeqInput refReader(SeqIOOptions::genFastaIn(njh::files::make_path(resultsDirectory, "inputRegions.fasta")));
+					SeqInput refReader(SeqIOOptions::genFastaIn( refFnp ) );
 					auto refSeqs = refReader.readAllReads<seqInfo>();
 					std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
 					for (const auto & seq : refSeqs) {
