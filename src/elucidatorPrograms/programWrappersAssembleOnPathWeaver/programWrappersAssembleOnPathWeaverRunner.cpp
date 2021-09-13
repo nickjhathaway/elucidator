@@ -1279,15 +1279,11 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	setUp.setOption(resultsDirectory, "--resultsDirectory", "Results Directory", true);
 	setUp.setOption(reOrientingKmerLength, "--reOrientingKmerLength", "re-orienting K-mer Length");
 	setUp.setOption(numThreads, "--numThreads", "number of threads to use");
-	setUp.setOption(overWriteDir,     "--overWriteDir",     "Over Write Spades Results Directory");
 	setUp.setOption(extraVelvetOptimiserOptions, "--extraVelvetOptimiserOptions", "Extra options to give to spades");
 	setUp.setOption(VelvetOptimiserOutDir,     "--VelvetOptimiserOutDir",     "VelvetOptimiser.pl Out Directory name, will be relative to final pass directory");
 	if("VelvetOptimiserOutDir" == VelvetOptimiserOutDir){
 		VelvetOptimiserOutDir = VelvetOptimiserOutDir.string() + "_" + optFuncKmer;
 	}
-
-	setUp.setOption(minFinalLength, "--minFinalLength", "min Final Length");
-	setUp.setOption(reOrientingKmerLength, "--reOrientingKmerLength", "re-orienting K-mer Length");
 
 	setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(pwOutputDir), "_Velvet_TODAY"), true);
 	setUp.finishSetUp(std::cout);
