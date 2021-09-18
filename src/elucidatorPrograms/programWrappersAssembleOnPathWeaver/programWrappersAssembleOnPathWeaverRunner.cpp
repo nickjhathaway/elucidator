@@ -1711,12 +1711,14 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					uint32_t aboveCutOff = 0;
 					bool allPassTrim = true;
 					for (const auto & contigsKmerRead : finalSeqs) {
-						if (len(contigsKmerRead->seqBase_) < minFinalLength) {
+						MetaDataInName seqMeta(contigsKmerRead->seqBase_.name_);
+
+						if (len(contigsKmerRead->seqBase_) < minFinalLength || seqMeta.getMeta<double>("estimatedPerBaseCoverage") < coverageCutOff) {
 							++belowCutOff;
 							belowCutOffOutputWriter.openWrite(contigsKmerRead);
 							contigsKmerRead->seqBase_.on_ = false;
 						} else {
-							MetaDataInName seqMeta(contigsKmerRead->seqBase_.name_);
+
 							trimmedContigInfoOut << contigsKmerRead->seqBase_.name_
 									<< "\t" << len(contigsKmerRead->seqBase_)
 									<< "\t" << seqMeta.getMeta("estimatedPerBaseCoverage")
@@ -2042,12 +2044,12 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					uint32_t aboveCutOff = 0;
 					bool allPassTrim = true;
 					for (const auto & contigsKmerRead : finalSeqs) {
-						if (len(contigsKmerRead->seqBase_) < minFinalLength) {
+						MetaDataInName seqMeta(contigsKmerRead->seqBase_.name_);
+						if (len(contigsKmerRead->seqBase_) < minFinalLength || seqMeta.getMeta<double>("estimatedPerBaseCoverage") < coverageCutOff) {
 							++belowCutOff;
 							belowCutOffOutputWriter.openWrite(contigsKmerRead);
 							contigsKmerRead->seqBase_.on_ = false;
 						} else {
-							MetaDataInName seqMeta(contigsKmerRead->seqBase_.name_);
 							trimmedContigInfoOut << contigsKmerRead->seqBase_.name_
 									<< "\t" << len(contigsKmerRead->seqBase_)
 									<< "\t" << seqMeta.getMeta("estimatedPerBaseCoverage")
