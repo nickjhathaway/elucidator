@@ -1242,7 +1242,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 
 	uint32_t velvetStartKmer = 51;
 	uint32_t velvetEndKmer = 75;
-	uint32_t velvetKmerStep = 5;
+	uint32_t velvetKmerStep = 4;
 	std::string optFuncKmer = "n50";
 	uint32_t velvetNumOfThreads = 1;
 	VecStr optimizerFuncsAvail{"LNbp","Lbp","Lcon","max","n50","ncon","tbp"};
@@ -1776,7 +1776,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 						}
 						if(toks.size() == 2 && "Velvetg parameter string" == toks[0]){
 							njh::trim(toks[1]);
-							velvetgArgs = njh::replaceString(toks[1], "-clean yes ", "");
+							velvetgArgs = njh::replaceString(toks[1], "-clean yes", "");
 						}
 					}
 				}
