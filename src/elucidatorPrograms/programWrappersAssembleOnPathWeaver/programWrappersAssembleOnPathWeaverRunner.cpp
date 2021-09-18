@@ -1240,11 +1240,11 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	bfs::path pwOutputDir = "";
 	std::string sample = "";
 
-	uint32_t velvetStartKmer = 51;
-	uint32_t velvetEndKmer = 75;
-	uint32_t velvetKmerStep = 4;
-	std::string optFuncKmer = "n50";
-	std::string optFuncCov = "n50";
+	uint32_t velvetStartKmer = 31;
+	uint32_t velvetEndKmer = 71;
+	uint32_t velvetKmerStep = 10;
+	std::string optFuncKmer = "n50*Lcon/tbp+log(Lbp)";
+	std::string optFuncCov = "n50*Lcon/tbp+log(Lbp)";
 
 	uint32_t velvetNumOfThreads = 1;
 	VecStr optimizerFuncsAvail{"LNbp","Lbp","Lcon","max","n50","ncon","tbp"};
@@ -1298,7 +1298,11 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	setUp.setOption(extraVelvetOptimiserOptions, "--extraVelvetOptimiserOptions", "Extra options to give to spades");
 	setUp.setOption(VelvetOptimiserOutDir,     "--VelvetOptimiserOutDir",     "VelvetOptimiser.pl Out Directory name, will be relative to final pass directory");
 	if("VelvetOptimiserOutDir" == VelvetOptimiserOutDir){
-		VelvetOptimiserOutDir = VelvetOptimiserOutDir.string() + "_kfunc" + optFuncKmer + "_covfunc" + optFuncCov;
+		if(!njh::in(optFuncKmer, optimizerFuncsAvail) || !njh::in(optFuncCov, optimizerFuncsAvail)){
+			VelvetOptimiserOutDir = VelvetOptimiserOutDir.string() + "_complex";
+		}else{
+			VelvetOptimiserOutDir = VelvetOptimiserOutDir.string() + "_kfunc" + optFuncKmer + "_covfunc" + optFuncCov;
+		}
 	}
 
 	setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(pwOutputDir), "_Velvet_TODAY"), true);
