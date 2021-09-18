@@ -37,7 +37,7 @@ programWrappersAssembleOnPathWeaverRunner::programWrappersAssembleOnPathWeaverRu
 
 					 addFunc("runSavageOnPathWeaverRegions", runSavageOnPathWeaverRegions, false),
 					 addFunc("runVelvetOptimizerAndMetaVelvetOnPathWeaverRegions", runVelvetOptimizerAndMetaVelvetOnPathWeaverRegions, false),
-
+					 addFunc("runTrinityOnPathWeaverRegions", runTrinityOnPathWeaverRegions, false),
            },//
           "programWrappersAssembleOnPathWeaverRunner") {}
 
@@ -535,6 +535,361 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 
 	return 0;
 }
+
+
+int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path bedFile = "";
+	bfs::path pwOutputDir = "";
+	std::string sample = "";
+
+	uint32_t TrinityNumThreads = 1;
+	uint32_t TrinityMaxMemory = 10;
+	std::string extraTrinityOptions = "";
+	uint32_t reOrientingKmerLength = 9;
+	uint32_t minFinalLength = 40;
+	bfs::path TrinityOutDir = "TrinityOut";
+	uint32_t numThreads = 1;
+	seqSetUp setUp(inputCommands);
+	setUp.processDebug();
+	setUp.processVerbose();
+	setUp.setOption(bedFile, "--bed", "The Regions to analyze", true);
+	setUp.setOption(pwOutputDir, "--pwOutputDir", "The PathWeaver directory", true);
+	setUp.setOption(sample, "--sample", "sample name", true);
+
+	setUp.setOption(numThreads, "--numThreads", "num Threads");
+	setUp.setOption(TrinityMaxMemory, "--TrinityMaxMemory", "Trinity Max Memory (in gigabytes)");
+
+
+	setUp.setOption(TrinityNumThreads, "--TrinityNumThreads", "Trinity Num Threads");
+	setUp.setOption(extraTrinityOptions, "--extraTrinityOptions", "extra Trinity Options");
+
+	setUp.setOption(minFinalLength, "--minFinalLength", "min Final Length");
+	setUp.setOption(reOrientingKmerLength, "--reOrientingKmerLength", "re-orienting K-mer Length");
+
+	setUp.setOption(TrinityOutDir,     "--TrinityOutDir",     "Trinity Out Directory name, will be relative to final pass directory");
+
+
+	setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(pwOutputDir), "_Trinity_TODAY"), true);
+	setUp.finishSetUp(std::cout);
+	setUp.startARunLog(setUp.pars_.directoryName_);
+	njh::sys::requireExternalProgramThrow("Trinity");
+
+	auto inputRegions = gatherRegions(bedFile.string(), "", setUp.pars_.verbose_);
+	sortGRegionsByStart(inputRegions);
+
+	VecStr regionNames;
+	for(const auto & reg : inputRegions){
+		regionNames.emplace_back(reg.uid_);
+	}
+	njh::sort(regionNames);
+	njh::concurrent::LockableQueue<std::string> regionsQueue(regionNames);
+
+	bfs::path finalDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("final"));
+	bfs::path partialDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("partial"));
+	auto allFinalSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(finalDirectory, "allFinal.fasta"));
+	auto allPartialSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(partialDirectory, "allPartial.fasta"));
+	SeqOutput allFinalWriter(allFinalSeqOpts);
+	SeqOutput allPartialWriter(allPartialSeqOpts);
+	allFinalWriter.openOut();
+	allPartialWriter.openOut();
+	std::mutex allFinalWriterMut;
+	std::mutex allPartialWriterMut;
+
+
+	std::unordered_map<std::string,
+			std::vector<std::shared_ptr<BamRegionInvestigator::RegionInfo>> >regInfosByUID;
+	for (const auto & reg : inputRegions) {
+		regInfosByUID[reg.uid_].emplace_back(std::make_shared<BamRegionInvestigator::RegionInfo>(reg));
+	}
+
+	std::unordered_map<std::string, std::string> exceptions;
+	std::mutex exceptionsMut;
+
+	std::function<void()> runTrinityOnRegion = [&](){
+		std::string regionUid = "";
+		while(regionsQueue.getVal(regionUid)){
+			const auto & regInfo = njh::mapAt(regInfosByUID, regionUid);
+			auto regionOutputDir = njh::files::make_path(setUp.pars_.directoryName_, regionUid, sample);
+			njh::files::makeDirP(njh::files::MkdirPar{regionOutputDir});
+
+			//
+
+			bfs::path refFnp = njh::files::make_path(pwOutputDir, regionUid, "allRefs.fasta");
+
+
+			//first extract the reads
+			bfs::path extractBam = njh::files::make_path(pwOutputDir, regionUid, sample + "_extraction", "extracted.bam");
+			OutOptions outOpts(njh::files::make_path(regionOutputDir, "extracted"));
+			auto readCounts = rawWriteExtractReadsFromBamOnlyMapped(extractBam, outOpts);
+			bfs::path pairedR1 = njh::files::make_path(regionOutputDir, "extracted_R1.fastq");
+			bfs::path pairedR2 = njh::files::make_path(regionOutputDir, "extracted_R2.fastq");
+			bfs::path singles =  njh::files::make_path(regionOutputDir, "extracted.fastq");
+			for(auto & reg : regInfo){
+				reg->totalPairedReads_ = readCounts.pairedReads_;
+				reg->totalReads_ = readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_;
+				reg->totalFinalReads_ = readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_;
+			}
+			try {
+				if(!exists(pairedR1) && !exists(singles)){
+					std::stringstream ss;
+					ss << __PRETTY_FUNCTION__ << ", couldn't find " << pairedR1 << " or " << singles << ", need to have at least one of them" << "\n";
+					throw std::runtime_error{ss.str()};
+				}
+				std::stringstream TrinityCmdStream;
+				TrinityCmdStream << "cd " << regionOutputDir << " && Trinity ";
+
+				if(exists(pairedR1)){
+					if(!exists(pairedR2)){
+						std::stringstream ss;
+						ss << __PRETTY_FUNCTION__ << ", found: " << pairedR1 << " but cound't find it's mate file: " << pairedR2 << "\n";
+						throw std::runtime_error{ss.str()};
+					}else{
+						TrinityCmdStream << " --left " << pairedR1.filename() << " --right " << pairedR2.filename() << " ";
+					}
+				}else if(exists(singles)){
+					TrinityCmdStream << " --single  " << singles.filename();
+				}
+
+				TrinityCmdStream  << " --seqType fq  --CPU " << TrinityNumThreads
+											  << " --max_memory " << TrinityMaxMemory << "G"
+												<< " --min_contig_length " << minFinalLength
+												<< " " << extraTrinityOptions
+												<< " --output " << TrinityOutDir
+												<< " > TrinityRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
+				auto TrinityFullOutputDir = njh::files::make_path(regionOutputDir, TrinityOutDir);
+
+				auto TrinityRunOutput = njh::sys::run({TrinityCmdStream.str()});
+
+				BioCmdsUtils::checkRunOutThrow(TrinityRunOutput, __PRETTY_FUNCTION__);
+
+				OutOptions TrinityRunOutputLogOpts(njh::files::make_path(TrinityFullOutputDir, "TrinityRunOutput.json"));
+				OutputStream TrinityRunOutputLogOut(TrinityRunOutputLogOpts);
+				TrinityRunOutputLogOut << njh::json::toJson(TrinityRunOutput) << std::endl;
+
+				auto contigsFnp = njh::files::make_path(TrinityFullOutputDir, "Trinity.fasta");
+
+				auto contigsSeqIoOpts = SeqIOOptions::genFastaIn(contigsFnp);
+				contigsSeqIoOpts.includeWhiteSpaceInName_ = false;
+				SeqInput contigsReader(contigsSeqIoOpts);
+				auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
+				std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+				for (const auto & seq : contigsSeqs) {
+					contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
+				}
+				allSetKmers(contigsKmerReads, reOrientingKmerLength, true);
+
+				SeqInput refReader(SeqIOOptions::genFastaIn(refFnp));
+				auto refSeqs = refReader.readAllReads<seqInfo>();
+				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
+				for (const auto & seq : refSeqs) {
+					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
+				}
+				allSetKmers(refKmerReads, reOrientingKmerLength, true);
+
+				for(const auto & seqKmer : contigsKmerReads) {
+					uint32_t forwardWinners = 0;
+					uint32_t revWinners = 0;
+					for (const auto & refSeq : refKmerReads) {
+						auto forDist = refSeq->compareKmers(*seqKmer);
+						auto revDist = refSeq->compareKmersRevComp(*seqKmer);
+						if (forDist.first < revDist.first) {
+							++revWinners;
+						} else {
+							++forwardWinners;
+						}
+					}
+					if (revWinners > forwardWinners) {
+						seqKmer->seqBase_.reverseComplementRead(true, true);
+					}
+				}
+
+				//sort by sequence length;
+				njh::sort(contigsKmerReads, [](const std::shared_ptr<seqWithKmerInfo> & seq1, const std::shared_ptr<seqWithKmerInfo> & seq2){
+					return len(seq1->seqBase_) > len(seq2->seqBase_);
+				});
+
+				OutOptions contigInfoOpts(njh::files::make_path(TrinityFullOutputDir, "contigs_outputInfo.tab.txt"));
+				OutputStream contigInfoOut(contigInfoOpts);
+				contigInfoOut << "name\tlength" << std::endl;
+				uint32_t defaultCoverage = 10;
+				for(const auto & contigsKmerRead : contigsKmerReads){
+					//auto assembleInfo = DefaultAssembleNameInfo(contigsKmerRead->seqBase_.name_, true);
+					contigInfoOut << contigsKmerRead->seqBase_.name_
+							<< "\t" << len(contigsKmerRead->seqBase_)
+							<< std::endl;
+							//<< "\t" << assembleInfo.coverage_ << std::endl;
+				}
+				auto reOrientedContigsFnp = njh::files::make_path(TrinityFullOutputDir, "reOriented_contigs.fasta");
+
+				SeqOutput::write(contigsKmerReads, SeqIOOptions::genFastaOut(reOrientedContigsFnp));
+
+				uint64_t maxLen = 0;
+				readVec::getMaxLength(refSeqs, maxLen);
+				readVec::getMaxLength(contigsKmerReads, maxLen);
+				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
+				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
+				std::vector<kmerInfo> inputSeqsKmerInfos;
+				for(const auto & input : refSeqs){
+					inputSeqsKmerInfos.emplace_back(input.seq_, 7, false);
+				}
+				readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, inputSeqsKmerInfos, alignerObj	);
+				//alignerObj.processAlnInfoOutputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
+
+				std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs;
+				for(auto & seq : contigsKmerReads){
+					bool found = false;
+					for(const auto & finalSeq : finalSeqs){
+						if(finalSeq->seqBase_.seq_ == seq->seqBase_.seq_){
+							found = true;
+							break;
+						}
+					}
+					if(!found){
+						finalSeqs.emplace_back(seq);
+					}
+				}
+				double totalCoverage = finalSeqs.size() * defaultCoverage;
+//				for(auto & seq : finalSeqs){
+//					//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
+//					totalCoverage += assembleInfo.coverage_;
+//				}
+
+				for(auto & seq : finalSeqs){
+					//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
+					MetaDataInName seqMeta;
+					seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
+					//seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
+					seqMeta.addMeta("estimatedPerBaseCoverage", defaultCoverage);
+					seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
+					seqMeta.addMeta("regionUID", regionUid);
+					seqMeta.addMeta("sample", sample);
+					seqMeta.resetMetaInName(seq->seqBase_.name_);
+					seq->seqBase_.cnt_ = (defaultCoverage/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
+					//seq->seqBase_.cnt_ = (assembleInfo.coverage_/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
+					seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
+				}
+
+				OutOptions trimmedContigInfoOpts(njh::files::make_path(TrinityFullOutputDir, "trimmed_reOriented_contigs_outputInfo.tab.txt"));
+				OutputStream trimmedContigInfoOut(trimmedContigInfoOpts);
+				trimmedContigInfoOut << "name\tlength\tcoverage" << std::endl;
+				auto trimmkedReOrientedContigsFnp = njh::files::make_path(TrinityFullOutputDir, "trimmed_reOriented_contigs.fasta");
+				SeqOutput outputWriter(SeqIOOptions::genFastaOut(trimmkedReOrientedContigsFnp));
+				auto trimmkedReOrientedContigsFnp_belowCutOff = njh::files::make_path(TrinityFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
+				SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmkedReOrientedContigsFnp_belowCutOff));
+
+				uint32_t belowCutOff = 0;
+				uint32_t aboveCutOff = 0;
+				bool allPassTrim = true;
+				for (const auto & contigsKmerRead : finalSeqs) {
+					if (len(contigsKmerRead->seqBase_) < minFinalLength) {
+						++belowCutOff;
+						belowCutOffOutputWriter.openWrite(contigsKmerRead);
+						contigsKmerRead->seqBase_.on_ = false;
+					} else {
+						MetaDataInName seqMeta(contigsKmerRead->seqBase_.name_);
+						trimmedContigInfoOut << contigsKmerRead->seqBase_.name_
+								<< "\t" << len(contigsKmerRead->seqBase_)
+								<< "\t" << seqMeta.getMeta("estimatedPerBaseCoverage")
+								<< std::endl;
+						if(!contigsKmerRead->seqBase_.on_){
+							allPassTrim = false;
+						}else{
+							++aboveCutOff;
+						}
+						outputWriter.openWrite(contigsKmerRead);
+					}
+				}
+				if(allPassTrim){
+					std::lock_guard<std::mutex> lock(allFinalWriterMut);
+					for (const auto & contigsKmerRead : finalSeqs) {
+						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
+							allFinalWriter.write(contigsKmerRead);
+						}
+					}
+					for(auto & reg : regInfo){
+						reg->infoCalled_ = true;
+						reg->uniqHaps_ = aboveCutOff;
+					}
+				}else{
+					std::lock_guard<std::mutex> lock(allPartialWriterMut);
+					for (const auto & contigsKmerRead : finalSeqs) {
+						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
+							allPartialWriter.write(contigsKmerRead);
+						}
+					}
+				}
+			} catch (std::exception & e) {
+				std::lock_guard<std::mutex> lock(exceptionsMut);
+				exceptions[regionUid] = e.what();
+				for(auto & reg : regInfo){
+					reg->infoCalled_ = false;
+					reg->uniqHaps_ = 0;
+				}
+			}
+		}
+	};
+
+
+	njh::concurrent::runVoidFunctionThreaded(runTrinityOnRegion, numThreads);
+	allFinalWriter.closeOut();
+	allPartialWriter.closeOut();
+	//sample,readTotal,readTotalUsed, success, name
+	//
+	OutputStream basicInfo(njh::files::make_path(finalDirectory, "basicInfoPerRegion.tab.txt"));
+
+	basicInfo << "#chrom\tstart\tend\tname\tlength\tstrand\tsuccess\tuniqHaps\treadTotal\treadTotalUsed\ttotalPairedReads";
+	basicInfo << "\tsample";
+	uint32_t maxExtraFields = 0;
+	for(const auto & p : inputRegions){
+
+		auto bedOut = p.genBedRecordCore();
+		if(bedOut.extraFields_.size() > maxExtraFields){
+			maxExtraFields = bedOut.extraFields_.size();
+		}
+	}
+	for(uint32_t t = 0; t < maxExtraFields; ++t){
+		basicInfo << "\textraField"<<t;
+	}
+	basicInfo << "\n";
+
+	std::map<uint32_t, uint32_t> coiCounts;
+
+	for (const auto & reg : inputRegions) {
+		const auto & regInfo = njh::mapAt(regInfosByUID, reg.uid_);
+		++coiCounts[regInfo.front()->uniqHaps_];
+		for(auto & reg : regInfo){
+			auto bedOut = reg->region_.genBedRecordCore();
+			basicInfo << bedOut.toDelimStr();
+			basicInfo << "\t" << njh::boolToStr(reg->infoCalled_)
+								<< "\t" << reg->uniqHaps_
+								<< "\t" << reg->totalReads_
+								<< "\t" << reg->totalFinalReads_
+								<< "\t" << reg->totalPairedReads_
+								<< "\t" << sample;
+			for(const auto & extra : bedOut.extraFields_){
+				basicInfo << "\t" << extra;
+			}
+			basicInfo << std::endl;
+		}
+	}
+
+	OutputStream coiOut(njh::files::make_path(finalDirectory, "coiCounts.tab.txt"));
+	coiOut << "coi\tcount" << std::endl;
+	for(const auto & count : coiCounts){
+		coiOut << count.first << "\t" << count.second << std::endl;
+	}
+
+	OutputStream exceptionsOut(njh::files::make_path(finalDirectory, "exceptionsMessages.tab.txt"));
+	exceptionsOut << "regionUID\tmessage" << std::endl;
+	for(const auto & exp : exceptions){
+		exceptionsOut << exp.first << "\t" << exp.second << std::endl;
+	}
+
+
+
+	return 0;
+}
+
 
 
 
@@ -2472,11 +2827,11 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegions(const
 						finalSeqs.emplace_back(seq);
 					}
 				}
-				double totalCoverage = 0;
-				for(auto & seq : finalSeqs){
-					//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
-					totalCoverage += 10;
-				}
+				double totalCoverage = finalSeqs.size() * defaultCoverage;
+//				for(auto & seq : finalSeqs){
+//					//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
+//					//totalCoverage += 10;
+//				}
 
 				for(auto & seq : finalSeqs){
 					//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);

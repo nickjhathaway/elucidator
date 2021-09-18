@@ -26,6 +26,7 @@ class programWrappersAssembleOnPathWeaverRunner : public njh::progutils::Program
 	static int runPRICEOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 
 
+	static int runTrinityOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 
 
 
