@@ -1244,6 +1244,8 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	uint32_t velvetEndKmer = 75;
 	uint32_t velvetKmerStep = 4;
 	std::string optFuncKmer = "n50";
+	std::string optFuncCov = "n50";
+
 	uint32_t velvetNumOfThreads = 1;
 	VecStr optimizerFuncsAvail{"LNbp","Lbp","Lcon","max","n50","ncon","tbp"};
 
@@ -1269,6 +1271,9 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	setUp.setOption(velvetEndKmer, "--velvetEndKmer", "velvet End Kmer");
 	setUp.setOption(velvetKmerStep, "--velvetKmerStep", "velvet Kmer Step");
 	setUp.setOption(optFuncKmer, "--optFuncKmer", "optimizer Func Kmer");
+	setUp.setOption(optFuncCov, "--optFuncCov", "optimizer Func Coverage");
+
+
 	bool doNotBreakUpAmbigousContigs = false;
 	setUp.setOption(doNotBreakUpAmbigousContigs, "--doBreakUpAmbigousContigs", "Do not Break Up Ambigous Contigs at Ns");
 	breakUpAmbigousContigs = !doNotBreakUpAmbigousContigs;
@@ -1278,6 +1283,12 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 		setUp.failed_ = true;
 		setUp.addWarning("Error for --optFuncKmer, value was set as " + optFuncKmer + " but doesn't match available options " + njh::conToStr(optimizerFuncsAvail, ", "));
 	}
+	if(!njh::in(optFuncCov, optimizerFuncsAvail)){
+		setUp.failed_ = true;
+		setUp.addWarning("Error for --optFuncCov, value was set as " + optFuncCov + " but doesn't match available options " + njh::conToStr(optimizerFuncsAvail, ", "));
+	}
+
+
 	setUp.setOption(minFinalLength, "--minFinalLength", "min Final Length");
 	setUp.setOption(reOrientingKmerLength, "--reOrientingKmerLength", "re-orienting K-mer Length");
 	setUp.setOption(numThreads, "--numThreads", "number of threads to use");
@@ -1287,7 +1298,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	setUp.setOption(extraVelvetOptimiserOptions, "--extraVelvetOptimiserOptions", "Extra options to give to spades");
 	setUp.setOption(VelvetOptimiserOutDir,     "--VelvetOptimiserOutDir",     "VelvetOptimiser.pl Out Directory name, will be relative to final pass directory");
 	if("VelvetOptimiserOutDir" == VelvetOptimiserOutDir){
-		VelvetOptimiserOutDir = VelvetOptimiserOutDir.string() + "_" + optFuncKmer;
+		VelvetOptimiserOutDir = VelvetOptimiserOutDir.string() + "_kfunc" + optFuncKmer + "_covfunc" + optFuncCov;
 	}
 
 	setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(pwOutputDir), "_Velvet_TODAY"), true);
@@ -1427,6 +1438,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 											<< " -e " << velvetEndKmer
 											<< " -x " << velvetKmerStep
 											<< " -optFuncKmer '" << optFuncKmer << "'"
+											<< " -optFuncCov '" << optFuncCov << "'"
 											<< " " << extraVelvetOptimiserOptions
 											<< " --d " << VelvetOptimiserOutDir
 											<< " -o '-exp_cov auto -cov_cutoff 300' ";
