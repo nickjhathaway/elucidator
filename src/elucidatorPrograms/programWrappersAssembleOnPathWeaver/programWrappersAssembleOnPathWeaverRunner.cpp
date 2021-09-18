@@ -1243,8 +1243,11 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	uint32_t velvetStartKmer = 31;
 	uint32_t velvetEndKmer = 71;
 	uint32_t velvetKmerStep = 10;
-	std::string optFuncKmer = "n50*Lcon/tbp+log(Lbp)";
-	std::string optFuncCov = "n50*Lcon/tbp+log(Lbp)";
+//	std::string optFuncKmer = "n50*Lcon/tbp+log(Lbp)";
+//	std::string optFuncCov = "n50*Lcon/tbp+log(Lbp)";
+
+	std::string optFuncKmer = "n50";
+	std::string optFuncCov = "n50";
 
 	uint32_t velvetNumOfThreads = 1;
 	VecStr optimizerFuncsAvail{"LNbp","Lbp","Lcon","max","n50","ncon","tbp"};
@@ -1445,7 +1448,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 											<< " -optFuncCov '" << optFuncCov << "'"
 											<< " " << extraVelvetOptimiserOptions
 											<< " --d " << VelvetOptimiserOutDir
-											<< " -o '-exp_cov auto -cov_cutoff 300 -read_trkg yes' ";
+											<< " -o '-exp_cov auto -cov_cutoff 300' ";
 				std::string vOptCmdPreCovCutOff = vOptCmdStream.str();
 				vOptCmdStream
 											<< " -m " << coverageCutOff
