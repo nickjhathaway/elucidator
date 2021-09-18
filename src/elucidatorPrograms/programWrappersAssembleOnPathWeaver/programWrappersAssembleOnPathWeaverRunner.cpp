@@ -1279,14 +1279,14 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	breakUpAmbigousContigs = !doNotBreakUpAmbigousContigs;
 
 	setUp.setOption(coverageCutOff, "--coverageCutOff", "Don't include these sequences in final output");
-	if(!njh::in(optFuncKmer, optimizerFuncsAvail)){
-		setUp.failed_ = true;
-		setUp.addWarning("Error for --optFuncKmer, value was set as " + optFuncKmer + " but doesn't match available options " + njh::conToStr(optimizerFuncsAvail, ", "));
-	}
-	if(!njh::in(optFuncCov, optimizerFuncsAvail)){
-		setUp.failed_ = true;
-		setUp.addWarning("Error for --optFuncCov, value was set as " + optFuncCov + " but doesn't match available options " + njh::conToStr(optimizerFuncsAvail, ", "));
-	}
+//	if(!njh::in(optFuncKmer, optimizerFuncsAvail)){
+//		setUp.failed_ = true;
+//		setUp.addWarning("Error for --optFuncKmer, value was set as " + optFuncKmer + " but doesn't match available options " + njh::conToStr(optimizerFuncsAvail, ", "));
+//	}
+//	if(!njh::in(optFuncCov, optimizerFuncsAvail)){
+//		setUp.failed_ = true;
+//		setUp.addWarning("Error for --optFuncCov, value was set as " + optFuncCov + " but doesn't match available options " + njh::conToStr(optimizerFuncsAvail, ", "));
+//	}
 
 
 	setUp.setOption(minFinalLength, "--minFinalLength", "min Final Length");
