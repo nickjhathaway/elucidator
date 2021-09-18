@@ -1445,7 +1445,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 											<< " -optFuncCov '" << optFuncCov << "'"
 											<< " " << extraVelvetOptimiserOptions
 											<< " --d " << VelvetOptimiserOutDir
-											<< " -o '-exp_cov auto -cov_cutoff 300' ";
+											<< " -o '-exp_cov auto -cov_cutoff 300 -read_trkg yes' ";
 				std::string vOptCmdPreCovCutOff = vOptCmdStream.str();
 				vOptCmdStream
 											<< " -m " << coverageCutOff
