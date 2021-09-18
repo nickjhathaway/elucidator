@@ -2434,13 +2434,14 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegions(const
 
 				OutOptions contigInfoOpts(njh::files::make_path(PRICEFullOutputDir, "contigs_outputInfo.tab.txt"));
 				OutputStream contigInfoOut(contigInfoOpts);
-				contigInfoOut << "name\tlength\tcoverage" << std::endl;
+				contigInfoOut << "name\tlength" << std::endl;
+				uint32_t defaultCoverage = 10;
 
 				for(const auto & contigsKmerRead : contigsKmerReads){
-					auto assembleInfo = DefaultAssembleNameInfo(contigsKmerRead->seqBase_.name_, true);
+					//auto assembleInfo = DefaultAssembleNameInfo(contigsKmerRead->seqBase_.name_, true);
 					contigInfoOut << contigsKmerRead->seqBase_.name_
 							<< "\t" << len(contigsKmerRead->seqBase_)
-							<< "\t" << assembleInfo.coverage_ << std::endl;
+							<< std::endl;
 				}
 				auto reOrientedContigsFnp = njh::files::make_path(PRICEFullOutputDir, "reOriented_contigs.fasta");
 
@@ -2473,20 +2474,20 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegions(const
 				}
 				double totalCoverage = 0;
 				for(auto & seq : finalSeqs){
-					auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
-					totalCoverage += assembleInfo.coverage_;
+					//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
+					totalCoverage += 10;
 				}
 
 				for(auto & seq : finalSeqs){
-					auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
+					//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
 					MetaDataInName seqMeta;
 					seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
-					seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
+					seqMeta.addMeta("estimatedPerBaseCoverage", defaultCoverage);
 					seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 					seqMeta.addMeta("regionUID", regionUid);
 					seqMeta.addMeta("sample", sample);
 					seqMeta.resetMetaInName(seq->seqBase_.name_);
-					seq->seqBase_.cnt_ = (assembleInfo.coverage_/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
+					seq->seqBase_.cnt_ = (defaultCoverage/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
 					seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
 				}
 
