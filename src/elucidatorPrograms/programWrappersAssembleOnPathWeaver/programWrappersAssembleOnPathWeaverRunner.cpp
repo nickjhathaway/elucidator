@@ -641,6 +641,9 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 				bfs::path optimJsonFnp = njh::files::make_path(pwOutputDir, regionUid, sample, "optimizationInfoBest.json");
 				Json::Value optimJson = njh::json::parseFile(optimJsonFnp.string());
 				std::cout << njh::conToStr(optimJson.getMemberNames(), "\n") << std::endl;
+
+				std::cout << "optimJson[\"runParams_\"][\"klen_\"].asUInt64(): " << optimJson["runParams_"]["klen_"].asUInt64() << std::endl;
+
 				exit(1);
 				if(!exists(pairedR1) && !exists(singles)){
 					std::stringstream ss;
