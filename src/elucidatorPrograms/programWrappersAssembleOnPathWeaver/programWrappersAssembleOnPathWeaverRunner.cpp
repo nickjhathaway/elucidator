@@ -783,6 +783,9 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 					seqMeta.addMeta("sample", sample);
 					seqMeta.resetMetaInName(seq->seqBase_.name_);
 					//seq->seqBase_.cnt_ = (defaultCoverage/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
+					std::cout << "kmerCoverage[seq->seqBase_.name_]: " << kmerCoverage[seq->seqBase_.name_] << std::endl;
+					std::cout << "totalCoverage: " << totalCoverage << std::endl;
+					std::cout << "reads: " << readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_ << std::endl;
 					seq->seqBase_.cnt_ = (kmerCoverage[seq->seqBase_.name_]/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
 					seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
 				}
