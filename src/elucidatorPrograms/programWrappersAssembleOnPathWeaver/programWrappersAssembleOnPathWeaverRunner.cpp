@@ -663,7 +663,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 //
 //
 				RayCmdStream    << " -k " << RayKmerLength
-				                << " -p " << pairedR1 <<  pairedR2
+				                << " -p " << pairedR1 << " " <<  pairedR2
 												<< " " << extraRayOptions
 												<< " -o " << RayOutDir
 												<< " > RayRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
@@ -731,7 +731,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 				OutOptions contigInfoOpts(njh::files::make_path(RayFullOutputDir, "contigs_outputInfo.tab.txt"));
 				OutputStream contigInfoOut(contigInfoOpts);
 				contigInfoOut << "name\tlength\tcoverage" << std::endl;
-				uint32_t defaultCoverage = 10;
+
 				for(const auto & contigsKmerRead : contigsKmerReads){
 					//auto assembleInfo = DefaultAssembleNameInfo(contigsKmerRead->seqBase_.name_, true);
 					contigInfoOut << contigsKmerRead->seqBase_.name_
