@@ -31,6 +31,9 @@ class programWrappersAssembleOnPathWeaverRunner : public njh::progutils::Program
 
 	static int runRayOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int runIDBAUDOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
+	static int runMIRAOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
+
+
 
 
 
