@@ -197,7 +197,7 @@ struct MIRAAssembleNameInfo{
 
 	void setInfoFromName(){
 		std::smatch match;
-		std::regex pat{R"(([A-z_]\d+)\s+cov=([0-9.]+)\s+len=(\d+)\s+gc=([0-9.]+)\s+nseq=(\d+).*)"};
+		std::regex pat{R"(([A-z1-9_]+\d+)\s+cov=([0-9.]+)\s+len=(\d+)\s+gc=([0-9.]+)\s+nseq=(\d+).*)"};
 		if(!std::regex_match(fullname_, match, pat)){
 			std::stringstream ss;
 			ss << __PRETTY_FUNCTION__ << ", error in processing " << fullname_ << " for basic assembly info" << "\n";
