@@ -378,7 +378,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 
 				MIRACmdStream  << " mira_manifest.txt "
 												<< " > MIRARunLog_" << njh::getCurrentDate() << ".txt 2>&1";
-				auto MIRAFullOutputDir = njh::files::make_path(regionOutputDir, MIRAOutDir);
+				auto MIRAFullOutputDir = njh::files::make_path(regionOutputDir, MIRAOutDir.filename().string() + "_assembly");
 
 				auto MIRARunOutput = njh::sys::run({MIRACmdStream.str()});
 
@@ -388,7 +388,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 				OutputStream MIRARunOutputLogOut(MIRARunOutputLogOpts);
 				MIRARunOutputLogOut << njh::json::toJson(MIRARunOutput) << std::endl;
 
-				auto contigsFnp = njh::files::make_path(MIRAFullOutputDir.string() + "_assembly/", MIRAOutDir.filename().string() + "_d_results", MIRAOutDir.filename().string() + "_out.unpadded.fasta");
+				auto contigsFnp = njh::files::make_path(regionOutputDir, MIRAOutDir.filename().string() + "_assembly/", MIRAOutDir.filename().string() + "_d_results", MIRAOutDir.filename().string() + "_out.unpadded.fasta");
 
 
 				auto contigsSeqIoOpts = SeqIOOptions::genFastaIn(contigsFnp);
