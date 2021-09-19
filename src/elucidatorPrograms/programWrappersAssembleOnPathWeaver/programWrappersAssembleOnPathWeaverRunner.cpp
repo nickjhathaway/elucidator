@@ -640,11 +640,14 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 			try {
 				bfs::path optimJsonFnp = njh::files::make_path(pwOutputDir, regionUid, sample, "optimizationInfoBest.json");
 				Json::Value optimJson = njh::json::parseFile(optimJsonFnp.string());
-				std::cout << njh::conToStr(optimJson.getMemberNames(), "\n") << std::endl;
-
-				std::cout << "optimJson[\"runParams_\"][\"klen_\"].asUInt64(): " << optimJson["runParams_"]["klen_"].asUInt64() << std::endl;
-
-				exit(1);
+				if(std::numeric_limits<uint32_t>::max() == RayKmerLength){
+					RayKmerLength = optimJson["runParams_"]["klen_"].asUInt64() ;
+				}
+//				std::cout << njh::conToStr(optimJson.getMemberNames(), "\n") << std::endl;
+//
+//				std::cout << "optimJson[\"runParams_\"][\"klen_\"].asUInt64(): " << optimJson["runParams_"]["klen_"].asUInt64() << std::endl;
+//
+//				exit(1);
 				if(!exists(pairedR1) && !exists(singles)){
 					std::stringstream ss;
 					ss << __PRETTY_FUNCTION__ << ", couldn't find " << pairedR1 << " or " << singles << ", need to have at least one of them" << "\n";
@@ -657,25 +660,13 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 					ss << __PRETTY_FUNCTION__ << ", error " << "Ray requires paired reads"<< "\n";
 					throw std::runtime_error{ss.str()};
 				}
-				if(exists(pairedR1)){
-					if(!exists(pairedR2)){
-						std::stringstream ss;
-						ss << __PRETTY_FUNCTION__ << ", found: " << pairedR1 << " but cound't find it's mate file: " << pairedR2 << "\n";
-						throw std::runtime_error{ss.str()};
-					}else{
-						RayCmdStream << " --left " << pairedR1.filename() << " --right " << pairedR2.filename() << " ";
-					}
-				}
-
-
-//				Ray -k 31 -p extracted_R1.fastq extracted_R2.fastq
 //
-//				RayCmdStream  << " --seqType fq  --CPU " << RayNumThreads
-//											  << " --max_memory " << RayMaxMemory << "G"
-//												<< " --min_contig_length " << minFinalLength
-//												<< " " << extraRayOptions
-//												<< " --output " << RayOutDir
-//												<< " > RayRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
+//
+				RayCmdStream    << " -k " << RayKmerLength
+				                << " -p " << pairedR1 <<  pairedR2
+												<< " " << extraRayOptions
+												<< " -o " << RayOutDir
+												<< " > RayRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
 				auto RayFullOutputDir = njh::files::make_path(regionOutputDir, RayOutDir);
 
 				auto RayRunOutput = njh::sys::run({RayCmdStream.str()});
@@ -686,8 +677,15 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 				OutputStream RayRunOutputLogOut(RayRunOutputLogOpts);
 				RayRunOutputLogOut << njh::json::toJson(RayRunOutput) << std::endl;
 
-				auto contigsFnp = njh::files::make_path(RayFullOutputDir, "Ray.fasta");
+				auto contigsFnp = njh::files::make_path(RayFullOutputDir, "Contigs.fasta");
 
+
+				std::unordered_map<std::string, double> kmerCoverage;
+				auto coverageInfo = njh::files::make_path(RayFullOutputDir, "BiologicalAbundances/_DeNovoAssembly/Contigs.tsv");
+				table covTab(coverageInfo, "\t", true);
+				for(const auto & row : covTab){
+					kmerCoverage[row[covTab.getColPos("#Contig name")]] = njh::StrToNumConverter::stoToNum<double>(row[covTab.getColPos("Mode k-mer coverage depth")]);
+				}
 				auto contigsSeqIoOpts = SeqIOOptions::genFastaIn(contigsFnp);
 				contigsSeqIoOpts.includeWhiteSpaceInName_ = false;
 				SeqInput contigsReader(contigsSeqIoOpts);
@@ -719,7 +717,9 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 						}
 					}
 					if (revWinners > forwardWinners) {
+						auto oldName = seqKmer->seqBase_.name_;
 						seqKmer->seqBase_.reverseComplementRead(true, true);
+						kmerCoverage[seqKmer->seqBase_.name_] = kmerCoverage[oldName];
 					}
 				}
 
@@ -730,14 +730,13 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 
 				OutOptions contigInfoOpts(njh::files::make_path(RayFullOutputDir, "contigs_outputInfo.tab.txt"));
 				OutputStream contigInfoOut(contigInfoOpts);
-				contigInfoOut << "name\tlength" << std::endl;
+				contigInfoOut << "name\tlength\tcoverage" << std::endl;
 				uint32_t defaultCoverage = 10;
 				for(const auto & contigsKmerRead : contigsKmerReads){
 					//auto assembleInfo = DefaultAssembleNameInfo(contigsKmerRead->seqBase_.name_, true);
 					contigInfoOut << contigsKmerRead->seqBase_.name_
 							<< "\t" << len(contigsKmerRead->seqBase_)
-							<< std::endl;
-							//<< "\t" << assembleInfo.coverage_ << std::endl;
+							<< "\t" << kmerCoverage[contigsKmerRead->seqBase_.name_] << std::endl;
 				}
 				auto reOrientedContigsFnp = njh::files::make_path(RayFullOutputDir, "reOriented_contigs.fasta");
 
@@ -768,24 +767,23 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 						finalSeqs.emplace_back(seq);
 					}
 				}
-				double totalCoverage = finalSeqs.size() * defaultCoverage;
-//				for(auto & seq : finalSeqs){
-//					//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
-//					totalCoverage += assembleInfo.coverage_;
-//				}
+				double totalCoverage = 0;
+				for(auto & seq : finalSeqs){
+					//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
+					totalCoverage += kmerCoverage[seq->seqBase_.name_];
+				}
 
 				for(auto & seq : finalSeqs){
 					//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
 					MetaDataInName seqMeta;
 					seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
-					//seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
-					seqMeta.addMeta("estimatedPerBaseCoverage", defaultCoverage);
+					seqMeta.addMeta("estimatedPerBaseCoverage", kmerCoverage[seq->seqBase_.name_]);
 					seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 					seqMeta.addMeta("regionUID", regionUid);
 					seqMeta.addMeta("sample", sample);
 					seqMeta.resetMetaInName(seq->seqBase_.name_);
-					seq->seqBase_.cnt_ = (defaultCoverage/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
-					//seq->seqBase_.cnt_ = (assembleInfo.coverage_/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
+					//seq->seqBase_.cnt_ = (defaultCoverage/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
+					seq->seqBase_.cnt_ = (kmerCoverage[seq->seqBase_.name_]/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
 					seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
 				}
 
