@@ -538,8 +538,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 }
 
 //
-//fq2fa --merge extracted_R1.fastq extracted_R2.fastq extracted.fasta
-//idba_ud -r extracted.fasta -o ibda_testing
+
 
 //
 
@@ -917,12 +916,12 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 	bfs::path pwOutputDir = "";
 	std::string sample = "";
 
-	uint32_t TrinityNumThreads = 1;
-	uint32_t TrinityMaxMemory = 10;
-	std::string extraTrinityOptions = "";
+	uint32_t IDBAUDNumThreads = 1;
+	std::string extraIDBAUDOptions = "";
 	uint32_t reOrientingKmerLength = 9;
 	uint32_t minFinalLength = 40;
-	bfs::path TrinityOutDir = "TrinityOut";
+	uint32_t IDBAUDKmerLength = std::numeric_limits<uint32_t>::max();
+	bfs::path IDBAUDOutDir = "IDBAUDOut";
 	uint32_t numThreads = 1;
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
@@ -931,23 +930,25 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 	setUp.setOption(pwOutputDir, "--pwOutputDir", "The PathWeaver directory", true);
 	setUp.setOption(sample, "--sample", "sample name", true);
 
+	setUp.setOption(IDBAUDKmerLength, "--IDBAUDKmerLength", "IDBAUD Kmer Length");
+
 	setUp.setOption(numThreads, "--numThreads", "num Threads");
-	setUp.setOption(TrinityMaxMemory, "--TrinityMaxMemory", "Trinity Max Memory (in gigabytes)");
 
 
-	setUp.setOption(TrinityNumThreads, "--TrinityNumThreads", "Trinity Num Threads");
-	setUp.setOption(extraTrinityOptions, "--extraTrinityOptions", "extra Trinity Options");
+	setUp.setOption(IDBAUDNumThreads, "--IDBAUDNumThreads", "IDBAUD Num Threads");
+	setUp.setOption(extraIDBAUDOptions, "--extraIDBAUDOptions", "extra IDBAUD Options");
 
 	setUp.setOption(minFinalLength, "--minFinalLength", "min Final Length");
 	setUp.setOption(reOrientingKmerLength, "--reOrientingKmerLength", "re-orienting K-mer Length");
 
-	setUp.setOption(TrinityOutDir,     "--TrinityOutDir",     "Trinity Out Directory name, will be relative to final pass directory");
+	setUp.setOption(IDBAUDOutDir,     "--IDBAUDOutDir",     "IDBAUD Out Directory name, will be relative to final pass directory");
 
 
-	setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(pwOutputDir), "_Trinity_TODAY"), true);
+	setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(pwOutputDir), "_IDBAUD_TODAY"), true);
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
-	njh::sys::requireExternalProgramThrow("Trinity");
+	njh::sys::requireExternalProgramThrow("fq2fa");
+	njh::sys::requireExternalProgramThrow("idba_ud");
 
 	auto inputRegions = gatherRegions(bedFile.string(), "", setUp.pars_.verbose_);
 	sortGRegionsByStart(inputRegions);
@@ -980,7 +981,7 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 	std::unordered_map<std::string, std::string> exceptions;
 	std::mutex exceptionsMut;
 
-	std::function<void()> runTrinityOnRegion = [&](){
+	std::function<void()> runIDBAUDOnRegion = [&](){
 		std::string regionUid = "";
 		while(regionsQueue.getVal(regionUid)){
 			const auto & regInfo = njh::mapAt(regInfosByUID, regionUid);
@@ -1005,43 +1006,56 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 				reg->totalFinalReads_ = readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_;
 			}
 			try {
+				bfs::path optimJsonFnp = njh::files::make_path(pwOutputDir, regionUid, sample, "optimizationInfoBest.json");
+				Json::Value optimJson = njh::json::parseFile(optimJsonFnp.string());
+				if(std::numeric_limits<uint32_t>::max() == IDBAUDKmerLength){
+					IDBAUDKmerLength = optimJson["runParams_"]["klen_"].asUInt64() ;
+				}
+//				std::cout << njh::conToStr(optimJson.getMemberNames(), "\n") << std::endl;
+//
+//				std::cout << "optimJson[\"runParams_\"][\"klen_\"].asUInt64(): " << optimJson["runParams_"]["klen_"].asUInt64() << std::endl;
+//
+//				exit(1);
 				if(!exists(pairedR1) && !exists(singles)){
 					std::stringstream ss;
 					ss << __PRETTY_FUNCTION__ << ", couldn't find " << pairedR1 << " or " << singles << ", need to have at least one of them" << "\n";
 					throw std::runtime_error{ss.str()};
 				}
-				std::stringstream TrinityCmdStream;
-				TrinityCmdStream << "cd " << regionOutputDir << " && Trinity ";
+				std::stringstream IDBAUDCmdStream;
 
-				if(exists(pairedR1)){
-					if(!exists(pairedR2)){
-						std::stringstream ss;
-						ss << __PRETTY_FUNCTION__ << ", found: " << pairedR1 << " but cound't find it's mate file: " << pairedR2 << "\n";
-						throw std::runtime_error{ss.str()};
-					}else{
-						TrinityCmdStream << " --left " << pairedR1.filename() << " --right " << pairedR2.filename() << " ";
-					}
-				}else if(exists(singles)){
-					TrinityCmdStream << " --single  " << singles.filename();
+				IDBAUDCmdStream << "cd " << regionOutputDir ;
+
+				IDBAUDCmdStream << " && fq2fa --merge extracted_R1.fastq extracted_R2.fastq extracted.fasta";
+
+				IDBAUDCmdStream << " && idba_ud ";
+				if(!exists(pairedR1)){
+					std::stringstream ss;
+					ss << __PRETTY_FUNCTION__ << ", error " << "IDBAUD requires paired reads"<< "\n";
+					throw std::runtime_error{ss.str()};
 				}
+//
+//
+				//
+				//idba_ud  -o ibda_testing
 
-				TrinityCmdStream  << " --seqType fq  --CPU " << TrinityNumThreads
-											  << " --max_memory " << TrinityMaxMemory << "G"
-												<< " --min_contig_length " << minFinalLength
-												<< " " << extraTrinityOptions
-												<< " --output " << TrinityOutDir
-												<< " > TrinityRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
-				auto TrinityFullOutputDir = njh::files::make_path(regionOutputDir, TrinityOutDir);
+				IDBAUDCmdStream
+				                << " -r extracted.fasta "
+												<< " --num_threads " << IDBAUDNumThreads
+												<< " " << extraIDBAUDOptions
+												<< " -o " << IDBAUDOutDir
+												<< " > IDBAUDRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
+				auto IDBAUDFullOutputDir = njh::files::make_path(regionOutputDir, IDBAUDOutDir);
 
-				auto TrinityRunOutput = njh::sys::run({TrinityCmdStream.str()});
+				auto IDBAUDRunOutput = njh::sys::run({IDBAUDCmdStream.str()});
 
-				BioCmdsUtils::checkRunOutThrow(TrinityRunOutput, __PRETTY_FUNCTION__);
+				BioCmdsUtils::checkRunOutThrow(IDBAUDRunOutput, __PRETTY_FUNCTION__);
 
-				OutOptions TrinityRunOutputLogOpts(njh::files::make_path(TrinityFullOutputDir, "TrinityRunOutput.json"));
-				OutputStream TrinityRunOutputLogOut(TrinityRunOutputLogOpts);
-				TrinityRunOutputLogOut << njh::json::toJson(TrinityRunOutput) << std::endl;
+				OutOptions IDBAUDRunOutputLogOpts(njh::files::make_path(IDBAUDFullOutputDir, "IDBAUDRunOutput.json"));
+				OutputStream IDBAUDRunOutputLogOut(IDBAUDRunOutputLogOpts);
+				IDBAUDRunOutputLogOut << njh::json::toJson(IDBAUDRunOutput) << std::endl;
 
-				auto contigsFnp = njh::files::make_path(TrinityFullOutputDir, "Trinity.fasta");
+				auto contigsFnp = njh::files::make_path(IDBAUDFullOutputDir, "contig.fa");
+
 
 				auto contigsSeqIoOpts = SeqIOOptions::genFastaIn(contigsFnp);
 				contigsSeqIoOpts.includeWhiteSpaceInName_ = false;
@@ -1074,27 +1088,30 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 						}
 					}
 					if (revWinners > forwardWinners) {
+						auto oldName = seqKmer->seqBase_.name_;
 						seqKmer->seqBase_.reverseComplementRead(true, true);
+//						kmerCoverage[seqKmer->seqBase_.name_] = kmerCoverage[oldName];
 					}
 				}
+
+				uint32_t defaultCoverage = 10;
 
 				//sort by sequence length;
 				njh::sort(contigsKmerReads, [](const std::shared_ptr<seqWithKmerInfo> & seq1, const std::shared_ptr<seqWithKmerInfo> & seq2){
 					return len(seq1->seqBase_) > len(seq2->seqBase_);
 				});
 
-				OutOptions contigInfoOpts(njh::files::make_path(TrinityFullOutputDir, "contigs_outputInfo.tab.txt"));
+				OutOptions contigInfoOpts(njh::files::make_path(IDBAUDFullOutputDir, "contigs_outputInfo.tab.txt"));
 				OutputStream contigInfoOut(contigInfoOpts);
-				contigInfoOut << "name\tlength" << std::endl;
-				uint32_t defaultCoverage = 10;
+				contigInfoOut << "name\tlength\tcoverage" << std::endl;
+
 				for(const auto & contigsKmerRead : contigsKmerReads){
 					//auto assembleInfo = DefaultAssembleNameInfo(contigsKmerRead->seqBase_.name_, true);
 					contigInfoOut << contigsKmerRead->seqBase_.name_
 							<< "\t" << len(contigsKmerRead->seqBase_)
-							<< std::endl;
-							//<< "\t" << assembleInfo.coverage_ << std::endl;
+							<< "\t" << defaultCoverage << std::endl;
 				}
-				auto reOrientedContigsFnp = njh::files::make_path(TrinityFullOutputDir, "reOriented_contigs.fasta");
+				auto reOrientedContigsFnp = njh::files::make_path(IDBAUDFullOutputDir, "reOriented_contigs.fasta");
 
 				SeqOutput::write(contigsKmerReads, SeqIOOptions::genFastaOut(reOrientedContigsFnp));
 
@@ -1123,33 +1140,37 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 						finalSeqs.emplace_back(seq);
 					}
 				}
-				double totalCoverage = finalSeqs.size() * defaultCoverage;
+				double totalCoverage = defaultCoverage * finalSeqs.size();
 //				for(auto & seq : finalSeqs){
 //					//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
-//					totalCoverage += assembleInfo.coverage_;
+//					totalCoverage += kmerCoverage[seq->seqBase_.name_];
 //				}
 
 				for(auto & seq : finalSeqs){
 					//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
 					MetaDataInName seqMeta;
 					seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
-					//seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
+//					seqMeta.addMeta("estimatedPerBaseCoverage", kmerCoverage[seq->seqBase_.name_]);
 					seqMeta.addMeta("estimatedPerBaseCoverage", defaultCoverage);
+
 					seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 					seqMeta.addMeta("regionUID", regionUid);
 					seqMeta.addMeta("sample", sample);
-					seqMeta.resetMetaInName(seq->seqBase_.name_);
+					//seq->seqBase_.cnt_ = (defaultCoverage/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
+//					std::cout << "kmerCoverage[seq->seqBase_.name_]: " << kmerCoverage[seq->seqBase_.name_] << std::endl;
+//					std::cout << "totalCoverage: " << totalCoverage << std::endl;
+//					std::cout << "reads: " << readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_ << std::endl;
 					seq->seqBase_.cnt_ = (defaultCoverage/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
-					//seq->seqBase_.cnt_ = (assembleInfo.coverage_/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
+					seqMeta.resetMetaInName(seq->seqBase_.name_);
 					seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
 				}
 
-				OutOptions trimmedContigInfoOpts(njh::files::make_path(TrinityFullOutputDir, "trimmed_reOriented_contigs_outputInfo.tab.txt"));
+				OutOptions trimmedContigInfoOpts(njh::files::make_path(IDBAUDFullOutputDir, "trimmed_reOriented_contigs_outputInfo.tab.txt"));
 				OutputStream trimmedContigInfoOut(trimmedContigInfoOpts);
 				trimmedContigInfoOut << "name\tlength\tcoverage" << std::endl;
-				auto trimmkedReOrientedContigsFnp = njh::files::make_path(TrinityFullOutputDir, "trimmed_reOriented_contigs.fasta");
+				auto trimmkedReOrientedContigsFnp = njh::files::make_path(IDBAUDFullOutputDir, "trimmed_reOriented_contigs.fasta");
 				SeqOutput outputWriter(SeqIOOptions::genFastaOut(trimmkedReOrientedContigsFnp));
-				auto trimmkedReOrientedContigsFnp_belowCutOff = njh::files::make_path(TrinityFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
+				auto trimmkedReOrientedContigsFnp_belowCutOff = njh::files::make_path(IDBAUDFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
 				SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmkedReOrientedContigsFnp_belowCutOff));
 
 				uint32_t belowCutOff = 0;
@@ -1205,7 +1226,7 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 	};
 
 
-	njh::concurrent::runVoidFunctionThreaded(runTrinityOnRegion, numThreads);
+	njh::concurrent::runVoidFunctionThreaded(runIDBAUDOnRegion, numThreads);
 	allFinalWriter.closeOut();
 	allPartialWriter.closeOut();
 	//sample,readTotal,readTotalUsed, success, name
