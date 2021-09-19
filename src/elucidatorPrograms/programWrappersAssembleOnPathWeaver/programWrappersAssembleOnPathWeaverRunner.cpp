@@ -663,7 +663,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 //
 //
 				RayCmdStream    << " -k " << RayKmerLength
-				                << " -p " << pairedR1 << " " <<  pairedR2
+				                << " -p " << pairedR1.filename() << " " <<  pairedR2.filename()
 												<< " " << extraRayOptions
 												<< " -o " << RayOutDir
 												<< " > RayRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
