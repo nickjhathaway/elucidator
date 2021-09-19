@@ -329,7 +329,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 
 				{
 					OutputStream miramanifestOutput(njh::files::make_path(regionOutputDir, "mira_manifest.txt"));
-					miramanifestOutput << "project = " << MIRAOutDir.filename() << std::endl;
+					miramanifestOutput << "project = " << MIRAOutDir.filename().string() << std::endl;
 					miramanifestOutput << "job = genome,denovo,accurate"<< std::endl;
 
 
