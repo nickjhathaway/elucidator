@@ -237,6 +237,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 	uint32_t minFinalLength = 40;
 	bfs::path MIRAOutDir = "MIRAOut";
 	uint32_t numThreads = 1;
+	uint32_t miraAttempts = 3 ;
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
 	setUp.processVerbose();
@@ -245,6 +246,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 	setUp.setOption(sample, "--sample", "sample name", true);
 
 	setUp.setOption(numThreads, "--numThreads", "num Threads");
+	setUp.setOption(miraAttempts, "--miraAttempts", "mira Attempts");
 
 
 	setUp.setOption(MIRANumThreads, "--MIRANumThreads", "MIRA Num Threads");
@@ -377,11 +379,16 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 				}
 
 				MIRACmdStream  << " mira_manifest.txt "
-												<< " > MIRARunLog_" << njh::getCurrentDate() << ".txt 2>&1";
+												<< " >> MIRARunLog_" << njh::getCurrentDate() << ".txt 2>&1";
 				auto MIRAFullOutputDir = njh::files::make_path(regionOutputDir, MIRAOutDir.filename().string() + "_assembly");
 
 				auto MIRARunOutput = njh::sys::run({MIRACmdStream.str()});
+				uint32_t currentMiraAttempt = 1;
+				while(!MIRARunOutput.success_ && currentMiraAttempt <= miraAttempts){
+					MIRARunOutput = njh::sys::run({MIRACmdStream.str()});
 
+					++currentMiraAttempt;
+				}
 				BioCmdsUtils::checkRunOutThrow(MIRARunOutput, __PRETTY_FUNCTION__);
 
 				OutOptions MIRARunOutputLogOpts(njh::files::make_path(MIRAFullOutputDir, "MIRARunOutput.json"));
