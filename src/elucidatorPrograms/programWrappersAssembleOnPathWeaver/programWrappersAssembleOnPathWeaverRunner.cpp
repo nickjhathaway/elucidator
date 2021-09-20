@@ -333,8 +333,8 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 					miramanifestOutput << "job = genome,denovo,accurate"<< std::endl;
 
 
-					miramanifestOutput << "parameters = -GENERAL:number_of_threads=" << MIRANumThreads << " COMMON_SETTINGS -NW:cmrnl=no -NW:cac=warn -NW:csrn=no -NW:cdrn=no"<< std::endl;
-
+					miramanifestOutput << "parameters = -CO:force_nonIUPACconsensus_perseqtype=yes -GENERAL:number_of_threads=" << MIRANumThreads << " COMMON_SETTINGS -NW:cmrnl=no -NW:cac=warn -NW:csrn=no -NW:cdrn=no"<< std::endl;
+					//-EDIT:edit_homopolymer_overcalls=yes
 					if(exists(pairedR1)){
 						if(!exists(pairedR2)){
 							std::stringstream ss;
