@@ -610,7 +610,14 @@ int bedExpRunner::extendToEndOfChrom(const njh::progutils::CmdArgs & inputComman
 	std::unordered_map<std::string, std::unordered_map<uint32_t, std::vector<uint32_t>>> alreadyTakenIds;
 	std::shared_ptr<Bed3RecordCore> b = reader.readNextRecord();
 	while(nullptr != b){
+		bool scoreIsLen = false;
+		if(b->extraFields_.size() >=2 && njh::strAllDigits(b->extraFields_[1])){
+			scoreIsLen = njh::StrToNumConverter::stoToNum<uint32_t>(b->extraFields_[1]) == b->length();
+		}
 		b->chromEnd_ = njh::mapAt(lengths, b->chrom_);
+		if(scoreIsLen){
+			b->extraFields_[1] = estd::to_string(b->length());
+		}
 		reader.write(*b, [](const Bed3RecordCore & bed, std::ostream & out){
 			out << bed.toDelimStrWithExtra() << std::endl;
 		});
@@ -634,7 +641,14 @@ int bedExpRunner::extendToStartOfChrom(const njh::progutils::CmdArgs & inputComm
 	std::unordered_map<std::string, std::unordered_map<uint32_t, std::vector<uint32_t>>> alreadyTakenIds;
 	std::shared_ptr<Bed3RecordCore> b = reader.readNextRecord();
 	while(nullptr != b){
+		bool scoreIsLen = false;
+		if(b->extraFields_.size() >=2 && njh::strAllDigits(b->extraFields_[1])){
+			scoreIsLen = njh::StrToNumConverter::stoToNum<uint32_t>(b->extraFields_[1]) == b->length();
+		}
 		b->chromStart_ = 0;
+		if(scoreIsLen){
+			b->extraFields_[1] = estd::to_string(b->length());
+		}
 		reader.write(*b, [](const Bed3RecordCore & bed, std::ostream & out){
 			out << bed.toDelimStrWithExtra() << std::endl;
 		});
