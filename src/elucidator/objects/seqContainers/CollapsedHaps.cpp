@@ -54,6 +54,90 @@ size_t CollapsedHaps::size() const{
 }
 
 
+VecStr CollapsedHaps::GenPopMeasuresPar::genHeader() const {
+	VecStr header { "id", "totalHaplotypes", "uniqueHaplotypes", "singlets",
+			"doublets", "expShannonEntropy", "ShannonEntropyE",
+			"effectiveNumOfAlleles", "he", "lengthPolymorphism" };
+	if (getPairwiseComps) {
+		header.emplace_back("avgPercentID");
+		header.emplace_back("avgNumOfDiffs");
+		if (numSegSites_ != std::numeric_limits < uint32_t > ::max()) {
+			header.emplace_back("nSegratingSites");
+			header.emplace_back("TajimaD");
+			header.emplace_back("TajimaDPVal");
+		}
+	}
+	return header;
+}
+
+
+
+VecStr CollapsedHaps::GenPopMeasuresRes::getOut(const CollapsedHaps & inputSeqs, const std::string & identifier, const GenPopMeasuresPar & pars) const{
+	VecStr ret;
+	ret = toVecStr(
+			identifier,
+			inputSeqs.getTotalHapCount(),
+			inputSeqs.seqs_.size(),
+			divMeasures_.singlets_,
+			divMeasures_.doublets_,
+			divMeasures_.expShannonEntropy_,
+			divMeasures_.ShannonEntropyE_,
+			divMeasures_.effectiveNumOfAlleles_,
+			divMeasures_.heterozygostiy_,
+			njh::boolToStr(inputSeqs.hasLengthVariation(pars.lowVarFreq))
+			);
+	if(pars.getPairwiseComps){
+		njh::addConToVec(ret, toVecStr(avgPMeasures_.avgPercentId, avgPMeasures_.avgNumOfDiffs));
+		if(pars.numSegSites_ != std::numeric_limits<uint32_t>::max()){
+			njh::addConToVec(ret, toVecStr(pars.numSegSites_, tajimaRes_.d_, tajimaRes_.pval_beta_));
+		}
+	}
+	return ret;
+}
+
+
+CollapsedHaps::GenPopMeasuresRes CollapsedHaps::getGeneralMeasuresOfDiversity(const GenPopMeasuresPar &pars,
+		const std::shared_ptr<aligner> &alignerObj) {
+	GenPopMeasuresRes ret;
+	if (pars.getPairwiseComps) {
+		if(nullptr == alignerObj){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "getting paired wise comparisons but didn't supply an aligner" << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		if (size() > 1) {
+			if (pars.diagAlnPairwiseComps) {
+				ret.allComps_ = getPairwiseCompsDiagAln(*alignerObj, pars.numThreads);
+				ret.avgPMeasures_ = getAvgPairwiseMeasures(ret.allComps_);
+			} else {
+				ret.allComps_ = getPairwiseComps(*alignerObj, pars.numThreads);
+				ret.avgPMeasures_ = getAvgPairwiseMeasures(ret.allComps_);
+			}
+		} else {
+			ret.avgPMeasures_.avgNumOfDiffs = 0;
+			ret.avgPMeasures_.avgPercentId = 1;
+		}
+	}
+	setFrequencies();
+	ret.divMeasures_ = PopGenCalculator::getGeneralMeasuresOfDiversity(seqs_);
+	if (pars.getPairwiseComps && size() > 1
+			&& std::numeric_limits < uint32_t > ::max() != pars.numSegSites_) {
+		if(pars.numSegSites_ == 0){
+			ret.tajimaRes_.d_ = 0;
+			ret.tajimaRes_.pval_beta_ = 1;
+			ret.tajimaRes_.pval_normal_ = 1;
+		}else{
+			try {
+				ret.tajimaRes_ = PopGenCalculator::calcTajimaTest(getTotalHapCount(),
+						pars.numSegSites_, ret.avgPMeasures_.avgNumOfDiffs);
+			} catch (std::exception &e) {
+				//currently doing nothing, some times due to frequency filtering etc the calc throw an exception;
+			}
+		}
+	}
+	return ret;
+}
+
 
 std::vector<uint32_t> CollapsedHaps::getReadLenVec() const{
 	std::vector<uint32_t> ret;

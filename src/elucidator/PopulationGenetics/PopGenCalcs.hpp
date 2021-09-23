@@ -37,7 +37,11 @@ class PopGenCalculator{
 public:
 
 	struct TajimaTestRes{
-		TajimaTestRes(double d, double pvalnorm, double pvalbeta):d_(d), pval_normal_(pvalnorm), pval_beta_(pvalbeta){
+		TajimaTestRes(double d, double pvalnorm, double pvalbeta) :
+				d_(d), pval_normal_(pvalnorm), pval_beta_(pvalbeta) {
+
+		}
+		TajimaTestRes() {
 
 		}
 		double d_{std::numeric_limits<double>::max()};

@@ -10,6 +10,7 @@
 
 #include "elucidator/common.h"
 #include "elucidator/objects/BioDataObject.h"
+#include "elucidator/PopulationGenetics.h"
 
 #include <njhseq/concurrency/pools/AlignerPool.hpp>
 
@@ -41,6 +42,35 @@ public:
 	uint32_t getTotalHapCount() const; /**< The total number of input haplotypes */
 	uint32_t getTotalUniqueHapCount() const; /**< the total number of unique haplotypes */
 	size_t size() const;
+
+	struct AvgPairwiseMeasures{
+		double avgPercentId {0};
+		double avgNumOfDiffs {0};
+	};
+
+	//population genetics
+	struct GenPopMeasuresPar{
+		bool getPairwiseComps {false};
+		bool diagAlnPairwiseComps {true};
+
+		uint32_t numSegSites_{std::numeric_limits<uint32_t>::max()};
+		uint32_t numThreads = 1;
+		double lowVarFreq = 0;
+		VecStr genHeader() const;
+	};
+
+	struct GenPopMeasuresRes{
+		PopGenCalculator::DiversityMeasures divMeasures_;
+		PopGenCalculator::TajimaTestRes tajimaRes_;
+		AvgPairwiseMeasures avgPMeasures_;
+		std::vector<std::vector<comparison>> allComps_;
+
+		VecStr getOut(const CollapsedHaps & inputSeqs, const std::string & identifier, const GenPopMeasuresPar & pars) const;
+	};
+	GenPopMeasuresRes getGeneralMeasuresOfDiversity(const GenPopMeasuresPar &pars,
+			const std::shared_ptr<aligner> &alignerObj = nullptr) ;
+
+
 	// getting reads lengths
 	std::vector<uint32_t> getReadLenVec() const;
 	std::unordered_map<uint32_t, uint32_t> getReadLenMap() const;
@@ -68,10 +98,7 @@ public:
 	std::vector<std::vector<comparison>> getPairwiseComps(aligner & alignerObj, uint32_t numThreads = 1) const;
 	std::vector<std::vector<comparison>> getPairwiseCompsDiagAln(aligner & alignerObj, uint32_t numThreads = 1) const;
 
-	struct AvgPairwiseMeasures{
-		double avgPercentId {0};
-		double avgNumOfDiffs {0};
-	};
+
 	AvgPairwiseMeasures getAvgPairwiseMeasures(const std::vector<std::vector<comparison>> & allComps) const;
 
 

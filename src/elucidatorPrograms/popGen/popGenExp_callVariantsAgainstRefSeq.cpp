@@ -32,6 +32,8 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 
   TranslatorByAlignment::TranslatorByAlignmentPars transPars;
   TranslatorByAlignment::RunPars variantCallerRunPars;
+  CollapsedHaps::GenPopMeasuresPar calcPopMeasuresPars;
+
   bfs::path knownAminoAcidChangesFnp;
 
 	std::string identifier = "";
@@ -42,8 +44,9 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 	uint32_t outwardsExpand = 5;
 
 	uint32_t numThreads = 1;
-	bool getPairwiseComps = false;
 	bool noDiagAlnPairwiseComps = false;
+
+
 	bfs::path metaFnp;
 	bool keepNonFieldSamples = false;
 	std::set<std::string> ignoreSubFields;
@@ -55,12 +58,15 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 	setUp.processDirectoryOutputName(true);
 	setUp.processAlnInfoInput();
 	setUp.setOption(numThreads, "--numThreads", "number of threads");
-	setUp.setOption(getPairwiseComps, "--getPairwiseComps", "get Pairwise comparison metrics");
+	calcPopMeasuresPars.numThreads = numThreads;
+	setUp.setOption(calcPopMeasuresPars.getPairwiseComps, "--getPairwiseComps", "get Pairwise comparison metrics");
 	setUp.setOption(noDiagAlnPairwiseComps, "--noDiagAlnPairwiseComps", "Use diagonal Alignment for Pairwise Comparisons");
-	bool diagAlnPairwiseComps = !noDiagAlnPairwiseComps;
+	calcPopMeasuresPars.diagAlnPairwiseComps = !noDiagAlnPairwiseComps;
 
 	setUp.setOption(variantCallerRunPars.occurrenceCutOff, "--occurrenceCutOff", "Occurrence Cut Off, don't report variants below this count");
 	setUp.setOption(variantCallerRunPars.lowVariantCutOff, "--lowVariantCutOff", "Low Variant Cut Off, don't report variants below this fraction");
+	calcPopMeasuresPars.lowVarFreq = variantCallerRunPars.lowVariantCutOff;
+
 	setUp.setOption(outwardsExpand, "--outwardsExpand", "The amount to expand outwards from given region when determining variants positions with extracted ref seq");
 	setUp.setOption(metaFnp,    "--metaFnp",    "Meta data to add to sequences");
 
@@ -171,15 +177,15 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 		++seqId;
 	}
 	readVec::getMaxLength(refSeq, maxLen);
-	aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
-	alignerObj.weighHomopolymers_ = false;
-	alignerObj.processAlnInfoInput(setUp.pars_.alnInfoDirName_, setUp.pars_.verbose_);
+	std::shared_ptr<aligner> alignerObj = std::make_shared<aligner>(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
+	alignerObj->weighHomopolymers_ = false;
+	alignerObj->processAlnInfoInput(setUp.pars_.alnInfoDirName_, setUp.pars_.verbose_);
 	//set up variant info
 	auto idSeq = refSeq;
 	idSeq.name_ = identifier;
 	TranslatorByAlignment::VariantsInfo varInfo(refRegion.genBed3RecordCore(), idSeq);
 	//get variant info
-	auto refComps = inputSeqs.getCompsAgainstRef(refSeq, alignerObj, numThreads);
+	auto refComps = inputSeqs.getCompsAgainstRef(refSeq, *alignerObj, numThreads);
 	for(const auto pos :  iter::range(inputSeqs.size())){
 		varInfo.addVariantInfo(
 				refComps[pos].refAlnSeq_,
@@ -210,68 +216,12 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 //	uint32_t biggestLenDiff = longestLen-shortestLen;
 	{
 		OutputStream divMeasuresOut(njh::files::make_path(setUp.pars_.directoryName_, "divMeasures.tab.txt"));
-		CollapsedHaps::AvgPairwiseMeasures avgPMeasures;
-		if(getPairwiseComps && inputSeqs.size() > 1 ){
-			if(diagAlnPairwiseComps){
-				auto allComps = inputSeqs.getPairwiseCompsDiagAln(alignerObj, numThreads);
-				avgPMeasures = inputSeqs.getAvgPairwiseMeasures(allComps);
-			}else{
-				auto allComps = inputSeqs.getPairwiseComps(alignerObj, numThreads);
-				avgPMeasures = inputSeqs.getAvgPairwiseMeasures(allComps);
-			}
-		}
-		inputSeqs.setFrequencies();
-		auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversity(inputSeqs.seqs_);
-
-		divMeasuresOut << "id\ttotalHaplotypes\tuniqueHaplotypes\tsinglets\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism" ;
-		if(getPairwiseComps){
-			divMeasuresOut << "\tavgPercentID\tavgNumOfDiffs";
-			divMeasuresOut << "\tnSegratingSites";
-			divMeasuresOut << "\tTajimaD\tTajimaDPVal";
-		}
-		divMeasuresOut << std::endl;
-		divMeasuresOut << identifier
-				<< "\t" << inputSeqs.getTotalHapCount()
-				<< "\t" << inputSeqs.seqs_.size()
-				<< "\t" << divMeasures.singlets_
-				<< "\t" << divMeasures.doublets_
-				<< "\t" << divMeasures.expShannonEntropy_
-				<< "\t" << divMeasures.ShannonEntropyE_
-				<< "\t" << divMeasures.effectiveNumOfAlleles_
-				<< "\t" << divMeasures.heterozygostiy_
-				<< "\t" << (inputSeqs.hasLengthVariation(variantCallerRunPars.lowVariantCutOff)? "true" : "false");
-		if(getPairwiseComps){
-			if(inputSeqs.size() > 1){
-				divMeasuresOut << "\t" << avgPMeasures.avgPercentId
-										<< "\t" << avgPMeasures.avgNumOfDiffs
-										<< "\t" << varInfo.getFinalNumberOfSegratingSites();
-				if(0 == varInfo.getFinalNumberOfSegratingSites()){
-					divMeasuresOut
-							<< "\t" << 0
-							<< "\t" << 1;
-				}else{
-					try {
-						auto tajimad = PopGenCalculator::calcTajimaTest(inputSeqs.getTotalHapCount(), varInfo.getFinalNumberOfSegratingSites(), avgPMeasures.avgNumOfDiffs);
-						divMeasuresOut
-								<< "\t" << tajimad.d_
-								<< "\t" << tajimad.pval_beta_;
-					} catch (std::exception & e) {
-						divMeasuresOut
-								<< "\t" << "NA"
-								<< "\t" << "NA";
-					}
-				}
-			}else{
-				divMeasuresOut << "\t" << 1
-										<< "\t" << avgPMeasures.avgNumOfDiffs
-										<< "\t" << 0;
-				divMeasuresOut
-						<< "\t" << 0
-						<< "\t" << 1;
-			}
-		}
-		divMeasuresOut << std::endl;
+		calcPopMeasuresPars.numSegSites_ = varInfo.getFinalNumberOfSegratingSites()	;
+		auto divMeasures = inputSeqs.getGeneralMeasuresOfDiversity(calcPopMeasuresPars, alignerObj);
+		divMeasuresOut << njh::conToStr(calcPopMeasuresPars.genHeader(), "\t") << std::endl;
+		divMeasuresOut << njh::conToStr(divMeasures.getOut(inputSeqs, identifier, calcPopMeasuresPars), "\t") << std::endl;
 	}
+
 	//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 	std::unordered_map<std::string, uint32_t> seqNameKey;
 
@@ -396,70 +346,11 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 					}
 				}
 				{
-
 					OutputStream divMeasuresOut(njh::files::make_path(variantInfoDir, "translatedDivMeasures.tab.txt"));
-					CollapsedHaps::AvgPairwiseMeasures avgPMeasures;
-					if(getPairwiseComps && inputTranslatedSeq.size() > 1 ){
-						if(diagAlnPairwiseComps){
-							auto allComps = inputTranslatedSeq.getPairwiseCompsDiagAln(alignerObj, numThreads);
-							avgPMeasures = inputTranslatedSeq.getAvgPairwiseMeasures(allComps);
-						}else{
-							auto allComps = inputTranslatedSeq.getPairwiseComps(alignerObj, numThreads);
-							avgPMeasures = inputTranslatedSeq.getAvgPairwiseMeasures(allComps);
-						}
-					}
-					divMeasuresOut << "id\tname\ttotalHaplotypes\tuniqueHaplotypes\tsinglets\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism" ;
-					if(getPairwiseComps){
-						divMeasuresOut << "\tavgPercentID\tavgNumOfDiffs";
-						divMeasuresOut << "\tnSegratingSites";
-
-						divMeasuresOut << "\tTajimaD\tTajimaDPVal";
-					}
-					divMeasuresOut << std::endl;
-					inputTranslatedSeq.setFrequencies();
-					auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversity(inputTranslatedSeq.seqs_);
-					divMeasuresOut << identifier
-							<< "\t" << bfs::basename(setUp.pars_.ioOptions_.firstName_)
-							<< "\t" << inputTranslatedSeq.getTotalHapCount()
-							<< "\t" << inputTranslatedSeq.seqs_.size()
-							<< "\t" << divMeasures.singlets_
-							<< "\t" << divMeasures.doublets_
-							<< "\t" << divMeasures.expShannonEntropy_
-							<< "\t" << divMeasures.ShannonEntropyE_
-							<< "\t" << divMeasures.effectiveNumOfAlleles_
-							<< "\t" << divMeasures.heterozygostiy_
-							<< "\t" << (inputTranslatedSeq.hasLengthVariation(variantCallerRunPars.lowVariantCutOff)? "true" : "false");
-					if(getPairwiseComps){
-						if(inputTranslatedSeq.size() > 1){
-							divMeasuresOut << "\t" << avgPMeasures.avgPercentId
-													<< "\t" << avgPMeasures.avgNumOfDiffs
-													<< "\t" << translatedRes.proteinVariants_.begin()->second.getFinalNumberOfSegratingSites();
-							if(0 == translatedRes.proteinVariants_.begin()->second.getFinalNumberOfSegratingSites()){
-								divMeasuresOut
-										<< "\t" << 0
-										<< "\t" << 1;
-							}else{
-								try {
-									auto tajimad = PopGenCalculator::calcTajimaTest(inputTranslatedSeq.getTotalHapCount(), translatedRes.proteinVariants_.begin()->second.getFinalNumberOfSegratingSites(), avgPMeasures.avgNumOfDiffs);
-									divMeasuresOut
-											<< "\t" << tajimad.d_
-											<< "\t" << tajimad.pval_beta_;
-								} catch (std::exception & e) {
-									divMeasuresOut
-											<< "\t" << "NA"
-											<< "\t" << "NA";
-								}
-							}
-						}else{
-							divMeasuresOut << "\t" << 1
-													<< "\t" << avgPMeasures.avgNumOfDiffs
-													<< "\t" << 0;
-							divMeasuresOut
-									<< "\t" << 0
-									<< "\t" << 1;
-						}
-					}
-					divMeasuresOut << std::endl;
+					calcPopMeasuresPars.numSegSites_ = translatedRes.proteinVariants_.begin()->second.getFinalNumberOfSegratingSites()	;
+					auto divMeasures = inputTranslatedSeq.getGeneralMeasuresOfDiversity(calcPopMeasuresPars, alignerObj);
+					divMeasuresOut << njh::conToStr(calcPopMeasuresPars.genHeader(), "\t") << std::endl;
+					divMeasuresOut << njh::conToStr(divMeasures.getOut(inputTranslatedSeq, identifier, calcPopMeasuresPars), "\t") << std::endl;
 				}
 
 				OutputStream transBedLocs(njh::files::make_path(variantInfoDir, "translatedInput.bed"));
@@ -543,7 +434,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 		}
 	}
 
-	alignerObj.processAlnInfoOutput(setUp.pars_.outAlnInfoDirName_, setUp.pars_.verbose_);
+	alignerObj->processAlnInfoOutput(setUp.pars_.outAlnInfoDirName_, setUp.pars_.verbose_);
 
 
 	return 0;
