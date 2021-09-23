@@ -47,7 +47,7 @@ int popGenExpRunner::quickHaplotypeInformation(const njh::progutils::CmdArgs & i
 	}
 
 	if(writeHeader){
-		out << "id\tname\ttotalHaplotypes\tuniqueHaplotypes\tsinglets\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism" ;
+		out << "id\ttotalHaplotypes\tuniqueHaplotypes\tsinglets\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism" ;
 		if(getPairwiseComps){
 			out << "\tavgPercentID\tavgNumOfDiffs";
 		}
@@ -57,7 +57,6 @@ int popGenExpRunner::quickHaplotypeInformation(const njh::progutils::CmdArgs & i
 	inputSeqs.setFrequencies();
 	auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversity(inputSeqs.seqs_);
 	out << identifier
-			<< "\t" << bfs::basename(setUp.pars_.ioOptions_.firstName_)
 			<< "\t" << inputSeqs.getTotalHapCount()
 			<< "\t" << inputSeqs.seqs_.size()
 			<< "\t" << divMeasures.singlets_

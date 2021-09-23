@@ -301,6 +301,9 @@ int programWrapperRunner::runDada2(const njh::progutils::CmdArgs & inputCommands
 	bool on454 = false;
 	bool checkBimeras = false;
 	bool overWriteDir = false;
+
+
+
 	setUp.setOption(trimToMin,    "--trimToMin",    "Trim to the minimum length of the input");
 	setUp.setOption(inputDir,     "--inputDir",     "Name of the input directory", true);
 	setUp.setOption(outputDir,    "--outputDir",    "Name of the output directory", true);

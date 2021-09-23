@@ -208,7 +208,6 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 //	uint32_t longestLen = vectorMaximum(njh::getVecOfMapKeys(readLens));
 //	uint32_t shortestLen = vectorMinimum(njh::getVecOfMapKeys(readLens));
 //	uint32_t biggestLenDiff = longestLen-shortestLen;
-
 	{
 		OutputStream divMeasuresOut(njh::files::make_path(setUp.pars_.directoryName_, "divMeasures.tab.txt"));
 		CollapsedHaps::AvgPairwiseMeasures avgPMeasures;
@@ -221,18 +220,17 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 				avgPMeasures = inputSeqs.getAvgPairwiseMeasures(allComps);
 			}
 		}
-		divMeasuresOut << "id\tname\ttotalHaplotypes\tuniqueHaplotypes\tsinglets\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism" ;
+		inputSeqs.setFrequencies();
+		auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversity(inputSeqs.seqs_);
+
+		divMeasuresOut << "id\ttotalHaplotypes\tuniqueHaplotypes\tsinglets\tdoublets\texpShannonEntropy\tShannonEntropyE\teffectiveNumOfAlleles\the\tlengthPolymorphism" ;
 		if(getPairwiseComps){
 			divMeasuresOut << "\tavgPercentID\tavgNumOfDiffs";
 			divMeasuresOut << "\tnSegratingSites";
-
 			divMeasuresOut << "\tTajimaD\tTajimaDPVal";
 		}
 		divMeasuresOut << std::endl;
-		inputSeqs.setFrequencies();
-		auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversity(inputSeqs.seqs_);
 		divMeasuresOut << identifier
-				<< "\t" << bfs::basename(setUp.pars_.ioOptions_.firstName_)
 				<< "\t" << inputSeqs.getTotalHapCount()
 				<< "\t" << inputSeqs.seqs_.size()
 				<< "\t" << divMeasures.singlets_
@@ -241,7 +239,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 				<< "\t" << divMeasures.ShannonEntropyE_
 				<< "\t" << divMeasures.effectiveNumOfAlleles_
 				<< "\t" << divMeasures.heterozygostiy_
-				<< "\t" << (readLens.size() > 1 ? "true" : "false");
+				<< "\t" << (inputSeqs.hasLengthVariation(variantCallerRunPars.lowVariantCutOff)? "true" : "false");
 		if(getPairwiseComps){
 			if(inputSeqs.size() > 1){
 				divMeasuresOut << "\t" << avgPMeasures.avgPercentId
@@ -262,7 +260,6 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 								<< "\t" << "NA"
 								<< "\t" << "NA";
 					}
-
 				}
 			}else{
 				divMeasuresOut << "\t" << 1
@@ -322,27 +319,20 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 		std::map<std::string, std::map<std::string, MetaDataInName>> knownAAMeta;
 		std::map<std::string, MetaDataInName> fullAATyped;
 		std::map<std::string, std::vector<TranslatorByAlignment::AAInfo>> fullAATypedWithCodonInfo;
-		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		if("" != transPars.gffFnp_){
-			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			auto uniqueSeqInOpts = SeqIOOptions::genFastaIn(uniqueSeqsOpts.out_.outName());
 			auto variantInfoDir =  njh::files::make_path(setUp.pars_.directoryName_, "proteinVariantInfo");
-			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			njh::files::makeDir(njh::files::MkdirPar{variantInfoDir});
 			translator->pars_.keepTemporaryFiles_ = true;
 			translator->pars_.workingDirtory_ = variantInfoDir;
-			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			std::unordered_map<std::string, std::unordered_set<std::string>> sampNamesForPopHaps;
 			for(const auto pos : iter::range(inputSeqs.size())){
 				sampNamesForPopHaps[inputSeqs.seqs_[pos]->name_] = sampNamesPerSeq[pos];
 			}
-			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			auto translatedRes = translator->run(uniqueSeqInOpts, sampNamesForPopHaps, variantCallerRunPars);
-			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			OutputStream popBedLocs(njh::files::make_path(variantInfoDir, "inputSeqs.bed"));
 			translatedRes.writeSeqLocations(popBedLocs);
 			if(!translatedRes.translations_.empty()){
-				//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				SeqOutput transwriter(SeqIOOptions::genFastaOut(njh::files::make_path(variantInfoDir, "translatedInput.fasta")));
 				std::vector<seqInfo> translatedSeqs;
 				std::vector<std::unordered_set<std::string>> translatedSeqInputNames;
@@ -438,7 +428,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 							<< "\t" << divMeasures.ShannonEntropyE_
 							<< "\t" << divMeasures.effectiveNumOfAlleles_
 							<< "\t" << divMeasures.heterozygostiy_
-							<< "\t" << (readLens.size() > 1 ? "true" : "false");
+							<< "\t" << (inputTranslatedSeq.hasLengthVariation(variantCallerRunPars.lowVariantCutOff)? "true" : "false");
 					if(getPairwiseComps){
 						if(inputTranslatedSeq.size() > 1){
 							divMeasuresOut << "\t" << avgPMeasures.avgPercentId
@@ -459,7 +449,6 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 											<< "\t" << "NA"
 											<< "\t" << "NA";
 								}
-
 							}
 						}else{
 							divMeasuresOut << "\t" << 1
@@ -534,44 +523,27 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 						}
 					}
 				}
-				//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				{
 					//snps
 					for( auto & varPerChrom : translatedRes.seqVariants_){
-						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 						varPerChrom.second.writeVCF(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-genomic.vcf")));
-						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 						varPerChrom.second.writeOutSNPsFinalInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-SNPs.tab.txt")), varPerChrom.first);
-						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 						if(!knownAAMutsChromPositions[varPerChrom.first].empty()){
 							varPerChrom.second.writeOutSNPsInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-knownAA_SNPs.tab.txt")), varPerChrom.first, knownAAMutsChromPositions[varPerChrom.first], true);
 						}
-						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 						varPerChrom.second.writeOutSNPsAllInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-allBases.tab.txt")), varPerChrom.first);
-						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 						if(!varPerChrom.second.variablePositons_.empty()){
-							//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 							GenomicRegion variableRegion = varPerChrom.second.getVariableRegion();
-							//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 							OutputStream bedVariableRegionOut(OutOptions(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerChrom.first +  "-chromosome_variableRegion.bed"))));
-							//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 							bedVariableRegionOut << variableRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
 						}
-						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 					}
 				}
 			}
-			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		}
 	}
 
-
-	//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 	alignerObj.processAlnInfoOutput(setUp.pars_.outAlnInfoDirName_, setUp.pars_.verbose_);
-//	std::cout << "varInfo.snpsFinal.size(): " << varInfo.snpsFinal.size() << std::endl;
-//	std::cout << "varInfo.deletionsFinal.size(): " << varInfo.deletionsFinal.size() << std::endl;
-//	std::cout << "varInfo.insertionsFinal.size(): " << varInfo.insertionsFinal.size() << std::endl;
-//
 
 
 	return 0;

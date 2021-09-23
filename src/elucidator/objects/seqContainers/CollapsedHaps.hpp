@@ -44,6 +44,7 @@ public:
 	// getting reads lengths
 	std::vector<uint32_t> getReadLenVec() const;
 	std::unordered_map<uint32_t, uint32_t> getReadLenMap() const;
+	bool hasLengthVariation(const double freqCutOff = 0) const;
 
 
 	std::vector<uint32_t> getOrder(const std::function<bool(const seqInfo &,const seqInfo&)> & comparator) const;

@@ -73,6 +73,38 @@ std::unordered_map<uint32_t, uint32_t> CollapsedHaps::getReadLenMap() const{
 	return ret;
 }
 
+
+bool CollapsedHaps::hasLengthVariation(const double freqCutOff) const {
+	auto readLens = getReadLenMap();
+	if (0 == freqCutOff) {
+		return readLens.size() > 1;
+	}
+
+	bool lengthVariation = false;
+
+	uint32_t mode = 0;
+	uint32_t lenMode = std::numeric_limits < uint32_t > ::max();
+
+	for (const auto &lenCount : readLens) {
+		if (lenCount.second > mode) {
+			mode = lenCount.second;
+			lenMode = lenCount.first;
+		}
+	}
+	uint32_t lengthNotMode = 0;
+	for (const auto &lenCount : readLens) {
+		if (lenCount.first != lenMode) {
+			lengthNotMode += lenCount.second;
+		}
+	}
+	if (static_cast<double>(lengthNotMode) / getTotalHapCount() >= freqCutOff) {
+		lengthVariation = true;
+	}
+	return lengthVariation;
+}
+
+
+
 std::vector<uint32_t> CollapsedHaps::getOrder(const std::function<bool(const seqInfo &,const seqInfo&)> & comparator) const{
 	std::vector<uint32_t> order(seqs_.size());
 	njh::iota<uint32_t>(order, 0);
