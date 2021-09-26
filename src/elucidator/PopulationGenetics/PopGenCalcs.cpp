@@ -436,7 +436,7 @@ PopGenCalculator::PopDifferentiationMeasuresPairWise PopGenCalculator::getPopDif
 	for(const auto & pop1Hap : pop1Haps){
 		if(!njh::in(pop1Hap.popUid_, pop2HapsCounts)){
 			++ret.uniqueHapsInPop1_;
-			ret.uniqueHapsInPop1CumFreq_ += pop2HapsFreqs[pop1Hap.popUid_];
+			ret.uniqueHapsInPop1CumFreq_ += pop1HapsFreqs[pop1Hap.popUid_];
 		}
 	}
 	for(const auto & pop2Hap : pop2Haps){
