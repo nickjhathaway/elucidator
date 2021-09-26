@@ -43,6 +43,8 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		if(!metaFieldsToCalcPopDiffs.empty()){
 			haps.meta_->checkForFieldsThrow(metaFieldsToCalcPopDiffs);
 		}
+	}else if(!metaFieldsToCalcPopDiffs.empty()){
+		haps.addMetaWithInputTab(njh::vecToSet(metaFieldsToCalcPopDiffs));
 	}
 	setUp.timer_.startNewLap("get hap probabilities");
 	haps.calcHapProbs();
@@ -67,24 +69,24 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 
 
 	outSampNamesOut << njh::conToStr(haps.sampNamesVec_, "\n") << std::endl;
-	for(const auto & it : indexRes.byTarget){
-		byTargetOut << njh::conToStr(it, "\t") << std::endl;
-	}
-	for(const auto & ih : indexRes.byHapsTarShared){
-		byHapTarSharedOut << njh::conToStr(ih, "\t") << std::endl;
-	}
-	for(const auto & ih : indexRes.byAllHaps){
-		byHapOut << njh::conToStr(ih, "\t") << std::endl;
-	}
-	for(const auto & ih : indexRes.avgJacard){
-		avgHapOut << njh::conToStr(ih, "\t") << std::endl;
-	}
-	for(const auto & ih : indexRes.byHapsTarSharedWeighted){
-		byHapTarSharedWeightedOut << njh::conToStr(ih, "\t") << std::endl;
-	}
-	for(const auto & ih : indexRes.avgJacardWeighted){
-		avgHapWeightedOut << njh::conToStr(ih, "\t") << std::endl;
-	}
+//	for(const auto & it : indexRes.byTarget){
+//		byTargetOut << njh::conToStr(it, "\t") << std::endl;
+//	}
+//	for(const auto & ih : indexRes.byHapsTarShared){
+//		byHapTarSharedOut << njh::conToStr(ih, "\t") << std::endl;
+//	}
+//	for(const auto & ih : indexRes.byAllHaps){
+//		byHapOut << njh::conToStr(ih, "\t") << std::endl;
+//	}
+//	for(const auto & ih : indexRes.avgJacard){
+//		avgHapOut << njh::conToStr(ih, "\t") << std::endl;
+//	}
+//	for(const auto & ih : indexRes.byHapsTarSharedWeighted){
+//		byHapTarSharedWeightedOut << njh::conToStr(ih, "\t") << std::endl;
+//	}
+//	for(const auto & ih : indexRes.avgJacardWeighted){
+//		avgHapWeightedOut << njh::conToStr(ih, "\t") << std::endl;
+//	}
 
 	{
 		setUp.timer_.startNewLap("get population pairwise measures");
@@ -92,7 +94,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		njh::iota<uint32_t>(tarKeys, 0);
 		njh::concurrent::LockableQueue<uint32_t> tarQueue(tarKeys);
 		OutputStream diversityMeasuresOut(njh::files::make_path(setUp.pars_.directoryName_, "diversityMeasuresPerTarget.tab.txt"));
-		diversityMeasuresOut << "loci\tsampCount\ttotalHaps\tuniqueHaps\the\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE" << '\n';
+		diversityMeasuresOut << "loci\tsampCount\ttotalHaps\tuniqueHaps\tSimpsonI\the\tExpP3\tExpP4\tExpP5\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE" << '\n';
 		std::mutex divOutMut;
 		std::function<void()> getTargetInfo = [&tarQueue,&haps,&diversityMeasuresOut,&divOutMut](){
 
@@ -121,7 +123,11 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 															<< "\t" << sampleCount
 															<< "\t" << totalHaps
 															<< "\t" << diversityForTar.alleleNumber_
+															<< "\t" << diversityForTar.simpsonIndex_
 															<< "\t" << diversityForTar.heterozygostiy_
+															<< "\t" << diversityForTar.ploidy3_.expectedCOIForPloidy_.at(3)
+															<< "\t" << diversityForTar.ploidy4_.expectedCOIForPloidy_.at(4)
+															<< "\t" << diversityForTar.ploidy5_.expectedCOIForPloidy_.at(5)
 															<< "\t" << diversityForTar.singlets_
 															<< "\t" << diversityForTar.doublets_
 															<< "\t" << diversityForTar.effectiveNumOfAlleles_
@@ -136,7 +142,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 
 
 
-	if("" != metaFnp && !metaFieldsToCalcPopDiffs.empty()){
+	if(!metaFieldsToCalcPopDiffs.empty()){
 		setUp.timer_.startNewLap("get population pairwise measures");
 
 		auto popMeasuresDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{"popDiffMeasures"});
@@ -147,7 +153,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		for(const auto & field : metaFieldsToCalcPopDiffs){
 			njh::concurrent::LockableQueue<uint32_t> tarQueue(tarKeys);
 			OutputStream diversityMeasuresOut(njh::files::make_path(popMeasuresDir, njh::pasteAsStr(field, "_diversityMeasures.tab.txt.gz")));
-			diversityMeasuresOut << field << "\tloci\tsampCount\ttotalHaps\tuniqueHaps\the\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE\tIn" << '\n';
+			diversityMeasuresOut << field << "\tloci\tsampCount\ttotalHaps\tuniqueHaps\tSimpsonI\the\tExpP3\tExpP4\tExpP5\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE\tIn" << '\n';
 			OutputStream diffMeasuresOut(njh::files::make_path(popMeasuresDir, njh::pasteAsStr(field, "_diffMeasures.tab.txt.gz")));
 			OutputStream pairwiseDiffMeasuresOut(njh::files::make_path(popMeasuresDir, njh::pasteAsStr(field, "_pairwiseDiffMeasures.tab.txt.gz")));
 			diffMeasuresOut << "meta" << "\t"<< "loci"
@@ -172,22 +178,36 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 					<< "\t" << "popMeta" << "1_totalHaps"
 					<< "\t" << "popMeta" << "1_uniqueHaps"
 					<< "\t" << "popMeta" << "1_samples"
+					<< "\t" << "hapsOnlyIn_popMeta" << "1"
 					<< "\t" << field << "2"
 					<< "\t" << "popMeta" << "2_totalHaps"
 					<< "\t" << "popMeta" << "2_uniqueHaps"
 					<< "\t" << "popMeta" << "2_samples"
+					<< "\t" << "hapsOnlyIn_popMeta" << "2"
+					<< "\t" << "uniqHapsCombinedPops"
+					<< "\t" << "uniqHapsSharedInPops"
 					<< "\t" << "HsSample"
-									<<"\t"<<"HsEst"
-									<<"\t"<<"HtSample"
-									<<"\t"<<"HtEst"
-									<<"\t"<<"Gst"
-									<<"\t"<<"GstEst"
-									<<"\t"<<"JostD"
-									<<"\t"<<"JostDEst"
-									<<"\t"<<"ChaoA"
-									<<"\t"<<"ChaoB"
-									<<"\t"<<"JostDChaoEst"
-									<<"\t"<< "In"<< std::endl;
+									<< "\t" << "HsEst"
+									<< "\t" << "HtSample"
+									<< "\t" << "HtEst"
+									<< "\t" << "Gst"
+									<< "\t" << "GstEst"
+									<< "\t" << "JostD"
+									<< "\t" << "JostDEst"
+									<< "\t" << "ChaoA"
+									<< "\t" << "ChaoB"
+									<< "\t" << "JostDChaoEst"
+									<< "\t" << "In"
+
+									<< "\t" << "brayCurtisDissim"
+									<< "\t" << "brayCurtisRelativeDissim"
+									<< "\t" << "jaccardIndexDissim"
+									<< "\t" << "sorensenDistance"
+									<< "\t" << "RMSE"
+									<< "\t" << "correlationDissim"
+									<< "\t" << "matchingCoefficientDistance"
+									<< "\t" << "plainAvalance"
+									<< std::endl;
 
 			std::mutex divOutMut;
 			std::vector<std::string> sampleToMeta;
@@ -232,7 +252,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 					if(hapsForTargetPerPopulation.size() > 1){
 						generalDiff = PopGenCalculator::getOverallPopDiff(hapsForTargetPerPopulation);
 					}
-					std::unordered_map<std::string, std::unordered_map<std::string, PopGenCalculator::PopDifferentiationMeasures>> pairwiseDiffs;
+					std::unordered_map<std::string, std::unordered_map<std::string, PopGenCalculator::PopDifferentiationMeasuresPairWise>> pairwiseDiffs;
 
 					if(hapsForTargetPerPopulation.size() > 1){
 						pairwiseDiffs = PopGenCalculator::getPairwisePopDiff(hapsForTargetPerPopulation);
@@ -257,7 +277,11 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 																	<< "\t" << sampleCount[popDiv.first]
 																	<< "\t" << totalHaps
 																	<< "\t" << popDiv.second.alleleNumber_
+																	<< "\t" << popDiv.second.simpsonIndex_
 																	<< "\t" << popDiv.second.heterozygostiy_
+																	<< "\t" << popDiv.second.ploidy3_.expectedCOIForPloidy_.at(3)
+																	<< "\t" << popDiv.second.ploidy4_.expectedCOIForPloidy_.at(4)
+																	<< "\t" << popDiv.second.ploidy5_.expectedCOIForPloidy_.at(5)
 																	<< "\t" << popDiv.second.singlets_
 																	<< "\t" << popDiv.second.doublets_
 																	<< "\t" << popDiv.second.effectiveNumOfAlleles_
@@ -295,22 +319,38 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 											<< "\t" << totalHapsPerPop[key]
 											<< "\t" << divMeausresPerPop[key].alleleNumber_
 											<< "\t" << sampleCount[key]
+											<< "\t" << pairwiseDiffs.at(key).at(subKey).uniqueHapsInPop1_
 											<< "\t" << subKey
 											<< "\t" << totalHapsPerPop[subKey]
 											<< "\t" << divMeausresPerPop[subKey].alleleNumber_
 											<< "\t" << sampleCount[subKey]
-																<<"\t"<< pairwiseDiffs.at(key).at(subKey).hsSample_
-																<<"\t"<< pairwiseDiffs.at(key).at(subKey).hsEst_
-																<<"\t"<< pairwiseDiffs.at(key).at(subKey).htSample_
-																<<"\t"<< pairwiseDiffs.at(key).at(subKey).htEst_
-																<<"\t"<< pairwiseDiffs.at(key).at(subKey).gst_
-																<<"\t"<< pairwiseDiffs.at(key).at(subKey).gstEst_
-																<<"\t"<< pairwiseDiffs.at(key).at(subKey).jostD_
-																<<"\t"<< pairwiseDiffs.at(key).at(subKey).jostDEst_
-																<<"\t"<< pairwiseDiffs.at(key).at(subKey).chaoA_
-																<<"\t"<< pairwiseDiffs.at(key).at(subKey).chaoB_
-																<<"\t"<< pairwiseDiffs.at(key).at(subKey).jostDChaoEst_
-																<<"\t"<< pairwiseDiffs.at(key).at(subKey).informativenessForAssign_<< std::endl;
+											<< "\t" << pairwiseDiffs.at(key).at(subKey).uniqueHapsInPop2_
+											<< "\t" << pairwiseDiffs.at(key).at(subKey).uniqueHapsAll_
+											<< "\t" << pairwiseDiffs.at(key).at(subKey).uniqueHapsShared_
+																<<"\t"<< pairwiseDiffs.at(key).at(subKey).genDiffMeasures_.hsSample_
+																<<"\t"<< pairwiseDiffs.at(key).at(subKey).genDiffMeasures_.hsEst_
+																<<"\t"<< pairwiseDiffs.at(key).at(subKey).genDiffMeasures_.htSample_
+																<<"\t"<< pairwiseDiffs.at(key).at(subKey).genDiffMeasures_.htEst_
+																<<"\t"<< pairwiseDiffs.at(key).at(subKey).genDiffMeasures_.gst_
+																<<"\t"<< pairwiseDiffs.at(key).at(subKey).genDiffMeasures_.gstEst_
+																<<"\t"<< pairwiseDiffs.at(key).at(subKey).genDiffMeasures_.jostD_
+																<<"\t"<< pairwiseDiffs.at(key).at(subKey).genDiffMeasures_.jostDEst_
+																<<"\t"<< pairwiseDiffs.at(key).at(subKey).genDiffMeasures_.chaoA_
+																<<"\t"<< pairwiseDiffs.at(key).at(subKey).genDiffMeasures_.chaoB_
+																<<"\t"<< pairwiseDiffs.at(key).at(subKey).genDiffMeasures_.jostDChaoEst_
+																<<"\t"<< pairwiseDiffs.at(key).at(subKey).genDiffMeasures_.informativenessForAssign_
+
+
+																<< "\t" << pairwiseDiffs.at(key).at(subKey).brayCurtisDissim_
+																<< "\t" << pairwiseDiffs.at(key).at(subKey).brayCurtisRelativeDissim_
+																<< "\t" << pairwiseDiffs.at(key).at(subKey).jaccardIndexDissim_
+																<< "\t" << pairwiseDiffs.at(key).at(subKey).sorensenDistance_
+																<< "\t" << pairwiseDiffs.at(key).at(subKey).RMSE_
+																<< "\t" << pairwiseDiffs.at(key).at(subKey).halfR_
+																<< "\t" << pairwiseDiffs.at(key).at(subKey).matchingCoefficientDistance_
+																<< "\t" << pairwiseDiffs.at(key).at(subKey).plainAvalance_
+
+																<< std::endl;
 								}
 							}
 						}

@@ -85,7 +85,7 @@ int bedExpRunner::bedGetOverlappingRegionsFromPanels(const njh::progutils::CmdAr
 	for(const auto & bedByPanel : bedsByPanel){
 		auto panelRegions = getBeds(bedByPanel.second);
 
-		for(const auto & bedPos : iter::range(regions.size())){
+		for(const auto bedPos : iter::range(regions.size())){
 			const auto & bed = regions[bedPos];
 			std::vector<Bed6RecordCore> overlappingRegions;
 			for(const auto & panelBed : panelRegions){
@@ -109,7 +109,7 @@ int bedExpRunner::bedGetOverlappingRegionsFromPanels(const njh::progutils::CmdAr
 		out << "\t" << "extrafield" << field;
 	}
 	out << "\t" << njh::conToStr(panelNames, "\t") << std::endl;
-	for(const auto & bedPos : iter::range(regions.size())){
+	for(const auto bedPos : iter::range(regions.size())){
 		out << regions[bedPos]->toDelimStr();
 		for(uint32_t field = 0; field < maxExtraFields; ++field){
 			out << "\t";

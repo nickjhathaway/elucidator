@@ -40,7 +40,12 @@ class popGenExpRunner : public njh::progutils::ProgramRunner {
 	static int tajimatest_testingExample(const njh::progutils::CmdArgs & inputCommands);
 	static int tajimatest(const njh::progutils::CmdArgs & inputCommands);
 
+	static int randomSamplingPloidyTest(const njh::progutils::CmdArgs & inputCommands);
+	static int randomSamplingPloidyTest2(const njh::progutils::CmdArgs & inputCommands);
 
+
+
+  static int callVariantsAgainstRefGenome(const njh::progutils::CmdArgs & inputCommands);
   static int callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & inputCommands);
   static int callVariantsAgainstRefSeqIndividual(const njh::progutils::CmdArgs & inputCommands);
 

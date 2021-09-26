@@ -37,11 +37,15 @@ public:
 	void setFrequencies(uint32_t total);
 	void setFrequencies();
 
+	std::unordered_map<std::string, uint32_t> renameBaseOnFreq(
+			const std::string &identifier);
 
 	////getting info
 	uint32_t getTotalHapCount() const; /**< The total number of input haplotypes */
 	uint32_t getTotalUniqueHapCount() const; /**< the total number of unique haplotypes */
 	size_t size() const;
+
+	std::unordered_map<std::string, uint32_t> genSeqNameKey() const;
 
 	struct AvgPairwiseMeasures{
 		double avgPercentId {0};
@@ -59,13 +63,18 @@ public:
 		VecStr genHeader() const;
 	};
 
-	struct GenPopMeasuresRes{
+	struct GenPopMeasuresRes {
 		PopGenCalculator::DiversityMeasures divMeasures_;
 		PopGenCalculator::TajimaTestRes tajimaRes_;
 		AvgPairwiseMeasures avgPMeasures_;
 		std::vector<std::vector<comparison>> allComps_;
 
-		VecStr getOut(const CollapsedHaps & inputSeqs, const std::string & identifier, const GenPopMeasuresPar & pars) const;
+		VecStr getOut(const CollapsedHaps &inputSeqs, const std::string &identifier,
+				const GenPopMeasuresPar &pars) const;
+
+		void writeDivMeasures(const OutOptions &outOpts,
+				const CollapsedHaps &inputSeqs, const std::string &identifier,
+				const GenPopMeasuresPar &pars) const;
 	};
 	GenPopMeasuresRes getGeneralMeasuresOfDiversity(const GenPopMeasuresPar &pars,
 			const std::shared_ptr<aligner> &alignerObj = nullptr) ;
@@ -75,6 +84,7 @@ public:
 	std::vector<uint32_t> getReadLenVec() const;
 	std::unordered_map<uint32_t, uint32_t> getReadLenMap() const;
 	bool hasLengthVariation(const double freqCutOff = 0) const;
+	uint32_t getLongestLenDiff(const double freqCutOff = 0) const;
 
 
 	std::vector<uint32_t> getOrder(const std::function<bool(const seqInfo &,const seqInfo&)> & comparator) const;
@@ -82,8 +92,18 @@ public:
 
 	//sample names
 	static std::string getSampleNameFromSeqName(const std::string & name, const std::vector<std::string> & possibleSampleMetaFields=VecStr{"sample", "BiologicalSample"});
+	static std::set<std::string> getPossibleLabIsolateNames(const std::unordered_set<std::string> & names);
+
 	std::set<std::string> getAllSampleNames();
 	std::vector<std::unordered_set<std::string>> getSampleNamesPerSeqs();
+
+	//writing out info
+	void writeOutSeqsOrdCnt(const SeqIOOptions &seqOpts) const;
+	void writeNames(const OutOptions &outOpts) const;
+	void writeLabIsolateNames(const OutOptions &outOpts) const;
+
+	void writeOutMetaFields(const OutOptions &outOpts) const;
+
 
 	//comparisons
 	struct CompWithAlnSeqs {

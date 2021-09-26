@@ -47,11 +47,335 @@ popGenExpRunner::popGenExpRunner()
 					 addFunc("getHapPopDifAndVariantsInfo", getHapPopDifAndVariantsInfo, true),
 					 addFunc("oldQuickHaplotypeInformationAndVariants", oldQuickHaplotypeInformationAndVariants, false),
 					 addFunc("quickHaplotypeVariantsWithRegion", quickHaplotypeVariantsWithRegion, false),
+					 addFunc("callVariantsAgainstRefGenome", callVariantsAgainstRefGenome, false),
+					 addFunc("randomSamplingPloidyTest", randomSamplingPloidyTest, false),
+					 addFunc("randomSamplingPloidyTest2", randomSamplingPloidyTest2, false),
 					 //
            },
           "popGenExp") {}
 
 
+
+
+
+
+int popGenExpRunner::randomSamplingPloidyTest(
+		const njh::progutils::CmdArgs & inputCommands) {
+	OutOptions outOpts("", ".tab.txt");
+	bfs::path countsTableFnp;
+	uint32_t ploidyTest = 2;
+	double runs = 100;
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(countsTableFnp, "--countsTableFnp", "counts Table Fnp, 2 columns, 1) name, 2) count", true);
+	setUp.setOption(ploidyTest, "--ploidyTest", "ploidy to test");
+	setUp.setOption(runs, "--runs", "sims to run");
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	table countsTab(countsTableFnp, "\t", true);
+	countsTab.changeHeaderToLowerCase();
+	countsTab.checkForColumnsThrow(VecStr{"name", "count"}, __PRETTY_FUNCTION__);
+
+	OutputStream out(outOpts);
+
+
+	VecStr namesStr = countsTab.getColumn("name");
+	VecStr countsStr = countsTab.getColumn("count");
+
+
+	std::vector<double> counts;
+	for (const auto &s : countsStr) {
+		counts.emplace_back(njh::StrToNumConverter::stoToNum<double>(s));
+	}
+
+	std::vector<long double> freqs;
+	long double total = vectorSum(counts);
+	for(const auto count : counts){
+		freqs.emplace_back(count/total);
+	}
+
+
+
+	std::vector<uint32_t> names(namesStr.size());
+	njh::iota(names, 0U);
+
+	njh::randObjectGen rObjGen(names, counts);
+	std::unordered_map<uint32_t, uint32_t> ploidyCounts;
+	for(uint32_t run = 0; run < runs; ++run){
+		std::unordered_set<uint32_t> generated;
+		for(uint32_t ploidy= 0; ploidy < ploidyTest; ++ploidy){
+			generated.emplace(rObjGen.genObj());
+		}
+		++ploidyCounts[generated.size()];
+	}
+	out << "ploidyObserved\tcount\tfreqObs\tfreqExpected" << std::endl;
+	std::unordered_map<uint32_t, std::string> expectedFreq;
+	for(uint32_t ploidy= 1; ploidy < ploidyTest + 1; ++ploidy){
+		expectedFreq[ploidy] = "NotImplemented";
+	}
+	//monoclonal
+	long double sumOfMonoSquareFreqs = 0;
+	for(const auto freq : freqs){
+		sumOfMonoSquareFreqs += std::pow(freq, ploidyTest);
+	}
+	expectedFreq[1] = estd::to_string(sumOfMonoSquareFreqs);
+
+	if (freqs.size() < ploidyTest){
+		for(uint32_t coi = freqs.size() + 1 ; coi < ploidyTest; ++coi){
+			expectedFreq[coi] = "0";
+		}
+	}
+	if (2 == ploidyTest) {
+		//for 2 clones it's just expected heterozygosity
+		expectedFreq[2] = estd::to_string(1 - sumOfMonoSquareFreqs);
+	} else if(3 == ploidyTest ){
+		long double sumOfNotTroidy = 0;
+		long double sumTwoClones = 0;
+		for(const auto freq : freqs){
+			long double monoClonal = std::pow(freq, 3);
+			long double twoClones = 3 * std::pow(freq, 2) * (1 - freq);
+			sumTwoClones += twoClones;
+			sumOfNotTroidy += monoClonal + twoClones;
+		}
+		if (freqs.size() > 1){
+			expectedFreq[2] = estd::to_string(sumTwoClones);
+		}
+		if (freqs.size() > 2) {
+			expectedFreq[3] = estd::to_string(1 - sumOfNotTroidy);
+		}
+	} else if (ploidyTest == 4) {
+		long double sumOf2Clones = 0;
+		for(const auto freqPos : iter::range(freqs.size())){
+			sumOf2Clones += std::pow(freqs[freqPos], 4 - 1) * (1 - freqs[freqPos]) * 4;
+			for(const auto otherFreqPos : iter::range(freqs.size())){
+				//plus all the times that you pick this hap twice and then pick the other hap twice as well, this occurs 3 times with a ploidy of 4
+				if(otherFreqPos != freqPos){
+					sumOf2Clones += std::pow(freqs[freqPos], 4 - 2) * std::pow(freqs[otherFreqPos], 4-2)  * (4 - 1);
+				}
+			}
+		}
+		long double sumOf3Clones = 0;
+		for (const auto freqPos : iter::range(freqs.size())) {
+			long double square = std::pow(freqs[freqPos], 2.0);
+			for (const auto otherFreqPos : iter::range(freqs.size())) {
+				//plus all the times that you pick this hap twice and then pick two haps that arent this hap or the hap you just choose, with a ploidy of 4 this happens 6 times
+				if (otherFreqPos != freqPos) {
+					long double allOtherFreqs = 1 - freqs[freqPos] - freqs[otherFreqPos];
+					sumOf3Clones += square * freqs[otherFreqPos] * allOtherFreqs * 6;
+				}
+			}
+		}
+		if(freqs.size() > 1){
+			expectedFreq[2] = estd::to_string(sumOf2Clones);
+		}
+		if(freqs.size() > 2){
+			expectedFreq[3] = estd::to_string(sumOf3Clones);
+		}
+		if(freqs.size() > 3){
+			expectedFreq[4] = estd::to_string(1 - sumOf3Clones - sumOf2Clones - sumOfMonoSquareFreqs);
+		}
+	} else if (5 == ploidyTest){
+		long double sumOf2Clones = 0;
+		for(const auto freqPos : iter::range(freqs.size())){
+
+			for(const auto otherFreqPos : iter::range(freqs.size())){
+				//plus all the times that you pick this hap twice and then pick the other hap twice as well, this occurs 3 times with a ploidy of 4
+				if(otherFreqPos != freqPos){
+
+//					sumOf2Clones += std::pow(freqs[freqPos], 4.0) * freqs[otherFreqPos] * 5;
+//					sumOf2Clones += std::pow(freqs[freqPos], 3.0) * std::pow(freqs[otherFreqPos], 2.0) * 9;
+					//sumOf2Clones += std::pow(freqs[freqPos], 2.0) * std::pow(freqs[otherFreqPos], 3.0) * 9;
+					sumOf2Clones += std::pow(freqs[freqPos], 4.0) * freqs[otherFreqPos] * 5;
+					sumOf2Clones += std::pow(freqs[freqPos], 3.0) * std::pow(freqs[otherFreqPos], 2.0) * 10;
+				}
+			}
+		}
+//		long double test = 0.50156;
+//
+//		long double sumOf3Clones = 0;
+//		{
+//
+//			struct Ans {
+//				Ans(uint32_t coef1, uint32_t coef2, double testVal, double testValDiff) :
+//						coeff1_(coef1), coeff2_(coef2), testVal_(testVal), testValDiff_(
+//								testValDiff) {
+//
+//				}
+//				uint32_t coeff1_;
+//				uint32_t coeff2_;
+//				double testVal_;
+//				double testValDiff_;
+//			};
+//			std::vector<Ans> answers;
+//			for(uint32_t coeff1 = 5; coeff1 < 30; ++coeff1){
+//				for(uint32_t coeff2 = 5; coeff2 < 30; ++coeff2){
+//
+//					long double currentTesting = 0;
+//					//long double
+//					for (const auto freqPos : iter::range(freqs.size())) {
+//						for (const auto qFreqPos : iter::range(freqs.size())) {
+//							if(qFreqPos == freqPos){
+//								continue;
+//							}
+//							double zFreq = 1 - freqs[freqPos] - freqs[qFreqPos];
+//							currentTesting += std::pow(freqs[freqPos], 3.0) * std::pow(freqs[qFreqPos], 1.0) * zFreq * coeff1;
+//							currentTesting += std::pow(freqs[freqPos], 2.0) * std::pow(freqs[qFreqPos], 2.0) * zFreq * coeff2;
+//							//sumOf3Clones += std::pow(freqs[freqPos], 3.0) * std::pow(freqs[qFreqPos], 1.0) * zFreq * 20;
+//							//sumOf3Clones += std::pow(freqs[freqPos], 2.0) * std::pow(freqs[qFreqPos], 2.0) * zFreq * 30;
+//							//sumOf3Clones += std::pow(freqs[freqPos], 1.0) * std::pow(freqs[qFreqPos], 3.0) * zFreq * 20;
+//						}
+//					}
+//					answers.emplace_back(Ans(coeff1, coeff2, currentTesting, std::abs(currentTesting - test)));
+//				}
+//			}
+//			njh::sort(answers, [](const Ans & a1, const Ans & a2){
+//				return a1.testValDiff_ < a2.testValDiff_;
+//			});
+//			for(uint32_t top = 0; top < 10; ++top){
+//				std::cout << "index: " << top  << std::endl;
+//				std::cout << "answers[top].coeff1_     : " << answers[top].coeff1_ << std::endl;
+//				std::cout << "answers[top].coeff2_     : " << answers[top].coeff2_ << std::endl;
+//				std::cout << "answers[top].testVal_    : " << answers[top].testVal_ << std::endl;
+//				std::cout << "answers[top].testValDiff_: " << answers[top].testValDiff_ << std::endl;
+//
+//				std::cout << std::endl;
+//			}
+//		}
+		long double sumOf3Clones = 0;
+		for (const auto freqPos : iter::range(freqs.size())) {
+			for (const auto qFreqPos : iter::range(freqs.size())) {
+				if(qFreqPos == freqPos){
+					continue;
+				}
+				double zFreq = 1 - freqs[freqPos] - freqs[qFreqPos];
+				sumOf3Clones += std::pow(freqs[freqPos], 3.0) * std::pow(freqs[qFreqPos], 1.0) * zFreq * 10;
+				sumOf3Clones += std::pow(freqs[freqPos], 2.0) * std::pow(freqs[qFreqPos], 2.0) * zFreq * 15;
+				//sumOf3Clones += std::pow(freqs[freqPos], 3.0) * std::pow(freqs[qFreqPos], 1.0) * zFreq * 20;
+				//sumOf3Clones += std::pow(freqs[freqPos], 2.0) * std::pow(freqs[qFreqPos], 2.0) * zFreq * 30;
+				//sumOf3Clones += std::pow(freqs[freqPos], 1.0) * std::pow(freqs[qFreqPos], 3.0) * zFreq * 20;
+			}
+		}
+//				if (otherFreqPos != freqPos) {
+//					long double allOtherFreqs = 1 - freqs[freqPos] - freqs[otherFreqPos];
+//					sumOf3Clones += square * freqs[otherFreqPos] * allOtherFreqs * 6;
+//				}
+//			}
+//		}
+		//something isn't quite right here
+	//	sumOf3Clones = sumOf3Clones * 2.0/3.0;
+		//sumOf3Clones = sumOf3Clones * 2.0/3.0;
+		//sumOf3Clones = sumOf3Clones * 0.67845;
+
+
+		long double sumOf4Clones = 0;
+		for (const auto freqPos : iter::range(freqs.size())) {
+			for (const auto qFreqPos : iter::range(freqs.size())) {
+				if(qFreqPos == freqPos){
+					continue;
+				}
+				for (const auto rFreqPos : iter::range(freqs.size())) {
+					if(rFreqPos == freqPos || rFreqPos == qFreqPos){
+						continue;
+					}
+					double zFreq = 1 - freqs[freqPos] - freqs[qFreqPos] - freqs[rFreqPos];
+					//sumOf4Clones += std::pow(freqs[freqPos], 2.0) * freqs[qFreqPos] * freqs[rFreqPos] * zFreq * 36;
+					sumOf4Clones += std::pow(freqs[freqPos], 2.0) * freqs[qFreqPos] * freqs[rFreqPos] * zFreq * 10;
+				}
+			}
+		}
+
+		if(freqs.size() > 1){
+			expectedFreq[2] = estd::to_string(sumOf2Clones);
+		}
+		if(freqs.size() > 2){
+			expectedFreq[3] = estd::to_string(sumOf3Clones);
+		}
+		if(freqs.size() > 3){
+			expectedFreq[4] = estd::to_string(sumOf4Clones);
+		}
+		if(freqs.size() > 4){
+			expectedFreq[5] = estd::to_string(1 - sumOf4Clones - sumOf3Clones - sumOf2Clones - sumOfMonoSquareFreqs);
+		}
+	}
+
+
+	for(uint32_t ploidy= 1; ploidy < ploidyTest + 1; ++ploidy){
+		out << ploidy
+				<< "\t" << ploidyCounts[ploidy]
+				<< "\t" << ploidyCounts[ploidy]/static_cast<double>(runs)
+				<< "\t" << expectedFreq[ploidy]
+				<< std::endl;
+	}
+
+
+	return 0;
+}
+
+
+
+int popGenExpRunner::randomSamplingPloidyTest2(
+		const njh::progutils::CmdArgs & inputCommands) {
+	OutOptions outOpts("", ".tab.txt");
+	bfs::path countsTableFnp;
+	double runs = 100;
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(countsTableFnp, "--countsTableFnp", "counts Table Fnp, 2 columns, 1) name, 2) count", true);
+	setUp.setOption(runs, "--runs", "sims to run");
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	table countsTab(countsTableFnp, "\t", true);
+	countsTab.changeHeaderToLowerCase();
+	countsTab.checkForColumnsThrow(VecStr{"name", "count"}, __PRETTY_FUNCTION__);
+
+	OutputStream out(outOpts);
+	out << "ploidyTest\tCOI\tobserved\tfreqObs\tfreqExpected\texpPoly" << std::endl;
+
+
+	VecStr namesStr = countsTab.getColumn("name");
+	VecStr countsStr = countsTab.getColumn("count");
+
+
+	std::vector<double> counts;
+	for (const auto &s : countsStr) {
+		counts.emplace_back(njh::StrToNumConverter::stoToNum<double>(s));
+	}
+
+	std::vector<long double> freqs;
+	long double total = vectorSum(counts);
+	for(const auto count : counts){
+		freqs.emplace_back(count/total);
+	}
+
+	std::vector<uint32_t> names(namesStr.size());
+	njh::iota(names, 0U);
+
+	njh::randObjectGen rObjGen(names, counts);
+	for(uint32_t ploidyTest = 2; ploidyTest <=5; ++ploidyTest){
+		std::unordered_map<uint32_t, uint32_t> ploidyCounts;
+		for(uint32_t run = 0; run < runs; ++run){
+			std::unordered_set<uint32_t> generated;
+			for(uint32_t ploidy= 0; ploidy < ploidyTest; ++ploidy){
+				generated.emplace(rObjGen.genObj());
+			}
+			++ploidyCounts[generated.size()];
+		}
+		auto infoForPloidy = PopGenCalculator::ExpectedPloidyInfo::genPloidyInfo(ploidyTest, freqs);
+		for(uint32_t ploidy= 1; ploidy <=ploidyTest; ++ploidy){
+			out << ploidyTest
+					<< "\t" << ploidy
+					<< "\t" << ploidyCounts[ploidy]
+					<< "\t" << ploidyCounts[ploidy]/static_cast<double>(runs)
+					<< "\t" << infoForPloidy.expectedCOIForPloidy_[ploidy]
+				  << "\t" << infoForPloidy.expectedPolyClonal_
+				  << std::endl;
+
+		}
+	}
+	return 0;
+}
 
 
 int popGenExpRunner::tajimatest(

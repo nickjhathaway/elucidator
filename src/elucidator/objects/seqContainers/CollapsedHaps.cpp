@@ -37,6 +37,22 @@ void CollapsedHaps::setFrequencies(){
 	setFrequencies(total);
 }
 
+std::unordered_map<std::string, uint32_t> CollapsedHaps::renameBaseOnFreq(
+		const std::string &identifier) {
+	//rename based on freq
+	std::vector<uint32_t> orderByCnt = getOrderByTopCnt();
+	uint32_t seqId = 0;
+	for (const auto pos : orderByCnt) {
+		MetaDataInName popMeta;
+		popMeta.addMeta("HapPopUIDCount",
+				static_cast<uint32_t>(std::round(seqs_[pos]->cnt_)));
+		seqs_[pos]->name_ = njh::pasteAsStr(identifier, ".",
+				leftPadNumStr<uint32_t>(seqId, size()), popMeta.createMetaName());
+		++seqId;
+	}
+	return genSeqNameKey();
+}
+
 uint32_t CollapsedHaps::getTotalHapCount() const{
 	uint32_t ret = 0;
 	for(const auto & seq : seqs_){
@@ -53,11 +69,20 @@ size_t CollapsedHaps::size() const{
 	return seqs_.size();
 }
 
+std::unordered_map<std::string, uint32_t> CollapsedHaps::genSeqNameKey() const {
+	std::unordered_map<std::string, uint32_t> ret;
+	for (const auto pos : iter::range(seqs_.size())) {
+		ret[seqs_[pos]->name_] = pos;
+	}
+	return ret;
+}
+
 
 VecStr CollapsedHaps::GenPopMeasuresPar::genHeader() const {
 	VecStr header { "id", "totalHaplotypes", "uniqueHaplotypes", "singlets",
 			"doublets", "expShannonEntropy", "ShannonEntropyE",
-			"effectiveNumOfAlleles", "he", "lengthPolymorphism" };
+			"effectiveNumOfAlleles", "SimpsonIndex", "he", "ExpP3", "ExpP4", "ExpP5",
+			"lengthPolymorphism" };
 	if (getPairwiseComps) {
 		header.emplace_back("avgPercentID");
 		header.emplace_back("avgNumOfDiffs");
@@ -83,7 +108,12 @@ VecStr CollapsedHaps::GenPopMeasuresRes::getOut(const CollapsedHaps & inputSeqs,
 			divMeasures_.expShannonEntropy_,
 			divMeasures_.ShannonEntropyE_,
 			divMeasures_.effectiveNumOfAlleles_,
+			divMeasures_.simpsonIndex_,
 			divMeasures_.heterozygostiy_,
+			divMeasures_.ploidy3_.expectedCOIForPloidy_.at(3),
+			divMeasures_.ploidy4_.expectedCOIForPloidy_.at(4),
+			divMeasures_.ploidy5_.expectedCOIForPloidy_.at(5),
+
 			njh::boolToStr(inputSeqs.hasLengthVariation(pars.lowVarFreq))
 			);
 	if(pars.getPairwiseComps){
@@ -93,6 +123,12 @@ VecStr CollapsedHaps::GenPopMeasuresRes::getOut(const CollapsedHaps & inputSeqs,
 		}
 	}
 	return ret;
+}
+
+void CollapsedHaps::GenPopMeasuresRes::writeDivMeasures(const OutOptions & outOpts, const CollapsedHaps & inputSeqs, const std::string & identifier, const GenPopMeasuresPar & pars) const {
+	OutputStream divMeasuresOut(outOpts);
+	divMeasuresOut << njh::conToStr(pars.genHeader(), "\t") << std::endl;
+	divMeasuresOut << njh::conToStr(getOut(inputSeqs, identifier, pars), "\t") << std::endl;
 }
 
 
@@ -187,6 +223,54 @@ bool CollapsedHaps::hasLengthVariation(const double freqCutOff) const {
 	return lengthVariation;
 }
 
+uint32_t CollapsedHaps::getLongestLenDiff(const double freqCutOff) const {
+	if (0 == freqCutOff) {
+		std::unordered_map<uint32_t, uint32_t> readLens = getReadLenMap();
+		uint32_t longestLen = vectorMaximum(njh::getVecOfMapKeys(readLens));
+		uint32_t shortestLen = vectorMinimum(njh::getVecOfMapKeys(readLens));
+		uint32_t biggestLenDiff = longestLen - shortestLen;
+		return biggestLenDiff;
+	}
+	std::map<uint32_t, uint32_t> lens;
+	double total = 0;
+	for (const auto &seq : seqs_) {
+		lens[len(*seq)] += seq->cnt_;
+		total += seq->cnt_;
+	}
+	if (lens.size() == 1) {
+		return 0;
+	}
+	uint32_t shortestLen = 0;
+	uint32_t longestLen = std::numeric_limits<uint32_t>::max();
+	{
+		//shortest len
+		uint32_t cumTotal = 0;
+		for (const auto &len : lens) {
+			cumTotal += len.second;
+			if (cumTotal / total > freqCutOff) {
+				shortestLen = len.first;
+				break;
+			}
+		}
+	}
+	{
+		//longest len
+		uint32_t cumTotal = 0;
+		for (const auto &len : iter::reversed(lens)) {
+			cumTotal += len.second;
+			if (cumTotal / total > freqCutOff) {
+				longestLen = len.first;
+				break;
+			}
+		}
+	}
+	if (longestLen > shortestLen) {
+		return longestLen - shortestLen;
+	} else {
+		return 0;
+	}
+}
+
 
 
 std::vector<uint32_t> CollapsedHaps::getOrder(const std::function<bool(const seqInfo &,const seqInfo&)> & comparator) const{
@@ -220,6 +304,25 @@ std::string CollapsedHaps::getSampleNameFromSeqName(const std::string &name,
 	return sample;
 }
 
+std::set<std::string> CollapsedHaps::getPossibleLabIsolateNames(const std::unordered_set<std::string> & names){
+	std::set<std::string> nonFieldSampleNames;
+	for(const auto & name : names){
+		if(MetaDataInName::nameHasMetaData(name)){
+			MetaDataInName meta(name);
+			std::string sampleField = "sample";
+			if(meta.containsMeta("BiologicalSample")){
+				sampleField = "BiologicalSample";
+			}
+			if(meta.containsMeta(sampleField) && meta.containsMeta("IsFieldSample") && !meta.getMeta<bool>("IsFieldSample")){
+				if(meta.containsMeta("site") && "LabIsolate" == meta.getMeta("site")){
+					nonFieldSampleNames.emplace(meta.getMeta(sampleField));
+				}
+			}
+		}
+	}
+	return nonFieldSampleNames;
+}
+
 std::set<std::string> CollapsedHaps::getAllSampleNames(){
 	std::set<std::string> ret;
 	for(const auto & subNames : names_){
@@ -243,6 +346,71 @@ std::vector<std::unordered_set<std::string>> CollapsedHaps::getSampleNamesPerSeq
 }
 
 
+void CollapsedHaps::writeOutSeqsOrdCnt(const SeqIOOptions &seqOpts) const {
+	auto orderByCnt = getOrderByTopCnt();
+	SeqOutput uniqueWriter(seqOpts);
+	uniqueWriter.openOut();
+	for (const auto pos : orderByCnt) {
+		uniqueWriter.write(seqs_[pos]);
+	}
+	uniqueWriter.closeOut();
+}
+
+void CollapsedHaps::writeNames(const OutOptions & outOpts) const {
+	auto orderByCnt = getOrderByTopCnt();
+	OutputStream nameOut(outOpts);
+	nameOut << "name\tnumber\tinputNames"	<< std::endl;
+	for(const auto pos : orderByCnt){
+		nameOut << seqs_[pos]->name_
+				<< "\t" << seqs_[pos]->cnt_
+				<< "\t" << njh::conToStr(names_[pos], ",") << std::endl;
+	}
+}
+
+
+void CollapsedHaps::writeOutMetaFields(const OutOptions &outOpts) const{
+	OutputStream out(outOpts);
+	std::set<std::string> allMetaFields;
+	for(const auto & inputNamesPerSeq : names_){
+		for(const auto & name : inputNamesPerSeq){
+			if(MetaDataInName::nameHasMetaData(name)){
+				MetaDataInName meta(name);
+				njh::addVecToSet(njh::getVecOfMapKeys(meta.meta_), allMetaFields);
+			}
+		}
+	}
+	out << "CollapsedName";
+	out << "\t" << njh::conToStr(allMetaFields, "\t") << std::endl;
+	for(const auto pos : iter::range(names_.size())){
+		for(const auto & name : names_[pos]){
+			out << seqs_[pos]->name_;
+			MetaDataInName seqMeta;
+			if(MetaDataInName::nameHasMetaData(name)){
+				seqMeta = MetaDataInName(name);
+			}
+			for(const auto & field : allMetaFields){
+				std::string val = "NA";
+				if(seqMeta.containsMeta(field)){
+					val = seqMeta.getMeta(field);
+				}
+				out << "\t" << val;
+			}
+			out << std::endl;
+		}
+	}
+}
+
+
+
+void CollapsedHaps::writeLabIsolateNames(const OutOptions & outOpts) const {
+	auto orderByCnt = getOrderByTopCnt();
+	OutputStream metaLabNamesOut(outOpts);
+	metaLabNamesOut << "name\tsamples" << std::endl;
+	for(const auto pos : orderByCnt){
+		std::set<std::string> nonFieldSampleNames = CollapsedHaps::getPossibleLabIsolateNames(names_[pos]);
+		metaLabNamesOut << seqs_[pos]->name_ << "\t" << njh::conToStr(nonFieldSampleNames, ",") << std::endl;
+	}
+}
 
 CollapsedHaps CollapsedHaps::readInReads(const SeqIOOptions & inOpts, const std::unique_ptr<MultipleGroupMetaData> & meta,
 		const std::unordered_map<std::string, std::set<std::string>> & metaValuesToAvoid){

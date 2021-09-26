@@ -121,7 +121,7 @@ std::vector<VCFVariant> readVCFLine(const std::string line){
 			ss << __PRETTY_FUNCTION__ << ", error " << "frequencies, " << freqs.size() << " do not equal seq toks, " << seqToks.size() << " for " << line << "\n";
 			throw std::runtime_error{ss.str()};
 		}
-		for(const auto & seqTok : iter::enumerate(seqToks)){
+		for(const auto seqTok : iter::enumerate(seqToks)){
 			ret.emplace_back(VCFVariant(GenomicRegion(name, chrom, location - 1, location - 1 + seqTok.element.size(), false	),
 					ref, seqTok.element, freqs[seqTok.index]
 					));

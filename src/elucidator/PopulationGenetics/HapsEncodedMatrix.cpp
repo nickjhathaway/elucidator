@@ -188,6 +188,21 @@ table HapsEncodedMatrix::getNumberTargetsPerSample() const {
 	return ret;
 }
 
+
+void HapsEncodedMatrix::addMetaWithInputTab(const std::set<std::string> & metaFields){
+	TableReader inputTab(TableIOOpts::genTabFileIn(pars_.tableFnp));
+	std::vector<std::string> tableCheckerCols{pars_.sampleCol};
+	njh::addConToVec(tableCheckerCols, metaFields);
+	inputTab.header_.checkForColumnsThrow(tableCheckerCols, __PRETTY_FUNCTION__);
+	table metaTab(tableCheckerCols);
+	VecStr row;
+	while(inputTab.getNextRow(row)){
+		metaTab.addRow(inputTab.extractCols(row, tableCheckerCols));
+	}
+	meta_ = std::make_shared<MultipleGroupMetaData>(metaTab.getUniqueRows(), njh::vecToSet(metaTab.getColumnLevels(pars_.sampleCol)));
+}
+
+
 void HapsEncodedMatrix::addMeta(const bfs::path & metaFnp){
 	if(encodeKeysSet_){
 		meta_ = std::make_shared<MultipleGroupMetaData>(metaFnp, std::set<std::string>(sampNames_.begin(), sampNames_.end()));

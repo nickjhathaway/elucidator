@@ -59,16 +59,37 @@ public:
 	 */
 	static TajimaTestRes calcTajimaTest(uint32_t nInputSeqs, uint32_t nSegragtingSites, double meanPairwiseDifferences);
 
+	struct ExpectedPloidyInfo {
 
-	struct DiversityMeasures{
 
-		uint32_t alleleNumber_ = 0; //number of unique alleles
-		uint32_t doublets_ = 0; //number of haplotypes found twice
-		uint32_t singlets_ = 0; //number of haplotypes found only once
-		double expShannonEntropy_ = std::numeric_limits<double>::max(); //exp of shannon entropy base e
-		double ShannonEntropyE_ = std::numeric_limits<double>::max(); //shannon entropy base e
-		double effectiveNumOfAlleles_ = std::numeric_limits<double>::max();
-		double heterozygostiy_  = std::numeric_limits<double>::max();
+		uint32_t ploidy_;
+
+		double expectedPolyClonal_; //!< the expected freq of polyclonal samples for given ploidy for given population frequencies
+		std::unordered_map<uint32_t, double> expectedCOIForPloidy_; //!< the expected COI or given ploidy for given population frequencies
+
+		//currently only does ploidy up to and including 5, will throw otherwise
+		static ExpectedPloidyInfo genPloidyInfo(uint32_t ploidy, const std::vector<long double> & freqs);
+	};
+
+
+
+	struct DiversityMeasures {
+
+		uint32_t alleleNumber_ = 0; //!< number of unique alleles
+		uint32_t doublets_ = 0; //!< number of haplotypes found twice
+		uint32_t singlets_ = 0; //!< number of haplotypes found only once
+		double expShannonEntropy_ = std::numeric_limits<double>::max(); //!< exp of shannon entropy base e
+		double ShannonEntropyE_ = std::numeric_limits<double>::max(); //!< shannon entropy base e
+		double effectiveNumOfAlleles_ = std::numeric_limits<double>::max();//!< effective number of alleles
+		double heterozygostiy_  = std::numeric_limits<double>::max();//!< the expected heterozygostity (He)
+
+		double simpsonIndex_ = std::numeric_limits<double>::max(); //!< simpson index of diversity
+
+		ExpectedPloidyInfo ploidy2_;//!< info when sampling 2 haplotypes
+		ExpectedPloidyInfo ploidy3_;//!< info when sampling 3 haplotypes
+		ExpectedPloidyInfo ploidy4_;//!< info when sampling 4 haplotypes
+		ExpectedPloidyInfo ploidy5_;//!< info when sampling 5 haplotypes
+
 
 
 	};
@@ -81,31 +102,47 @@ public:
 	 */
 	template<typename T>
 	static DiversityMeasures getGeneralMeasuresOfDiversity(const std::vector<T> & haps){
-		DiversityMeasures res;
 
-		res.alleleNumber_ = haps.size();
-		double sumOfSquares = 0;
-		double sumOfLogFreqTimesFreq = 0;
-
-		for (const auto & hap : haps) {
-			const seqInfo & seqRef = getSeqBase(hap);
-			if (1 == seqRef.cnt_) {
-				++res.singlets_;
-			} else if (2 == seqRef.cnt_) {
-				++res.doublets_;
-			}
-			sumOfSquares += std::pow(seqRef.frac_, 2.0);
-			sumOfLogFreqTimesFreq += seqRef.frac_ * std::log(seqRef.frac_);
+		std::unordered_map<std::string, uint32_t> popCounts;
+		for(const auto & seq : haps){
+			popCounts[getSeqBase(seq).seq_] += getSeqBase(seq).cnt_;
 		}
-		res.heterozygostiy_ = 1 - sumOfSquares;
-		res.effectiveNumOfAlleles_ = std::pow(sumOfSquares, -1);
-		res.ShannonEntropyE_ = -sumOfLogFreqTimesFreq;
-		res.expShannonEntropy_ = std::exp(-sumOfLogFreqTimesFreq);
-
-		return res;
+		std::vector<PopGenCalculator::PopHapInfo> popHapInfos;
+		uint32_t count = 0;
+		for(const auto & popCount : popCounts){
+			popHapInfos.emplace_back(count, popCount.second);
+			++count;
+		}
+		return getGeneralMeasuresOfDiversity(popHapInfos);
+//
+//
+//		DiversityMeasures res;
+//
+//		res.alleleNumber_ = haps.size();
+//		double sumOfSquares = 0;
+//		double sumOfLogFreqTimesFreq = 0;
+//
+//
+//		for (const auto & hap : haps) {
+//			const seqInfo & seqRef = getSeqBase(hap);
+//			if (1 == seqRef.cnt_) {
+//				++res.singlets_;
+//			} else if (2 == seqRef.cnt_) {
+//				++res.doublets_;
+//			}
+//			sumOfSquares += std::pow(seqRef.frac_, 2.0);
+//			sumOfLogFreqTimesFreq += seqRef.frac_ * std::log(seqRef.frac_);
+//		}
+//
+//		res.heterozygostiy_ = 1 - sumOfSquares;
+//		res.effectiveNumOfAlleles_ = std::pow(sumOfSquares, -1);
+//		res.ShannonEntropyE_ = -sumOfLogFreqTimesFreq;
+//		res.expShannonEntropy_ = std::exp(-sumOfLogFreqTimesFreq);
+//
+//		return res;
 	}
 
-	/**@brief Get several general measures of diversity, assumes haps are already collapsed to unique haplotypes and have frequencies set
+	/**@brief Get several general measures of diversity,
 	 *
 	 * @param haps a vector of unique haplotypes
 	 * @return a struct with several diversity measurements
@@ -151,6 +188,47 @@ public:
 
 		std::unordered_map<uint32_t, double> informativenessForAssignPerHap_;
 		std::unordered_map<std::string, double> informativenessForAssignPerPopulation_;
+
+	};
+
+	struct PopDifferentiationMeasuresPairWise{
+		PopDifferentiationMeasuresPairWise(
+				const PopDifferentiationMeasures & genDiffMeasures,
+				const std::string & pop1Name,
+				const std::string & pop2Name): genDiffMeasures_(genDiffMeasures),
+						pop1Name_(pop1Name),
+						pop2Name_(pop2Name){
+
+		}
+		PopDifferentiationMeasuresPairWise(){
+			//here for convenience
+		}
+		PopDifferentiationMeasures genDiffMeasures_;
+		std::string pop1Name_;
+		std::string pop2Name_;
+		//Specific to comparing two populations
+		double brayCurtisDissim_ = std::numeric_limits<double>::max();
+		double brayCurtisRelativeDissim_ = std::numeric_limits<double>::max();
+		//double chiSquare_ = std::numeric_limits<double>::max();
+		double jaccardIndexDissim_ = std::numeric_limits<double>::max();
+		double sorensenDistance_ = std::numeric_limits<double>::max();
+
+		double matchingCoefficientDistance_ = std::numeric_limits<double>::max();
+		double halfR_ = std::numeric_limits<double>::max();//!< 0.5 * 1 - correlation
+
+		double RMSE_ = std::numeric_limits<double>::max();
+
+		//avalance
+
+		double plainAvalance_ = std::numeric_limits<double>::max();
+		double discriminatingAvalance_ = std::numeric_limits<double>::max();//!< not yet implemented, would take a "genetic" distance into account as well
+
+
+
+		uint32_t uniqueHapsAll_ { 0 };
+		uint32_t uniqueHapsShared_ { 0 };
+		uint32_t uniqueHapsInPop1_ { 0 };
+		uint32_t uniqueHapsInPop2_ { 0 };
 
 	};
 
@@ -280,39 +358,16 @@ public:
 	};
 
 
-	static DiversityMeasures getGeneralMeasuresOfDiversity(const std::vector<PopHapInfo> & haps){
-		DiversityMeasures res;
-
-		res.alleleNumber_ = haps.size();
-		double sumOfSquares = 0;
-		double sumOfLogFreqTimesFreq = 0;
-		double totalHaps = PopHapInfo::getTotalPopCount(haps);
-		for (const auto & hap : haps) {
-			if (1 == hap.count_) {
-				++res.singlets_;
-			} else if (2 == hap.count_) {
-				++res.doublets_;
-			}
-			double prob = hap.count_/totalHaps;
-			sumOfSquares += std::pow(prob, 2.0);
-			sumOfLogFreqTimesFreq += prob * std::log(prob);
-		}
-		res.heterozygostiy_ = 1 - sumOfSquares;
-		res.effectiveNumOfAlleles_ = std::pow(sumOfSquares, -1);
-		res.ShannonEntropyE_ = -sumOfLogFreqTimesFreq;
-		res.expShannonEntropy_ = std::exp(-sumOfLogFreqTimesFreq);
-
-		return res;
-	}
+	static DiversityMeasures getGeneralMeasuresOfDiversity(const std::vector<PopHapInfo> & haps);
 
 
 	static PopDifferentiationMeasures getOverallPopDiff(std::unordered_map<std::string, std::vector<PopHapInfo> > hapsForPopulations);
 
 
-	static PopDifferentiationMeasures getPopDiff(const std::string & pop1, const std::vector<PopHapInfo> & pop1Haps,
-																				const std::string & pop2, const std::vector<PopHapInfo> & pop2Haps){
-		return getOverallPopDiff(std::unordered_map<std::string, std::vector<PopHapInfo>>{{pop1, pop1Haps}, {pop2, pop2Haps}});
-	}
+	static PopDifferentiationMeasuresPairWise getPopDiff(
+			const std::string & pop1, const std::vector<PopHapInfo> & pop1Haps,
+			const std::string & pop2, const std::vector<PopHapInfo> & pop2Haps,
+			const std::unordered_set<uint32_t> & allPossibleHaps);
 
 	template<typename T>
 	static PopDifferentiationMeasures getOverallPopDiffForSeqs(const std::unordered_map<std::string, std::shared_ptr<std::vector<T>>> & popSeqs){
@@ -347,19 +402,20 @@ public:
 	}
 
 
+	static std::unordered_map<std::string,
+			std::unordered_map<std::string, PopDifferentiationMeasuresPairWise>> getPairwisePopDiff(
+			const std::unordered_map<std::string, std::vector<PopHapInfo>> & hapsForPopulations);
 
 
 	template<typename T>
 	static std::unordered_map<std::string,
-			std::unordered_map<std::string, PopDifferentiationMeasures>> getPairwisePopDiff(
+			std::unordered_map<std::string, PopDifferentiationMeasuresPairWise>> getPairwisePopDiff(
 			const std::unordered_map<std::string, std::shared_ptr<std::vector<T>>> & popSeqs) {
 		if(popSeqs.size() < 2){
 			std::stringstream ss;
 			ss << __PRETTY_FUNCTION__ << " error, popSeqs should at least be size 2 not " << popSeqs.size() << "\n";
 			throw std::runtime_error{ss.str()};
 		}
-		std::unordered_map<std::string,
-				std::unordered_map<std::string, PopDifferentiationMeasures>> ret;
 
 		auto keys = njh::getVecOfMapKeys(popSeqs);
 		njh::sort(keys);
@@ -385,43 +441,22 @@ public:
 				hapsForPopulations[pop.first].emplace_back(PopHapInfo(seqToPopUID[getSeqBase(hap).seq_], getSeqBase(hap).cnt_));
 			}
 		}
-		for(const auto keyPos : iter::range(keys.size())){
-			for(const auto secondKeyPos : iter::range(keyPos)){
-	//			std::unordered_map<std::string, std::shared_ptr<std::vector<T>>> currentPair;
-	//			currentPair[keys[keyPos]] = popSeqs.at(keys[keyPos]);
-	//			currentPair[keys[secondKeyPos]] = popSeqs.at(keys[secondKeyPos]);
-	//			auto popMeasures = getOverallPopDiff(currentPair);
-				auto popMeasures = getPopDiff(keys[keyPos], hapsForPopulations[keys[keyPos]],
-						keys[secondKeyPos], hapsForPopulations[keys[secondKeyPos]]);
-				ret[keys[keyPos]][keys[secondKeyPos]] = popMeasures;
-			}
-		}
-		return ret;
+		return getPairwisePopDiff(hapsForPopulations);
+//		for(const auto keyPos : iter::range(keys.size())){
+//			for(const auto secondKeyPos : iter::range(keyPos)){
+//	//			std::unordered_map<std::string, std::shared_ptr<std::vector<T>>> currentPair;
+//	//			currentPair[keys[keyPos]] = popSeqs.at(keys[keyPos]);
+//	//			currentPair[keys[secondKeyPos]] = popSeqs.at(keys[secondKeyPos]);
+//	//			auto popMeasures = getOverallPopDiff(currentPair);
+//				auto popMeasures = getPopDiff(keys[keyPos], hapsForPopulations[keys[keyPos]],
+//						keys[secondKeyPos], hapsForPopulations[keys[secondKeyPos]]);
+//				ret[keys[keyPos]][keys[secondKeyPos]] = popMeasures;
+//			}
+//		}
+//		return ret;
 	}
 
-	static std::unordered_map<std::string,
-			std::unordered_map<std::string, PopDifferentiationMeasures>> getPairwisePopDiff(
-			const std::unordered_map<std::string, std::vector<PopHapInfo>> & hapsForPopulations) {
-		if(hapsForPopulations.size() < 2){
-			std::stringstream ss;
-			ss << __PRETTY_FUNCTION__ << " error, popSeqs should at least be size 2 not " << hapsForPopulations.size() << "\n";
-			throw std::runtime_error{ss.str()};
-		}
-		std::unordered_map<std::string,
-				std::unordered_map<std::string, PopDifferentiationMeasures>> ret;
-		auto keys = njh::getVecOfMapKeys(hapsForPopulations);
-		njh::sort(keys);
-		for(const auto keyPos : iter::range(keys.size())){
-			for(const auto secondKeyPos : iter::range(keyPos)){
-				auto popMeasures = getPopDiff(
-						keys[keyPos],       hapsForPopulations.at(keys[keyPos]),
-						keys[secondKeyPos], hapsForPopulations.at(keys[secondKeyPos])
-						);
-				ret[keys[keyPos]][keys[secondKeyPos]] = popMeasures;
-			}
-		}
-		return ret;
-	}
+
 
 };
 

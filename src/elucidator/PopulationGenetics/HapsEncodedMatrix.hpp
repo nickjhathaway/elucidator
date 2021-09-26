@@ -93,6 +93,7 @@ public:
 	table getNumberTargetsPerSample() const;
 
 	void addMeta(const bfs::path & metaFnp);
+	void addMetaWithInputTab(const std::set<std::string> & metaFields);
 
 	void resetEncoding();
 	void setEncodeKeys();
