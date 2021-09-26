@@ -243,6 +243,7 @@ PopGenCalculator::DiversityMeasures PopGenCalculator::getGeneralMeasuresOfDivers
 
 	//ploidy 2
 	res.ploidy2_ = ExpectedPloidyInfo::genPloidyInfo(2, freqs);
+	//ploidy of 2 is kind of unnecssary since it's just expected hetereozygosity
 
 	//ploidy 3
 	res.ploidy3_ = ExpectedPloidyInfo::genPloidyInfo(3, freqs);
@@ -396,7 +397,8 @@ PopGenCalculator::PopDifferentiationMeasures PopGenCalculator::getOverallPopDiff
 PopGenCalculator::PopDifferentiationMeasuresPairWise PopGenCalculator::getPopDiff(
 		const std::string & pop1, const std::vector<PopHapInfo> & pop1Haps,
 		const std::string & pop2, const std::vector<PopHapInfo> & pop2Haps,
-		const std::unordered_set<uint32_t> & allPossibleHaps){
+		const std::unordered_set<uint32_t> & allPossibleHaps,
+		const std::unordered_map<uint32_t, std::unordered_map<uint32_t, double>> & pairwiseDistances){
 	PopDifferentiationMeasuresPairWise ret(getOverallPopDiff(std::unordered_map<std::string, std::vector<PopHapInfo>>{{pop1, pop1Haps}, {pop2, pop2Haps}}),
 			pop1, pop2);
 
@@ -434,11 +436,13 @@ PopGenCalculator::PopDifferentiationMeasuresPairWise PopGenCalculator::getPopDif
 	for(const auto & pop1Hap : pop1Haps){
 		if(!njh::in(pop1Hap.popUid_, pop2HapsCounts)){
 			++ret.uniqueHapsInPop1_;
+			ret.uniqueHapsInPop1CumFreq_ += pop2HapsFreqs[pop1Hap.popUid_];
 		}
 	}
 	for(const auto & pop2Hap : pop2Haps){
 		if(!njh::in(pop2Hap.popUid_, pop1HapsCounts)){
 			++ret.uniqueHapsInPop2_;
+			ret.uniqueHapsInPop2CumFreq_ += pop2HapsFreqs[pop2Hap.popUid_];
 		}
 		if(njh::in(pop2Hap.popUid_, pop1HapsCounts)){
 			++ret.uniqueHapsShared_;
@@ -522,6 +526,22 @@ PopGenCalculator::PopDifferentiationMeasuresPairWise PopGenCalculator::getPopDif
 
 	}
 
+
+
+	// discriminatingAvalance_
+	if(pairwiseDistances.empty()){
+		//no distances supplied
+		ret.discriminatingAvalance_  = ret.plainAvalance_ ;
+	}else{
+		double sum = 0;
+		for(const auto & hap1 : allHaps){
+			for(const auto & hap2 : allHaps){
+				sum += pairwiseDistances.at(hap1).at(hap2) * std::abs(pop1HapsFreqs[hap1] - pop2HapsFreqs[hap1]) * std::abs(pop1HapsFreqs[hap2] - pop2HapsFreqs[hap2]);
+			}
+		}
+		ret.plainAvalance_ = sum * 0.5;
+	}
+
 	// plainAvalance_
 	{
 		double sum = 0;
@@ -534,8 +554,6 @@ PopGenCalculator::PopDifferentiationMeasuresPairWise PopGenCalculator::getPopDif
 	}
 
 
-	// discriminatingAvalance_
-
 	return ret;
 }
 
@@ -543,7 +561,8 @@ PopGenCalculator::PopDifferentiationMeasuresPairWise PopGenCalculator::getPopDif
 
 std::unordered_map<std::string,
 		std::unordered_map<std::string, PopGenCalculator::PopDifferentiationMeasuresPairWise>> PopGenCalculator::getPairwisePopDiff(
-		const std::unordered_map<std::string, std::vector<PopHapInfo>> & hapsForPopulations) {
+		const std::unordered_map<std::string, std::vector<PopHapInfo>> & hapsForPopulations,
+		const std::unordered_map<uint32_t, std::unordered_map<uint32_t, double>> & pairwiseDists) {
 	if(hapsForPopulations.size() < 2){
 		std::stringstream ss;
 		ss << __PRETTY_FUNCTION__ << " error, popSeqs should at least be size 2 not " << hapsForPopulations.size() << "\n";
@@ -563,7 +582,7 @@ std::unordered_map<std::string,
 			auto popMeasures = getPopDiff(
 					keys[keyPos],       hapsForPopulations.at(keys[keyPos]),
 					keys[secondKeyPos], hapsForPopulations.at(keys[secondKeyPos]),
-					allHaps
+					allHaps, pairwiseDists
 					);
 			ret[keys[keyPos]][keys[secondKeyPos]] = popMeasures;
 		}

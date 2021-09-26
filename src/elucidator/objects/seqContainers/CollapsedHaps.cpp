@@ -86,6 +86,8 @@ VecStr CollapsedHaps::GenPopMeasuresPar::genHeader() const {
 	if (getPairwiseComps) {
 		header.emplace_back("avgPercentID");
 		header.emplace_back("avgNumOfDiffs");
+		header.emplace_back("simpleAvalance");
+		header.emplace_back("completeAvalance");
 		if (numSegSites_ != std::numeric_limits < uint32_t > ::max()) {
 			header.emplace_back("nSegratingSites");
 			header.emplace_back("TajimaD");
@@ -118,6 +120,7 @@ VecStr CollapsedHaps::GenPopMeasuresRes::getOut(const CollapsedHaps & inputSeqs,
 			);
 	if(pars.getPairwiseComps){
 		njh::addConToVec(ret, toVecStr(avgPMeasures_.avgPercentId, avgPMeasures_.avgNumOfDiffs));
+		njh::addConToVec(ret, toVecStr(avgPMeasures_.simpleAvalance_, avgPMeasures_.completeAvalance_));
 		if(pars.numSegSites_ != std::numeric_limits<uint32_t>::max()){
 			njh::addConToVec(ret, toVecStr(pars.numSegSites_, tajimaRes_.d_, tajimaRes_.pval_beta_));
 		}
@@ -582,6 +585,9 @@ CollapsedHaps::AvgPairwiseMeasures CollapsedHaps::getAvgPairwiseMeasures(const s
 	AvgPairwiseMeasures ret;
 	PairwisePairFactory pFac(seqs_.size());
 	PairwisePairFactory::PairwisePair pair;
+
+
+
 	while(pFac.setNextPair(pair)){
 		uint32_t toalSeqInComp = seqs_[pair.row_]->cnt_ + seqs_[pair.col_]->cnt_;
 
@@ -589,15 +595,19 @@ CollapsedHaps::AvgPairwiseMeasures CollapsedHaps::getAvgPairwiseMeasures(const s
 				  PairwisePairFactory::getTotalPairwiseComps(toalSeqInComp)
 				- PairwisePairFactory::getTotalPairwiseComps(seqs_[pair.row_]->cnt_)
 				- PairwisePairFactory::getTotalPairwiseComps(seqs_[pair.col_]->cnt_);
-
+		ret.simpleAvalance_   += (1 - allComps[pair.row_][pair.col_].distances_.eventBasedIdentityHq_) * 2;
+		ret.completeAvalance_ += (1 - allComps[pair.row_][pair.col_].distances_.eventBasedIdentityHq_) * seqs_[pair.row_]->frac_ * seqs_[pair.col_]->frac_ * 2;
 		ret.avgPercentId  += allComps[pair.row_][pair.col_].distances_.eventBasedIdentityHq_ * totalBetweenComps;
 		ret.avgNumOfDiffs += allComps[pair.row_][pair.col_].distances_.getNumOfEvents(true) * totalBetweenComps;
 	}
+
 	uint64_t total = getTotalHapCount();
 	for(const auto pos : iter::range(getTotalUniqueHapCount() )){
 		//add in the 100% percent matches between the same exact seqs for the pairwise comps
 		ret.avgPercentId += PairwisePairFactory::getTotalPairwiseComps(seqs_[pos]->cnt_);
 	}
+
+	ret.simpleAvalance_ /= (getTotalUniqueHapCount() * (getTotalUniqueHapCount() - 1));
 	ret.avgPercentId  /= PairwisePairFactory::getTotalPairwiseComps(total);
 	ret.avgNumOfDiffs /= PairwisePairFactory::getTotalPairwiseComps(total);
 	return ret;

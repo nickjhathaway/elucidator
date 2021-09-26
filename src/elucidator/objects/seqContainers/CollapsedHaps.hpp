@@ -50,6 +50,9 @@ public:
 	struct AvgPairwiseMeasures{
 		double avgPercentId {0};
 		double avgNumOfDiffs {0};
+
+		double simpleAvalance_ = 0;
+		double completeAvalance_ = 0;
 	};
 
 	//population genetics
@@ -117,6 +120,7 @@ public:
 	std::vector<CompWithAlnSeqs> getCompsAgainstRef(const seqInfo & refSeq, aligner & alignerObj, uint32_t numThreads = 1) const;
 	std::vector<std::vector<comparison>> getPairwiseComps(aligner & alignerObj, uint32_t numThreads = 1) const;
 	std::vector<std::vector<comparison>> getPairwiseCompsDiagAln(aligner & alignerObj, uint32_t numThreads = 1) const;
+
 
 
 	AvgPairwiseMeasures getAvgPairwiseMeasures(const std::vector<std::vector<comparison>> & allComps) const;

@@ -179,11 +179,13 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 					<< "\t" << "popMeta" << "1_uniqueHaps"
 					<< "\t" << "popMeta" << "1_samples"
 					<< "\t" << "hapsOnlyIn_popMeta" << "1"
+					<< "\t" << "hapsOnlyIn_popMeta" << "1CumFreq"
 					<< "\t" << field << "2"
 					<< "\t" << "popMeta" << "2_totalHaps"
 					<< "\t" << "popMeta" << "2_uniqueHaps"
 					<< "\t" << "popMeta" << "2_samples"
 					<< "\t" << "hapsOnlyIn_popMeta" << "2"
+					<< "\t" << "hapsOnlyIn_popMeta" << "2CumFreq"
 					<< "\t" << "uniqHapsCombinedPops"
 					<< "\t" << "uniqHapsSharedInPops"
 					<< "\t" << "HsSample"
@@ -320,11 +322,14 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 											<< "\t" << divMeausresPerPop[key].alleleNumber_
 											<< "\t" << sampleCount[key]
 											<< "\t" << pairwiseDiffs.at(key).at(subKey).uniqueHapsInPop1_
+											<< "\t" << pairwiseDiffs.at(key).at(subKey).uniqueHapsInPop1CumFreq_
 											<< "\t" << subKey
 											<< "\t" << totalHapsPerPop[subKey]
 											<< "\t" << divMeausresPerPop[subKey].alleleNumber_
 											<< "\t" << sampleCount[subKey]
 											<< "\t" << pairwiseDiffs.at(key).at(subKey).uniqueHapsInPop2_
+											<< "\t" << pairwiseDiffs.at(key).at(subKey).uniqueHapsInPop2CumFreq_
+
 											<< "\t" << pairwiseDiffs.at(key).at(subKey).uniqueHapsAll_
 											<< "\t" << pairwiseDiffs.at(key).at(subKey).uniqueHapsShared_
 																<<"\t"<< pairwiseDiffs.at(key).at(subKey).genDiffMeasures_.hsSample_

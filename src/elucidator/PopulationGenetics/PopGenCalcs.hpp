@@ -218,10 +218,10 @@ public:
 
 		double RMSE_ = std::numeric_limits<double>::max();
 
-		//avalance
+		//Avalanche
 
+		double discriminatingAvalance_ = std::numeric_limits<double>::max(); //!< not yet implemented, would take a "genetic" distance into account as well
 		double plainAvalance_ = std::numeric_limits<double>::max();
-		double discriminatingAvalance_ = std::numeric_limits<double>::max();//!< not yet implemented, would take a "genetic" distance into account as well
 
 
 
@@ -229,6 +229,10 @@ public:
 		uint32_t uniqueHapsShared_ { 0 };
 		uint32_t uniqueHapsInPop1_ { 0 };
 		uint32_t uniqueHapsInPop2_ { 0 };
+
+		double uniqueHapsInPop1CumFreq_ {0};
+		double uniqueHapsInPop2CumFreq_ {0};
+
 
 	};
 
@@ -367,7 +371,8 @@ public:
 	static PopDifferentiationMeasuresPairWise getPopDiff(
 			const std::string & pop1, const std::vector<PopHapInfo> & pop1Haps,
 			const std::string & pop2, const std::vector<PopHapInfo> & pop2Haps,
-			const std::unordered_set<uint32_t> & allPossibleHaps);
+			const std::unordered_set<uint32_t> & allPossibleHaps,
+			const std::unordered_map<uint32_t, std::unordered_map<uint32_t, double>> & pairwiseDistacne = std::unordered_map<uint32_t, std::unordered_map<uint32_t, double>>{});
 
 	template<typename T>
 	static PopDifferentiationMeasures getOverallPopDiffForSeqs(const std::unordered_map<std::string, std::shared_ptr<std::vector<T>>> & popSeqs){
@@ -404,13 +409,15 @@ public:
 
 	static std::unordered_map<std::string,
 			std::unordered_map<std::string, PopDifferentiationMeasuresPairWise>> getPairwisePopDiff(
-			const std::unordered_map<std::string, std::vector<PopHapInfo>> & hapsForPopulations);
+			const std::unordered_map<std::string, std::vector<PopHapInfo>> & hapsForPopulations,
+			const std::unordered_map<uint32_t, std::unordered_map<uint32_t, double>> & pairwiseDists = std::unordered_map<uint32_t, std::unordered_map<uint32_t, double>>{});
 
 
 	template<typename T>
 	static std::unordered_map<std::string,
 			std::unordered_map<std::string, PopDifferentiationMeasuresPairWise>> getPairwisePopDiff(
-			const std::unordered_map<std::string, std::shared_ptr<std::vector<T>>> & popSeqs) {
+			const std::unordered_map<std::string, std::shared_ptr<std::vector<T>>> & popSeqs,
+			const std::vector<std::vector<double>> & pairwiseDistacne = std::vector<std::vector<double>>{}) {
 		if(popSeqs.size() < 2){
 			std::stringstream ss;
 			ss << __PRETTY_FUNCTION__ << " error, popSeqs should at least be size 2 not " << popSeqs.size() << "\n";
