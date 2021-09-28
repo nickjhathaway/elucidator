@@ -70,7 +70,9 @@ void collapseAndCallVariants(const CollapseAndCallVariantsPars & pars){
 
 	std::unordered_map<std::string, std::set<std::string>> metaValuesToAvoid = njh::progutils::CmdArgs::sepSubArgsMulti<std::string, std::string>(pars.ignoreSubFields);
 
-
+	njh::files::makeDirP(njh::files::MkdirPar(pars.outputDirectory));
+	//kinda silly but this will make so any parent directiores that need to exist will be made and then
+	//over write directory will take affect below
 	njh::files::makeDir(njh::files::MkdirPar(pars.outputDirectory, pars.overWriteDirectory));
 
 	auto inputSeqs = CollapsedHaps::readInReads(pars.inOpts, meta, metaValuesToAvoid);
