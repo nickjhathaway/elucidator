@@ -83,7 +83,7 @@ void increaseCountsForAlnSlim(const BamTools::BamAlignment & bAln,
 		alignerObj.parts_.lHolder_ = info.second;
 		alignerObj.rearrangeObjsLocal(alignerObj.alignObjectA_,
 				alignerObj.alignObjectB_);
-		uint64_t currentMaxLen = alignerObj.parts_.maxSize_;
+		uint64_t currentMaxLen = alignerObj.parts_.maxSize_ - 1;
 		if(ionTorrent && reAlignTorrent){
 			readVec::getMaxLength(ref, currentMaxLen);
 			readVec::getMaxLength(query, currentMaxLen);

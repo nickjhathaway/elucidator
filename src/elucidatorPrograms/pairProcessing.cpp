@@ -280,7 +280,7 @@ int pairProcessingRunner::detectPossiblePrimers(
 
 		readVec::getMaxLength(seq.seqBase_, maxsize);
 		readVec::getMaxLength(seq.mateSeqBase_, maxsize);
-		if(maxsize > alignerObj.parts_.maxSize_){
+		if(maxsize >= alignerObj.parts_.maxSize_){
 			alignerObj.parts_.setMaxSize(maxsize);
 		}
 		motif frontMot(seq.seqBase_.seq_.substr(0, minOverlap));

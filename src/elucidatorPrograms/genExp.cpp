@@ -185,7 +185,7 @@ int genExpRunner::mapReads(const njh::progutils::CmdArgs & inputCommands) {
 		readVec::handelLowerCaseBases(read, setUp.pars_.ioOptions_.lowerCaseBases_);
 		readVec::getMaxLength(read, maxLen);
 
-		if (maxLen > alignerObj.parts_.maxSize_) {
+		if (maxLen >= alignerObj.parts_.maxSize_) {
 			if(setUp.pars_.debug_){
 				std::cout << std::endl << "Resizing alignment matrix"  << std::endl;;
 			}

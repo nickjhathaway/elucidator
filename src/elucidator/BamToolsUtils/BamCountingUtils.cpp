@@ -151,7 +151,7 @@ void increaseCountsForAln(const BamTools::BamAlignment & bAln,
 			queryAln.outPutSeqAnsi(std::cerr);
 			exit(1);
 		}*/
-		uint64_t currentMaxLen = alignerObj.parts_.maxSize_;
+		uint64_t currentMaxLen = alignerObj.parts_.maxSize_ - 1;
 		if(ionTorrent && reAlignTorrent){
 			readVec::getMaxLength(ref, currentMaxLen);
 			readVec::getMaxLength(query, currentMaxLen);
