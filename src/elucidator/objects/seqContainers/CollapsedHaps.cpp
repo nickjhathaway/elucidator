@@ -13,6 +13,21 @@
 namespace njhseq {
 
 
+CollapsedHaps::CollapsedHaps(const std::vector<seqInfo> & seqs, const std::vector<std::unordered_set<std::string>> & names):names_(names){
+	if(names.size() != seqs.size()){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << "seqs and names need to be same size: " << "names.size(): " << names.size() << ", seqs.size(): " << seqs.size()<< "\n";
+		throw std::runtime_error{ss.str()};
+	}
+	for(const auto & seq : seqs){
+		seqs_.emplace_back(std::make_shared<seqInfo>(seq));
+	}
+	setFrequencies();
+	setSubNamesToMainSeqPos();
+}
+
+
+
 void CollapsedHaps::setSubNamesToMainSeqPos(){
 	subNamesToMainSeqPos_.clear();
 	for(const auto  names : iter::enumerate(names_)){
@@ -135,8 +150,73 @@ void CollapsedHaps::GenPopMeasuresRes::writeDivMeasures(const OutOptions & outOp
 }
 
 
+std::unordered_map<std::string, CollapsedHaps> CollapsedHaps::splitOutSeqsByMeta(
+		const std::string &metaField) const{
+
+	std::unordered_map<std::string, CollapsedHaps> ret;
+	std::unordered_map<std::string, std::vector<seqInfo>> seqs;
+	std::unordered_map<std::string, std::vector<std::unordered_set<std::string>>> names;
+
+	for (const auto seqPos : iter::range(seqs_.size())) {
+		std::unordered_map<std::string, std::unordered_set<std::string>> subNames;
+		for(const auto & name : names_[seqPos]){
+			std::string val = "NA";
+			if(MetaDataInName::nameHasMetaData(name)){
+				MetaDataInName seqMeta(name);
+				if(seqMeta.containsMeta(metaField)){
+					val = seqMeta.getMeta(metaField);
+				}
+			}
+			subNames[val].emplace(name);
+		}
+		for(const auto & field : subNames){
+			seqs[field.first].emplace_back(*seqs_[seqPos]);
+			names[field.first].emplace_back(field.second);
+		}
+	}
+	for (const auto &field : seqs) {
+		if (field.second.size() != names[field.first].size()) {
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "in processing field: "
+					<< field.first << "names and seqs should be same size, seqs size(): "
+					<< field.second.size() << ", names size(): "
+					<< names[field.first].size() << "\n";
+			throw std::runtime_error { ss.str() };
+		}
+		ret[field.first] = CollapsedHaps(field.second, names[field.first]);
+	}
+	return ret;
+}
+
+
+
+std::unordered_map<std::string,
+		std::unordered_map<std::string, CollapsedHaps::GenPopMeasuresRes>> CollapsedHaps::getGeneralMeasuresOfDiversity(
+		const std::unordered_map<std::string,
+				std::unordered_map<std::string, GenPopMeasuresPar>> &pars,
+		const std::set<std::string> &metaFields,
+		const std::shared_ptr<aligner> &alignerObj)const {
+
+	std::unordered_map<std::string, std::unordered_map<std::string, CollapsedHaps::GenPopMeasuresRes>> ret;
+	for(const auto & metaField : metaFields){
+		auto splitSeqs = splitOutSeqsByMeta(metaField);
+		for(const auto & subField : splitSeqs){
+			if(!njh::in(subField.first, pars.at(metaField))){
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "no parameters given for sub field: " << subField.first << " in " << metaField<< "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			ret[metaField][subField.first] = subField.second.getGeneralMeasuresOfDiversity(pars.at(metaField).at(subField.first), alignerObj);
+		}
+	}
+
+	return ret;
+}
+
+
+
 CollapsedHaps::GenPopMeasuresRes CollapsedHaps::getGeneralMeasuresOfDiversity(const GenPopMeasuresPar &pars,
-		const std::shared_ptr<aligner> &alignerObj) {
+		const std::shared_ptr<aligner> &alignerObj) const {
 	GenPopMeasuresRes ret;
 	if (pars.getPairwiseComps) {
 		if(nullptr == alignerObj){
@@ -157,7 +237,12 @@ CollapsedHaps::GenPopMeasuresRes CollapsedHaps::getGeneralMeasuresOfDiversity(co
 			ret.avgPMeasures_.avgPercentId = 1;
 		}
 	}
-	setFrequencies();
+	//setFrequencies();
+	//set defaults;
+	ret.tajimaRes_.d_ = 0;
+	ret.tajimaRes_.pval_beta_ = 1;
+	ret.tajimaRes_.pval_normal_ = 1;
+
 	ret.divMeasures_ = PopGenCalculator::getGeneralMeasuresOfDiversity(seqs_);
 	if (pars.getPairwiseComps && size() > 1
 			&& std::numeric_limits < uint32_t > ::max() != pars.numSegSites_) {
@@ -165,10 +250,9 @@ CollapsedHaps::GenPopMeasuresRes CollapsedHaps::getGeneralMeasuresOfDiversity(co
 			ret.tajimaRes_.d_ = 0;
 			ret.tajimaRes_.pval_beta_ = 1;
 			ret.tajimaRes_.pval_normal_ = 1;
-		}else{
+		} else {
 			try {
-				ret.tajimaRes_ = PopGenCalculator::calcTajimaTest(getTotalHapCount(),
-						pars.numSegSites_, ret.avgPMeasures_.avgNumOfDiffs);
+				ret.tajimaRes_ = PopGenCalculator::calcTajimaTest(getTotalHapCount(), pars.numSegSites_, ret.avgPMeasures_.avgNumOfDiffs);
 			} catch (std::exception &e) {
 				//currently doing nothing, some times due to frequency filtering etc the calc throw an exception;
 			}
@@ -347,6 +431,24 @@ std::vector<std::unordered_set<std::string>> CollapsedHaps::getSampleNamesPerSeq
 	}
 	return ret;
 }
+
+
+void CollapsedHaps::writeOutAll(const bfs::path & outputDirectory, const std::string & namePrefix, bool overWrite) const{
+	auto uniqueSeqsOpts = SeqIOOptions::genFastaOutGz(njh::files::make_path(outputDirectory, njh::pasteAsStr(namePrefix, ".fasta.gz") ) );
+	uniqueSeqsOpts.out_.overWriteFile_ = overWrite;
+	OutOptions allNamesOpts(njh::files::make_path(outputDirectory, njh::pasteAsStr(namePrefix, "_names.tab.txt.gz")));
+	allNamesOpts.overWriteFile_ = overWrite;
+	OutOptions metaDataOpts(njh::files::make_path(outputDirectory, njh::pasteAsStr(namePrefix, "_meta.tab.txt.gz")));
+	metaDataOpts.overWriteFile_ = overWrite;
+	OutOptions labIsolateNamesOpts(njh::files::make_path(outputDirectory, njh::pasteAsStr(namePrefix, "_labIsolateNames.tab.txt.gz")));
+	labIsolateNamesOpts.overWriteFile_ = overWrite;
+	writeOutSeqsOrdCnt(uniqueSeqsOpts);
+	writeNames(allNamesOpts);
+	writeOutMetaFields(metaDataOpts);
+	writeLabIsolateNames(labIsolateNamesOpts);
+
+}
+
 
 
 void CollapsedHaps::writeOutSeqsOrdCnt(const SeqIOOptions &seqOpts) const {

@@ -23,6 +23,17 @@ namespace njhseq {
 class CollapsedHaps{
 public:
 
+	CollapsedHaps(){
+
+	}
+
+
+	/**@brief Construct with seqs, seqs should already be collapsed to unique seqs
+	 *
+	 * @param seqs a set of unique seq inputs
+	 * @param names a vectors of sub names for input seqs, needs to be same size as seqs
+	 */
+	CollapsedHaps(const std::vector<seqInfo> & seqs, const std::vector<std::unordered_set<std::string>> & names);
 	std::vector<std::shared_ptr<seqInfo>> seqs_;
 	std::vector<std::unordered_set<std::string>> names_;
 	std::vector<std::string> possibleSampleMetaFields_{"sample", "BiologicalSample"};
@@ -79,8 +90,18 @@ public:
 				const CollapsedHaps &inputSeqs, const std::string &identifier,
 				const GenPopMeasuresPar &pars) const;
 	};
+
+	std::unordered_map<std::string,
+			std::unordered_map<std::string, GenPopMeasuresRes>> getGeneralMeasuresOfDiversity(
+			const std::unordered_map<std::string,
+					std::unordered_map<std::string, GenPopMeasuresPar>> &pars,
+			const std::set<std::string> &metaFields,
+			const std::shared_ptr<aligner> &alignerObj = nullptr) const;
 	GenPopMeasuresRes getGeneralMeasuresOfDiversity(const GenPopMeasuresPar &pars,
-			const std::shared_ptr<aligner> &alignerObj = nullptr) ;
+			const std::shared_ptr<aligner> &alignerObj = nullptr) const;
+
+	//
+	std::unordered_map<std::string, CollapsedHaps> splitOutSeqsByMeta(const std::string & metaField) const;
 
 
 	// getting reads lengths
@@ -104,8 +125,9 @@ public:
 	void writeOutSeqsOrdCnt(const SeqIOOptions &seqOpts) const;
 	void writeNames(const OutOptions &outOpts) const;
 	void writeLabIsolateNames(const OutOptions &outOpts) const;
-
 	void writeOutMetaFields(const OutOptions &outOpts) const;
+
+	void writeOutAll(const bfs::path & outputDirectory, const std::string & namePrefix, bool overWrite = false) const;
 
 
 	//comparisons
@@ -194,13 +216,14 @@ public:
 	}
 
 	template<typename SEQTYPE>
-	static CollapsedHaps collapseReads(const std::vector<SEQTYPE> & seqs,
-			const std::vector<std::unordered_set<std::string>> & names
-	){
-		if(seqs.size() != names.size()){
+	static CollapsedHaps collapseReads(const std::vector<SEQTYPE> &seqs,
+			const std::vector<std::unordered_set<std::string>> &names) {
+		if (seqs.size() != names.size()) {
 			std::stringstream ss;
-			ss << __PRETTY_FUNCTION__ << ", error " << "seqs and names must be same length; seqs.size(): " << seqs.size() << ", names.size():" << names.size()<< "\n";
-			throw std::runtime_error{ss.str()};
+			ss << __PRETTY_FUNCTION__ << ", error "
+					<< "seqs and names must be same length; seqs.size(): " << seqs.size()
+					<< ", names.size():" << names.size() << "\n";
+			throw std::runtime_error { ss.str() };
 		}
 
 		CollapsedHaps ret;
@@ -241,6 +264,9 @@ public:
 		return ret;
 
 	}
+
+
+
 
 
 };
