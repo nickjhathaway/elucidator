@@ -117,7 +117,7 @@ void collapseAndCallVariants(const CollapseAndCallVariantsPars & pars){
 
 
 	if(!translatedRes.translations_.empty()){
-		SeqOutput transwriter(SeqIOOptions::genFastaOut(njh::files::make_path(variantInfoDir, "translatedInput.fasta.gz")));
+		SeqOutput transwriter(SeqIOOptions::genFastaOutGz(njh::files::make_path(variantInfoDir, "translatedInput.fasta.gz")));
 		std::vector<seqInfo> translatedSeqs;
 		std::vector<std::unordered_set<std::string>> translatedSeqInputNames;
 		auto seqNames = njh::getVecOfMapKeys(translatedRes.translations_);
@@ -133,35 +133,44 @@ void collapseAndCallVariants(const CollapseAndCallVariantsPars & pars){
 		auto inputTranslatedSeq = CollapsedHaps::collapseReads(translatedSeqs, translatedSeqInputNames);
 		std::string identifierTranslated = njh::pasteAsStr(pars.identifier, "-translated");
 		inputTranslatedSeq.renameBaseOnFreq(identifierTranslated);
+		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		//write out seqs
 		inputTranslatedSeq.writeOutAll(variantInfoDir, "uniqueTranslatedSeqs");
 		//get div measures
 		auto calcPopMeasuresPars =  pars.calcPopMeasuresPars;
 		calcPopMeasuresPars.numSegSites_ = translatedRes.proteinVariants_.begin()->second.getFinalNumberOfSegratingSites();
+		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		auto divMeasures = inputTranslatedSeq.getGeneralMeasuresOfDiversity(calcPopMeasuresPars, alignerObj);
 		divMeasures.writeDivMeasures(
 				njh::files::make_path(variantInfoDir, "translatedDivMeasures.tab.txt"),
 				inputTranslatedSeq,
 				identifierTranslated, calcPopMeasuresPars);
-
+		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		OutputStream transBedLocs(njh::files::make_path(variantInfoDir, "translatedInput.bed"));
 		translatedRes.writeSeqLocationsTranslation(transBedLocs);
 		translatedRes.writeOutTranslatedIndvVars(njh::files::make_path(variantInfoDir, "variantsPerTranslatedSeq.tab.txt.gz"), translator->knownAminoAcidPositions_);
+		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		{
 			//protein
 			for(auto & varPerTrans : translatedRes.proteinVariants_){
+				//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				varPerTrans.second.writeVCF(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein.vcf")));
+				//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				varPerTrans.second.writeOutSNPsFinalInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein_aminoAcidVariable.tab.txt.gz")), varPerTrans.first, true);
 				std::set<uint32_t> knownMutationsLocationsZeroBased;
+				//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				for(const auto & snpPos : varPerTrans.second.allBases){
 					if(njh::in(snpPos.first + 1, translator->knownAminoAcidPositions_[varPerTrans.first])){
 						knownMutationsLocationsZeroBased.emplace(snpPos.first);
+						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 						auto genomicLocationForAAPos = translatedRes.translationInfoForTranscirpt_.at(varPerTrans.first)->genBedFromAAPositions(snpPos.first, snpPos.first + 1);
+						//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 						for(const auto gPos : iter::range(genomicLocationForAAPos.chromStart_, genomicLocationForAAPos.chromEnd_)){
 							knownAAMutsChromPositions[genomicLocationForAAPos.chrom_].emplace(gPos);
 						}
 					}
 				}
+				//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				varPerTrans.second.writeOutSNPsAllInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein_aminoAcidsAll.tab.txt.gz")), varPerTrans.first, true);
 				if(!varPerTrans.second.variablePositons_.empty()){
 					GenomicRegion variableRegion = varPerTrans.second.getVariableRegion();
@@ -169,12 +178,14 @@ void collapseAndCallVariants(const CollapseAndCallVariantsPars & pars){
 					OutputStream bedVariableRegionOut(OutOptions(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein_variableRegion.bed"))));
 					bedVariableRegionOut << variableRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
 				}
+				//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				if(!knownMutationsLocationsZeroBased.empty()){
 					varPerTrans.second.writeOutSNPsInfo(njh::files::make_path(variantInfoDir, njh::pasteAsStr(varPerTrans.first +  "-protein_aminoAcidKnownMutations.tab.txt.gz")), varPerTrans.first, knownMutationsLocationsZeroBased, true);
 				}
 			}
-
+			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			translatedRes.writeOutAATypedInfo(njh::files::make_path(variantInfoDir, "seqKnownAATyped.tab.txt.gz"));
+			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		}
 	}
 
@@ -202,7 +213,7 @@ void collapseAndCallVariants(const CollapseAndCallVariantsPars & pars){
 			bedVariableRegionOut << variableRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
 		}
 	}
-
+	//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 	{
 		auto snpTyped = translatedRes.genSeqSNPTypedStr();
 		OutputStream snpTypedOut(njh::files::make_path(variantInfoDir, "seqSnpTyped.tab.txt.gz"));
@@ -213,6 +224,7 @@ void collapseAndCallVariants(const CollapseAndCallVariantsPars & pars){
 			snpTypedOut << std::endl;
 		}
 	}
+	//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 	{
 		auto divMeasures = inputSeqs.getGeneralMeasuresOfDiversity(
 				calcPopMeasuresPars, alignerObj);
@@ -296,7 +308,6 @@ int popGenExpRunner::callVariantsAgainstRefGenome(const njh::progutils::CmdArgs 
 
 	setUp.setOption(pars.identifier, "--identifier", "Give a identifier name for info", true);
 	setUp.setOption(pars.metaFieldsToCalcPopDiffs, "--metaFieldsToCalcPopDiffs", "Meta Fields To Calculate Pop Diffs");
-
 
 
 	//setUp.setOption(pars.transPars.knownAminoAcidMutationsFnp_, "--proteinMutantTypingFnp", "Protein Mutant Typing Fnp, columns should be ID=gene id in gff, AAPosition=amino acid position", false);
