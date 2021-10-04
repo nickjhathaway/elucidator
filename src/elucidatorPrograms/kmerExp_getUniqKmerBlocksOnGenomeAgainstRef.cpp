@@ -50,6 +50,7 @@ int kmerExpRunner::getUniqKmerBlocksOnGenomeAgainstRef(const njh::progutils::Cmd
 
 	std::unordered_set<std::string> refKmers;
 	std::mutex refKmersMut;
+
 	{
 
 		SeqInput reader(refGenomeOpts);
@@ -70,7 +71,6 @@ int kmerExpRunner::getUniqKmerBlocksOnGenomeAgainstRef(const njh::progutils::Cmd
 				refKmers.insert(refKmersCurrent.begin(), refKmersCurrent.end());
 			}
 		};
-
 		njh::concurrent::runVoidFunctionThreaded(addKmers, numThreads);
 	}
 

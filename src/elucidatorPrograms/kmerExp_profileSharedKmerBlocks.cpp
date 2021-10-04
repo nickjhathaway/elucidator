@@ -236,7 +236,7 @@ int kmerExpRunner::profileSharedKmerBlocks(const njh::progutils::CmdArgs & input
 		for (auto & seq : seqs) {
 			auto search = seq.second.kInfo_->kmers_.find(sub);
 			//if both sequences contain the kmer and the kmer is unique in both sequences, add them
-			if (search != seq.second.kInfo_->kmers_.end()
+			if (   search != seq.second.kInfo_->kmers_.end()
 					&& search->second.positions_.size() == 1
 					&& refGenInfo.kmers_[search->first].positions_.size() == 1) {
 				seq.second.addComp(refGenInfo.kmers_[search->first].positions_.front(), search->second.positions_.front());
@@ -319,7 +319,12 @@ int kmerExpRunner::profileSharedKmerBlocks(const njh::progutils::CmdArgs & input
 			maxMinStartAll = minStart;
 		}
 	}
+
+	auto perfectDir = njh::files::make_path(setUp.pars_.directoryName_, "perfectLocations");
+	njh::files::makeDir(njh::files::MkdirPar{perfectDir});
+
 	for(const auto & g : perfectSeqs){
+
 		Json::Value currentGen;
 		currentGen["name_"] = g.first;
 		currentGen["kLen_"] = kLen;
@@ -330,7 +335,14 @@ int kmerExpRunner::profileSharedKmerBlocks(const njh::progutils::CmdArgs & input
 				minStart = k.second.start_;
 			}
 		}
+		OutputStream perfectOut(njh::files::make_path(perfectDir, g.first + ".bed"));
 		for(const auto & k : g.second.kComps_ ){
+			perfectOut << g.first
+					<< "\t" << k.second.start_
+					<< "\t" << k.second.start_ + k.second.size_
+					<< "\t" << setUp.pars_.seqObj_.seqBase_.name_ << "-" << k.second.refStart_ << "-" << k.second.refStart_ + k.second.size_
+					<< "\t" << k.second.size_ + kLen - 1
+					<< "\t" << "+" << std::endl;
 			auto outJsonForBlock = njh::json::toJson(k.second);
 			outJsonForBlock["realStart_"] = outJsonForBlock["start_"].asUInt64();
 			outJsonForBlock["start_"] = outJsonForBlock["start_"].asUInt64() - minStart + maxMinStartAll;

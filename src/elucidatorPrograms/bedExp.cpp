@@ -108,6 +108,7 @@ bedExpRunner::bedExpRunner()
 					 addFunc("getDegreeOfOverlappingBedRegions", getDegreeOfOverlappingBedRegions, false),
 					 addFunc("bedGetOverlappingRegionsFromPanels", bedGetOverlappingRegionsFromPanels, false),
 					 addFunc("bedAddRegionsNonCompletelyInOther", bedAddRegionsNonCompletelyInOther, false),
+					 addFunc("bedBinCloseRegions", bedBinCloseRegions, false),
            },//
           "bedExp") {}
 

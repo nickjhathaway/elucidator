@@ -89,6 +89,7 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("filterUniqueKmerSetForEntropy", filterUniqueKmerSetForEntropy, false),
 					 addFunc("testingSimpleKmerHasher", testingSimpleKmerHasher, false),
 					 addFunc("countingUniqKmersFromSetsInUnmappedAlns", countingUniqKmersFromSetsInUnmappedAlns, false),
+					 addFunc("chromVsChromUniqueComp", chromVsChromUniqueComp, false),
 					 //
            },
           "kmerExp") {}

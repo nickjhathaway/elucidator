@@ -81,6 +81,7 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 
 	//adding a field to bed file
 	static int bedAddSmartIDForPlotting(const njh::progutils::CmdArgs & inputCommands);
+	static int bedBinCloseRegions(const njh::progutils::CmdArgs & inputCommands);
 
 	//getting surrounding regions
 	static int getUpstreamRegion(const njh::progutils::CmdArgs & inputCommands);
