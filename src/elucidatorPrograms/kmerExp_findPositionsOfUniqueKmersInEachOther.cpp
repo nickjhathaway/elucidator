@@ -350,7 +350,7 @@ int kmerExpRunner::chromVsChromUniqueComp(const njh::progutils::CmdArgs & inputC
 	bool checkComplement = false;
 	uint32_t kmerLength = 31;
 	uint32_t minSize = 100;
-	uint32_t minDisForGrouping = 10000;
+	uint32_t minDisForGrouping = 1000;
 	OutOptions outOpts(bfs::path("out"), ".tab.txt");
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
