@@ -65,28 +65,33 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 
 	OutputStream byHapTarSharedWeightedOut(njh::files::make_path(setUp.pars_.directoryName_, "jacardByHapsTarSharedWeighted.tab.txt.gz"));
 	OutputStream avgHapWeightedOut(njh::files::make_path(setUp.pars_.directoryName_, "avgJacardPerTargetWeighted.tab.txt.gz"));
+	OutputStream targetsSharedBetweenSampsOut(njh::files::make_path(setUp.pars_.directoryName_, "targetsSharedBetweenSamps.tab.txt.gz"));
 
 
 
 	outSampNamesOut << njh::conToStr(haps.sampNamesVec_, "\n") << std::endl;
-//	for(const auto & it : indexRes.byTarget){
-//		byTargetOut << njh::conToStr(it, "\t") << std::endl;
-//	}
-//	for(const auto & ih : indexRes.byHapsTarShared){
-//		byHapTarSharedOut << njh::conToStr(ih, "\t") << std::endl;
-//	}
-//	for(const auto & ih : indexRes.byAllHaps){
-//		byHapOut << njh::conToStr(ih, "\t") << std::endl;
-//	}
-//	for(const auto & ih : indexRes.avgJacard){
-//		avgHapOut << njh::conToStr(ih, "\t") << std::endl;
-//	}
-//	for(const auto & ih : indexRes.byHapsTarSharedWeighted){
-//		byHapTarSharedWeightedOut << njh::conToStr(ih, "\t") << std::endl;
-//	}
-//	for(const auto & ih : indexRes.avgJacardWeighted){
-//		avgHapWeightedOut << njh::conToStr(ih, "\t") << std::endl;
-//	}
+	for(const auto & it : indexRes.byTarget){
+		byTargetOut << njh::conToStr(it, "\t") << std::endl;
+	}
+	for(const auto & ih : indexRes.byHapsTarShared){
+		byHapTarSharedOut << njh::conToStr(ih, "\t") << std::endl;
+	}
+	for(const auto & ih : indexRes.byAllHaps){
+		byHapOut << njh::conToStr(ih, "\t") << std::endl;
+	}
+	for(const auto & ih : indexRes.avgJacard){
+		avgHapOut << njh::conToStr(ih, "\t") << std::endl;
+	}
+	for(const auto & ih : indexRes.byHapsTarSharedWeighted){
+		byHapTarSharedWeightedOut << njh::conToStr(ih, "\t") << std::endl;
+	}
+	for(const auto & ih : indexRes.avgJacardWeighted){
+		avgHapWeightedOut << njh::conToStr(ih, "\t") << std::endl;
+	}
+
+	for(const auto & ih : indexRes.targetsShared){
+		targetsSharedBetweenSampsOut << njh::conToStr(ih, "\t") << std::endl;
+	}
 
 	{
 		setUp.timer_.startNewLap("get population pairwise measures");

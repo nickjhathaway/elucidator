@@ -108,6 +108,8 @@ public:
 		std::vector<std::vector<double>> avgJacardWeighted; //! averaged jacard distance for shared targets weighted by
 		std::vector<std::vector<double>> byTarget; //! fraction of targets that have at least shared haplotype between samples
 
+		std::vector<std::vector<double>> targetsShared; //! number of targets shared between samples
+
 	};
 
 	IndexResults genIndexMeasures(bool verbose = false) const;

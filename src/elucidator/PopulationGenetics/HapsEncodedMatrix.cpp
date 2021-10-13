@@ -288,6 +288,8 @@ HapsEncodedMatrix::IndexResults::IndexResults(const uint64_t numOfSamps){
 
 	byHapsTarSharedWeighted = std::vector<std::vector<double>> (numOfSamps, std::vector<double>(numOfSamps));
 	avgJacardWeighted = std::vector<std::vector<double>> (numOfSamps, std::vector<double>(numOfSamps));
+	targetsShared = std::vector<std::vector<double>> (numOfSamps, std::vector<double>(numOfSamps));
+
 
 
 	for(uint32_t pos = 0; pos < numOfSamps; ++pos){
@@ -300,6 +302,8 @@ HapsEncodedMatrix::IndexResults::IndexResults(const uint64_t numOfSamps){
 
 		byHapsTarSharedWeighted[pos][pos] = 1;
 		avgJacardWeighted[pos][pos] = 1;
+
+		targetsShared[pos][pos] = 1;
 	}
 }
 
@@ -315,6 +319,7 @@ HapsEncodedMatrix::IndexResults HapsEncodedMatrix::genIndexMeasures(bool verbose
 	if(verbose){
 		std::cout << "totalComps: " << pFactor.totalCompares_ << std::endl;
 	}
+
 
 	std::function<void()> compSamps = [&pFactor,&progpar,
 																		 this,
@@ -386,6 +391,10 @@ HapsEncodedMatrix::IndexResults HapsEncodedMatrix::genIndexMeasures(bool verbose
 					ret.avgJacardWeighted[pair.col_][pair.row_] = meanJacardWeighted;
 					ret.byTarget[pair.row_][pair.col_] = totalTarsWithAtLeastOneHapShared/static_cast<double>(totalTarsWithDataForBoth);
 					ret.byTarget[pair.col_][pair.row_] = totalTarsWithAtLeastOneHapShared/static_cast<double>(totalTarsWithDataForBoth);
+
+					ret.targetsShared[pair.row_][pair.col_] = totalTarsWithDataForBoth;
+					ret.targetsShared[pair.col_][pair.row_] = totalTarsWithDataForBoth;
+
 				}
 				//for all
 				{
@@ -415,6 +424,12 @@ HapsEncodedMatrix::IndexResults HapsEncodedMatrix::genIndexMeasures(bool verbose
 			}
 		}
 	};
+
+
+	for (const auto row : iter::range(targetsEncodeBySamp_.size())) {
+		ret.targetsShared[row][row] = vectorSum(targetsEncodeBySamp_[row]);
+	}
+
 
 
 	njh::concurrent::runVoidFunctionThreaded(compSamps, pars_.numThreads);
