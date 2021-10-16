@@ -19,7 +19,7 @@ namespace njhseq {
 int readSimulatorRunner::createLibrarySimMultipleMixtureSpiecesMixture(
 		const njh::progutils::CmdArgs & inputCommands) {
 
-	/**@todo this approach needs a re-vamp to handle what is being attempt which is having multiple regions (like 18S rRNA, etc) amplfied using one primer pair */
+	/**@todo this approach needs a re-vamp to handle what is being attempt which is having multiple regions (like 18S rRNA, etc) amplified using one primer pair */
 //	LibrarySetup::SimLibrarySetupPars simPars;
 //	bfs::path primerMidFnp = "";
 //
@@ -49,7 +49,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureSpiecesMixture(
 //	setUp.setOption(primerMidFnp, "--primerMidFnp", "Primer MID Fnp", true);
 //
 //	setUp.setOption(simPars.pairedEndLength_, "--pairedEndLength", "Paired End Length");
-//	setUp.setOption(simPars.noAddPrimers_, "--noAddPrimers", "Primers are already present");
+//	setUp.setOption(simPars.noAddPrimers_,                "--noAddPrimers", "Primers are already present");
 //	setUp.setOption(simPars.barcodeRandomPrecedingBases_, "--barcodeRandomPrecedingBases", "Barcode Random Preceding Bases");
 //	setUp.setOption(simPars.primerRandomPrecedingBases_, "--primerRandomPrecedingBases", "Primer Random Preceding Bases");
 //	setUp.setOption(simPars.addReverseComplement_, "--addReverseComplement", "Add Reverse Complement");
@@ -147,7 +147,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureSpiecesMixture(
 //
 //	struct StrainMixture {
 //		StrainMixture(const std::string & name,
-//				const std::map<std::string, double> & hapFracs,
+//				const std::unordered_map<std::string, double> & hapFracs,
 //				const MetaDataInName & meta) :
 //				name_(name), hapFracs_(hapFracs), meta_(meta) {
 //		}

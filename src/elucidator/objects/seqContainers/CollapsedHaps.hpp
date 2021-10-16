@@ -10,7 +10,6 @@
 
 #include "elucidator/common.h"
 #include "elucidator/objects/BioDataObject.h"
-#include "elucidator/PopulationGenetics.h"
 
 #include <njhseq/concurrency/pools/AlignerPool.hpp>
 

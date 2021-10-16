@@ -41,11 +41,15 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	adjustAroundGivenFrac = std::min(adjustAroundGivenFrac, 0.99);
 	setUp.setOption(twoSdFrac, "--twoSdFrac", "Two Sd Fracs around genome starting template amount", njh::progutils::ProgramSetUp::CheckCase::GREATERZERO);
 	setUp.setOption(timePoints, "--timePoints", "Additional time points, will automatically have time point 00", njh::progutils::ProgramSetUp::ConCheckCase::NONZERO);
-	setUp.setOption(patientSetupFile, "--patientSetupFile", "Patient Setup File", true);
+
 	setUp.setOption(rawPatientSetupFile, "--rawPatientSetupFile", "Patient Setup File designates individual samples");
+
+	setUp.setOption(patientSetupFile, "--patientSetupFile", "Patient Setup File", true);
 	setUp.setOption(coiTableFnp, "--coiTable", "COI Table", true);
 	setUp.setOption(haplotypeInfo, "--haplotypeInfo", "Haplotype Info", true);
 	setUp.setOption(primerMidFnp, "--primerMidFnp", "Primer MID Fnp", true);
+	setUp.setOption(libraryName, "--libraryName", "Library Name", true);
+
 	setUp.setOption(simPars.pairedEndLength_, "--pairedEndLength", "Paired End Length");
 	setUp.setOption(simPars.noAddPrimers_, "--noAddPrimers", "Primers are already present");
 	setUp.setOption(simPars.barcodeRandomPrecedingBases_, "--barcodeRandomPrecedingBases", "Barcode Random Preceding Bases");
@@ -53,7 +57,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	setUp.setOption(simPars.addReverseComplement_, "--addReverseComplement", "Add Reverse Complement");
 	setUp.setOption(simPars.addBluntEndingArtifact_, "--addBluntEndingArtifact", "Add Blunt Ending Artifact");
 	setUp.setOption(simPars.bluntEndingArtifactChance_, "--bluntEndingArtifactChance", "Blunt Ending Artifact Chance");
-	setUp.setOption(libraryName, "--libraryName", "Library Name", true);
+
 	setUp.processDirectoryOutputName(libraryName, true);
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_ );

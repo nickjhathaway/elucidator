@@ -18,13 +18,14 @@ namespace njhseq {
 
 
 int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::CmdArgs & inputCommands){
-
+	bool writeOutDistMatrices = false;
 	bfs::path metaFnp;
 	VecStr metaFieldsToCalcPopDiffs{};
 	HapsEncodedMatrix::SetWithExternalPars pars;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
+	setUp.setOption(writeOutDistMatrices, "--writeOutDistMatrices", "write Out Dist Matrices");
 	setUp.setOption(metaFnp, "--metaFnp", "Table of meta data for samples, needs a column named sample and each additonal column will be the meta data associated with that sample");
 	setUp.setOption(metaFieldsToCalcPopDiffs, "--metaFieldsToCalcPopDiffs", "Meta Fields To Calc Pop Diffs");
   pars.setDefaults(setUp);
@@ -56,41 +57,42 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	numTargetsPerSample.outPutContents(outSamplesPerTarget, "\t");
 	setUp.timer_.startNewLap("get index measures");
 	auto indexRes = haps.genIndexMeasures(setUp.pars_.verbose_);
+	if(writeOutDistMatrices){
+		OutputStream outSampNamesOut(njh::files::make_path(setUp.pars_.directoryName_, "sampleNames.tab.txt"));
+		OutputStream byTargetOut(njh::files::make_path(setUp.pars_.directoryName_, "percOfTarSharingAtLeastOneHap.tab.txt.gz"));
+		OutputStream byHapOut(njh::files::make_path(setUp.pars_.directoryName_, "jacardByAllHap.tab.txt.gz"));
+		OutputStream byHapTarSharedOut(njh::files::make_path(setUp.pars_.directoryName_, "jacardByHapsTarShared.tab.txt.gz"));
+		OutputStream avgHapOut(njh::files::make_path(setUp.pars_.directoryName_, "avgJacardPerTarget.tab.txt.gz"));
 
-	OutputStream outSampNamesOut(njh::files::make_path(setUp.pars_.directoryName_, "sampleNames.tab.txt"));
-	OutputStream byTargetOut(njh::files::make_path(setUp.pars_.directoryName_, "percOfTarSharingAtLeastOneHap.tab.txt.gz"));
-	OutputStream byHapOut(njh::files::make_path(setUp.pars_.directoryName_, "jacardByAllHap.tab.txt.gz"));
-	OutputStream byHapTarSharedOut(njh::files::make_path(setUp.pars_.directoryName_, "jacardByHapsTarShared.tab.txt.gz"));
-	OutputStream avgHapOut(njh::files::make_path(setUp.pars_.directoryName_, "avgJacardPerTarget.tab.txt.gz"));
-
-	OutputStream byHapTarSharedWeightedOut(njh::files::make_path(setUp.pars_.directoryName_, "jacardByHapsTarSharedWeighted.tab.txt.gz"));
-	OutputStream avgHapWeightedOut(njh::files::make_path(setUp.pars_.directoryName_, "avgJacardPerTargetWeighted.tab.txt.gz"));
-	OutputStream targetsSharedBetweenSampsOut(njh::files::make_path(setUp.pars_.directoryName_, "targetsSharedBetweenSamps.tab.txt.gz"));
+		OutputStream byHapTarSharedWeightedOut(njh::files::make_path(setUp.pars_.directoryName_, "jacardByHapsTarSharedWeighted.tab.txt.gz"));
+		OutputStream avgHapWeightedOut(njh::files::make_path(setUp.pars_.directoryName_, "avgJacardPerTargetWeighted.tab.txt.gz"));
+		OutputStream targetsSharedBetweenSampsOut(njh::files::make_path(setUp.pars_.directoryName_, "targetsSharedBetweenSamps.tab.txt.gz"));
 
 
 
-	outSampNamesOut << njh::conToStr(haps.sampNamesVec_, "\n") << std::endl;
-	for(const auto & it : indexRes.byTarget){
-		byTargetOut << njh::conToStr(it, "\t") << std::endl;
-	}
-	for(const auto & ih : indexRes.byHapsTarShared){
-		byHapTarSharedOut << njh::conToStr(ih, "\t") << std::endl;
-	}
-	for(const auto & ih : indexRes.byAllHaps){
-		byHapOut << njh::conToStr(ih, "\t") << std::endl;
-	}
-	for(const auto & ih : indexRes.avgJacard){
-		avgHapOut << njh::conToStr(ih, "\t") << std::endl;
-	}
-	for(const auto & ih : indexRes.byHapsTarSharedWeighted){
-		byHapTarSharedWeightedOut << njh::conToStr(ih, "\t") << std::endl;
-	}
-	for(const auto & ih : indexRes.avgJacardWeighted){
-		avgHapWeightedOut << njh::conToStr(ih, "\t") << std::endl;
-	}
+		outSampNamesOut << njh::conToStr(haps.sampNamesVec_, "\n") << std::endl;
+		for(const auto & it : indexRes.byTarget){
+			byTargetOut << njh::conToStr(it, "\t") << std::endl;
+		}
+		for(const auto & ih : indexRes.byHapsTarShared){
+			byHapTarSharedOut << njh::conToStr(ih, "\t") << std::endl;
+		}
+		for(const auto & ih : indexRes.byAllHaps){
+			byHapOut << njh::conToStr(ih, "\t") << std::endl;
+		}
+		for(const auto & ih : indexRes.avgJacard){
+			avgHapOut << njh::conToStr(ih, "\t") << std::endl;
+		}
+		for(const auto & ih : indexRes.byHapsTarSharedWeighted){
+			byHapTarSharedWeightedOut << njh::conToStr(ih, "\t") << std::endl;
+		}
+		for(const auto & ih : indexRes.avgJacardWeighted){
+			avgHapWeightedOut << njh::conToStr(ih, "\t") << std::endl;
+		}
 
-	for(const auto & ih : indexRes.targetsShared){
-		targetsSharedBetweenSampsOut << njh::conToStr(ih, "\t") << std::endl;
+		for(const auto & ih : indexRes.targetsShared){
+			targetsSharedBetweenSampsOut << njh::conToStr(ih, "\t") << std::endl;
+		}
 	}
 
 	{

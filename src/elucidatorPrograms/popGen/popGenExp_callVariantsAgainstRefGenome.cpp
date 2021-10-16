@@ -59,7 +59,7 @@ struct CollapseAndCallVariantsPars{
 
 
 
-void collapseAndCallVariants(const CollapseAndCallVariantsPars & pars){
+TranslatorByAlignment::TranslatorByAlignmentResult collapseAndCallVariants(const CollapseAndCallVariantsPars & pars){
 
 	njh::files::checkExistenceThrow(pars.transPars.lzPars_.genomeFnp, __PRETTY_FUNCTION__);
 	//read in meta if available
@@ -97,7 +97,7 @@ void collapseAndCallVariants(const CollapseAndCallVariantsPars & pars){
 	auto variantInfoDir =  njh::files::make_path(pars.outputDirectory, "variantCalls");
 	njh::files::makeDir(njh::files::MkdirPar{variantInfoDir});
 	std::unique_ptr<TranslatorByAlignment> translator = std::make_unique<TranslatorByAlignment>(pars.transPars);
-	translator->pars_.keepTemporaryFiles_ = true;
+	//translator->pars_.keepTemporaryFiles_ = true;
 	translator->pars_.workingDirtory_ = variantInfoDir;
 	std::unordered_map<std::string, std::unordered_set<std::string>> sampNamesForPopHaps;
 	for(const auto pos : iter::range(inputSeqs.size())){
@@ -184,7 +184,7 @@ void collapseAndCallVariants(const CollapseAndCallVariantsPars & pars){
 				}
 			}
 			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-			translatedRes.writeOutAATypedInfo(njh::files::make_path(variantInfoDir, "seqKnownAATyped.tab.txt.gz"));
+			translatedRes.writeOutAATypedInfo(njh::files::make_path(variantInfoDir, "seqsAATyped.tab.txt.gz"));
 			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		}
 	}
@@ -216,7 +216,7 @@ void collapseAndCallVariants(const CollapseAndCallVariantsPars & pars){
 	//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 	{
 		auto snpTyped = translatedRes.genSeqSNPTypedStr();
-		OutputStream snpTypedOut(njh::files::make_path(variantInfoDir, "seqSnpTyped.tab.txt.gz"));
+		OutputStream snpTypedOut(njh::files::make_path(variantInfoDir, "seqSNPTyped.tab.txt.gz"));
 		snpTypedOut << "name\tsnpTyped" << std::endl;
 		for(const auto & seqPos : inputSeqs.getOrderByTopCnt()){
 			snpTypedOut << inputSeqs.seqs_[seqPos]->name_
@@ -253,6 +253,7 @@ void collapseAndCallVariants(const CollapseAndCallVariantsPars & pars){
 
 	alignerObj->processAlnInfoOutput(pars.alnCacheDir.string(), false);
 
+	return translatedRes;
 }
 
 
@@ -261,22 +262,8 @@ int popGenExpRunner::callVariantsAgainstRefGenome(const njh::progutils::CmdArgs 
 
 	/**@todo should add the following  2) make into a function, 3) generate connected hap map, 4) unique haps to region count, 5) doing multiple pop fields at once */
 
-//  TranslatorByAlignment::TranslatorByAlignmentPars transPars;
-//  TranslatorByAlignment::RunPars variantCallerRunPars;
-//  CollapsedHaps::GenPopMeasuresPar calcPopMeasuresPars;
-//
-//
-//	std::string identifier = "";
-//	variantCallerRunPars.lowVariantCutOff = 0.005;
-//	variantCallerRunPars.occurrenceCutOff = 2;
-//
-//	uint32_t numThreads = 1;
-	bool noDiagAlnPairwiseComps = false;
-//
-//
-//	bfs::path metaFnp;
-//	std::set<std::string> ignoreSubFields;
 
+	bool noDiagAlnPairwiseComps = false;
 	CollapseAndCallVariantsPars pars;
 
 	seqSetUp setUp(inputCommands);
@@ -285,9 +272,7 @@ int popGenExpRunner::callVariantsAgainstRefGenome(const njh::progutils::CmdArgs 
 	setUp.processReadInNames(true);
 	pars.inOpts = setUp.pars_.ioOptions_;
 
-	//setUp.processDirectoryOutputName(true);
-	setUp.setOption(pars.outputDirectory, "--dout", "Output directory", true);
-	setUp.setOption(pars.overWriteDirectory, "--overWriteDir", "over write output Directory");
+
 
 	setUp.processAlnInfoInput();
 	pars.alnCacheDir = setUp.pars_.alnInfoDirName_;
@@ -311,6 +296,9 @@ int popGenExpRunner::callVariantsAgainstRefGenome(const njh::progutils::CmdArgs 
 
 
 	//setUp.setOption(pars.transPars.knownAminoAcidMutationsFnp_, "--proteinMutantTypingFnp", "Protein Mutant Typing Fnp, columns should be ID=gene id in gff, AAPosition=amino acid position", false);
+	//setUp.processDirectoryOutputName(true);
+	setUp.setOption(pars.outputDirectory, "--dout", "Output directory", true);
+	setUp.setOption(pars.overWriteDirectory, "--overWriteDir", "over write output Directory");
 	setUp.finishSetUp(std::cout);
 
 	collapseAndCallVariants(pars);
