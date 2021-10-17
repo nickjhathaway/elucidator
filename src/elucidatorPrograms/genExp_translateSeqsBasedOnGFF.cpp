@@ -18,7 +18,7 @@
 #include <njhseq/objects/Gene/GeneFromGffs.hpp>
 
 #include "elucidator/BioRecordsUtils/BedUtility.hpp"
-#include "elucidator/PopulationGenetics.h"
+#include <njhseq/PopulationGenetics.h>
 #include <njhseq/objects/Gene/GenomicAminoAcidPositionTyper.hpp>
 #include <njhseq/GenomeUtils/GenomeExtraction/ParsingAlignmentInfo.h>
 #include <njhseq/BamToolsUtils.h>

@@ -27,7 +27,8 @@
 #include "popGenExp.hpp"
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/objects/counters/DNABaseCounter.hpp"
-#include "elucidator/PopulationGenetics.h"
+#include <njhseq/PopulationGenetics.h>
+#include <njhseq/objects/seqContainers/CollapsedHaps.hpp>
 
 namespace njhseq {
 

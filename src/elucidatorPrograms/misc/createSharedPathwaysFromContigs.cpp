@@ -16,7 +16,7 @@
 #include "elucidator/BioRecordsUtils/BedUtility.hpp"
 
 
-#include "elucidator/PopulationGenetics.h"
+#include <njhseq/PopulationGenetics.h>
 
 namespace njhseq {
 

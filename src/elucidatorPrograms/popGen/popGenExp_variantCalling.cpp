@@ -10,7 +10,6 @@
 #include "popGenExp.hpp"
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/objects/counters/DNABaseCounter.hpp"
-#include "elucidator/PopulationGenetics.h"
 
 
 
@@ -19,14 +18,14 @@
 #include <njhseq/objects/Gene/GeneFromGffs.hpp>
 
 #include "elucidator/BioRecordsUtils/BedUtility.hpp"
-#include "elucidator/PopulationGenetics.h"
 #include <njhseq/objects/Gene/GenomicAminoAcidPositionTyper.hpp>
 #include <njhseq/objects/Gene/TranslatorByAlignment.hpp>
 
 #include <njhseq/objects/seqObjects/Clusters/identicalCluster.hpp>
 #include <njhseq/concurrency/pools/BamReaderPool.hpp>
 #include <njhseq/concurrency/pools/AlignerPool.hpp>
-#include "elucidator/objects/seqContainers/CollapsedHaps.hpp"
+#include <njhseq/PopulationGenetics.h>
+#include <njhseq/objects/seqContainers/CollapsedHaps.hpp>
 
 
 
