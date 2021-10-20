@@ -987,7 +987,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 	bfs::path pwOutputDir = "";
 	std::string sample = "";
 
-	uint32_t RayNumThreads = 1;
+	//uint32_t RayNumThreads = 1;
 	std::string extraRayOptions = "";
 	uint32_t reOrientingKmerLength = 9;
 	uint32_t minFinalLength = 40;
@@ -1006,7 +1006,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 	setUp.setOption(numThreads, "--numThreads", "num Threads");
 
 
-	setUp.setOption(RayNumThreads, "--RayNumThreads", "Ray Num Threads");
+	//setUp.setOption(RayNumThreads, "--RayNumThreads", "Ray Num Threads");
 	setUp.setOption(extraRayOptions, "--extraRayOptions", "extra Ray Options");
 
 	setUp.setOption(minFinalLength, "--minFinalLength", "min Final Length");
