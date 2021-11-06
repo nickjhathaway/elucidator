@@ -67,6 +67,7 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 
 	static int bedFilterRegionsCompletelyInOther(const njh::progutils::CmdArgs & inputCommands);
 	static int bedKeepRegionsCompletelyInOther(const njh::progutils::CmdArgs & inputCommands);
+	static int bedGetRegionsEncompassingOthers(const njh::progutils::CmdArgs & inputCommands);
 	static int bedFilterRegionsStartingOrEndingInOther(const njh::progutils::CmdArgs & inputCommands);
 	static int bedKeepRegionsStartingOrEndingInOther(const njh::progutils::CmdArgs & inputCommands);
 

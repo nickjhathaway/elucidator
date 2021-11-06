@@ -34,6 +34,8 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 	lzPars.coverage = 95;
 	lzPars.identity = 90;
 
+	uint32_t nBowtie2Alns = 100;
+
 	comparison amountOfErrorForCoverageCalc;
 	MultiGenomeMapper::inputParameters mapperPars;
 	seqSetUp setUp(inputCommands);
@@ -47,6 +49,7 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
   setUp.setOption(program, "--program", "Name of the program to output with the report", true);
   setUp.setOption(sample,  "--sample",  "Name of the sample to output with the report",  true);
 	setUp.setOption(lencutOffForBowtie, "--lencutOffForBowtie", "Contigs below this length will be evaulated by bowtie instead of lastz");
+	setUp.setOption(nBowtie2Alns, "--nBowtie2Alns", "The max number of bowtie alignments to check");
 
 	setUp.setOption(numThreads, "--numThreads", "number of cpus to use");
   setUp.setOption(genomesStr, "--genomes", "Names of the genomes to extract from (should not have extension, e.g. Pf3d7 for Pf3d7.fasta");
@@ -150,7 +153,7 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 		njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{genome});
 	}
 	njh::concurrent::LockableQueue<GenomeWithProgram> genomesQueue(genomesWithPrograms);
-	std::function<void()> alignToGenome = [&setUp,&genomesQueue,&gMapper,&bRunner,&tempLastzInOpts,&tempInBowtie2Opts,&lzPars](){
+	std::function<void()> alignToGenome = [&setUp,&genomesQueue,&gMapper,&bRunner,&tempLastzInOpts,&tempInBowtie2Opts,&lzPars,&nBowtie2Alns](){
 		GenomeWithProgram gAndProgram;
 		while(genomesQueue.getVal(gAndProgram)){
 			bfs::path genomeDir = njh::files::make_path(setUp.pars_.directoryName_, gAndProgram.genome_);
@@ -174,7 +177,7 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 					auto seqOpts = tempInBowtie2Opts;
 					seqOpts.out_.outFilename_ = njh::files::make_path(genomeDir, "alignedSeqsBowtie2.sorted.bam");
 
-					auto runOut = bRunner.bowtie2Align(seqOpts, gMapper.genomes_.at(gAndProgram.genome_)->fnp_, "-a");
+					auto runOut = bRunner.bowtie2Align(seqOpts, gMapper.genomes_.at(gAndProgram.genome_)->fnp_, njh::pasteAsStr("-k ", nBowtie2Alns));
 					OutOptions bowtie2AlignLogOpts(njh::files::make_path(genomeDir, "bowtie2Log.json"));
 					OutputStream bowtie2AlignLogOut(bowtie2AlignLogOpts);
 					bowtie2AlignLogOut << njh::json::toJson(runOut) << std::endl;
@@ -304,8 +307,9 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 				comparisonOut << readNumber
 						<< '\t' << aln.Name << appName
 						<< '\t' << results->gRegion_.createUidFromCoordsStrand()
-						<< '\t' << results->comp_.distances_.eventBasedIdentityHq_
+						<< '\t' << results->comp_.distances_.eventBasedIdentity_
 						<< '\t' << results->comp_.alnScore_
+						<< '\t' << results->comp_.distances_.eventBasedIdentityHq_
 						<< '\t' << refInfo.compareKmers(seqKInfo).second
 						<< '\t' << results->comp_.oneBaseIndel_
 						<< '\t' << results->comp_.twoBaseIndel_
@@ -691,6 +695,9 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	lzPars.coverage = 95;
 	lzPars.identity = 90;
 
+	uint32_t nBowtie2Alns = 100;
+
+
 	bool calcSpecificCoverage = false;
 	comparison amountOfErrorForCoverageCalc;
 	MultiGenomeMapper::inputParameters mapperPars;
@@ -707,6 +714,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
   setUp.setOption(target,  "--target", "Name of the target region to output with the report", true);
 
 	setUp.setOption(lencutOffForBowtie, "--lencutOffForBowtie", "Contigs below this length will be evaulated by bowtie instead of lastz");
+	setUp.setOption(nBowtie2Alns, "--nBowtie2Alns", "The max number of bowtie alignments to check");
 
 	setUp.setOption(numThreads, "--numThreads", "number of cpus to use");
   setUp.setOption(genomesStr, "--genomes", "Names of the genomes to extract from (should not have extension, e.g. Pf3d7 for Pf3d7.fasta");
@@ -956,7 +964,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 		njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{genome});
 	}
 	njh::concurrent::LockableQueue<GenomeWithProgram> genomesQueue(genomesWithPrograms);
-	std::function<void()> alignToGenome = [&setUp,&genomesQueue,&gMapper,&bRunner,&tempLastzInOpts,&tempInBowtie2Opts,&lzPars](){
+	std::function<void()> alignToGenome = [&setUp,&genomesQueue,&gMapper,&bRunner,&tempLastzInOpts,&tempInBowtie2Opts,&lzPars,&nBowtie2Alns](){
 		GenomeWithProgram gAndProgram;
 		while(genomesQueue.getVal(gAndProgram)){
 			bfs::path genomeDir = njh::files::make_path(setUp.pars_.directoryName_, gAndProgram.genome_);
@@ -980,7 +988,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 					auto seqOpts = tempInBowtie2Opts;
 					seqOpts.out_.outFilename_ = njh::files::make_path(genomeDir, "alignedSeqsBowtie2.sorted.bam");
 
-					auto runOut = bRunner.bowtie2Align(seqOpts, gMapper.genomes_.at(gAndProgram.genome_)->fnp_, "-a");
+					auto runOut = bRunner.bowtie2Align(seqOpts, gMapper.genomes_.at(gAndProgram.genome_)->fnp_, njh::pasteAsStr("-k ", nBowtie2Alns));
 					OutOptions bowtie2AlignLogOpts(njh::files::make_path(genomeDir, "bowtie2Log.json"));
 					OutputStream bowtie2AlignLogOut(bowtie2AlignLogOpts);
 					bowtie2AlignLogOut << njh::json::toJson(runOut) << std::endl;

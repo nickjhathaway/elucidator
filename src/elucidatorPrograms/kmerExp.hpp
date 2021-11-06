@@ -74,6 +74,7 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int getKmerDistStats(const njh::progutils::CmdArgs & inputCommands);
 	static int getBestKmerDist(const njh::progutils::CmdArgs & inputCommands);
 
+	static int getKmerDetailedKmerDistAgainstRef(const njh::progutils::CmdArgs & inputCommands);
 
 	static int findingMinimumKLenForNoRedundantKmers(const njh::progutils::CmdArgs & inputCommands);
 

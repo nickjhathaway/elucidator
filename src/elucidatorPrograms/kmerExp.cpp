@@ -90,6 +90,7 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("testingSimpleKmerHasher", testingSimpleKmerHasher, false),
 					 addFunc("countingUniqKmersFromSetsInUnmappedAlns", countingUniqKmersFromSetsInUnmappedAlns, false),
 					 addFunc("chromVsChromUniqueComp", chromVsChromUniqueComp, false),
+					 addFunc("getKmerDetailedKmerDistAgainstRef", getKmerDetailedKmerDistAgainstRef, false),
 					 //
            },
           "kmerExp") {}

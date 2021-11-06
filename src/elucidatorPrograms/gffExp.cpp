@@ -1211,10 +1211,16 @@ int gffExpRunner::gffToBedByChrom(const njh::progutils::CmdArgs & inputCommands)
 	OutOptions outOpts(bfs::path("out"));
 	outOpts.outExtention_ = ".bed";
 	std::string chrom = "";
+	VecStr features;
+
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(inputFile, "--gff", "Input gff file", true);
 	setUp.setOption(chrom, "--chrom", "chrom in gff to extract", true);
 	setUp.processWritingOptions(outOpts);
+
+	setUp.setOption(features, "--features,--feature", "Only extract records of that match this feature or features");
+
+
 	setUp.finishSetUp(std::cout);
 
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
@@ -1233,9 +1239,13 @@ int gffExpRunner::gffToBedByChrom(const njh::progutils::CmdArgs & inputCommands)
 
 	Json::Value outJson;
 	while (nullptr != gRecord) {
+
+
 		if(gRecord->seqid_ == chrom){
-			outJson[gRecord->getAttr("ID")] = gRecord->toJson();
-			outFile << GenomicRegion(*gRecord).genBedRecordCore().toDelimStr() << std::endl;
+			if(features.empty() || njh::in(gRecord->type_,features)){
+				outJson[gRecord->getAttr("ID")] = gRecord->toJson();
+				outFile << GenomicRegion(*gRecord).genBedRecordCore().toDelimStr() << std::endl;
+			}
 		}
 		bool end = false;
 		while ('#' == reader.inFile_->peek()) {

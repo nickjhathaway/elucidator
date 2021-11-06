@@ -93,6 +93,7 @@ bamExpRunner::bamExpRunner()
 					 addFunc("bamCovBasesRough", bamCovBasesRough, false),
 					 addFunc("bamCov", bamCov, false),
 					 addFunc("BamFilterByChromsToBam", BamFilterByChromsToBam, false),
+					 addFunc("BamGetSpanningReadsForRegionLongReads", BamGetSpanningReadsForRegionLongReads, false),
           },//
 
 				"bamExp") {

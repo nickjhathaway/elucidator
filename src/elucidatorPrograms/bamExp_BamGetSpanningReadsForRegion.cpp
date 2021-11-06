@@ -130,6 +130,190 @@ int bamExpRunner::BamGetPileupForRegion(
 }
 
 
+
+int bamExpRunner::BamGetSpanningReadsForRegionLongReads(
+		const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path bedFnp = "";
+	uint32_t numThreads = 1;
+	uint32_t minWindowSize = 50000;
+	bool trimToRegion = false;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.processReadInNames(VecStr{"--bam"});
+	setUp.processDirectoryOutputName(true);
+	setUp.setOption(numThreads, "--numThreads", "Number Threads");
+	setUp.setOption(trimToRegion, "--trimToRegion", "Trim To Region");
+	setUp.setOption(minWindowSize, "--minWindowSize", "min Window Size");
+
+	setUp.setOption(bedFnp, "--bed", "Bed file", true);
+
+	setUp.finishSetUp(std::cout);
+	setUp.startARunLog(setUp.pars_.directoryName_);
+
+	auto inputRegions = bedPtrsToGenomicRegs(getBeds(bedFnp));
+	std::vector<std::string> regionNames;
+	std::set<std::string> repeatNames;
+	std::unordered_map<std::string, uint32_t> regionToLen;
+
+	for(const auto & region : inputRegions){
+		if(njh::in(region.uid_, regionNames)){
+			repeatNames.emplace(region.uid_);
+		}
+		regionNames.emplace_back(region.uid_);
+		regionToLen[region.uid_] = region.getLen();
+	}
+	if(!repeatNames.empty()){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error "
+				<< "can't have regions with the same names, following names were repeated:"
+				<< njh::conToStr(repeatNames) << "\n";
+		throw std::runtime_error{ss.str()};
+	}
+
+	njh::concurrent::LockableQueue<GenomicRegion> regionsQueue(inputRegions);
+	njhseq::concurrent::BamReaderPool bamPool(setUp.pars_.ioOptions_.firstName_, numThreads);
+	bamPool.openBamFile();
+
+	MultiSeqOutCache<seqInfo> seqIOOutCache;
+	for(const auto & reg : inputRegions){
+		seqIOOutCache.addReader(reg.uid_, SeqIOOptions::genFastqOutGz(njh::files::make_path(setUp.pars_.directoryName_, reg.uid_)));
+	}
+	std::map<std::string, uint32_t> spanningReadCounts;
+	std::map<std::string, uint32_t> totalReadCounts;
+
+	std::mutex spanRCountsMut;
+
+
+	std::function<void()> extractReadsForRegion = [&seqIOOutCache,&regionsQueue,
+																&bamPool,&trimToRegion,
+																&spanningReadCounts,&totalReadCounts,
+																&spanRCountsMut,&minWindowSize
+																](){
+		GenomicRegion currentRegion;
+		auto currentBReader = bamPool.popReader();
+		auto refData = currentBReader->GetReferenceData();
+		std::unordered_map<std::string, uint32_t> chromLens;
+
+		for(const auto & chrom : refData){
+			chromLens[chrom.RefName] = chrom.RefLength;
+		}
+		BamTools::BamAlignment bAln;
+		std::unordered_map<std::string, uint32_t> currentSpanningReadCounts;
+		std::unordered_map<std::string, uint32_t> currentTotalReadCounts;
+
+		while(regionsQueue.getVal(currentRegion)){
+			auto setterRegion = currentRegion;
+			if (setterRegion.getLen() < minWindowSize) {
+				uint32_t frontWindow = std::min<uint32_t>(minWindowSize/2, setterRegion.start_);
+				uint32_t endWindow = minWindowSize - frontWindow;
+				setterRegion.start_ = setterRegion.start_ - frontWindow;
+				setterRegion.end_ = std::min<uint32_t>(chromLens[setterRegion.chrom_], setterRegion.end_ + endWindow);
+			}
+
+			setBamFileRegionThrow(*currentBReader, setterRegion);
+			uint32_t count = 0;
+			while(currentBReader->GetNextAlignment(bAln)){
+				std::cout << "count:" << count << std::endl;
+				std::cout << "\tbAln.Name: " << bAln.Name << std::endl;
+				std::cout << "\tbAln.IsPrimaryAlignment(): " << njh::colorBool(bAln.IsPrimaryAlignment()) << std::endl;
+				std::cout << "\tbAln.IsMapped(): " << njh::colorBool(bAln.IsMapped()) << std::endl;
+				++count;
+				if(bAln.IsPrimaryAlignment() && bAln.IsMapped()){
+					++currentTotalReadCounts[currentRegion.uid_];
+					if(bAln.Position <= currentRegion.start_ && bAln.GetEndPosition() >= currentRegion.end_){
+						++currentSpanningReadCounts[currentRegion.uid_];
+						if(trimToRegion){
+//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+
+							seqInfo querySeq = bamAlnToSeqInfo(bAln, true);
+							GenomicRegion balnRegion(bAln, refData);
+//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+
+							uint32_t startRelative = currentRegion.start_ - balnRegion.start_;
+							uint32_t endRelative = currentRegion.end_ - balnRegion.start_;
+
+//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+							seqInfo holderSeq(balnRegion.uid_, std::string(balnRegion.getLen(), 'N'));
+//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+							auto alnInfo = bamAlnToAlnInfoLocal(bAln);
+							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//							std::cout << "cigar: " << genCigarStr(bAln) << std::endl;
+//							std::cout << njh::json::writeAsOneLine(balnRegion.toJson()) << std::endl;
+							std::cout << balnRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+//							std::cout << "holderSeq.seq_.size(): " << holderSeq.seq_.size() << std::endl;
+//							std::cout << "balnRegion.getLen(): " << balnRegion.getLen() << std::endl;
+//							std::cout << "alnInfo.begin()->second.localAStart_: " << alnInfo.begin()->second.localAStart_ << std::endl;
+//							std::cout << "alnInfo.begin()->second.localASize_ : " << alnInfo.begin()->second.localASize_ << std::endl;
+//							std::cout << "querySeq.seq_.size(): " << querySeq.seq_.size() << std::endl;
+//
+//							std::cout << "alnInfo.begin()->second.localBStart_: " << alnInfo.begin()->second.localBStart_ << std::endl;
+//							std::cout << "alnInfo.begin()->second.localBSize_ : " << alnInfo.begin()->second.localBSize_ << std::endl;
+
+							alignCalc::rearrangeLocal(holderSeq.seq_,  querySeq.seq_, '-'	, alnInfo.begin()->second);
+//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+							alignCalc::rearrangeLocal(holderSeq.qual_, querySeq.qual_, 0	, alnInfo.begin()->second);
+//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+
+							auto startAln = getAlnPosForRealPos(holderSeq.seq_, startRelative);
+							auto endAln = getAlnPosForRealPos(holderSeq.seq_, endRelative - 1) + 1;
+							auto outSeq = querySeq.getSubRead(startAln, endAln - startAln);
+//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+
+							outSeq.removeGaps();
+//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+
+							if(currentRegion.reverseSrand_){
+								outSeq.reverseComplementRead(false, true);
+							}
+//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+
+							seqIOOutCache.add(currentRegion.uid_, outSeq);
+//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+
+						}else{
+							//spanning read
+							seqInfo querySeq = bamAlnToSeqInfo(bAln, false);
+							if(bAln.IsReverseStrand() != currentRegion.reverseSrand_){
+								querySeq.reverseComplementRead(false, true);
+							}
+							seqIOOutCache.add(currentRegion.uid_, querySeq);
+						}
+					}
+				}
+			}
+		}
+		{
+			std::lock_guard<std::mutex> lock(spanRCountsMut);
+			for(const auto & spanCount : currentSpanningReadCounts){
+				spanningReadCounts[spanCount.first] = spanCount.second;
+			}
+
+			for(const auto & totalCount : currentTotalReadCounts){
+				totalReadCounts[totalCount.first] = totalCount.second;
+			}
+		}
+	};
+
+	njh::concurrent::runVoidFunctionThreaded(extractReadsForRegion, numThreads);
+
+	//zero out counts;
+	for(const auto & region : inputRegions){
+		spanningReadCounts[region.uid_] += 0;
+	}
+	OutputStream outCounts(njh::files::make_path(setUp.pars_.directoryName_, "spanningReadCounts.tab.txt"));
+	outCounts << "region\tspanningReads\ttotalReads\tregionLength" << std::endl;
+	for(const auto & spanCount : spanningReadCounts){
+		outCounts << spanCount.first
+				<< "\t" << spanCount.second
+				<< "\t" << totalReadCounts[spanCount.first]
+				<< "\t" << regionToLen[spanCount.first] << std::endl;
+	}
+	return 0;
+}
+
+
 int bamExpRunner::BamGetSpanningReadsForRegion(
 		const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFnp = "";

@@ -620,17 +620,12 @@ int kmerExpRunner::findPositionsOfUniqueKmersInEachOther(const njh::progutils::C
 		}
 
 	}else{
-		kmerInfo kInfo1(seq1.seq_, kmerLength, false);
+		kmerInfo kInfo2(seq2.seq_, kmerLength, false);
+		kmerInfo kInfo1(seq1.seq_, kmerLength, checkComplement);
 		{
-			kmerInfo kInfo2(seq2.seq_, kmerLength, false);
-
 			std::unordered_set<std::string> sharedUniqueKmers;
 			//
-			for(const auto & k :kInfo1.kmers_){
-				if(1 == k.second.count_ && njh::in(k.first, kInfo2.kmers_) && 1 == kInfo2.kmers_[k.first].count_){
-					sharedUniqueKmers.emplace(k.first);
-				}
-			}
+
 
 			out << "kmer\tseq1Pos\tseq2Pos";
 			if(checkComplement){
@@ -652,24 +647,20 @@ int kmerExpRunner::findPositionsOfUniqueKmersInEachOther(const njh::progutils::C
 			}
 		}
 		if(checkComplement){
-			kmerInfo kInfo2(seq2.seq_, kmerLength, true);
-
 			std::unordered_set<std::string> sharedUniqueKmers;
 			//
-			for(const auto & k :kInfo1.kmers_){
+			for(const auto & k :kInfo1.kmersRevComp_){
 				if(1 == k.second.count_ && njh::in(k.first, kInfo2.kmers_) && 1 == kInfo2.kmers_[k.first].count_){
 					sharedUniqueKmers.emplace(k.first);
 				}
 			}
-
-			out << "kmer\tseq1Pos\tseq2Pos" << std::endl;
 			VecStr sharedUniqueKmersVec(sharedUniqueKmers.begin(), sharedUniqueKmers.end());
 			njh::sort(sharedUniqueKmersVec, [&kInfo1](const std::string & k1, const std::string & k2){
-				return kInfo1.kmers_[k1].positions_.front() < kInfo1.kmers_[k2].positions_.front();
+				return kInfo1.kmersRevComp_[k1].positions_.front() < kInfo1.kmersRevComp_[k2].positions_.front();
 			});
 			for(const auto & k : sharedUniqueKmersVec){
 				out << k
-						<< "\t" << kInfo1.kmers_[k].positions_.front()
+						<< "\t" << kInfo1.kmersRevComp_[k].positions_.front()
 						<< "\t" << kInfo2.kmers_[k].positions_.front();
 				out << "\t" << njh::boolToStr(true);
 				out << std::endl;
