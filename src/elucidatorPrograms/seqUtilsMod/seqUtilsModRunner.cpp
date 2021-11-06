@@ -703,8 +703,9 @@ int seqUtilsModRunner::renameIDs(const njh::progutils::CmdArgs & inputCommands) 
   bool keepChimeraFlag = false;
   bool keepComplementFlag = false;
   auto outOptsKey = TableIOOpts::genTabFileOut("", true);
-
+  bfs::path keyIn = "";
   seqUtilsModSetUp setUp(inputCommands);
+  setUp.setOption(keyIn, "--keyIn", "A file with a key to rename seqs with");
   setUp.setOption(outOptsKey.out_.outFilename_, "--keyOut", "A filename to write a key for the original name to");
   setUp.setOption(keepComplementFlag, "--keepComplementFlag", "Keep any reads marked with _Comp");
   setUp.processVerbose();
@@ -714,22 +715,53 @@ int seqUtilsModRunner::renameIDs(const njh::progutils::CmdArgs & inputCommands) 
 
 	reader.openIn();
 	reader.openOut();
-	auto inReads = reader.in_.readAllReads<readObject>();
-  if (sortBy != "none") {
-    readVecSorter::sortReadVector(inReads, sortBy);
-  }
-  VecStr originalNames = readVec::getNames(inReads);
-  renameReadNames(inReads, stub, setUp.pars_.ioOptions_.processed_,
-                  keepChimeraFlag);
-  VecStr newNames = readVec::getNames(inReads);
-  table nameKey(VecStr{"originalNames", "newNames"});
-  for(const auto pos : iter::range(newNames.size())){
-  	nameKey.addRow(originalNames[pos], newNames[pos]);
-  }
-  if("" != outOptsKey.out_.outFilename_){
-  	nameKey.outPutContents(outOptsKey);
-  }
-  reader.openWrite(inReads);
+
+	if("" != keyIn){
+		table nameKey(keyIn, "\t", false);
+		if(2 != nameKey.nCol()){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "name key has to be 2 columns no header, 1) old name, 2) new name, not size of : " << nameKey.nCol() << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		std::unordered_map<std::string, std::string> nameKeyMap;
+		for(const auto & row : nameKey){
+			if(njh::in(row[0], nameKeyMap)){
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "already have name: " << row[0] << "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			nameKeyMap[row[0]] = row[1];
+		}
+		seqInfo seq;
+		while(reader.readNextRead(seq)){
+			if(!njh::in(seq.name_, nameKeyMap)){
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "couldn't find name: " << seq.name_ << " in key: " << keyIn << "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			seq.name_ = nameKeyMap[seq.name_];
+			reader.write(seq);
+		}
+	} else {
+		auto inReads = reader.in_.readAllReads<readObject>();
+	  if (sortBy != "none") {
+	    readVecSorter::sortReadVector(inReads, sortBy);
+	  }
+
+	  VecStr originalNames = readVec::getNames(inReads);
+	  renameReadNames(inReads, stub, setUp.pars_.ioOptions_.processed_,
+	                  keepChimeraFlag);
+	  VecStr newNames = readVec::getNames(inReads);
+	  table nameKey(VecStr{"originalName", "newName"});
+	  for(const auto pos : iter::range(newNames.size())){
+	  	nameKey.addRow(originalNames[pos], newNames[pos]);
+	  }
+	  if("" != outOptsKey.out_.outFilename_){
+	  	nameKey.outPutContents(outOptsKey);
+	  }
+	  reader.openWrite(inReads);
+	}
+
   if(setUp.pars_.verbose_){
   	setUp.logRunTime(std::cout);
   }

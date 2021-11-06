@@ -217,4 +217,88 @@ int gffExpRunner::gffSortInefficient(const njh::progutils::CmdArgs & inputComman
 
 	return 0;
 }
+
+
+
+
+
+int gffExpRunner::gffRenameChroms(const njh::progutils::CmdArgs & inputCommands){
+	bfs::path inputFile;
+	bfs::path keyIn = "";
+
+	OutOptions outOpts(bfs::path("out.gff"));
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(inputFile, "--gff", "Input gff file", true);
+	setUp.setOption(keyIn, "--keyIn", "A file with a key to rename seqs with");
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+	table nameKey(keyIn, "\t", false);
+	if(2 != nameKey.nCol()){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << "name key has to be 2 columns no header, 1) old name, 2) new name, not size of : " << nameKey.nCol() << "\n";
+		throw std::runtime_error{ss.str()};
+	}
+	std::unordered_map<std::string, std::string> nameKeyMap;
+	for(const auto & row : nameKey){
+		if(njh::in(row[0], nameKeyMap)){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "already have name: " << row[0] << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		nameKeyMap[row[0]] = row[1];
+	}
+	BioDataFileIO<GFFCore> reader{(IoOptions(InOptions(inputFile)))};
+	reader.openIn();
+	uint32_t count = 0;
+	std::string line = "";
+
+	std::ofstream outFile;
+	outOpts.openFile(outFile);
+	{
+		//write header
+		std::ifstream infile(inputFile.string());
+		while('#' == infile.peek()){
+			njh::files::crossPlatGetline(infile, line);
+			outFile << line << std::endl;
+		}
+	}
+	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
+	std::stringstream endOfFile;
+	while(nullptr != gRecord) {
+
+		if(!njh::in(gRecord->seqid_, nameKeyMap)){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "name: " << gRecord->seqid_ << " not in " << keyIn << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		gRecord->seqid_ = nameKeyMap[gRecord->seqid_];
+		gRecord->writeGffRecord(outFile);
+		bool end = false;
+
+		while ('#' == reader.inFile_->peek()) {
+			if (njh::files::nextLineBeginsWith(*reader.inFile_, "##FASTA")) {
+				//write out the fasta if there
+				while('#' == reader.inFile_->peek()){
+					njh::files::crossPlatGetline(*reader.inFile_, line);
+					endOfFile << line << "\n";
+				}
+				end = true;
+				break;
+			}
+			njh::files::crossPlatGetline(*reader.inFile_, line);
+		}
+		if (end) {
+			break;
+		}
+		gRecord = reader.readNextRecord();
+		++count;
+	}
+
+
+	return 0;
+}
+
+
+
 }  // namespace njhseq

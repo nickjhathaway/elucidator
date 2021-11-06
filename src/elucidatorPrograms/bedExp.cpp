@@ -546,7 +546,7 @@ int bedExpRunner::bedRenameChromosomes(const njh::progutils::CmdArgs & inputComm
 	outOpts.outExtention_ = ".bed";
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(bedFile, "--bed", "Bed file", true);
-	setUp.setOption(chromKeyTableFnp, "--chromKeyTableFnp", "A key table, first column is current chromosome names in bed file, second column is the name to be renamed to", true);
+	setUp.setOption(chromKeyTableFnp, "--chromKeyTableFnp", "A key table, no header, 1) current chromosome names in bed file, 2) name to be renamed to", true);
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 
@@ -554,7 +554,7 @@ int bedExpRunner::bedRenameChromosomes(const njh::progutils::CmdArgs & inputComm
 
 	if(2 != chromKeyTab.columnNames_.size()){
 		std::stringstream ss;
-		ss << __PRETTY_FUNCTION__ << ", error " << chromKeyTableFnp << " should be a table with two columns, first chrom name, second length" << "\n";
+		ss << __PRETTY_FUNCTION__ << ", error " << chromKeyTableFnp << " should be a table with two columns, first chrom name, second new name" << "\n";
 		throw std::runtime_error{ss.str()};
 	}
 

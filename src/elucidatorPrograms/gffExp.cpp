@@ -68,6 +68,7 @@ gffExpRunner::gffExpRunner()
 					 addFunc("appendGff", appendGff, false),
 					 addFunc("revCompGff", revCompGff, false),
 					 addFunc("gffTranscriptIDForGeneIDs", gffTranscriptIDForGeneIDs, false),
+					 addFunc("gffRenameChroms", gffRenameChroms, false),
            },//
           "gffExp") {}
 class AmionoAcidPositionInfo {

@@ -214,10 +214,10 @@ int bamExpRunner::BamGetSpanningReadsForRegionLongReads(
 			setBamFileRegionThrow(*currentBReader, setterRegion);
 			uint32_t count = 0;
 			while(currentBReader->GetNextAlignment(bAln)){
-				std::cout << "count:" << count << std::endl;
-				std::cout << "\tbAln.Name: " << bAln.Name << std::endl;
-				std::cout << "\tbAln.IsPrimaryAlignment(): " << njh::colorBool(bAln.IsPrimaryAlignment()) << std::endl;
-				std::cout << "\tbAln.IsMapped(): " << njh::colorBool(bAln.IsMapped()) << std::endl;
+//				std::cout << "count:" << count << std::endl;
+//				std::cout << "\tbAln.Name: " << bAln.Name << std::endl;
+//				std::cout << "\tbAln.IsPrimaryAlignment(): " << njh::colorBool(bAln.IsPrimaryAlignment()) << std::endl;
+//				std::cout << "\tbAln.IsMapped(): " << njh::colorBool(bAln.IsMapped()) << std::endl;
 				++count;
 				if(bAln.IsPrimaryAlignment() && bAln.IsMapped()){
 					++currentTotalReadCounts[currentRegion.uid_];
@@ -237,11 +237,11 @@ int bamExpRunner::BamGetSpanningReadsForRegionLongReads(
 							seqInfo holderSeq(balnRegion.uid_, std::string(balnRegion.getLen(), 'N'));
 //							std::cout << __FILE__ << " " << __LINE__ << std::endl;
 							auto alnInfo = bamAlnToAlnInfoLocal(bAln);
-							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //							std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //							std::cout << "cigar: " << genCigarStr(bAln) << std::endl;
 //							std::cout << njh::json::writeAsOneLine(balnRegion.toJson()) << std::endl;
-							std::cout << balnRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+//							std::cout << balnRegion.genBedRecordCore().toDelimStrWithExtra() << std::endl;
 //							std::cout << "holderSeq.seq_.size(): " << holderSeq.seq_.size() << std::endl;
 //							std::cout << "balnRegion.getLen(): " << balnRegion.getLen() << std::endl;
 //							std::cout << "alnInfo.begin()->second.localAStart_: " << alnInfo.begin()->second.localAStart_ << std::endl;

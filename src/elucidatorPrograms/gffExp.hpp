@@ -52,6 +52,7 @@ class gffExpRunner : public njh::progutils::ProgramRunner {
 	static int extractGffChrom(const njh::progutils::CmdArgs & inputCommands);
 
 
+	static int gffRenameChroms(const njh::progutils::CmdArgs & inputCommands);
 
 	static int gffSortInefficient(const njh::progutils::CmdArgs & inputCommands);
 	static int roughGffConversionToOther(const njh::progutils::CmdArgs & inputCommands);
