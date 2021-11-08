@@ -848,8 +848,13 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
 				auto outRegion = reg;
 				outRegion.chrom_ = gRegion.chrom_;
 				outRegion.strand_ = (gRegion.reverseSrand_ ? '-' : '+');
-				outRegion.chromStart_ = gRegion.getRelativePositionFromStartStrandAware(reg.chromStart_);
-				outRegion.chromEnd_ = gRegion.getRelativePositionFromStartStrandAware(reg.chromEnd_);
+				if(gRegion.reverseSrand_){
+					outRegion.chromStart_ = gRegion.getRelativePositionFromStartStrandAware(reg.chromEnd_) + 1;
+					outRegion.chromEnd_ = gRegion.getRelativePositionFromStartStrandAware(reg.chromStart_) + 1;
+				}else{
+					outRegion.chromStart_ = gRegion.getRelativePositionFromStartStrandAware(reg.chromStart_);
+					outRegion.chromEnd_ = gRegion.getRelativePositionFromStartStrandAware(reg.chromEnd_);
+				}
 				*combinedGenomicOut << outRegion.toDelimStrWithExtra() << std::endl;
 			}
 		}
