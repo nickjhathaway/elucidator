@@ -1316,10 +1316,12 @@ int gffExpRunner::gffToBedByBedLoc(const njh::progutils::CmdArgs & inputCommands
 				}
 				outJson[gRecord->getAttr("ID")] = gRecord->toJson();
 				auto outRegion = GenomicRegion(*gRecord).genBedRecordCore();
-
+				std::string extra = "";
+				extra.append("[");
+				extra.append("overlapUID=" + inputRegion.uid_ + ";");
+				extra.append("overlapGenomicUID=" + inputRegion.createUidFromCoords() + ";");
 				if("" != extraAttributesStr){
-					std::string extra = "";
-					extra.append("[");
+
 					for(const auto & attr : extraAttributes){
 						if(gRecord->hasAttr(attr)){
 							extra.append(attr + "=" + gRecord->getAttr(attr) + ";");
@@ -1327,9 +1329,9 @@ int gffExpRunner::gffToBedByBedLoc(const njh::progutils::CmdArgs & inputCommands
 							extra.append(attr + "=" + "NA" + ";");
 						}
 					}
-					extra.append("]");
-					outRegion.extraFields_.emplace_back(extra);
 				}
+				extra.append("]");
+				outRegion.extraFields_.emplace_back(extra);
 
 				outFile << outRegion.toDelimStrWithExtra() << std::endl;
 			}
