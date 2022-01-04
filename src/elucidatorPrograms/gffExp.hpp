@@ -46,7 +46,9 @@ class gffExpRunner : public njh::progutils::ProgramRunner {
 	static int gffToBedByChrom(const njh::progutils::CmdArgs & inputCommands);
 	static int gffToBedByBedLoc(const njh::progutils::CmdArgs & inputCommands);
 	static int gffToBedByName(const njh::progutils::CmdArgs & inputCommands);
+	static int gffToBedByID(const njh::progutils::CmdArgs & inputCommands);
 	static int gffToJsonByID(const njh::progutils::CmdArgs & inputCommands);
+
 
 	static int extractGffFeature(const njh::progutils::CmdArgs & inputCommands);
 	static int extractGffChrom(const njh::progutils::CmdArgs & inputCommands);
