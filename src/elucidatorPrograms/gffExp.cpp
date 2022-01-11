@@ -69,6 +69,7 @@ gffExpRunner::gffExpRunner()
 					 addFunc("revCompGff", revCompGff, false),
 					 addFunc("gffTranscriptIDForGeneIDs", gffTranscriptIDForGeneIDs, false),
 					 addFunc("gffRenameChroms", gffRenameChroms, false),
+					 addFunc("gffToBedByID", gffToBedByID, false),
            },//
           "gffExp") {}
 class AmionoAcidPositionInfo {
@@ -402,6 +403,47 @@ int gffExpRunner::removeFastaFromGffFile(const njh::progutils::CmdArgs & inputCo
 }
 
 
+
+int gffExpRunner::gffToBedByID(const njh::progutils::CmdArgs & inputCommands) {
+
+	bfs::path filename = "";
+	std::set<std::string> ids;
+	OutOptions outOpts(bfs::path(""), ".bed");
+
+	seqSetUp setUp(inputCommands);
+	setUp.processWritingOptions(outOpts);
+	setUp.setOption(filename, "--gff", "Gff File", true);
+	setUp.setOption(ids, "--id", "ID or IDs", true);
+	setUp.finishSetUp(std::cout);
+
+
+	BioDataFileIO<GFFCore> gffIo(IoOptions(InOptions(filename), outOpts));
+
+	gffIo.openOut();
+	gffIo.openIn();
+	GFFCore gff;
+	std::string line = "";
+	while(gffIo.readNextRecord(gff)){
+		if(gff.hasAttr("ID") && njh::in(gff.getAttr("ID") , ids )){
+			gffIo.write(gff, [](const GFFCore & g, std::ostream & out){
+					out << GenomicRegion(g).genBedRecordCore().toDelimStr() << std::endl;
+				;});
+		}
+		bool end = false;
+		while('#' == gffIo.inFile_->peek()){
+			if (njh::files::nextLineBeginsWith(*gffIo.inFile_, "##FASTA")) {
+				end = true;
+				break;
+			}
+			njh::files::crossPlatGetline(*gffIo.inFile_, line);
+		}
+		if(end){
+			break;
+		}
+	}
+	return 0;
+}
+
 int gffExpRunner::gffToBedByName(const njh::progutils::CmdArgs & inputCommands) {
 
 	bfs::path filename = "";
@@ -416,8 +458,8 @@ int gffExpRunner::gffToBedByName(const njh::progutils::CmdArgs & inputCommands) 
 
 
 	BioDataFileIO<GFFCore> gffIo(IoOptions(InOptions(filename), outOpts));
-	gffIo.openIn();
 	gffIo.openOut();
+	gffIo.openIn();
 	GFFCore gff;
 	std::string line = "";
 	while(gffIo.readNextRecord(gff)){

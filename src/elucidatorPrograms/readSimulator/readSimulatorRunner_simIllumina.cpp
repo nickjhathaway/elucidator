@@ -203,12 +203,15 @@ int readSimulatorRunner::shearSimIlluminaAlign(const njh::progutils::CmdArgs & i
 		SeqOutput writer(outSeqOpts);
 		writer.openOut();
 		while(reader.readNextRead(seq)){
+//			std::cout << "seqLen: " << len(seq) << std::endl;
+
 			auto r1Seq = simulator.simR1(seq, outLength);
 			seq.reverseComplementRead(false, true);
 			auto r2Seq = simulator.simR2(seq, outLength);
 			writer.write(PairedRead(r1Seq, r2Seq, false));
 		}
 	}
+//	std::cout << __FILE__ << " " << __LINE__ << std::endl;
 	auto tempDir = njh::files::make_path(setUp.pars_.directoryName_, "temp");
 	njh::files::makeDir(njh::files::MkdirPar{tempDir});
 
@@ -219,7 +222,7 @@ int readSimulatorRunner::shearSimIlluminaAlign(const njh::progutils::CmdArgs & i
 	detectPrimersCmd << "elucidator detectPossiblePrimers --overWriteDir --fastq1gz " << illuminaPairedOutStub << "_R1.fastq.gz --fastq2gz " << illuminaPairedOutStub << "_R2.fastq.gz --dout " << tempDir << "/seqeuncedShearedSeqs_detectPrimers";
 	auto detectPrimersCmd_runOut = njh::sys::run({detectPrimersCmd.str()});
 	BioCmdsUtils::checkRunOutThrow(detectPrimersCmd_runOut, __PRETTY_FUNCTION__);
-
+//	std::cout << __FILE__ << " " << __LINE__ << std::endl;
 	std::stringstream setUpTrimmingCmd;
 	setUpTrimmingCmd << "cd " << tempDir << " && elucidator setUpRunAdapterRemoval --extraArgs=\"--trim3p 1 --minlength 30\" --numThreads " << numThreads << " --fastq1 ../fastq/seqeuncedShearedSeqs_R1.fastq.gz --fastq2 ../fastq/seqeuncedShearedSeqs_R2.fastq.gz --overWrite --combineSingles --gzip --detectPrimersDir seqeuncedShearedSeqs_detectPrimers";
 	auto setUpTrimmingCmd_runOut = njh::sys::run({setUpTrimmingCmd.str()});
