@@ -1362,6 +1362,8 @@ int gffExpRunner::gffToBedByBedLoc(const njh::progutils::CmdArgs & inputCommands
 				extra.append("[");
 				extra.append("overlapUID=" + inputRegion.uid_ + ";");
 				extra.append("overlapGenomicUID=" + inputRegion.createUidFromCoords() + ";");
+				extra.append("feature=" + gRecord->type_ + ";");
+
 				if("" != extraAttributesStr){
 
 					for(const auto & attr : extraAttributes){
