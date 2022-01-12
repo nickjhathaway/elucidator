@@ -351,7 +351,7 @@ int genExpRunner::extractRefSeqsFromGenomes(
 							SeqOutput separatedWriter(separatedSeqFileOpts);
 							separatedWriter.openOut();
 							for(const auto & refSeq : refSeqs){
-								auto toks = tokenizeString(refSeq.name_, "-");//unfortuantley there's not a better way to separate so hopefully the ref genomes don't have - in their names
+								auto toks = tokenizeString(refSeq.name_, "::");//unfortuantley there's not a better way to separate so hopefully the ref genomes don't have - in their names
 								for(const auto & tok : toks){
 									separatedWriter.write(seqInfo{tok, refSeq.seq_});
 								}

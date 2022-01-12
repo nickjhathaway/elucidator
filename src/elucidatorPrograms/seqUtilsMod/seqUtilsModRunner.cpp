@@ -82,20 +82,28 @@ int seqUtilsModRunner::increaseQualityScores(const njh::progutils::CmdArgs & inp
 
 int seqUtilsModRunner::expandOutCollapsedToUnique(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path inputNames = "";
+	std::string delim = ",";
+	std::string readsColName = "reads";
+	std::string nameColName = "name";
 	seqSetUp setUp(inputCommands);
 	setUp.pars_.ioOptions_.out_.outFilename_ = "";
-	setUp.processDefaultReader({ "--fasta" }, true);
+	setUp.processDefaultReader({ "--fasta", "--fastagz", "--fastq", "--fastqgz"}, true);
 	setUp.setOption(inputNames, "--inputNames", "Input names", true);
+	setUp.setOption(delim, "--delim", "Delimiter", false);
+
+	setUp.setOption(readsColName, "--readsColName", "Reads Col Name, containing the unique names", false);
+	setUp.setOption(nameColName, "--nameColName", "Name Col Name, containing the name in the collapsed file", false);
+
 	setUp.finishSetUp(std::cout);
 
 	table namesTab(inputNames, "\t", true);
-	namesTab.checkForColumnsThrow(VecStr{"name","reads"}, __PRETTY_FUNCTION__)	;
+	namesTab.checkForColumnsThrow(VecStr{nameColName,readsColName}, __PRETTY_FUNCTION__)	;
 
 	std::unordered_map<std::string, VecStr> readNames;
-	auto nameColPos = namesTab.getColPos("name");
-	auto readsColPos = namesTab.getColPos("reads");
+	auto nameColPos = namesTab.getColPos(nameColName);
+	auto readsColPos = namesTab.getColPos(readsColName);
 	for(const auto & row : namesTab.content_){
-		readNames[row[nameColPos]] = tokenizeString(row[readsColPos], ",");
+		addOtherVec(readNames[row[nameColPos]], tokenizeString(row[readsColPos], delim));
 	}
 
 	SeqIO reader(setUp.pars_.ioOptions_);
@@ -114,7 +122,6 @@ int seqUtilsModRunner::expandOutCollapsedToUnique(const njh::progutils::CmdArgs 
 				reader.write(outSeq);
 			}
 		}
-
 	}
 	return 0;
 }

@@ -91,12 +91,14 @@ int metaExpRunner::addSeqNameAsSampleMeta(const njh::progutils::CmdArgs & inputC
 
 int metaExpRunner::renameSeqsWithMetaField(const njh::progutils::CmdArgs & inputCommands){
 	VecStr metaFields;
+	bool makeNamesUnique = false;
 	std::string sep = "-";
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.setOption(sep, "--sep", "Separator between meta fields if using multiple");
 	setUp.setOption(metaFields, "--metaFields", "Meta fields within name to use", true);
+	setUp.setOption(makeNamesUnique, "--makeNamesUnique", "Make Names unique by appending to the name a number if name already take");
 	setUp.processDefaultReader(true);
   if (setUp.pars_.ioOptions_.out_.outFilename_ == "out") {
   	setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(njh::files::removeExtension(setUp.pars_.ioOptions_.firstName_), "renamed_");
@@ -106,6 +108,7 @@ int metaExpRunner::renameSeqsWithMetaField(const njh::progutils::CmdArgs & input
 	SeqIO reader(setUp.pars_.ioOptions_);
 	reader.openIn();
 	reader.openOut();
+	std::unordered_map<std::string, uint32_t> nameCounts;
 	while (reader.readNextRead(seq)) {
 		if (MetaDataInName::nameHasMetaData(seq.name_)) {
 			MetaDataInName meta(seq.name_);
@@ -113,7 +116,14 @@ int metaExpRunner::renameSeqsWithMetaField(const njh::progutils::CmdArgs & input
 			for (const auto & field : metaFields) {
 				metaData.emplace_back(meta.getMeta(field));
 			}
-			seq.name_ = njh::conToStr(metaData, sep);
+			auto newName = njh::conToStr(metaData, sep);
+			if(makeNamesUnique){
+				++nameCounts[newName];
+				if(nameCounts[newName] > 1){
+					newName = njh::pasteAsStr(newName, ".", nameCounts[newName]);
+				}
+			}
+			seq.name_ = newName;
 		} else {
 			std::stringstream ss;
 			ss << __PRETTY_FUNCTION__ << ", error " << seq.name_

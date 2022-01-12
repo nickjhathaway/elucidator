@@ -92,6 +92,7 @@ class programWrapperRunner : public njh::progutils::ProgramRunner {
 
 
 	static int runHmmsearch(const njh::progutils::CmdArgs & inputCommands);
+	static int runnhmmscan(const njh::progutils::CmdArgs & inputCommands);
 
 };
 

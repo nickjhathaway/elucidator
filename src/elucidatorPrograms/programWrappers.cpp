@@ -70,6 +70,7 @@ programWrapperRunner::programWrapperRunner()
 						addFunc("parsePrimer3OutputToTable", parsePrimer3OutputToTable, false),
 						addFunc("genPossiblePrimersWithPrimer3", genPossiblePrimersWithPrimer3, false),
 						addFunc("genPossiblePrimerPairsWithPrimer3", genPossiblePrimerPairsWithPrimer3, false),
+						addFunc("runnhmmscan", runnhmmscan, false),
            },//
           "programWrapper") {}
 
