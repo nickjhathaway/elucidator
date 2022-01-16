@@ -132,6 +132,7 @@ int seqUtilsModRunner::guessAProteinFromSeq(
 	bool removeTrailingStop = false;
 	bool mark = false;
 	bool overWriteMeta = false;
+	bool forceMStart = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processDefaultReader(true);
 	if ("out" == setUp.pars_.ioOptions_.out_.outFilename_) {
@@ -143,6 +144,7 @@ int seqUtilsModRunner::guessAProteinFromSeq(
 	setUp.setOption(overWriteMeta, "--overWriteMeta", "If marking whether or not to reset the meta already in the sequence name");
 
 	setUp.setOption(removeTrailingStop, "--removeTrailingStop", "Remove Trailing Stop Codon");
+	setUp.setOption(forceMStart, "--forceMStart", "force M Start");
 
 	setUp.finishSetUp(std::cout);
 
@@ -158,18 +160,23 @@ int seqUtilsModRunner::guessAProteinFromSeq(
 			std::shared_ptr<readVecTrimmer::BreakUpRes> longest;
 			uint32_t frameWithLongest = std::numeric_limits<uint32_t>::max();
 			uint32_t lengthOfLongestFrame = std::numeric_limits<uint32_t>::max();
-			for (const auto start : iter::range(3)) {
-				auto prot = seq.translateRet(false, false, start);
-				auto possibleSubSeqs = readVecTrimmer::breakUpSeqOnPat(prot, pFinder);
-				for (const auto & possible : possibleSubSeqs) {
-					if (nullptr == longest) {
-						longest = std::make_shared<readVecTrimmer::BreakUpRes>(possible);
-						frameWithLongest = start;
-						lengthOfLongestFrame = len(prot);
-					} else if (len(possible.seqBase_) > len(longest->seqBase_)) {
-						longest = std::make_shared<readVecTrimmer::BreakUpRes>(possible);
-						frameWithLongest = start;
-						lengthOfLongestFrame = len(prot);
+			bool isRevComp = false;
+			for (auto comp : {false, true}){
+				for (const auto start : iter::range(3)) {
+					auto prot = seq.translateRet(comp, comp, start, forceMStart);
+					auto possibleSubSeqs = readVecTrimmer::breakUpSeqOnPat(prot, pFinder);
+					for (const auto & possible : possibleSubSeqs) {
+						if (nullptr == longest) {
+							longest = std::make_shared<readVecTrimmer::BreakUpRes>(possible);
+							frameWithLongest = start;
+							lengthOfLongestFrame = len(prot);
+							isRevComp = comp;
+						} else if (len(possible.seqBase_) > len(longest->seqBase_)) {
+							longest = std::make_shared<readVecTrimmer::BreakUpRes>(possible);
+							frameWithLongest = start;
+							lengthOfLongestFrame = len(prot);
+							isRevComp = comp;
+						}
 					}
 				}
 			}
@@ -202,6 +209,7 @@ int seqUtilsModRunner::guessAProteinFromSeq(
 				meta.addMeta("aaStart", longest->start_, overWriteMeta);
 				meta.addMeta("aaStop", aaStop, overWriteMeta);
 				meta.addMeta("aaLen", lengthOfLongestFrame, overWriteMeta);
+				meta.addMeta("isRevComp", isRevComp);
 				if(nameHasMeta){
 					meta.resetMetaInName(longest->seqBase_.name_);
 				}else{
@@ -212,22 +220,32 @@ int seqUtilsModRunner::guessAProteinFromSeq(
 			reader.write(longest);
 
 		} else {
-			std::vector<seqInfo> translatedSeqs{seq.translateRet(false, false, 0),
-				seq.translateRet(false, false, 1),
-				seq.translateRet(false, false, 2)};
+			std::unordered_map<bool, std::vector<seqInfo>>  translatedSeqs;
+			translatedSeqs[false] =  std::vector<seqInfo>{
+				seq.translateRet(false, false, 0, forceMStart),
+				seq.translateRet(false, false, 1, forceMStart),
+				seq.translateRet(false, false, 2, forceMStart)};
+			translatedSeqs[true] =  std::vector<seqInfo>{
+				seq.translateRet(true, true, 0, forceMStart),
+				seq.translateRet(true, true, 1, forceMStart),
+				seq.translateRet(true, true, 2, forceMStart)};
 
 
 			uint32_t minPos = 0;
 			uint32_t minStopCodon = std::numeric_limits<uint32_t>::max();
-			for(auto pos: iter::range(translatedSeqs.size())){
-				auto stops =  countOccurences(translatedSeqs[pos].seq_, "*");
-				if(stops < minStopCodon){
-					minStopCodon = stops;
-					minPos = pos;
+			bool isRevComp = false;
+			for (auto comp : {false, true}){
+				for(auto pos: iter::range(translatedSeqs.size())){
+					auto stops =  countOccurences(translatedSeqs[comp][pos].seq_, "*");
+					if(stops < minStopCodon){
+						minStopCodon = stops;
+						minPos = pos;
+						isRevComp = comp;
+					}
 				}
 			}
 
-			seqInfo seqCopy = translatedSeqs[minPos];
+			seqInfo seqCopy = translatedSeqs[isRevComp][minPos];
 			if (mark) {
 				MetaDataInName meta;
 				bool nameHasMeta = false;
@@ -236,6 +254,8 @@ int seqUtilsModRunner::guessAProteinFromSeq(
 					nameHasMeta = true;
 				}
 				meta.addMeta("frame", minPos);
+				meta.addMeta("isRevComp", isRevComp);
+
 				if (nameHasMeta) {
 					meta.resetMetaInName(seqCopy.name_);
 				} else {

@@ -38,7 +38,7 @@ namespace njhseq {
 seqSearchingRunner::seqSearchingRunner()
     : njh::progutils::ProgramRunner(
           {
-
+					 addFunc("findHomopolymerLocations", findHomopolymerLocations, false),
 					 addFunc("chopAndMap", chopAndMap, false),
 					 addFunc("chopAndMapAndRefine", chopAndMapAndRefine, false),
 					 addFunc("findMotifLocations", findMotifLocations, false),
@@ -49,7 +49,49 @@ seqSearchingRunner::seqSearchingRunner()
           "seqSearching") {}
 
 
+int seqSearchingRunner::findHomopolymerLocations(const njh::progutils::CmdArgs & inputCommands){
+	OutOptions outOpts(bfs::path(""), ".bed");
+	char base = 'N';
+	uint32_t minLen = 1;
+	uint32_t maxLen = std::numeric_limits<uint32_t>::max();
+	seqSetUp setUp(inputCommands);
+	setUp.processDebug();
+	setUp.processVerbose();
+	setUp.processReadInNames(VecStr{"--fasta", "--fastagz", "--fastqgz", "--fastq"}, true);
+	setUp.setOption(base, "--base", "Base to search for");
+	setUp.setOption(minLen, "--minLen", "minimum len");
+	setUp.setOption(maxLen, "--maxLen", "maximum len");
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
 
+  std::regex e(R"(\d+)");
+	std::regex pat(njh::pasteAsStr("(", base, "+)"));
+	seqInfo seq;
+
+	SeqInput reader(setUp.pars_.ioOptions_);
+	reader.openIn()	;
+
+	OutputStream out(outOpts);
+
+	while(reader.readNextRead(seq)){
+		std::sregex_iterator iter(seq.seq_.begin(), seq.seq_.end(), pat);
+		std::sregex_iterator end;
+		while (iter != end) {
+			auto len = iter->str().size();
+			if(len >= minLen && len <= maxLen){
+				out << seq.name_
+						<< "\t" << iter->position()
+						<< "\t" << iter->position() + len
+						<< "\t" << base << "x" << len
+						<< "\t" << len
+						<< "\t" << '+'
+						<< std::endl;
+			}
+			++iter;
+		}
+	}
+	return 0;
+}
 
 
 int seqSearchingRunner::findSimpleTandemRepeatLocations(const njh::progutils::CmdArgs & inputCommands){

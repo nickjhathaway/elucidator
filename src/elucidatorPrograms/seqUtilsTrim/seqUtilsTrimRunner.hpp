@@ -72,6 +72,10 @@ class seqUtilsTrimRunner : public njh::progutils::ProgramRunner {
   static int trimToPositions(const njh::progutils::CmdArgs & inputCommands);
   static int trimToPositionsForEachName(const njh::progutils::CmdArgs & inputCommands);
 
+
+  static int trimToRefWithGlobalAlignmentNonOverlappingRegions(const njh::progutils::CmdArgs & inputCommands);
+
+
   static int trimToRefWithGlobalAlignment(const njh::progutils::CmdArgs & inputCommands);
   static int trimToRefWithGlobalAlignmentToRefPositions(const njh::progutils::CmdArgs & inputCommands);
 

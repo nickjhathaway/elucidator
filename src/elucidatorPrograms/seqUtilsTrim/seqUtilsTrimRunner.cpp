@@ -73,6 +73,7 @@ seqUtilsTrimRunner::seqUtilsTrimRunner()
 			addFunc("trimFrontForTandemRepeat", trimFrontForTandemRepeat, false),
 			addFunc("trimEdgesForLowEntropy", trimEdgesForLowEntropy, false),
 			addFunc("leftTrimToMeanAlignSite", leftTrimToMeanAlignSite, false),
+			addFunc("trimToRefWithGlobalAlignmentNonOverlappingRegions", trimToRefWithGlobalAlignmentNonOverlappingRegions, false),
 },
                     "seqUtilsTrim") {}
 //
