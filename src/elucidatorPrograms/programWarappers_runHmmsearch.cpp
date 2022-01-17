@@ -31,11 +31,11 @@
 #include <njhseq/readVectorManipulation/readVectorHelpers/readVecTrimmer.hpp>
 #include <njhseq/system/Muscler.hpp>
 #include <njhseq/objects/BioDataObject/BioDataFileIO.hpp>
-#include <njhseq/objects/BioDataObject/HmmerDomainHitTab.hpp>
-#include <njhseq/objects/BioDataObject/HmmerTableDomainHit.hpp>
-
 #include <njhseq/objects/BioDataObject/BedRecordCore.hpp>
 #include <njhseq/objects/BioDataObject/BioRecordsUtils/BedUtility.hpp>
+
+#include <njhseq/objects/BioDataObject/BioRecordsUtils/HmmerUtility.hpp>
+
 
 namespace njhseq {
 

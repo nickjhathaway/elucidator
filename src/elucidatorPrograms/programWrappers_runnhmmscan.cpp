@@ -15,11 +15,9 @@
 #include <njhseq/readVectorManipulation/readVectorHelpers/readVecTrimmer.hpp>
 #include <njhseq/system/Muscler.hpp>
 #include <njhseq/objects/BioDataObject/BioDataFileIO.hpp>
-#include <njhseq/objects/BioDataObject/HmmerDomainHitTab.hpp>
-#include <njhseq/objects/BioDataObject/HmmerTableDomainHit.hpp>
-
 #include <njhseq/objects/BioDataObject/BedRecordCore.hpp>
 #include <njhseq/objects/BioDataObject/BioRecordsUtils/BedUtility.hpp>
+#include <njhseq/objects/BioDataObject/BioRecordsUtils/HmmerUtility.hpp>
 
 namespace njhseq {
 
@@ -27,7 +25,7 @@ namespace njhseq {
 
 
 int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputCommands){
-	std::string defaultParameters = "--nonull2 --incT 20 --incdomT 20 -T 20";
+	std::string defaultParameters = "--nonull2 --incT 20 --incdomT 20 -T 20 --notextw";
 	bfs::path hmmModel;
 	uint32_t hmmStartFilter = std::numeric_limits<uint32_t>::max();
 
@@ -142,12 +140,12 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 		OutputStream out(allDomainHitsFnp);
 		OutputStream outFilt(filtDomainHitsFnp);
 
-		BioDataFileIO<HmmerTableDomainHit> reader{IoOptions(InOptions(rawDomainHitsFnp))};
-		HmmerTableDomainHit domain;
+		BioDataFileIO<HmmerSeqHitTab> reader{IoOptions(InOptions(rawDomainHitsFnp))};
+		HmmerSeqHitTab domain;
 		reader.openIn();
 		uint32_t count = 0;
-		out << "#" << njh::conToStr(HmmerTableDomainHit::toDelimStrHeader(), "\t") << std::endl;
-		outFilt << "#" << njh::conToStr(HmmerTableDomainHit::toDelimStrHeader(), "\t") << std::endl;
+		out << "#" << njh::conToStr(HmmerSeqHitTab::toDelimStrHeader(), "\t") << std::endl;
+		outFilt << "#" << njh::conToStr(HmmerSeqHitTab::toDelimStrHeader(), "\t") << std::endl;
 
 		while(reader.readNextRecord(domain)){
 			out << domain.toDelimStr() << std::endl;
@@ -160,20 +158,20 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	//get best non-overlapping positions
 	std::vector<Bed6RecordCore> filteredRegions;
 
-	std::unordered_map<std::string, std::vector<HmmerTableDomainHit>> domainsPerSeq;
+	std::unordered_map<std::string, std::vector<HmmerSeqHitTab>> domainsPerSeq;
 
 	{
-		std::vector<HmmerTableDomainHit> domains;
+		std::vector<HmmerSeqHitTab> domains;
 		std::vector<Bed6RecordCore> locations;
 //		std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		{
-			BioDataFileIO<HmmerTableDomainHit> reader{IoOptions(InOptions(filtDomainHitsFnp))};
+			BioDataFileIO<HmmerSeqHitTab> reader{IoOptions(InOptions(filtDomainHitsFnp))};
 
-			HmmerTableDomainHit domain;
+			HmmerSeqHitTab domain;
 			reader.openIn();
 			uint32_t count = 0;
 			while(reader.readNextRecord(domain)){
-				if(domain.genBed6().length() < minLength){
+				if(domain.genBed6_env().length() < minLength){
 					continue;
 				}
 
@@ -181,7 +179,7 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 				domain.queryName_ = seqKey[njh::StrToNumConverter::stoToNum<uint32_t>(domain.queryName_)];
 				domains.emplace_back(domain);
 //				std::cout << __FILE__ << " " << __LINE__ << std::endl;
-				auto genLoc = domain.genBed6();
+				auto genLoc = domain.genBed6_env();
 				genLoc.name_ = njh::pasteAsStr(count);
 				locations.emplace_back(genLoc);
 //				std::cout << __FILE__ << " " << __LINE__ << std::endl;
@@ -218,7 +216,7 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 		}
 //		std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		OutputStream outFiltNonOverlap(nonOverlappingDomainHitsFnp);
-		outFiltNonOverlap << "#" << njh::conToStr(HmmerTableDomainHit::toDelimStrHeader(), "\t") << "\tbedName" << std::endl;
+		outFiltNonOverlap << "#" << njh::conToStr(HmmerSeqHitTab::toDelimStrHeader(), "\t") << "\tbedName" << std::endl;
 		BedUtility::coordSort(filteredRegions);
 		OutputStream bedRegionsOut(bedRegionsFnp);
 //		std::cout << __FILE__ << " " << __LINE__ << std::endl;
@@ -260,7 +258,7 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 		while(reader.readNextRead(seq)){
 			if(njh::in(seq.name_, domainsPerSeq)){
 				for(const auto & domain : domainsPerSeq[seq.name_]){
-					Bed6RecordCore region = domain.genBed6();
+					Bed6RecordCore region = domain.genBed6_env();
 					auto subSeq = seq.getSubRead(region.chromStart_, region.length());
 					MetaDataInName meta;
 					meta.addMeta("hmmFrom", domain.hmmFrom_ - 1, true);

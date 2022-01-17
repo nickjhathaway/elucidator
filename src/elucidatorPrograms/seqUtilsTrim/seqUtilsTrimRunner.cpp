@@ -50,7 +50,8 @@ seqUtilsTrimRunner::seqUtilsTrimRunner()
 			addFunc("trimBetweenMostCommonKmers", trimBetweenMostCommonKmers, false),
 
 
-			addFunc("trimWithHmmer", trimWithHmmer, false),
+			addFunc("trimWithhmmsearch", trimWithhmmsearch, false),
+			addFunc("trimWithnhmmscan", trimWithnhmmscan, false),
 
 			addFunc("trimWithMuscle", trimWithMuscle, false),
 			addFunc("trimWithMuscleToRef", trimWithMuscleToRef, false),

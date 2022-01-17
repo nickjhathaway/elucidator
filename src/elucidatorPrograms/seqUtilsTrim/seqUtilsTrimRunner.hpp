@@ -52,7 +52,8 @@ class seqUtilsTrimRunner : public njh::progutils::ProgramRunner {
   static int trimToMostCommonKmer(const njh::progutils::CmdArgs & inputCommands);
   static int trimBetweenMostCommonKmers(const njh::progutils::CmdArgs & inputCommands);
 
-  static int trimWithHmmer(const njh::progutils::CmdArgs & inputCommands);
+  static int trimWithnhmmscan(const njh::progutils::CmdArgs & inputCommands);
+  static int trimWithhmmsearch(const njh::progutils::CmdArgs & inputCommands);
 
   static int trimWithMuscle(const njh::progutils::CmdArgs & inputCommands);
 
