@@ -29,7 +29,7 @@
 #include "parsingFileExp.hpp"
 #include <njhseq/objects/BioDataObject/BioDataFileIO.hpp>
 
-#include <njhseq/objects/BioDataObject/HmmerDomainHitTab.hpp>
+#include <njhseq/objects/BioDataObject/HmmerObjs/HmmerDomainHitTab.hpp>
 #include <njhseq/objects/BioDataObject/BedRecordCore.hpp>
 
 namespace njhseq {

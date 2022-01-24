@@ -9,6 +9,8 @@
 #include "ContigsCompareGraph.hpp"
 #include <njhseq/alignment.h>
 
+#include <njhseq/readVectorManipulation/readVectorOperations/massGetters.hpp>
+#include <njhseq/IO/SeqIO.h>
 
 namespace njhseq {
 
@@ -1401,5 +1403,296 @@ void ContigsCompareGraphDev::resetGroups() const {
 	}
 }
 
+
+
+
+std::vector<seqInfo> ContigsCompareGraphDev::correctSeqsByGraph(const std::vector<seqInfo> & seqs, const correctSeqsByGraphPars & pars) {
+
+	njh::stopWatch watch;
+	//correction
+	ContigsCompareGraphDev compGraph(pars.klen);
+	compGraph.setOccurenceCutOff(pars.kmerOccurenceCutOff);
+	for(const auto & seq : seqs){
+		compGraph.increaseKCounts(seq.seq_);
+	}
+	compGraph.populateNodesFromCounts();
+	for(const auto & seq : seqs){
+		compGraph.threadThroughSequence(seq, seq.name_);
+	}
+
+
+	std::unordered_map<std::string, uint32_t> seqnameToPosition;
+	{
+		uint32_t seqCount = 0;
+		for(const auto & seq : seqs){
+			seqnameToPosition[seq.name_] = seqCount++;
+		}
+	}
+	std::vector<seqInfo> correctedSeqs = seqs;
+	for(const auto & seq : seqs){
+		bool printInfo = pars.debug;
+		std::vector<SubSeqment> subPositions;
+		for(uint32_t pos = 0; pos < len(seq) + 1 - pars.klen; ++pos){
+			std::string subK = seq.seq_.substr(pos, pars.klen);
+			if(compGraph.kCounts_[subK] <= pars.correctionOccurenceCutOff){
+				if(subPositions.empty() || (subPositions.back().pos_ + subPositions.back().size_ + 1 - pars.klen != pos)){
+					subPositions.emplace_back(SubSeqment(pos, pars.klen));
+				}else{
+					subPositions.back().size_ += 1;
+				}
+			}
+		}
+		if(printInfo){
+			std::cout << "subPositions.size(): " << subPositions.size() << std::endl;
+		}
+		if(!subPositions.empty()){
+			if(printInfo){
+				std::cout << seq.name_ << std::endl;
+			}
+			njh::sort(subPositions,[](const SubSeqment & s1, const SubSeqment & s2){
+				return s1.pos_ > s2.pos_;
+			});
+			for(const auto & subPosition : subPositions){
+				std::string subSegment = seq.seq_.substr(subPosition.pos_, subPosition.size_);
+				if(printInfo){
+					std::cout << "\t" <<"subsegment: " << subSegment << std::endl;
+					std::cout << "\t" << "pos : " << subPosition.pos_ << std::endl;
+					std::cout << "\t" << "size: " << subPosition.size_ << std::endl;
+
+				}
+				std::string head = "";
+				std::string tail = "";
+				if(subPosition.pos_ != 0){
+					head = seq.seq_.substr(subPosition.pos_ - 1, pars.klen);
+					if(printInfo){
+						std::cout << "\t\t" << "head: " << std::endl;
+						std::cout << "\t\t" << head << std::endl;
+						std::cout << "\t\t" << compGraph.kCounts_[head] << std::endl;
+					}
+				}
+				if(subPosition.pos_ + subPosition.size_ != len(seq)){
+					tail = seq.seq_.substr(subPosition.pos_ + subPosition.size_ + 1 - pars.klen, pars.klen);
+					if(printInfo){
+						std::cout << "\t\t" << "tail: " << std::endl;
+						std::cout << "\t\t" << tail << std::endl;
+						std::cout << "\t\t" << compGraph.kCounts_[tail] << std::endl;
+					}
+				}
+				std::unordered_map<std::string, uint32_t> headPositions;
+				std::unordered_map<std::string, uint32_t> tailPositions;
+				uint32_t replaceStart = subPosition.pos_;
+				uint32_t replaceLen = subPosition.size_;
+				if("" != head){
+					--replaceStart;
+					++replaceLen;
+					for(const auto & tailEdge : compGraph.nodes_[compGraph.nodePositions_[head]]->tailEdges_){
+						for(const auto & con : tailEdge->connectorInfos_){
+							headPositions[con.readName_] = con.headPos_;
+						}
+					}
+				}
+				if("" != tail){
+					++replaceLen;
+					for(const auto & headEdge :compGraph.nodes_[compGraph.nodePositions_[tail]]->headEdges_){
+						for(const auto & con : headEdge->connectorInfos_){
+							tailPositions[con.readName_] = con.tailPos_;
+						}
+					}
+				}
+				if("" == head){
+					for(const auto & tailPosition : tailPositions){
+						headPositions[tailPosition.first] = 0;
+					}
+				}
+				if("" == tail){
+					for(const auto & headPosition : headPositions){
+						tailPositions[headPosition.first] = len(seqs[seqnameToPosition[headPosition.first]]);
+					}
+				}
+				std::unordered_map<std::string, uint32_t> subSeqCounts;
+				for(const auto & headPosition : headPositions){
+					if(headPosition.first == seq.name_){
+						continue;
+					}
+					if(njh::in(headPosition.first, tailPositions) && tailPositions[headPosition.first] > headPosition.second){
+						++subSeqCounts[seqs[seqnameToPosition[headPosition.first]].seq_.substr(headPosition.second, tailPositions[headPosition.first] - headPosition.second + pars.klen)];
+					}
+				}
+				std::vector<std::string> subSeqsAbove;
+				if(printInfo){
+					std::cout << "\t" << "subSeqsCounts" << std::endl;
+				}
+				for(const auto & subSeq : subSeqCounts){
+					if(printInfo){
+						std::cout << "\t" << subSeq.first << ": " << subSeq.second << std::endl;
+					}
+					if(subSeq.second > std::max(pars.correctionOccurenceCutOff, pars.lowFreqCutOff)){
+						subSeqsAbove.emplace_back(subSeq.first);
+					}
+				}
+				if(1 == subSeqsAbove.size()){
+					if(printInfo){
+						std::cout << "replacing: " << replaceStart << "," << replaceLen << std::endl;
+						std::cout << "old        : " << correctedSeqs[seqnameToPosition[seq.name_]].seq_.substr(replaceStart, replaceLen) << std::endl;
+						std::cout << "replacement: " << subSeqsAbove.front() << std::endl;
+					}
+
+					correctedSeqs[seqnameToPosition[seq.name_]].seq_.replace(replaceStart, replaceLen, subSeqsAbove.front());
+					correctedSeqs[seqnameToPosition[seq.name_]].qual_.erase(
+							correctedSeqs[seqnameToPosition[seq.name_]].qual_.begin() + replaceStart,
+							correctedSeqs[seqnameToPosition[seq.name_]].qual_.begin() + replaceStart + replaceLen);
+					std::vector<uint32_t> insertQual(subSeqsAbove.front().size(), 40);
+					correctedSeqs[seqnameToPosition[seq.name_]].qual_.insert(correctedSeqs[seqnameToPosition[seq.name_]].qual_.begin() + replaceStart,
+							insertQual.begin(), insertQual.end());
+				}
+			}
+		}
+	}
+	if(pars.debug){
+		watch.logLapTimes(std::cout, true, 6, true);
+	}
+	return correctedSeqs;
 }
+
+
+
+uint32_t ContigsCompareGraphDev::findMinNonredundantKmer(
+		uint32_t minimumKmerLen, const std::vector<seqInfo> &seqs,
+		const std::string &funcName) {
+	bool foundLength = false;
+	uint32_t ret = minimumKmerLen;
+	uint64_t maxLen = readVec::getMaxLength(seqs);
+
+	while (ret < maxLen && !foundLength) {
+		bool allPass = true;
+		for (const auto &seq : seqs) {
+			kmerInfo kinfo(seq.seq_, ret, false);
+			for (const auto &k : kinfo.kmers_) {
+				if (k.second.count_ > 1) {
+					allPass = false;
+					break;
+				}
+			}
+		}
+		if (allPass) {
+			foundLength = true;
+		} else {
+			++ret;
+		}
+	}
+	if (!foundLength) {
+		std::stringstream ss;
+		ss << funcName << ", error "
+				<< " couldn't determine a minimum non-redundant kmer size" << "\n";
+		throw std::runtime_error { ss.str() };
+	}
+	return ret;
+}
+
+std::vector<seqInfo> ContigsCompareGraphDev::filterSeqsOnLen(
+		const std::vector<seqInfo> &seqs,
+		const correctSeqsByGraphPars &graphCorrectingPars, const double lenFiltMultiplier,
+		const SeqIOOptions &filteredSeqOpts) {
+	auto seqLens = readVec::getLengths(seqs);
+	uint32_t medianLen = std::round(vectorMedianRef(seqLens));
+	uint32_t lenDiff = medianLen - std::round(medianLen * lenFiltMultiplier);
+	std::vector<seqInfo> filterSeqs;
+	std::vector<seqInfo> filteredOffSeqs;
+	for (const auto &seq : seqs) {
+		if (uAbsdiff(medianLen, len(seq)) > lenDiff) {
+			filteredOffSeqs.emplace_back(seq);
+		} else {
+			filterSeqs.emplace_back(seq);
+		}
+	}
+	if (!filteredOffSeqs.empty()
+			&& filteredOffSeqs.size()
+					<= graphCorrectingPars.correctionOccurenceCutOff) {
+		SeqOutput::write(filteredOffSeqs, filteredSeqOpts);
+	}
+	return filterSeqs;
+}
+
+std::vector<seqInfo> ContigsCompareGraphDev::filterSeqsOnKmerSim(const std::vector<seqInfo> &seqs,
+		const correctSeqsByGraphPars &graphCorrectingPars,
+		const kmerInfo & refSeqKInfo,
+		const double kSimCutOff,
+		const SeqIOOptions & filteredSeqOpts){
+	std::vector<seqInfo> filterSeqs;
+	std::vector<seqInfo> filteredOffSeqs;
+	for(const auto & seq : seqs){
+		kmerInfo seqKInfo(seq.seq_, refSeqKInfo.kLen_, false);
+
+		if(refSeqKInfo.compareKmers(seqKInfo).second < kSimCutOff){
+			filteredOffSeqs.emplace_back(seq);
+		}else{
+			filterSeqs.emplace_back(seq);
+		}
+	}
+	if(!filteredOffSeqs.empty() && filteredOffSeqs.size() <= graphCorrectingPars.correctionOccurenceCutOff){
+		SeqOutput::write(filteredOffSeqs, filteredSeqOpts);
+	}
+	return filterSeqs;
+}
+
+
+std::vector<seqInfo> ContigsCompareGraphDev::readInSeqs(const SeqIOOptions & inOpts, seqInfo & refSeq, const std::string & refSeqName){
+	std::vector<seqInfo> seqs;
+
+	SeqInput reader(inOpts);
+	reader.openIn();
+	std::unordered_set<std::string> readNames;
+	if("" != refSeq.name_){
+		//supplying refname
+		seqs.emplace_back(refSeq);
+		readNames.emplace(refSeq.name_);
+	}else if("" == refSeqName){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << "if not supplying ref seq, nave to give a ref seq name to find within the input file: " << inOpts.firstName_ << "\n";
+		throw std::runtime_error{ss.str()};
+	}
+	seqInfo seq;
+	while(reader.readNextRead(seq)){
+		bool matchingRefSeqName = false;
+		if(seq.name_ == refSeqName){
+			matchingRefSeqName = true;
+		}else{
+			if (MetaDataInName::nameHasMetaData(seq.name_)) {
+				MetaDataInName meta(seq.name_);
+				if (meta.containsMeta("sample")) {
+					if(meta.getMeta("sample") == refSeqName){
+						matchingRefSeqName = true;
+					}
+				}
+			}
+		}
+		if(matchingRefSeqName){
+			if("" != refSeq.name_){
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "already found a seq maching reference name: " << refSeqName << "\n";
+				ss << "previous: " << refSeq.name_ << "\n";
+				ss << "current: " << seq.name_ << "\n";
+				throw std::runtime_error{ss.str()};
+			}else{
+				refSeq = seq;
+			}
+		}
+		if(njh::in(seq.name_, readNames)){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "already have seq name: " << seq.name_ << ", can't have repeat names"<< "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		seqs.emplace_back(seq);
+		readNames.emplace(seq.name_);
+	}
+	if("" == refSeq.name_){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << "didn't find a matching seq for reference: " << refSeqName<< "\n";
+		throw std::runtime_error{ss.str()};
+	}
+	return seqs;
+}
+
+
+} //namespace njhseq
 

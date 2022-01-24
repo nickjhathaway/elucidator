@@ -10,6 +10,7 @@
 #include "elucidator/common.h"
 #include <njhseq/alignment/alignerUtils/comparison.hpp>
 #include <njhseq/objects/seqObjects/BaseObjects/seqInfo.hpp>
+#include <njhseq/objects/kmer/kmerInfo.hpp>
 
 
 namespace njhseq {
@@ -140,6 +141,70 @@ public:
 
 
 	void resetGroups() const ;
+
+
+	struct SubSeqment {
+		SubSeqment(uint32_t pos, uint32_t size) :
+				pos_(pos), size_(size) {
+
+		}
+		std::string head_;
+		std::string tail_;
+
+		uint32_t pos_;
+		uint32_t size_;
+
+	};
+
+	struct SubSeqPos {
+		SubSeqPos(const std::string &subSeq, const uint32_t pos) :
+				subSeq_(subSeq), pos_(pos) {
+
+		}
+		std::string subSeq_;
+		uint32_t pos_;
+
+		Bed6RecordCore genBedRegion(const std::string &chrom) const {
+			return Bed6RecordCore(chrom, pos_, pos_ + subSeq_.size(), subSeq_,
+					subSeq_.size(), '+');
+		}
+	};
+
+
+	struct correctSeqsByGraphPars {
+		correctSeqsByGraphPars(){
+			allowableError.hqMismatches_ = 1;
+			allowableError.oneBaseIndel_ = 1;
+		}
+		uint32_t klen = std::numeric_limits<uint32_t>::max();
+		uint32_t kmerOccurenceCutOff = 0;
+		uint32_t correctionOccurenceCutOff = 2; //inclusive
+		uint32_t lowFreqCutOff = 3;
+		bool doNotCollapseLowFreqNodes = false;
+		bool debug = false;
+		comparison allowableError;
+
+	};
+
+	static std::vector<seqInfo> correctSeqsByGraph(
+			const std::vector<seqInfo> &seqs, const correctSeqsByGraphPars &pars);
+
+	static uint32_t findMinNonredundantKmer(uint32_t minimumKmerLen,
+			const std::vector<seqInfo> &seqs, const std::string &funcName);
+
+	static std::vector<seqInfo> filterSeqsOnLen(const std::vector<seqInfo> &seqs,
+			const correctSeqsByGraphPars &graphCorrectingPars,
+			const double lenFiltMultiplier, const SeqIOOptions &filteredSeqOpts);
+
+	static std::vector<seqInfo> filterSeqsOnKmerSim(
+			const std::vector<seqInfo> &seqs,
+			const correctSeqsByGraphPars &graphCorrectingPars,
+			const kmerInfo &refSeqKInfo, const double kSimCutOff,
+			const SeqIOOptions &filteredSeqOpts);
+
+	static std::vector<seqInfo> readInSeqs(const SeqIOOptions &inOpts,
+			seqInfo &refSeq, const std::string &refSeqName);
+
 
 
 private:
