@@ -12,6 +12,10 @@
 #include <njhseq/objects/seqObjects/BaseObjects/seqInfo.hpp>
 #include <njhseq/objects/kmer/kmerInfo.hpp>
 
+#include <njhseq/objects/BioDataObject/BedRecordCore.hpp>
+#include <njhseq/objects/BioDataObject/GenomicRegion.hpp>
+
+
 
 namespace njhseq {
 class ContigsCompareGraphDev {
@@ -164,9 +168,12 @@ public:
 		std::string subSeq_;
 		uint32_t pos_;
 
-		Bed6RecordCore genBedRegion(const std::string &chrom) const {
+		Bed6RecordCore genBed6Region(const std::string &chrom) const {
 			return Bed6RecordCore(chrom, pos_, pos_ + subSeq_.size(), subSeq_,
 					subSeq_.size(), '+');
+		}
+		Bed3RecordCore genBed3Region(const std::string &chrom) const {
+			return Bed3RecordCore(chrom, pos_, pos_ + subSeq_.size());
 		}
 	};
 
@@ -204,6 +211,21 @@ public:
 
 	static std::vector<seqInfo> readInSeqs(const SeqIOOptions &inOpts,
 			seqInfo &refSeq, const std::string &refSeqName);
+
+	struct processConservedNodesVecRes{
+		std::unordered_map<std::string, std::vector<SubSeqPos>> nameToSubSegments;
+		std::unordered_map<std::string, std::unordered_map<std::string, Bed6RecordCore>> subSeqToNameToPos;
+		std::unordered_map<std::string, std::vector<Bed6RecordCore>> nameToSubSegPositions;
+
+		std::unordered_map<std::string, std::string> subseqToIDKey;
+		std::unordered_map<std::string, std::string> IDtoSubseqKey;
+	};
+
+
+
+	static processConservedNodesVecRes processConservedNodesVec(const std::vector<std::shared_ptr<node>> & nodes);
+
+
 
 
 

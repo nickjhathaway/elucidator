@@ -11,6 +11,7 @@
 
 #include <njhseq/readVectorManipulation/readVectorOperations/massGetters.hpp>
 #include <njhseq/IO/SeqIO.h>
+#include <njhseq/objects/BioDataObject/BioRecordsUtils/BedUtility.hpp>
 
 namespace njhseq {
 
@@ -1692,6 +1693,101 @@ std::vector<seqInfo> ContigsCompareGraphDev::readInSeqs(const SeqIOOptions & inO
 	}
 	return seqs;
 }
+
+
+ContigsCompareGraphDev::processConservedNodesVecRes ContigsCompareGraphDev::processConservedNodesVec(const std::vector<std::shared_ptr<node>> & nodes){
+	processConservedNodesVecRes ret;
+	if(1 == nodes.size()){
+		for(const auto & name : nodes.front()->inReadNamesIdx_){
+			ret.nameToSubSegments[name].emplace_back(nodes.front()->k_, 0);
+		}
+	}else if(nodes.size() > 1){
+		for(const auto & n : nodes){
+			std::unordered_map<std::string, uint32_t> nodePositionPerSeq;
+			for(const auto & h : n->headEdges_){
+				for(const auto & con : h->connectorInfos_){
+					nodePositionPerSeq[con.readName_] = con.tailPos_;
+				}
+			}
+			for(const auto & t : n->tailEdges_){
+				for(const auto & con : t->connectorInfos_){
+					nodePositionPerSeq[con.readName_] = con.headPos_ - (n->k_.size() - n->kLen_);
+				}
+			}
+			for(const auto & seq : nodePositionPerSeq){
+				ret.nameToSubSegments[seq.first].emplace_back(n->k_, seq.second);
+			}
+		}
+	}else{
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << "nodes vector is empty, size:" << nodes.size()<< "\n";
+		throw std::runtime_error{ss.str()};
+	}
+
+	std::unordered_set<std::string> paths;
+	for(auto & subSeqs : ret.nameToSubSegments){
+		njh::sort(subSeqs.second, [](const ContigsCompareGraphDev::SubSeqPos & p1, const ContigsCompareGraphDev::SubSeqPos & p2 ){
+			return p1.pos_ < p2.pos_;
+		});
+		std::string path = "";
+		for(const auto & sub : subSeqs.second){
+			if("" != path){
+				path += "-";
+			}
+			path += sub.subSeq_;
+		}
+		paths.emplace(path);
+	}
+	if(paths.size() > 1){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << " error more than one path , " << njh::conToStr(paths, ",") << "\n";
+		throw std::runtime_error{ss.str()};
+	}
+
+	std::unordered_map<std::string, std::vector<uint32_t>> startingPositions;
+	for(auto & subSeqs : ret.nameToSubSegments){
+		for(const auto & sub : subSeqs.second){
+			startingPositions[sub.subSeq_].emplace_back(sub.pos_);
+		}
+	}
+	std::unordered_map<std::string, std::vector<uint32_t>> startingPositionsAvg;
+	for(const auto & positions : startingPositions){
+		startingPositionsAvg[positions.first].emplace_back(vectorMean(positions.second));
+	}
+	VecStr conservedSeqs;
+	for(const auto & subNode : nodes){
+		conservedSeqs.emplace_back(subNode->k_);
+	}
+	njh::sort(conservedSeqs, [&startingPositionsAvg](const std::string & seq1, const std::string & seq2){
+		return startingPositionsAvg[seq1] < startingPositionsAvg[seq2];
+	});
+	for(auto & subSeqs : ret.nameToSubSegments){
+		for(const auto & sub : subSeqs.second){
+			auto outRegion = sub.genBed6Region(subSeqs.first);
+			ret.nameToSubSegPositions[subSeqs.first].emplace_back(outRegion);
+			ret.subSeqToNameToPos[sub.subSeq_].emplace(subSeqs.first, outRegion);
+			//std::cout << "\t" << sub.pos_ << ": " << sub.subSeq_ << std::endl;
+			//sharedLocsOut << outRegion.toDelimStr()<< std::endl;
+		}
+	}
+
+	for(auto & subPositions : ret.nameToSubSegPositions){
+		BedUtility::coordSort(subPositions.second, false);
+	}
+
+
+	uint32_t subseqCount = 0;
+
+	for(const auto & subSeq : conservedSeqs){
+		std::string ID = njh::pasteAsStr("subseq.", njh::leftPadNumStr<uint32_t>(subseqCount, nodes.size()));
+		ret.subseqToIDKey[subSeq] = ID;
+		ret.IDtoSubseqKey[ID] = subSeq;
+		++subseqCount;
+	}
+
+	return ret;
+}
+
 
 
 } //namespace njhseq
