@@ -1370,7 +1370,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					subRegionsSeqs[varName] = subSeqs;
 				}
 				//middle
-				if(processedNodes.nameToSubSegPositions.at(refSeq.name_).size() > 2){
+				if(processedNodes.nameToSubSegPositions.at(refSeq.name_).size() > 1){
 					for(auto pos : iter::range(processedNodes.nameToSubSegPositions.at(refSeq.name_).size() - 1)){
 						auto varName = njh::pasteAsStr("var.", njh::leftPadNumStr<uint32_t>(varCount, totalVar));;
 						uint32_t start = processedNodes.nameToSubSegPositions.at(refSeq.name_)[pos].chromEnd_;
