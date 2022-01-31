@@ -182,6 +182,8 @@ public:
 		correctSeqsByGraphPars(){
 			allowableError.hqMismatches_ = 1;
 			allowableError.oneBaseIndel_ = 1;
+			allowableError.twoBaseIndel_ = .99;
+			allowableError.largeBaseIndel_ = .99;
 		}
 		uint32_t klen = std::numeric_limits<uint32_t>::max();
 		uint32_t kmerOccurenceCutOff = 0;

@@ -1375,6 +1375,17 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 						auto varName = njh::pasteAsStr("var.", njh::leftPadNumStr<uint32_t>(varCount, totalVar));;
 						uint32_t start = processedNodes.nameToSubSegPositions.at(refSeq.name_)[pos].chromEnd_;
 						uint32_t end = processedNodes.nameToSubSegPositions.at(refSeq.name_)[pos + 1].chromStart_;
+//						bool indelRegion = false;
+//						uint32_t refDiff = 0;
+//						if(end <= start && ((start - end) < graphCorrectingPars.klen)){
+////							uint32_t newEnd = start;
+////							start = end;
+////							end =  newEnd;
+//							refDiff = start - end;
+//							end = start + 1;
+//							indelRegion = true;
+//						}
+
 						Bed3RecordCore varSubRegion(refSeq.name_, start, end);
 						variableRegionsRelative.emplace_back(GenomicRegion(varSubRegion).genBedRecordCore());
 						variableRegionsRelative.back().name_ = varName;
@@ -1389,16 +1400,76 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 						for(const auto & frontRegion : processedNodes.subSeqToNameToPos[processedNodes.nameToSubSegPositions.at(refSeq.name_)[pos].name_]){
 
 							auto endRegion = processedNodes.subSeqToNameToPos[processedNodes.nameToSubSegPositions.at(refSeq.name_)[pos + 1].name_][frontRegion.first];
+							uint32_t start = frontRegion.second.chromEnd_;
+							uint32_t end = endRegion.chromStart_;
 
-							auto subSeq = seqs[seqKey[frontRegion.first]].getSubRead(frontRegion.second.chromEnd_, endRegion.chromStart_ - frontRegion.second.chromEnd_);
+//							bool hasIndel = false;
+//							if(end < start && ((start - end) < graphCorrectingPars.klen) && indelRegion){
+//								uint32_t diff = start - end;
+//
+//
+//								if("var.07" == varName){
+//									if(refDiff != diff){
+//										std::cout << njh::bashCT::red;
+//									}else{
+//										std::cout << njh::bashCT::blue;
+//									}
+//									uint32_t newEnd = end + refDiff;
+//									uint32_t newStart = start - refDiff;
+//									std::cout << "refDiff: " << refDiff << std::endl;
+//									std::cout << "diff: " << diff << std::endl;
+//									std::cout << "newStart: " << newStart << std::endl;
+//									std::cout << "newEnd: " << newEnd << std::endl;
+//									std::cout << njh::bashCT::reset;
+//								}
+//								if(diff >= refDiff){
+//									uint32_t newEnd = start;
+//									start = end;
+//									end =  newEnd;
+//								}else{
+//									uint32_t newEnd = end + refDiff;
+//									uint32_t newStart = start - refDiff;
+//									start = newStart;
+//									end = newEnd;
+//								}
+//								if(diff != refDiff){
+//									hasIndel = true;
+//								}
+//								if("var.07" == varName){
+//									if(refDiff != diff){
+//										std::cout << njh::bashCT::red;
+//									}else{
+//										std::cout << njh::bashCT::blue;
+//									}
+//									std::cout << "start: " << start << std::endl;
+//									std::cout << "end: " << end << std::endl;
+//									std::cout << "diff: " << end - start << std::endl;
+//									std::cout << njh::bashCT::reset;
+//								}
+//							}else if(end < start){
+//								std::stringstream ss;
+//								ss << __PRETTY_FUNCTION__ << ", error " << "for " << frontRegion.first << " end: " << end << " is before start: " << start << "\n";
+//								throw std::runtime_error{ss.str()};
+//							}
+							auto subSeq = seqs[seqKey[frontRegion.first]].getSubRead(start, end - start);
 							MetaDataInName seqMeta;
 							if(MetaDataInName::nameHasMetaData(subSeq.name_)){
 								seqMeta = MetaDataInName(subSeq.name_);
 							}
 							seqMeta.addMeta("SubRegUID", varName, true);
-							seqMeta.addMeta("SeqStart", frontRegion.second.chromEnd_, true);
-							seqMeta.addMeta("SeqStop", endRegion.chromStart_, true);
+							seqMeta.addMeta("SeqStart", start, true);
+							seqMeta.addMeta("SeqStop", end, true);
+//							if(noInsert){
+//								subSeq.seq_ = std::string("X");
+//								seqMeta.addMeta("SeqStart", end, true);
+//								seqMeta.removeMeta("SeqStop");
+//							}
+//
+//							if(indelRegion){
+//								seqMeta.addMeta("hasIndel", hasIndel, true);
+//							}
 							seqMeta.resetMetaInName(subSeq.name_);
+
 							subSeqs.emplace_back(subSeq);
 						}
 						subRegionsSeqs[varName] = subSeqs;
