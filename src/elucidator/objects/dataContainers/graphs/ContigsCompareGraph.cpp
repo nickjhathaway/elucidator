@@ -1764,16 +1764,30 @@ ContigsCompareGraphDev::processConservedNodesVecRes ContigsCompareGraphDev::proc
 	for(auto & subSeqs : ret.nameToSubSegments){
 		for(const auto & sub : subSeqs.second){
 			auto outRegion = sub.genBed6Region(subSeqs.first);
-			ret.nameToSubSegPositions[subSeqs.first].emplace_back(outRegion);
+			ret.nameToSubSegPositions_raw[subSeqs.first].emplace_back(outRegion);
 			ret.subSeqToNameToPos[sub.subSeq_].emplace(subSeqs.first, outRegion);
 			//std::cout << "\t" << sub.pos_ << ": " << sub.subSeq_ << std::endl;
 			//sharedLocsOut << outRegion.toDelimStr()<< std::endl;
 		}
 	}
 
-	for(auto & subPositions : ret.nameToSubSegPositions){
+	for (auto &subPositions : ret.nameToSubSegPositions_raw) {
 		BedUtility::coordSort(subPositions.second, false);
 	}
+
+	//filt to non-overlapping
+	for (auto &subPositions : ret.nameToSubSegPositions_raw) {
+		ret.nameToSubSegPositions_filt[subPositions.first].emplace_back(subPositions.second.front());
+		if(subPositions.second.size() > 1){
+			for(const auto pos : iter::range(1UL, subPositions.second.size())){
+				if(!ret.nameToSubSegPositions_filt[subPositions.first].back().overlaps(subPositions.second[pos], 1)){
+					ret.nameToSubSegPositions_filt[subPositions.first].emplace_back(subPositions.second[pos]);
+				}
+			}
+		}
+	}
+
+
 
 
 	uint32_t subseqCount = 0;

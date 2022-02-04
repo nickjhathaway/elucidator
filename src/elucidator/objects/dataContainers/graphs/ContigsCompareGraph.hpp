@@ -217,7 +217,8 @@ public:
 	struct processConservedNodesVecRes{
 		std::unordered_map<std::string, std::vector<SubSeqPos>> nameToSubSegments;
 		std::unordered_map<std::string, std::unordered_map<std::string, Bed6RecordCore>> subSeqToNameToPos;
-		std::unordered_map<std::string, std::vector<Bed6RecordCore>> nameToSubSegPositions;
+		std::unordered_map<std::string, std::vector<Bed6RecordCore>> nameToSubSegPositions_raw;
+		std::unordered_map<std::string, std::vector<Bed6RecordCore>> nameToSubSegPositions_filt;
 
 		std::unordered_map<std::string, std::string> subseqToIDKey;
 		std::unordered_map<std::string, std::string> IDtoSubseqKey;
