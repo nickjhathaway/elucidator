@@ -1088,7 +1088,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 
 	//diversity
 	{
-		OutputStream outDivMeasures(njh::files::make_path(subsegmentInfoDir, "divMeasuresFullRegion.tab.txt"));
+		OutputStream outDivMeasures(njh::files::make_path(setUp.pars_.directoryName_, "divMeasuresFullRegion.tab.txt"));
 		outDivMeasures << "target\tlength\ttotalHaps\tuniqueHaps\the\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE" << std::endl;
 
 		//first full div
