@@ -687,11 +687,9 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
 
 
   setUp.processDirectoryOutputName(true);
-  if(supplement){
-    //supplemental options
-    pars.verbose = setUp.pars_.verbose_;
-  	pars.setDefaultOpts(setUp);
-  }
+  //supplemental options
+  pars.verbose = setUp.pars_.verbose_;
+	pars.setDefaultOpts(setUp);
   setUp.finishSetUp();
 
   setUp.startARunLog(setUp.pars_.directoryName_);
@@ -778,6 +776,10 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
 				continue;
 			}
 			std::shared_ptr<TandemRepeatFinderRecord> record = std::make_shared<TandemRepeatFinderRecord>(line);
+			if(record->numberOfAlignedRepeats_ < pars.minNumRepeats ||
+					record->fullSeq_.size() < pars.lengthCutOff){
+				continue;
+			}
 			record->setSeqName(currentSeqName);
 			outFile << GenomicRegion(*record).genBedRecordCore().toDelimStr() << std::endl;
 			if(outGenomicLocationOut){
@@ -826,7 +828,7 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
 						break;
 					}
 				}
-				if(!found){
+				if(!found && rec.score_ * match >= Minscore){
 					combinedRepeats.emplace_back(rec);
 				}
 			}

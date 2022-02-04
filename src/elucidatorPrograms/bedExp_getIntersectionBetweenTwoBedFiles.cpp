@@ -181,8 +181,8 @@ int bedExpRunner::removeSubRegionsFromBedFile(const njh::progutils::CmdArgs & in
 				bool scoreIsLength = inputRegion->score_ == inputRegion->length();
 				Bed6RecordCore outRegion = *inputRegion;
 				outRegion.chromStart_ = regionNotCovered.start_;
-				outRegion.chromEnd_ =regionNotCovered.end_;
-				outRegion.name_ = outRegion.genUIDFromCoordsWithStrand();
+				outRegion.chromEnd_ = regionNotCovered.end_;
+				outRegion.name_ = njh::pasteAsStr(inputRegion->name_, "__", outRegion.genUIDFromCoordsWithStrand());
 				if(scoreIsLength){
 					outRegion.score_ = outRegion.length();
 				}
