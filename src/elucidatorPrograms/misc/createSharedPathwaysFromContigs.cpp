@@ -17,6 +17,7 @@
 
 
 #include <njhseq/PopulationGenetics.h>
+#include <njhseq/objects/seqContainers/CollapsedHaps.hpp>
 
 #include <boost/filesystem.hpp>
 
@@ -1089,7 +1090,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	//diversity
 	{
 		OutputStream outDivMeasures(njh::files::make_path(setUp.pars_.directoryName_, "divMeasuresFullRegion.tab.txt"));
-		outDivMeasures << "target\tlength\ttotalHaps\tuniqueHaps\the\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE" << std::endl;
+		outDivMeasures << "target\tlength\ttotalHaps\tuniqueHaps\the\texp3\texp4\texp5\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE" << std::endl;
 
 		//first full div
 		{
@@ -1100,6 +1101,9 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 													<< "\t" << seqs.size()
 													<< "\t" << divMeasures.alleleNumber_
 													<< "\t" << divMeasures.heterozygostiy_
+													<< "\t" << divMeasures.ploidy3_.expectedPolyClonal_
+													<< "\t" << divMeasures.ploidy4_.expectedPolyClonal_
+													<< "\t" << divMeasures.ploidy5_.expectedPolyClonal_
 													<< "\t" << divMeasures.singlets_
 													<< "\t" << divMeasures.doublets_
 													<< "\t" << divMeasures.effectiveNumOfAlleles_
@@ -1247,23 +1251,9 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 
 		auto seqsDir = njh::files::makeDir(subsegmentInfoDir, njh::files::MkdirPar{"subSeqs"});
 		OutputStream outDivMeasures(njh::files::make_path(subsegmentInfoDir, "divMeasuresPerSubRegion.tab.txt"));
-		outDivMeasures << "target\tlength\ttotalHaps\tuniqueHaps\the\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE" << std::endl;
+		outDivMeasures << "target\tlength\ttotalHaps\tuniqueHaps\the\texp3\texp4\texp5\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE" << std::endl;
 
 		//first full div
-//		{
-//			std::unordered_map<std::string, uint32_t> popCounts;
-//			auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversityRawInput(seqs);
-//			outDivMeasures << refSeqLoc.createUidFromCoordsStrand()
-//													<< "\t" << refSeqLoc.getLen()
-//													<< "\t" << seqs.size()
-//													<< "\t" << divMeasures.alleleNumber_
-//													<< "\t" << divMeasures.heterozygostiy_
-//													<< "\t" << divMeasures.singlets_
-//													<< "\t" << divMeasures.doublets_
-//													<< "\t" << divMeasures.effectiveNumOfAlleles_
-//													<< "\t" << divMeasures.ShannonEntropyE_
-//													<< std::endl;
-//		}
 		OutputStream sharedLocsOutRefSeq(njh::files::make_path(subsegmentInfoDir, njh::pasteAsStr("refSeqGenomicLocs.bed")));
 		table outSubSeqs(VecStr{"target", "frontSeq", "endSeq"});
 
@@ -1344,14 +1334,22 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 
 			//output variable region info
 			{
+				//key1 = input name; key2 = variable region name; val = sequence;
+
+				std::unordered_map<std::string, std::unordered_map<std::string, std::string>> variableRegions;
+
 				auto seqsDir = njh::files::makeDir(conservedRegionInfoDir, njh::files::MkdirPar{"subSeqsVariableRegions"});
 				OutputStream outDivMeasures(njh::files::make_path(conservedRegionInfoDir, "divMeasuresPerVarRegion.tab.txt"));
-				outDivMeasures << "target\tlength\ttotalHaps\tuniqueHaps\the\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE" << std::endl;
+				outDivMeasures << "target\tlength\ttotalHaps\tuniqueHaps\the\texp3\texp4\texp5\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE" << std::endl;
 				OutputStream variableRegionsRelOut(njh::files::make_path(conservedRegionInfoDir, njh::pasteAsStr(nodes.first, "_ref_variable.bed")));
 				OutputStream variableRegionsGenomicOut(njh::files::make_path(conservedRegionInfoDir, njh::pasteAsStr(nodes.first, "_ref_variable_genomic.bed")));
 				std::vector<Bed6RecordCore> variableRegionsRelative;
 				std::vector<Bed6RecordCore> variableRegionsGenomic;
 				std::map<std::string, std::vector<seqInfo>> subRegionsSeqs;
+				std::map<std::string, CollapsedHaps> subRegionsSeqsUniq;
+				//key1 = var region name; key2 = sequence; val = unique seq key;
+				std::unordered_map<std::string, std::unordered_map<std::string, uint32_t>> varRegionSeqKey;
+
 				uint32_t varCount = 0;
 				uint32_t totalVar = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() - 1;
 				if(0 != processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).front().chromStart_){
@@ -1378,6 +1376,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					std::vector<seqInfo> subSeqs;
 					for(const auto & endRegion : processedNodes.subSeqToNameToPos[processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).front().name_]){
 						auto subSeq = seqs[seqKey[endRegion.first]].getSubRead(0, endRegion.second.chromStart_);
+						variableRegions[subSeq.name_][varName] = subSeq.seq_;
 						MetaDataInName seqMeta;
 						if(MetaDataInName::nameHasMetaData(subSeq.name_)){
 							seqMeta = MetaDataInName(subSeq.name_);
@@ -1393,7 +1392,8 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 				//middle
 				if(processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() > 1){
 					for(auto pos : iter::range(processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() - 1)){
-						auto varName = njh::pasteAsStr("var.", njh::leftPadNumStr<uint32_t>(varCount, totalVar));;
+						auto varName = njh::pasteAsStr("var.", njh::leftPadNumStr<uint32_t>(varCount, totalVar));
+
 						uint32_t start = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_)[pos].chromEnd_;
 						uint32_t end = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_)[pos + 1].chromStart_;
 
@@ -1415,6 +1415,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 							uint32_t end = endRegion.chromStart_;
 
 							auto subSeq = seqs[seqKey[frontRegion.first]].getSubRead(start, end - start);
+							variableRegions[subSeq.name_][varName] = subSeq.seq_;
 							MetaDataInName seqMeta;
 							if(MetaDataInName::nameHasMetaData(subSeq.name_)){
 								seqMeta = MetaDataInName(subSeq.name_);
@@ -1447,6 +1448,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					std::vector<seqInfo> subSeqs;
 					for(const auto & frontRegion : processedNodes.subSeqToNameToPos[processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).back().name_]){
 						auto subSeq = seqs[seqKey[frontRegion.first]].getSubRead(frontRegion.second.chromEnd_);
+						variableRegions[subSeq.name_][varName] = subSeq.seq_;
 						MetaDataInName seqMeta;
 						if(MetaDataInName::nameHasMetaData(subSeq.name_)){
 							seqMeta = MetaDataInName(subSeq.name_);
@@ -1467,23 +1469,48 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 				for(auto & varRegion : variableRegionsRelative){
 					variableRegionsRelOut << varRegion.toDelimStrWithExtra() << std::endl;
 				}
+				OutputStream outSubregionCodingKeyOut(njh::files::make_path(conservedRegionInfoDir, "subRegionCodedNameKey.tab.txt"));
+				outSubregionCodingKeyOut << "variableRegName\tname\tnameID" << std::endl;
 				//process info on variable regions
 				{
 					for(const auto & subSeqs : subRegionsSeqs){
 						auto subSeqOpts = SeqIOOptions::genFastaOutGz(njh::files::make_path(seqsDir, subSeqs.first + ".fasta.gz"));
 						SeqOutput::write(subSeqs.second, subSeqOpts);
+						auto uniqSeqs = CollapsedHaps::collapseReads(subSeqs.second);
+						uniqSeqs.renameBaseOnFreq(njh::pasteAsStr(refSeqLoc.createUidFromCoordsStrand(), "__", subSeqs.first));
+						;
+						for(const auto pos : uniqSeqs.getOrderByTopCnt()){
+							varRegionSeqKey[subSeqs.first][uniqSeqs.seqs_[pos]->seq_] = pos;
+							outSubregionCodingKeyOut << subSeqs.first
+									<< "\t" << uniqSeqs.seqs_[pos]->name_
+									<< "\t" << pos << std::endl;
+						}
+						subRegionsSeqsUniq[subSeqs.first] = uniqSeqs;
+						SeqOutput::write(uniqSeqs.seqs_, SeqIOOptions::genFastaOutGz(njh::files::make_path(seqsDir, "uniq_" + subSeqs.first + ".fasta.gz")));
 						auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversityRawInput(subSeqs.second);
 						outDivMeasures << subSeqs.first
 								<< "\t" << vectorMean(readVec::getLengths(subSeqs.second))
 																<< "\t" << subSeqs.second.size()
 																<< "\t" << divMeasures.alleleNumber_
 																<< "\t" << divMeasures.heterozygostiy_
+																<< "\t" << divMeasures.ploidy3_.expectedCOIForPloidy_[3]
+																<< "\t" << divMeasures.ploidy4_.expectedCOIForPloidy_[4]
+																<< "\t" << divMeasures.ploidy5_.expectedCOIForPloidy_[5]
 																<< "\t" << divMeasures.singlets_
 																<< "\t" << divMeasures.doublets_
 																<< "\t" << divMeasures.effectiveNumOfAlleles_
 																<< "\t" << divMeasures.ShannonEntropyE_
 																<< '\n';
 					}
+				}
+				OutputStream outSubregionCoding(njh::files::make_path(conservedRegionInfoDir, "subRegionCoded.tab.txt"));
+				outSubregionCoding << "name\t" << njh::conToStr(njh::getVecOfMapKeys(subRegionsSeqs), "\t") << std::endl;
+				for(const auto & name : variableRegions){
+					outSubregionCoding << name.first;
+					for(const auto & subRegion : name.second){
+						outSubregionCoding << "\t" << varRegionSeqKey[subRegion.first][subRegion.second];
+					}
+					outSubregionCoding << std::endl;
 				}
 			}
 
@@ -1568,6 +1595,9 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 															<< "\t" << seqsFromLargestSubRegion.size()
 															<< "\t" << divMeasures.alleleNumber_
 															<< "\t" << divMeasures.heterozygostiy_
+															<< "\t" << divMeasures.ploidy3_.expectedCOIForPloidy_[3]
+															<< "\t" << divMeasures.ploidy4_.expectedCOIForPloidy_[4]
+															<< "\t" << divMeasures.ploidy5_.expectedCOIForPloidy_[5]
 															<< "\t" << divMeasures.singlets_
 															<< "\t" << divMeasures.doublets_
 															<< "\t" << divMeasures.effectiveNumOfAlleles_
@@ -1661,6 +1691,9 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 															<< "\t" << subSeqs.second.size()
 															<< "\t" << divMeasures.alleleNumber_
 															<< "\t" << divMeasures.heterozygostiy_
+															<< "\t" << divMeasures.ploidy3_.expectedCOIForPloidy_[3]
+															<< "\t" << divMeasures.ploidy4_.expectedCOIForPloidy_[4]
+															<< "\t" << divMeasures.ploidy5_.expectedCOIForPloidy_[5]
 															<< "\t" << divMeasures.singlets_
 															<< "\t" << divMeasures.doublets_
 															<< "\t" << divMeasures.effectiveNumOfAlleles_
