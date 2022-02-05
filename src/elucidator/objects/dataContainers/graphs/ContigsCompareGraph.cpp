@@ -1780,7 +1780,8 @@ ContigsCompareGraphDev::processConservedNodesVecRes ContigsCompareGraphDev::proc
 		ret.nameToSubSegPositions_filt[subPositions.first].emplace_back(subPositions.second.front());
 		if(subPositions.second.size() > 1){
 			for(const auto pos : iter::range(1UL, subPositions.second.size())){
-				if(!ret.nameToSubSegPositions_filt[subPositions.first].back().overlaps(subPositions.second[pos], 1)){
+				if(!ret.nameToSubSegPositions_filt[subPositions.first].back().overlaps(subPositions.second[pos], 1) &&
+						ret.nameToSubSegPositions_filt[subPositions.first].back().chromEnd_ != subPositions.second[pos].chromStart_){
 					ret.nameToSubSegPositions_filt[subPositions.first].emplace_back(subPositions.second[pos]);
 				}
 			}
