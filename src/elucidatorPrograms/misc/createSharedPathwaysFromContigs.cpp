@@ -1406,6 +1406,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 				//check front
 				if(0 != processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).front().chromStart_){
 					auto varName = njh::pasteAsStr("var.", njh::leftPadNumStr<uint32_t>(varCount, totalVar));;
+					varName = njh::pasteAsStr(refSeqLoc.createUidFromCoordsStrand(), "__", varName);
 					uint32_t start = 0;
 					uint32_t end = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).front().chromStart_;
 					createSubRegion(start, end, varName, variableRegionsRelative, variableRegionsGenomic);
@@ -1437,6 +1438,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					for(auto pos : iter::range(processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() - 1)){
 //						std::cout << "pos: " << pos << std::endl;
 						auto varName = njh::pasteAsStr("var.", njh::leftPadNumStr<uint32_t>(varCount, totalVar));
+						varName = njh::pasteAsStr(refSeqLoc.createUidFromCoordsStrand(), "__", varName);
 //						std::cout << varName << std::endl;
 						uint32_t start = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_)[pos].chromEnd_;
 						uint32_t end = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_)[pos + 1].chromStart_;
@@ -1502,7 +1504,8 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 //				std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				//check back
 				if(len(refCorrectedInfo) !=  processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).back().chromEnd_){
-					auto varName = njh::pasteAsStr("var.", njh::leftPadNumStr<uint32_t>(varCount, totalVar));;
+					auto varName = njh::pasteAsStr("var.", njh::leftPadNumStr<uint32_t>(varCount, totalVar));
+					varName = njh::pasteAsStr(refSeqLoc.createUidFromCoordsStrand(), "__", varName);
 					uint32_t start = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).back().chromEnd_;
 					uint32_t end = len(refCorrectedInfo);
 					createSubRegion(start, end, varName, variableRegionsRelative, variableRegionsGenomic);
@@ -1551,7 +1554,8 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 						auto subSeqOpts = SeqIOOptions::genFastaOutGz(njh::files::make_path(seqsDir, subSeqs.first + ".fasta.gz"));
 						SeqOutput::write(subSeqs.second, subSeqOpts);
 						auto uniqSeqs = CollapsedHaps::collapseReads(subSeqs.second);
-						auto identifier = njh::pasteAsStr(refSeqLoc.createUidFromCoordsStrand(), "__", subSeqs.first);
+						//auto identifier = njh::pasteAsStr(refSeqLoc.createUidFromCoordsStrand(), "__", subSeqs.first);
+						auto identifier = subSeqs.first;
 						uniqSeqs.renameBaseOnFreq(identifier);
 
 						for(const auto pos : uniqSeqs.getOrderByTopCnt()){
