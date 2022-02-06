@@ -18,7 +18,7 @@
 
 #include <njhseq/PopulationGenetics.h>
 #include <njhseq/objects/seqContainers/CollapsedHaps.hpp>
-
+#include <njhseq/objects/Gene/TranslatorByAlignment.hpp>
 #include <boost/filesystem.hpp>
 
 
@@ -963,11 +963,22 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	double kSimCutOff =  0.40;
 	double lenFiltMultiplier = 0.91;
 
+	uint32_t numThreads = 1;
+
+	TranslatorByAlignment::RunPars variantCallerRunPars;
+	CollapsedHaps::GenPopMeasuresPar calcPopMeasuresPars;
+	calcPopMeasuresPars.getPairwiseComps = true;
+
+	variantCallerRunPars.lowVariantCutOff = 0.005;
+	variantCallerRunPars.occurrenceCutOff = 1;
+	calcPopMeasuresPars.lowVarFreq = variantCallerRunPars.lowVariantCutOff;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 
 	bool refNameRequired = setUp.processSeq(refSeq, "--refSeq", "Reference seq", false);
+	setUp.setOption(numThreads, "--numThreads", "num Threads");
+
 	setUp.setOption(kSimFilter, "--kSimFilter", "filter input sequences on kSimFilter for artifacts");
 	setUp.setOption(kLenForFilter, "--kLenForFilter", "filter kLenForFilter for artifacts");
 	setUp.setOption(kSimCutOff, "--kSimCutOff", "filter kSimCutOff for artifacts");
@@ -1330,8 +1341,28 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 				}
 			}
 
+			uint32_t klen_minus1 = graphCorrectingPars.klen -1;
+			auto createSubRegion = [&refSeq,&refSeqLoc,&modSubSegmentToCorrectedRef](uint32_t start, uint32_t end, const std::string & varName,
+					std::vector<Bed6RecordCore> & relative, std::vector<Bed6RecordCore> & genomic){
+				Bed3RecordCore varSubRegion(refSeq.name_, start, end);
+				relative.emplace_back(GenomicRegion(varSubRegion).genBedRecordCore());
+				relative.back().name_ = varName;
+				modSubSegmentToCorrectedRef(varSubRegion);
+				Bed6RecordCore varRegion = refSeqLoc.genBedRecordCore().adjustSubRegionToRelativePosition(varSubRegion);
+				varRegion.name_ = varName;
+				genomic.emplace_back(varRegion);
+			};
 
-
+			auto renameSeq = [](seqInfo & subSeq, uint32_t start, uint32_t end, const std::string & varName){
+				MetaDataInName seqMeta;
+				if(MetaDataInName::nameHasMetaData(subSeq.name_)){
+					seqMeta = MetaDataInName(subSeq.name_);
+				}
+				seqMeta.addMeta("SubRegUID", varName, true);
+				seqMeta.addMeta("SeqStart", start, true);
+				seqMeta.addMeta("SeqStop", end, true);
+				seqMeta.resetMetaInName(subSeq.name_);
+			};
 			//output variable region info
 			{
 				//key1 = input name; key2 = variable region name; val = sequence;
@@ -1340,12 +1371,22 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 
 				auto seqsDir = njh::files::makeDir(conservedRegionInfoDir, njh::files::MkdirPar{"subSeqsVariableRegions"});
 				OutputStream outDivMeasures(njh::files::make_path(conservedRegionInfoDir, "divMeasuresPerVarRegion.tab.txt"));
-				outDivMeasures << "target\tlength\ttotalHaps\tuniqueHaps\the\texp3\texp4\texp5\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE" << std::endl;
+//				outDivMeasures << "target\tlength\ttotalHaps\tuniqueHaps\the\texp3\texp4\texp5\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE" << std::endl;
+				outDivMeasures << njh::conToStr(calcPopMeasuresPars.genHeader(), "\t") << std::endl;
 				OutputStream variableRegionsRelOut(njh::files::make_path(conservedRegionInfoDir, njh::pasteAsStr(nodes.first, "_ref_variable.bed")));
 				OutputStream variableRegionsGenomicOut(njh::files::make_path(conservedRegionInfoDir, njh::pasteAsStr(nodes.first, "_ref_variable_genomic.bed")));
 				std::vector<Bed6RecordCore> variableRegionsRelative;
 				std::vector<Bed6RecordCore> variableRegionsGenomic;
+
+				OutputStream variableRegionsRelExpanedOut(njh::files::make_path(conservedRegionInfoDir, njh::pasteAsStr(nodes.first, "_ref_variable_expaned.bed")));
+				OutputStream variableRegionsGenomicExpanedOut(njh::files::make_path(conservedRegionInfoDir, njh::pasteAsStr(nodes.first, "_ref_variable_expanded_genomic.bed")));
+				std::vector<Bed6RecordCore> variableRegionsRelativeExpaned;
+				std::vector<Bed6RecordCore> variableRegionsGenomicExpaned;
+
+
 				std::map<std::string, std::vector<seqInfo>> subRegionsSeqs;
+				std::map<std::string, seqInfo> subRegionsRefSeqs;
+				std::map<std::string, GenomicRegion> subRegionsRefSeqsLoc;
 				std::map<std::string, CollapsedHaps> subRegionsSeqsUniq;
 				//key1 = var region name; key2 = sequence; val = unique seq key;
 				std::unordered_map<std::string, std::unordered_map<std::string, uint32_t>> varRegionSeqKey;
@@ -1358,116 +1399,149 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 				if(len(refCorrectedInfo) !=  processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).back().chromEnd_){
 					++totalVar;
 				}
+//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+
+
+
 				//check front
 				if(0 != processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).front().chromStart_){
 					auto varName = njh::pasteAsStr("var.", njh::leftPadNumStr<uint32_t>(varCount, totalVar));;
 					uint32_t start = 0;
 					uint32_t end = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).front().chromStart_;
-					Bed3RecordCore varSubRegion(refSeq.name_, start, end);
-					variableRegionsRelative.emplace_back(GenomicRegion(varSubRegion).genBedRecordCore());
-					variableRegionsRelative.back().name_ = varName;
-					modSubSegmentToCorrectedRef(varSubRegion);
-					Bed6RecordCore varRegion = refSeqLoc.genBedRecordCore().adjustSubRegionToRelativePosition(varSubRegion);
-					varRegion.name_ = varName;
-					variableRegionsGenomic.emplace_back(varRegion);
+					createSubRegion(start, end, varName, variableRegionsRelative, variableRegionsGenomic);
+					//adjust to expanded
+					//start -= klen_minus1;
+					end += klen_minus1;
+					createSubRegion(start, end, varName, variableRegionsRelativeExpaned, variableRegionsGenomicExpaned);
+					subRegionsRefSeqsLoc[varName] = variableRegionsGenomicExpaned.back();
 					++varCount;
-
 					//getting diversity
 					std::vector<seqInfo> subSeqs;
 					for(const auto & endRegion : processedNodes.subSeqToNameToPos[processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).front().name_]){
-						auto subSeq = seqs[seqKey[endRegion.first]].getSubRead(0, endRegion.second.chromStart_);
-						variableRegions[subSeq.name_][varName] = subSeq.seq_;
-						MetaDataInName seqMeta;
-						if(MetaDataInName::nameHasMetaData(subSeq.name_)){
-							seqMeta = MetaDataInName(subSeq.name_);
+						uint32_t start = 0;
+						uint32_t end = endRegion.second.chromStart_ + klen_minus1;
+						auto subSeq = seqs[seqKey[endRegion.first]].getSubRead(start, end);
+						if(subSeq.name_ == refSeqName){
+							subRegionsRefSeqs[varName] = subSeq;
 						}
-						seqMeta.addMeta("SubRegUID", varName, true);
-						seqMeta.addMeta("SeqStart", 0, true);
-						seqMeta.addMeta("SeqStop", endRegion.second.chromStart_, true);
-						seqMeta.resetMetaInName(subSeq.name_);
+						variableRegions[subSeq.name_][varName] = subSeq.seq_;
+						renameSeq(subSeq, start, end, varName);
 						subSeqs.emplace_back(subSeq);
 					}
 					subRegionsSeqs[varName] = subSeqs;
 				}
+//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				//middle
 				if(processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() > 1){
+//					std::cout << "processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size(): " << processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() << std::endl;
 					for(auto pos : iter::range(processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() - 1)){
+//						std::cout << "pos: " << pos << std::endl;
 						auto varName = njh::pasteAsStr("var.", njh::leftPadNumStr<uint32_t>(varCount, totalVar));
-
+//						std::cout << varName << std::endl;
 						uint32_t start = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_)[pos].chromEnd_;
 						uint32_t end = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_)[pos + 1].chromStart_;
-
-						Bed3RecordCore varSubRegion(refSeq.name_, start, end);
-						variableRegionsRelative.emplace_back(GenomicRegion(varSubRegion).genBedRecordCore());
-						variableRegionsRelative.back().name_ = varName;
-						modSubSegmentToCorrectedRef(varSubRegion);
-						Bed6RecordCore varRegion = refSeqLoc.genBedRecordCore().adjustSubRegionToRelativePosition(varSubRegion);
-						varRegion.name_ = varName;
-						variableRegionsGenomic.emplace_back(varRegion);
+						if(end <= start){
+							std::stringstream ss;
+							ss << __PRETTY_FUNCTION__ << ", error " << "end: " << end << " is less than start: " << start << " for " << refSeqName << "\n";
+							throw std::runtime_error{ss.str()};
+						}
+						if(end > refCorrectedInfo.seq_.size()){
+							std::stringstream ss;
+							ss << __PRETTY_FUNCTION__ << ", error " << "end: " << end << " is past the end of the seq len: " << refCorrectedInfo.seq_.size() << "\n";
+							throw std::runtime_error{ss.str()};
+						}
+//						std::cout << "start: " << start << std::endl;
+//						std::cout << "end: " << end << std::endl;
+						createSubRegion(start, end, varName, variableRegionsRelative, variableRegionsGenomic);
+						//adjust to expanded
+						start -= klen_minus1;
+						end += klen_minus1;
+						createSubRegion(start, end, varName, variableRegionsRelativeExpaned, variableRegionsGenomicExpaned);
+						subRegionsRefSeqsLoc[varName] = variableRegionsGenomicExpaned.back();
+//						Bed3RecordCore varSubRegion(refSeq.name_, start, end);
+//						variableRegionsRelative.emplace_back(GenomicRegion(varSubRegion).genBedRecordCore());
+//						variableRegionsRelative.back().name_ = varName;
+//						modSubSegmentToCorrectedRef(varSubRegion);
+//						Bed6RecordCore varRegion = refSeqLoc.genBedRecordCore().adjustSubRegionToRelativePosition(varSubRegion);
+//						varRegion.name_ = varName;
+//						variableRegionsGenomic.emplace_back(varRegion);
 						++varCount;
-
+//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
 						//getting diversity
 						std::vector<seqInfo> subSeqs;
 						for(const auto & frontRegion : processedNodes.subSeqToNameToPos[processedNodes.nameToSubSegPositions_filt.at(refSeq.name_)[pos].name_]){
 
 							auto endRegion = processedNodes.subSeqToNameToPos[processedNodes.nameToSubSegPositions_filt.at(refSeq.name_)[pos + 1].name_][frontRegion.first];
-							uint32_t start = frontRegion.second.chromEnd_;
-							uint32_t end = endRegion.chromStart_;
+//							std::cout << "seqs[seqKey[frontRegion.first]].name_: " << seqs[seqKey[frontRegion.first]].name_ << std::endl;
+							uint32_t start = frontRegion.second.chromEnd_ - klen_minus1;
+							uint32_t end = endRegion.chromStart_ + klen_minus1;
+							if(end <= start){
+								std::stringstream ss;
+								ss << __PRETTY_FUNCTION__ << ", error " << "end: " << end << " is less than start: " << start << " for " << seqs[seqKey[frontRegion.first]].name_ << "\n";
+								throw std::runtime_error{ss.str()};
+							}
+							if(end > seqs[seqKey[frontRegion.first]].seq_.size()){
+								std::stringstream ss;
+								ss << __PRETTY_FUNCTION__ << ", error " << "end: " << end << " is past the end of the seq len: " << seqs[seqKey[frontRegion.first]].seq_.size() << "\n";
+								throw std::runtime_error{ss.str()};
+							}
+//							std::cout << "start: " << start << std::endl;
+//							std::cout << "end: " << end << std::endl;
 
 							auto subSeq = seqs[seqKey[frontRegion.first]].getSubRead(start, end - start);
-							variableRegions[subSeq.name_][varName] = subSeq.seq_;
-							MetaDataInName seqMeta;
-							if(MetaDataInName::nameHasMetaData(subSeq.name_)){
-								seqMeta = MetaDataInName(subSeq.name_);
+							if(subSeq.name_ == refSeqName){
+								subRegionsRefSeqs[varName] = subSeq;
 							}
-							seqMeta.addMeta("SubRegUID", varName, true);
-							seqMeta.addMeta("SeqStart", start, true);
-							seqMeta.addMeta("SeqStop", end, true);
-							seqMeta.resetMetaInName(subSeq.name_);
-
+							variableRegions[subSeq.name_][varName] = subSeq.seq_;
+							renameSeq(subSeq, start, end, varName);
 							subSeqs.emplace_back(subSeq);
 						}
 						subRegionsSeqs[varName] = subSeqs;
 					}
 				}
+//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				//check back
 				if(len(refCorrectedInfo) !=  processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).back().chromEnd_){
 					auto varName = njh::pasteAsStr("var.", njh::leftPadNumStr<uint32_t>(varCount, totalVar));;
 					uint32_t start = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).back().chromEnd_;
 					uint32_t end = len(refCorrectedInfo);
-					Bed3RecordCore varSubRegion(refSeq.name_, start, end);
-					variableRegionsRelative.emplace_back(GenomicRegion(varSubRegion).genBedRecordCore());
-					variableRegionsRelative.back().name_ = varName;
-					modSubSegmentToCorrectedRef(varSubRegion);
-					Bed6RecordCore varRegion = refSeqLoc.genBedRecordCore().adjustSubRegionToRelativePosition(varSubRegion);
-					varRegion.name_ = varName;
-					variableRegionsGenomic.emplace_back(varRegion);
+					createSubRegion(start, end, varName, variableRegionsRelative, variableRegionsGenomic);
+					//adjust to expanded
+					start -= klen_minus1;
+					//end += klen_minus1;
+					createSubRegion(start, end, varName, variableRegionsRelativeExpaned, variableRegionsGenomicExpaned);
+					subRegionsRefSeqsLoc[varName] = variableRegionsGenomicExpaned.back();
 					++varCount;
 
 					//getting diversity
 					std::vector<seqInfo> subSeqs;
 					for(const auto & frontRegion : processedNodes.subSeqToNameToPos[processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).back().name_]){
-						auto subSeq = seqs[seqKey[frontRegion.first]].getSubRead(frontRegion.second.chromEnd_);
-						variableRegions[subSeq.name_][varName] = subSeq.seq_;
-						MetaDataInName seqMeta;
-						if(MetaDataInName::nameHasMetaData(subSeq.name_)){
-							seqMeta = MetaDataInName(subSeq.name_);
+						uint32_t start = frontRegion.second.chromEnd_ - klen_minus1;
+						uint32_t end = len(seqs[seqKey[frontRegion.first]]);
+						auto subSeq = seqs[seqKey[frontRegion.first]].getSubRead(start);
+						if(subSeq.name_ == refSeqName){
+							subRegionsRefSeqs[varName] = subSeq;
 						}
-						seqMeta.addMeta("SubRegUID", varName, true);
-						seqMeta.addMeta("SeqStart", frontRegion.second.chromEnd_, true);
-						seqMeta.addMeta("SeqStop", len(seqs[seqKey[frontRegion.first]]), true);
-						seqMeta.resetMetaInName(subSeq.name_);
+						variableRegions[subSeq.name_][varName] = subSeq.seq_;
+						renameSeq(subSeq, start, end, varName);
 						subSeqs.emplace_back(subSeq);
 					}
 					subRegionsSeqs[varName] = subSeqs;
 				}
+//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				//genomic out
 				for(auto & varRegion : variableRegionsGenomic){
 					variableRegionsGenomicOut << varRegion.toDelimStrWithExtra() << std::endl;
 				}
+				for(auto & varRegion : variableRegionsGenomicExpaned){
+					variableRegionsGenomicExpanedOut << varRegion.toDelimStrWithExtra() << std::endl;
+				}
 				//relative out
 				for(auto & varRegion : variableRegionsRelative){
 					variableRegionsRelOut << varRegion.toDelimStrWithExtra() << std::endl;
+				}
+				for(auto & varRegion : variableRegionsRelativeExpaned){
+					variableRegionsRelExpanedOut << varRegion.toDelimStrWithExtra() << std::endl;
 				}
 				OutputStream outSubregionCodingKeyOut(njh::files::make_path(conservedRegionInfoDir, "subRegionCodedNameKey.tab.txt"));
 				outSubregionCodingKeyOut << "variableRegName\tname\tnameID" << std::endl;
@@ -1477,8 +1551,9 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 						auto subSeqOpts = SeqIOOptions::genFastaOutGz(njh::files::make_path(seqsDir, subSeqs.first + ".fasta.gz"));
 						SeqOutput::write(subSeqs.second, subSeqOpts);
 						auto uniqSeqs = CollapsedHaps::collapseReads(subSeqs.second);
-						uniqSeqs.renameBaseOnFreq(njh::pasteAsStr(refSeqLoc.createUidFromCoordsStrand(), "__", subSeqs.first));
-						;
+						auto identifier = njh::pasteAsStr(refSeqLoc.createUidFromCoordsStrand(), "__", subSeqs.first);
+						uniqSeqs.renameBaseOnFreq(identifier);
+
 						for(const auto pos : uniqSeqs.getOrderByTopCnt()){
 							varRegionSeqKey[subSeqs.first][uniqSeqs.seqs_[pos]->seq_] = pos;
 							outSubregionCodingKeyOut << subSeqs.first
@@ -1487,20 +1562,57 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 						}
 						subRegionsSeqsUniq[subSeqs.first] = uniqSeqs;
 						SeqOutput::write(uniqSeqs.seqs_, SeqIOOptions::genFastaOutGz(njh::files::make_path(seqsDir, "uniq_" + subSeqs.first + ".fasta.gz")));
-						auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversityRawInput(subSeqs.second);
-						outDivMeasures << subSeqs.first
-								<< "\t" << vectorMean(readVec::getLengths(subSeqs.second))
-																<< "\t" << subSeqs.second.size()
-																<< "\t" << divMeasures.alleleNumber_
-																<< "\t" << divMeasures.heterozygostiy_
-																<< "\t" << divMeasures.ploidy3_.expectedCOIForPloidy_[3]
-																<< "\t" << divMeasures.ploidy4_.expectedCOIForPloidy_[4]
-																<< "\t" << divMeasures.ploidy5_.expectedCOIForPloidy_[5]
-																<< "\t" << divMeasures.singlets_
-																<< "\t" << divMeasures.doublets_
-																<< "\t" << divMeasures.effectiveNumOfAlleles_
-																<< "\t" << divMeasures.ShannonEntropyE_
-																<< '\n';
+						//samples names
+						auto sampNamesPerSeq = uniqSeqs.getSampleNamesPerSeqs();
+						auto allSamples = uniqSeqs.getAllSampleNames();
+						uint64_t maxLen = readVec::getMaxLength(uniqSeqs.seqs_);
+						readVec::getMaxLength(refSeq, maxLen);
+
+						std::shared_ptr<aligner> alignerObj = std::make_shared<aligner>(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
+						alignerObj->weighHomopolymers_ = false;
+						alignerObj->processAlnInfoInput(setUp.pars_.alnInfoDirName_, setUp.pars_.verbose_);
+						//set up variant info
+						auto idSeq = refSeq;
+						idSeq.name_ = identifier;
+						TranslatorByAlignment::VariantsInfo varInfo(subRegionsRefSeqsLoc[subSeqs.first].genBed3RecordCore(), idSeq);
+						//get variant info
+						auto refComps = uniqSeqs.getCompsAgainstRef(refSeq, *alignerObj, numThreads);
+						for(const auto pos :  iter::range(uniqSeqs.size())){
+							varInfo.addVariantInfo(
+									refComps[pos].refAlnSeq_,
+									refComps[pos].queryAlnSeq_,
+									uniqSeqs.seqs_[pos]->cnt_,
+									sampNamesPerSeq[pos],
+									refComps[pos].comp_,
+									subRegionsRefSeqsLoc[subSeqs.first].start_);
+						}
+						varInfo.setFinals(variantCallerRunPars);
+						{
+							calcPopMeasuresPars.numSegSites_ = varInfo.getFinalNumberOfSegratingSites();
+							auto divMeasures = uniqSeqs.getGeneralMeasuresOfDiversity(
+									calcPopMeasuresPars, alignerObj);
+//							OutputStream divMeasuresOut(outOpts);
+							outDivMeasures << njh::conToStr(divMeasures.getOut(uniqSeqs, identifier, calcPopMeasuresPars), "\t") << std::endl;
+//							divMeasures.writeDivMeasures(
+//									njh::files::make_path(conservedRegionInfoDir,
+//											subSeqs.first + "_divMeasures.tab.txt"), uniqSeqs, identifier, calcPopMeasuresPars);
+						}
+
+
+//						auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversityRawInput(subSeqs.second);
+//						outDivMeasures << subSeqs.first
+//								<< "\t" << vectorMean(readVec::getLengths(subSeqs.second))
+//																<< "\t" << subSeqs.second.size()
+//																<< "\t" << divMeasures.alleleNumber_
+//																<< "\t" << divMeasures.heterozygostiy_
+//																<< "\t" << divMeasures.ploidy3_.expectedCOIForPloidy_[3]
+//																<< "\t" << divMeasures.ploidy4_.expectedCOIForPloidy_[4]
+//																<< "\t" << divMeasures.ploidy5_.expectedCOIForPloidy_[5]
+//																<< "\t" << divMeasures.singlets_
+//																<< "\t" << divMeasures.doublets_
+//																<< "\t" << divMeasures.effectiveNumOfAlleles_
+//																<< "\t" << divMeasures.ShannonEntropyE_
+//																<< '\n';
 					}
 				}
 				OutputStream outSubregionCoding(njh::files::make_path(conservedRegionInfoDir, "subRegionCoded.tab.txt"));
@@ -1577,14 +1689,14 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 
 					seqInfo subSeq(seqs[seqKey[frontRegion.first]].getSubRead(outRegion.chromStart_, outRegion.length()));
 	//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
-
-					MetaDataInName seqMeta(subSeq.name_);
-					seqMeta.addMeta("SubRegUID", bedReg_genomic.name_, true);
-					seqMeta.addMeta("SeqStart", outRegion.chromStart_, true);
-					seqMeta.addMeta("SeqStop", outRegion.chromEnd_, true);
-	//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
-
-					seqMeta.resetMetaInName(subSeq.name_);
+					renameSeq(subSeq, outRegion.chromStart_, outRegion.chromEnd_, bedReg_genomic.name_);
+//					MetaDataInName seqMeta(subSeq.name_);
+//					seqMeta.addMeta("SubRegUID", bedReg_genomic.name_, true);
+//					seqMeta.addMeta("SeqStart", outRegion.chromStart_, true);
+//					seqMeta.addMeta("SeqStop", outRegion.chromEnd_, true);
+//	//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
+//					seqMeta.resetMetaInName(subSeq.name_);
 					seqsFromLargestSubRegion.emplace_back(subSeq);
 				}
 				// diversity
@@ -1668,14 +1780,13 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 
 						seqInfo subSeq(seqs[seqKey[frontRegion.first]].getSubRead(outRegion.chromStart_, outRegion.length()));
 //						std::cout << __FILE__ << " " << __LINE__ << std::endl;
-
-						MetaDataInName seqMeta(subSeq.name_);
-						seqMeta.addMeta("SubRegUID", subRegion.first, true);
-						seqMeta.addMeta("SeqStart", outRegion.chromStart_, true);
-						seqMeta.addMeta("SeqStop", outRegion.chromEnd_, true);
+						renameSeq(subSeq, outRegion.chromStart_, outRegion.chromEnd_, subRegion.first);
+//						MetaDataInName seqMeta(subSeq.name_);
+//						seqMeta.addMeta("SubRegUID", subRegion.first, true);
+//						seqMeta.addMeta("SeqStart", outRegion.chromStart_, true);
+//						seqMeta.addMeta("SeqStop", outRegion.chromEnd_, true);
 //						std::cout << __FILE__ << " " << __LINE__ << std::endl;
-
-						seqMeta.resetMetaInName(subSeq.name_);
+//						seqMeta.resetMetaInName(subSeq.name_);
 						subRegionsSeqs[subRegion.first].emplace_back(subSeq);
 					}
 				}
