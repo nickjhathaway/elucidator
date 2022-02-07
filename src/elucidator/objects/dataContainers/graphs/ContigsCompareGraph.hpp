@@ -135,7 +135,7 @@ public:
 	void collapseSingleLinkedPaths();
 
 
-	bool collapseLowFreqNodes(const comparison & allowableError, uint32_t lowFreqCutOff);
+	bool collapseLowFreqNodes(const comparison & allowableError, uint32_t lowFreqCutOff, std::vector<seqInfo> & seqs, const std::unordered_map<std::string, uint32_t> & nameToSeqPos);
 
 	void removeNullNodes();
 
@@ -187,8 +187,8 @@ public:
 		}
 		uint32_t klen = std::numeric_limits<uint32_t>::max();
 		uint32_t kmerOccurenceCutOff = 0;
-		uint32_t correctionOccurenceCutOff = 2; //inclusive
-		uint32_t lowFreqCutOff = 3;
+		uint32_t correctionOccurenceCutOff = 3; //inclusive
+		uint32_t lowFreqCutOff = 3; //inclusive
 		bool doNotCollapseLowFreqNodes = false;
 		bool debug = false;
 		comparison allowableError;

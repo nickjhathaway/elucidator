@@ -1102,7 +1102,7 @@ void ContigsCompareGraphDev::collapseSingleLinkedPaths(){
 
 
 
-bool ContigsCompareGraphDev::collapseLowFreqNodes(const comparison & allowableError, uint32_t lowFreqCutOff){
+bool ContigsCompareGraphDev::collapseLowFreqNodes(const comparison & allowableError, uint32_t lowFreqCutOff, std::vector<seqInfo> & seqs, const std::unordered_map<std::string, uint32_t> & nameToSeqPos){
 	std::map<std::string, std::vector<std::shared_ptr<node>>> groupedNodes;
 	//gather together the nodes that have the same heads and tails and are also singlely linked forward and backwards
 	for(const auto & n : nodes_){
@@ -1132,6 +1132,7 @@ bool ContigsCompareGraphDev::collapseLowFreqNodes(const comparison & allowableEr
 	//iterate over the groups
 	uint32_t groupCount = 0;
 	for(auto & group : groupedNodes){
+		resetNodeVisitCounts();
 		// if there are only two nodes in the group, process them
 		if(2 == group.second.size()){
 			++groupCount;
@@ -1175,7 +1176,103 @@ bool ContigsCompareGraphDev::collapseLowFreqNodes(const comparison & allowableEr
 				node1->inReadNamesIdx_.insert(
 						node2->inReadNamesIdx_.begin(),
 						node2->inReadNamesIdx_.end());
+
+				//fix the reads
+				for(const auto & name : node2->inReadNamesIdx_){
+					auto & seq = seqs[nameToSeqPos.at(name)];
+					uint32_t insertPos = std::numeric_limits<uint32_t>::max();
+					if(!node2->headless()){
+						//doing only 1 head or single tail, so just the first one
+						auto node2HeadEdge = node2->getFirstOnHeadEdge();
+						for(const auto & con : node2HeadEdge->connectorInfos_){
+							if(con.readName_ == name){
+								insertPos = con.tailPos_;
+							}
+						}
+					}else{
+						insertPos = 0;
+					}
+					if(std::numeric_limits<uint32_t>::max() == insertPos){
+						std::stringstream ss;
+						ss << __PRETTY_FUNCTION__ << ", error " << "failed to find insert position for: " << name << "\n";
+						throw std::runtime_error{ss.str()};
+					}
+					seq.replace(insertPos, node2->k_.size(), node1->k_);
+				}
+
+				//fix downstream positions if needed
+				if (!node1->tailless() && node1->k_.size() != node2->k_.size()) {
+					int32_t sizeDifference = static_cast<int32_t>(node1->k_.size()) - static_cast<int32_t>(node2->k_.size());
+					//get the size difference and add this to the positions downstream
+					std::deque<std::shared_ptr<node>> nodesToMod;
+					auto node2TailEdge = node2->getFirstOnTailEdge();
+
+					for( auto & con : node2TailEdge->connectorInfos_){
+						if(njh::in(con.readName_, node2->inReadNamesIdx_)){
+//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//							std::cout << "name: " << con.readName_ << std::endl;
+//							std::cout << "\tcon.headPos_: " << con.headPos_ << std::endl;
+//							std::cout << "\tcon.tailPos_: " << con.tailPos_ << std::endl;
+							con.headPos_ += sizeDifference;
+							con.tailPos_ += sizeDifference;
+//							std::cout << "\tcon.headPos_: " << con.headPos_ << std::endl;
+//							std::cout << "\tcon.tailPos_: " << con.tailPos_ << std::endl << std::endl;
+						}
+					}
+					auto tailNode = node2TailEdge->tail_.lock();
+
+					for(const auto & tail : tailNode->tailEdges_){
+						nodesToMod.emplace_back(tail->tail_.lock());
+					}
+
+
+					while(!nodesToMod.empty()){
+						auto nextNode = nodesToMod.front();
+						nodesToMod.pop_front();
+						nextNode->visitCount_ += 1;
+						//mode head edges
+						for(auto & head : nextNode->headEdges_){
+							for( auto & con : head->connectorInfos_){
+								if(njh::in(con.readName_, node2->inReadNamesIdx_)){
+//									std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//									std::cout << "name: " << con.readName_ << std::endl;
+//									std::cout << "\tcon.headPos_: " << con.headPos_ << std::endl;
+//									std::cout << "\tcon.tailPos_: " << con.tailPos_ << std::endl;
+									con.tailPos_ += sizeDifference;
+									con.headPos_ += sizeDifference;
+//									std::cout << "\tcon.headPos_: " << con.headPos_ << std::endl;
+//									std::cout << "\tcon.tailPos_: " << con.tailPos_ << std::endl << std::endl;
+								}
+							}
+						}
+
+						//add next to mod
+						for(const auto & tail : nextNode->tailEdges_){
+							auto nextToMod = tail->tail_.lock();
+							if(nextToMod->visitCount_ == 0){
+								nodesToMod.emplace_back(nextToMod);
+							}
+						}
+					}
+
+//					std::deque<uint32_t> toSpread;
+//					toSpread.emplace_back(pos);
+//					while(!toSpread.empty()){
+//						uint32_t nextPos = toSpread.front();
+//						toSpread.pop_front();
+//						nodes_[nextPos].group_ = currentGroup;
+//						for(const auto e : nodes_[nextPos].edges_){
+//							//spread if no group assigned
+//							if(std::numeric_limits<uint32_t>::max() == nodes_[e].group_){
+//								toSpread.emplace_back(e);
+//							}
+//						}
+//					}
+				}
+
+
 				if(!node1->headless()){
+
 					auto node1HeadEdge = node1->getFirstOnHeadEdge();
 					auto node2HeadEdge = node2->getFirstOnHeadEdge();
 					node1HeadEdge->cnt_ += node2HeadEdge->cnt_;
@@ -1210,6 +1307,7 @@ bool ContigsCompareGraphDev::collapseLowFreqNodes(const comparison & allowableEr
 		removeOffNodes();
 		removeOffEdges();
 		resetNodePositions();
+		resetNodeVisitCounts();
 		return true;
 	}
 	return false;
@@ -1694,6 +1792,22 @@ std::vector<seqInfo> ContigsCompareGraphDev::readInSeqs(const SeqIOOptions & inO
 	return seqs;
 }
 
+//for(const auto & n : nodes.second){
+//	std::unordered_map<std::string, uint32_t> nodePositionPerSeq;
+//	for(const auto & h : n->headEdges_){
+//		for(const auto & con : h->connectorInfos_){
+//			nodePositionPerSeq[con.readName_] = con.tailPos_;
+
+//		}
+//	}
+//	for(const auto & t : n->tailEdges_){
+//		for(const auto & con : t->connectorInfos_){
+//
+//			nodePositionPerSeq[con.readName_] = con.headPos_ - (n->k_.size() - n->kLen_);
+//		}
+//	}
+//
+
 
 ContigsCompareGraphDev::processConservedNodesVecRes ContigsCompareGraphDev::processConservedNodesVec(const std::vector<std::shared_ptr<node>> & nodes){
 	processConservedNodesVecRes ret;
@@ -1706,11 +1820,22 @@ ContigsCompareGraphDev::processConservedNodesVecRes ContigsCompareGraphDev::proc
 			std::unordered_map<std::string, uint32_t> nodePositionPerSeq;
 			for(const auto & h : n->headEdges_){
 				for(const auto & con : h->connectorInfos_){
+//					if(con.readName_ == "ERR4045391.1[PopUID=oppA.27;p_name=oppA;readCount=2569;sample=ERR4045391]_f0.5"){
+//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//						std::cout << "con.tailPos_: " << con.tailPos_ << std::endl;
+//					}
 					nodePositionPerSeq[con.readName_] = con.tailPos_;
 				}
 			}
 			for(const auto & t : n->tailEdges_){
 				for(const auto & con : t->connectorInfos_){
+//					if(con.readName_ == "ERR4045391.1[PopUID=oppA.27;p_name=oppA;readCount=2569;sample=ERR4045391]_f0.5"){
+//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//						std::cout << "con.headPos_: " << con.headPos_ << std::endl;
+//						std::cout << "n->k_.size(): " << n->k_.size() << std::endl;
+//						std::cout << "n->kLen_: " << n->kLen_ << std::endl;
+//						std::cout << "(n->k_.size() - n->kLen_): " << (n->k_.size() - n->kLen_) << std::endl;
+//					}
 					nodePositionPerSeq[con.readName_] = con.headPos_ - (n->k_.size() - n->kLen_);
 				}
 			}
@@ -1725,6 +1850,8 @@ ContigsCompareGraphDev::processConservedNodesVecRes ContigsCompareGraphDev::proc
 	}
 
 	std::unordered_set<std::string> paths;
+	std::stringstream pathCheckErrorStream;
+	pathCheckErrorStream << __PRETTY_FUNCTION__ << ", error:" << "\n";
 	for(auto & subSeqs : ret.nameToSubSegments){
 		njh::sort(subSeqs.second, [](const ContigsCompareGraphDev::SubSeqPos & p1, const ContigsCompareGraphDev::SubSeqPos & p2 ){
 			return p1.pos_ < p2.pos_;
@@ -1736,12 +1863,20 @@ ContigsCompareGraphDev::processConservedNodesVecRes ContigsCompareGraphDev::proc
 			}
 			path += sub.subSeq_;
 		}
+		if(!paths.empty() && !njh::in(path, paths)){
+			pathCheckErrorStream << "name: " << subSeqs.first << " has a different path" << "\n";
+			std::cout << subSeqs.first << std::endl;
+			for(const auto & sub : subSeqs.second){
+				std::cout << "pos: " << sub.pos_ << std::endl;
+				std::cout << "\tseq: " << sub.subSeq_ << std::endl;
+			}
+		}
 		paths.emplace(path);
 	}
 	if(paths.size() > 1){
-		std::stringstream ss;
-		ss << __PRETTY_FUNCTION__ << ", error " << " error more than one path , " << njh::conToStr(paths, ",") << "\n";
-		throw std::runtime_error{ss.str()};
+
+		pathCheckErrorStream << "more than one path , " << njh::conToStr(paths, ",") << "\n";
+		throw std::runtime_error{pathCheckErrorStream.str()};
 	}
 
 	std::unordered_map<std::string, std::vector<uint32_t>> startingPositions;

@@ -560,8 +560,12 @@ int miscRunner::createSharedPathwaysFromRefSeqs(const njh::progutils::CmdArgs & 
 		//SeqOutput::write(outSeqs, seqsOutOpts);
 	}
 	if(collapseLowFreqNodes){
+		std::unordered_map<std::string, uint32_t> nameToPos;
+		for(const auto & seqEnum : iter::enumerate(seqs)){
+			nameToPos[seqEnum.second.name_] = seqEnum.first;
+		}
 		uint32_t collapseCount = 0;
-		while(compGraph.collapseLowFreqNodes(allowableError, lowFreqCutOff)){
+		while(compGraph.collapseLowFreqNodes(allowableError, lowFreqCutOff, seqs, nameToPos)){
 			{
 				auto outOptsCurrent = outOpts;
 				outOptsCurrent.outFilename_ = njh::files::prependFileBasename(outOptsCurrent.outFilename_,
@@ -1163,9 +1167,14 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 		seqsOutOpts.out_.transferOverwriteOpts(outOpts);
 		//SeqOutput::write(outSeqs, seqsOutOpts);
 	}
+
 	if(!graphCorrectingPars.doNotCollapseLowFreqNodes){
+		std::unordered_map<std::string, uint32_t> nameToPos;
+		for(const auto & seqEnum : iter::enumerate(seqs)){
+			nameToPos[seqEnum.second.name_] = seqEnum.first;
+		}
 		uint32_t collapseCount = 0;
-		while(compGraph.collapseLowFreqNodes(graphCorrectingPars.allowableError, graphCorrectingPars.lowFreqCutOff)){
+		while(compGraph.collapseLowFreqNodes(graphCorrectingPars.allowableError, graphCorrectingPars.lowFreqCutOff, seqs, nameToPos)){
 			{
 				auto outOptsCurrent = outOpts;
 				outOptsCurrent.outFilename_ = njh::files::prependFileBasename(outOptsCurrent.outFilename_,
@@ -1190,6 +1199,9 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 				//SeqOutput::write(outSeqs, seqsOutOpts);
 			}
 			++collapseCount;
+		}
+		if(collapseCount > 0){
+			SeqOutput::write(seqs, SeqIOOptions::genFastaOutGz(njh::files::make_path(setUp.pars_.directoryName_, "correctedSeqs_afterCollapseLowFreqNodes")));
 		}
 	}
 	uint32_t splitCount = 0;
