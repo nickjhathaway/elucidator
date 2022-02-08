@@ -1009,6 +1009,29 @@ div.main-container {
 }
 </style>
 
+The output of:
+
+```{r}
+runLogs = list.files(pattern = "runLog_elucidator-.*.txt")
+runOutput = read_lines(runLogs[1])
+cat(runOutput, sep = "\n")
+```
+
+Takes called haplotypes and analyzes for conserved sequences and variable subblocks. 
+
+# Plot Graph  
+Big red blocks are conserved between all haplotypes. Node width is depth, node height is length of the subsegments. 
+Block color is heatmap colors of depth. 
+
+```{r}
+library(Rgraphviz)
+graph = Rgraphviz::agread("noLabels_final_graph.dot")
+plot(graph)
+plot(graph)
+```
+
+# Variable blocks  
+
 ```{r}
 variableRegionLoc = readr::read_tsv("subRegionInfo/0_ref_variable_genomic.bed", col_names = F) %>% 
   rename(target = X4)
@@ -1031,7 +1054,12 @@ ggplot() +
             data = variableRegionDiv) + 
   sofonias_theme + 
   labs(y = "he")
+```
 
+# TajimaD  
+Each variable block's TajimaD, the grey block is the full region. 
+
+```{r}
 ggplot() +
   geom_rect(aes(xmin = X2, xmax = X3,
                 ymin = -1, ymax = 1),
@@ -1046,6 +1074,7 @@ ggplot() +
 
 ```
 
+
 ```{r, fig.width=30}
 subsegmentsLocs = readr::read_tsv("subsegmentInfo/refSeqGenomicLocs.bed", col_names = F)%>% 
   rename(target = X4)
@@ -1057,13 +1086,24 @@ subsegmentsDiv = subsegmentsDiv %>%
   arrange(desc(he)) %>% 
   mutate(rank = row_number()) %>% 
   mutate(heMatchesRef = fullRefHe == he)
+```
 
+# Variable sub regions  
+
+Regions across the whole region. Regions are created by combing each variable region, the blocks are sorted by expected hetereozygosity, with the full region being on the bottom. The red blocks are the variable regions.  
+
+```{r, fig.width=30}
+variableRegionDiv = variableRegionDiv %>% 
+  mutate(length = X3 - X2, start = X2, end = X3)
+subsegmentsDiv = subsegmentsDiv  %>% 
+  mutate(length = X3 - X2, start = X2, end = X3)
+  
 ggplotly(ggplot() +
   geom_rect(aes(xmin = X2, xmax = X3,
                 ymin = rank,  ymax = rank + 1, 
                 fill = heMatchesRef, 
                 he = he, 
-                start = X2, end = X3, length = X5),
+                start = start, end = end, length = length),
             color = "black",
             data = subsegmentsDiv) + 
   geom_rect(aes(xmin = X2, xmax = X3,
@@ -1075,7 +1115,8 @@ ggplotly(ggplot() +
             data = refSeqDiv) + 
   geom_rect(aes(xmin = X2, xmax = X3,
                 ymin = 0, ymax = -he * 10, 
-                he = he, start = X2, end = X3, target = target),
+                he = he, start = start, end = end, target = target, 
+                length = length),
             data = variableRegionDiv, fill = "red") + 
   sofonias_theme + 
   labs(y = "he-rank") + 
@@ -1084,6 +1125,11 @@ ggplotly(ggplot() +
 ```
 
 # Coded 
+
+```{r}
+refNames = readr::read_tsv("refNames.txt", col_names = F)
+```
+
 ```{r}
 varRegionCoded = readr::read_tsv("subRegionInfo/subRegionCoded.tab.txt")
 
@@ -1107,17 +1153,34 @@ varRegionCoded_seqIDCount = varRegionCoded %>%
   group_by(Seq_ID) %>% 
   count()
 
-ggplot(varRegionCoded_seqIDCount %>% 
-         mutate(Seq_ID = factor(Seq_ID))) + 
-  geom_bar(aes(x = Seq_ID, y = n), stat = "identity") + 
-  geom_text(aes(x  = Seq_ID, y = n + 15, label = n) )
+
+varRegionCoded_ref = varRegionCoded %>% 
+  mutate(ref = name %in% refNames$X1) %>% 
+  filter(ref) %>% 
+  select(name, Seq_ID, ref) %>% 
+  unique() %>% 
+  mutate(refLabel = gsub("\\[.*", "", name))
+
+varRegionCoded_ref_collapsed = varRegionCoded_ref %>% 
+  group_by() %>% 
+  group_by(Seq_ID) %>% 
+  summarise(RefLabel = paste0(refLabel, collapse = ","))
+
+
+varRegionCoded_seq_labs = varRegionCoded_seq %>% 
+  select(Seq_ID) %>% 
+  left_join(varRegionCoded_ref_collapsed) %>% 
+  mutate(Seq_ID_Label = ifelse(is.na(RefLabel), Seq_ID, paste0(RefLabel)))
+varRegionCoded_seqIDCount = varRegionCoded_seqIDCount %>% 
+  left_join(varRegionCoded_seq_labs)
 
 varRegionCoded_mod = varRegionCoded %>% 
   mutate(Pop = gsub(".*PopUID=", "", name))%>% 
   mutate(Pop = gsub(";.*", "", Pop)) %>% 
   select(Pop, Seq_ID) %>% 
   unique() %>% 
-  arrange(Pop)
+  arrange(Pop) %>% 
+  left_join(varRegionCoded_seqIDCount)
 DT::datatable(varRegionCoded_mod,
           extensions = 'Buttons', options = list(
     dom = 'Bfrtip',
@@ -1125,29 +1188,88 @@ DT::datatable(varRegionCoded_mod,
   ))
 
 
+
+
 varRegionCoded_seq_mat = as.matrix(varRegionCoded_seq[,1:(ncol(varRegionCoded_seq) - 1)])
-rownames(varRegionCoded_seq_mat) = varRegionCoded_seq$Seq_ID
+rownames(varRegionCoded_seq_mat) = varRegionCoded_seq_labs$Seq_ID_Label
 varRegionCoded_seq_hclust = hclust(dist(varRegionCoded_seq_mat))
 
 codedColors = scheme$hex(length(unique(varRegionCoded_gat$code)))
 names(codedColors) = unique(varRegionCoded_gat$code)
 
+```
+
+# Variable Blocks    
+Below colored blocks, each column is colored by how prevalent each block is at that variable region.  
+
+## All sequences  
+```{r}
 ggplot(varRegionCoded_gat) + 
   geom_tile(aes(x = region, y = name, fill = factor(code))) + 
   sofonias_theme_xRotate + 
   theme(axis.text.y = element_blank()) + 
-  scale_fill_manual(values = codedColors)
+  scale_fill_manual("Variable blocks", values = codedColors)
 
 
 varRegionCoded_seq_gat = varRegionCoded_seq %>% 
-  gather(region, code, 1:(ncol(.) - 1) )%>% 
-  mutate(Seq_ID = factor(Seq_ID, levels = rownames(varRegionCoded_seq_mat)[varRegionCoded_seq_hclust$order]))
-ggplot(varRegionCoded_seq_gat) + 
-  geom_tile(aes(x = region, y = Seq_ID, fill = factor(code))) + 
-  sofonias_theme_xRotate + 
-  scale_fill_manual(values = codedColors)
+  gather(region, code, 1:(ncol(.) - 1) ) %>% 
+  left_join(varRegionCoded_seq_labs) %>% 
+  mutate(Seq_ID_Label = factor(Seq_ID_Label, levels = rownames(varRegionCoded_seq_mat)[varRegionCoded_seq_hclust$order]))
+```
 
-plot(varRegionCoded_seq_hclust)
+## Unique
+
+```{r}
+ggplot(varRegionCoded_seq_gat) + 
+  geom_tile(aes(x = region, y = Seq_ID_Label, fill = factor(code))) + 
+  sofonias_theme_xRotate + 
+  scale_fill_manual("Variable blocks", values = codedColors)
+
+#plot(varRegionCoded_seq_hclust)
+```
+
+# Dendrogram  
+
+Below is a dendrogram based on clustering on per variable block regions  
+```{r}
+clus <- cutree(varRegionCoded_seq_hclust, 4)
+g <- split(names(clus), clus)
+
+p <- ggtree(varRegionCoded_seq_hclust)
+clades <- sapply(g, function(n) MRCA(p, n))
+# 
+p <- groupClade(p, clades, group_name='subtree') + aes(color=subtree)
+# 
+d <- tibble(label = names(clus)) %>% 
+  left_join(varRegionCoded_seqIDCount %>% 
+              mutate(Seq_ID_Label = as.character(Seq_ID_Label)) %>% 
+              rename(label = Seq_ID_Label))
+
+subtreeColor = RColorBrewer::brewer.pal(4, "Set1");
+names(subtreeColor) = c("1", "2", "3", "4")
+
+p %<+% d +
+  layout_dendrogram() +
+  geom_tippoint(aes(size = n, fill = subtree),
+                shape=21, color='black') +
+  #geom_tiplab(aes(label=cyl), size=3, hjust=.5, color='black') +
+  geom_tiplab(angle=90, hjust=1, offset=-0.1, show.legend=FALSE) +
+  scale_color_manual(values = subtreeColor) +
+  scale_fill_manual(values = subtreeColor) + 
+  theme_dendrogram(plot.margin=margin(6,6,80,6)) #+
+  #theme(legend.position=c(.9, .6))
+# 
+
+```
+
+# Seq ID counts   
+Counts of unique sequences  
+```{r}
+ggplot(varRegionCoded_seqIDCount %>% 
+         mutate(Seq_ID_Label = factor(Seq_ID_Label))) + 
+  geom_bar(aes(x = Seq_ID_Label, y = n), stat = "identity") + 
+  geom_text(aes(x  = Seq_ID_Label, y = n + 15, label = n) ) + 
+  sofonias_theme_xRotate
 
 ```)";
 
@@ -1211,8 +1333,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	//setUp.setOption(subRegionComboPars.filterFinalRegionsToNonoverlapingOrAdjacentRegions, "--filterRegionsWithinRegions", "Filter Regions Within Regions");
 
 
-	setUp.setOption(genomeFnp, "--genome",
-			"Path to a genome to determine the location in", true);
+	setUp.setOption(genomeFnp, "--genome", "Path to a genome to determine the location in", true);
 	setUp.setOption(minimumKlen, "--minimumKlen", "minimum k-mer length");
 	setUp.setOption(graphCorrectingPars.kmerOccurenceCutOff, "--kmerOccurenceCutOff", "K-mer Occurence Cut Off");
 	setUp.setOption(graphCorrectingPars.doNotCollapseLowFreqNodes, "--doNotCollapseLowFreqNodes", "don't collapse Low Freq Nodes");
@@ -1234,14 +1355,38 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	auto subsegmentInfoDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{"subsegmentInfo"});
 
 	if ("" != refSeq.name_) {
+		auto refName = bfs::path(bfs::basename(genomeFnp)).replace_extension("").string();
+		refSeq.name_ = refName;
 		MetaDataInName refSeqMeta;
 		if (MetaDataInName::nameHasMetaData(refSeq.name_)) {
 			refSeqMeta = MetaDataInName(refSeq.name_);
 		}
 		refSeqMeta.addMeta("sample", refSeq.name_, true);
+		refSeqMeta.addMeta("site", "LabIsolate", true);
+		refSeqMeta.addMeta("IsFieldSample", false, true);
 		refSeqMeta.resetMetaInName(refSeq.name_);
 	}
 	std::vector<seqInfo> seqs = ContigsCompareGraphDev::readInSeqs(setUp.pars_.ioOptions_, refSeq, refSeqName);
+
+	{
+		OutputStream outRefNames(njh::files::make_path(setUp.pars_.directoryName_, "refNames.txt"));
+		for(const auto & seq : seqs){
+			if(MetaDataInName::nameHasMetaData(seq.name_)){
+				MetaDataInName meta(seq.name_);
+				std::string sampleField = "sample";
+				if(meta.containsMeta("BiologicalSample")){
+					sampleField = "BiologicalSample";
+				}
+				if(meta.containsMeta(sampleField) && meta.containsMeta("IsFieldSample") && !meta.getMeta<bool>("IsFieldSample")){
+					if(meta.containsMeta("site") && "LabIsolate" == meta.getMeta("site")){
+						outRefNames << seq.name_ << std::endl;
+					}
+				}
+			}
+		}
+	}
+
+
 	if (lenFilter) {
 		seqs = ContigsCompareGraphDev::filterSeqsOnLen(seqs, graphCorrectingPars,
 				lenFiltMultiplier,
@@ -1477,8 +1622,14 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 			groupContigCountsOut << group.first << '\t' << group.second.size() << std::endl;
 		}
 
+		auto uniqCorrectedSeqs = CollapsedHaps::collapseReads(seqs);
+		//auto identifier = njh::pasteAsStr(refSeqLoc.createUidFromCoordsStrand(), "__", subSeqs.first);
+		uniqCorrectedSeqs.renameBaseOnFreq(refSeqLoc.createUidFromCoordsStrand());
 
-
+		SeqOutput::write(uniqCorrectedSeqs.seqs_, SeqIOOptions::genFastaOutGz(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs.fasta.gz")));
+		uniqCorrectedSeqs.writeNames(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs_names.tab.txt.gz")));
+		uniqCorrectedSeqs.writeOutMetaFields(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs_meta.tab.txt.gz")));
+		uniqCorrectedSeqs.writeLabIsolateNames(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs_labIsolateNames.tab.txt.gz")));
 
 		auto seqsDir = njh::files::makeDir(subsegmentInfoDir, njh::files::MkdirPar{"subSeqs"});
 		OutputStream outDivMeasures(njh::files::make_path(subsegmentInfoDir, "divMeasuresPerSubRegion.tab.txt"));
