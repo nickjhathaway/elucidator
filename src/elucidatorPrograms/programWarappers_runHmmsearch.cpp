@@ -39,6 +39,7 @@
 
 namespace njhseq {
 
+namespace bfs = boost::filesystem;
 
 
 int programWrapperRunner::runHmmsearch(const njh::progutils::CmdArgs & inputCommands){

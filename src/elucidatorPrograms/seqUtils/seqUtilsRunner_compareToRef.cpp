@@ -318,7 +318,7 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 				      profileInfoFile
 									<< "\t" << curAligner->comp_.distances_.eventBasedIdentityHq_
 									<< "\t"
-									<< input->compareKmers(*best).second << "\t"
+									<< input->compareKmersRevComp(*best).second << "\t"
 									<< curAligner->comp_.oneBaseIndel_ << "\t"
 									<< curAligner->comp_.twoBaseIndel_<< "\t"
 									<< curAligner->comp_.largeBaseIndel_ << "\t"

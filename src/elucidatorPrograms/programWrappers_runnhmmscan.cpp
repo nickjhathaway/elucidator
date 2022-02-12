@@ -21,6 +21,7 @@
 
 namespace njhseq {
 
+namespace bfs = boost::filesystem;
 
 
 

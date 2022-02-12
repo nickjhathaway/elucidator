@@ -267,11 +267,11 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 	auto inputRegions = gatherRegions(bedFile.string(), "", setUp.pars_.verbose_);
 	sortGRegionsByStart(inputRegions);
 
-	VecStr regionNames;
+	std::set<std::string> regionNames;
 	for(const auto & reg : inputRegions){
-		regionNames.emplace_back(reg.uid_);
+		regionNames.emplace(reg.uid_);
 	}
-	njh::sort(regionNames);
+	//njh::sort(regionNames);
 	njh::concurrent::LockableQueue<std::string> regionsQueue(regionNames);
 
 	bfs::path finalDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("final"));
@@ -412,11 +412,17 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 				SeqInput refReader(SeqIOOptions::genFastaIn(refFnp));
 				auto refSeqs = refReader.readAllReads<seqInfo>();
 				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
+				std::vector<seqInfo> revComp_refSeqs;
+				std::vector<kmerInfo> revComp_refSeqsKInfos;
 				for (const auto & seq : refSeqs) {
 					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
 				allSetKmers(refKmerReads, reOrientingKmerLength, true);
-
+				for(const auto & rSeq : refSeqs){
+					revComp_refSeqs.emplace_back(rSeq);
+					revComp_refSeqs.back().reverseComplementRead(false, true);
+					revComp_refSeqsKInfos.emplace_back(revComp_refSeqs.back().seq_, 7, false);
+				}
 				for(const auto & seqKmer : contigsKmerReads) {
 					uint32_t forwardWinners = 0;
 					uint32_t revWinners = 0;
@@ -459,24 +465,28 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 				readVec::getMaxLength(contigsKmerReads, maxLen);
 				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
-				std::vector<kmerInfo> inputSeqsKmerInfos;
+				std::vector<kmerInfo> refSeqsKmerInfos;
 				for(const auto & input : refSeqs){
-					inputSeqsKmerInfos.emplace_back(input.seq_, 7, false);
+					refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 				}
-				readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, inputSeqsKmerInfos, alignerObj	);
-				//alignerObj.processAlnInfoOutputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
-
+				//readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, refSeqsKmerInfos, alignerObj);
 				std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs;
-				for(auto & seq : contigsKmerReads){
-					bool found = false;
-					for(const auto & finalSeq : finalSeqs){
-						if(finalSeq->seqBase_.seq_ == seq->seqBase_.seq_){
-							found = true;
-							break;
+				std::unordered_map<std::string, uint32_t> finalSeqCounts;
+				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
+				for(const auto & seq : contigsKmerReads){
+					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
+					for(auto & seq : trimmed){
+						bool found = false;
+						for(const auto & finalSeq : finalSeqs){
+							if(finalSeq->seqBase_.seq_ == seq.seq_){
+								found = true;
+								break;
+							}
 						}
-					}
-					if(!found){
-						finalSeqs.emplace_back(seq);
+						if(!found){
+							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
+							++finalSeqCounts[seq.name_];
+						}
 					}
 				}
 				double totalCoverage = 0;
@@ -493,6 +503,10 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 					seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 					seqMeta.addMeta("regionUID", regionUid);
 					seqMeta.addMeta("sample", sample);
+					if(finalSeqCounts[seq->seqBase_.name_] > 1){
+						seqMeta.addMeta("seqTrimmedCount", finalSeqCountsWritten[seq->seqBase_.name_]);
+						++finalSeqCountsWritten[seq->seqBase_.name_];
+					}
 					seqMeta.resetMetaInName(seq->seqBase_.name_);
 					seq->seqBase_.cnt_ = assembleInfo.seqNumber_;
 					seq->seqBase_.name_ += njh::pasteAsStr("_t", assembleInfo.seqNumber_);
@@ -661,11 +675,11 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 	auto inputRegions = gatherRegions(bedFile.string(), "", setUp.pars_.verbose_);
 	sortGRegionsByStart(inputRegions);
 
-	VecStr regionNames;
+	std::set<std::string> regionNames;
 	for(const auto & reg : inputRegions){
-		regionNames.emplace_back(reg.uid_);
+		regionNames.emplace(reg.uid_);
 	}
-	njh::sort(regionNames);
+	//njh::sort(regionNames);
 	njh::concurrent::LockableQueue<std::string> regionsQueue(regionNames);
 
 	bfs::path finalDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("final"));
@@ -770,11 +784,17 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 				SeqInput refReader(SeqIOOptions::genFastaIn(refFnp));
 				auto refSeqs = refReader.readAllReads<seqInfo>();
 				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
+				std::vector<seqInfo> revComp_refSeqs;
+				std::vector<kmerInfo> revComp_refSeqsKInfos;
 				for (const auto & seq : refSeqs) {
 					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
 				allSetKmers(refKmerReads, reOrientingKmerLength, true);
-
+				for(const auto & rSeq : refSeqs){
+					revComp_refSeqs.emplace_back(rSeq);
+					revComp_refSeqs.back().reverseComplementRead(false, true);
+					revComp_refSeqsKInfos.emplace_back(revComp_refSeqs.back().seq_, 7, false);
+				}
 				for(const auto & seqKmer : contigsKmerReads) {
 					uint32_t forwardWinners = 0;
 					uint32_t revWinners = 0;
@@ -816,24 +836,29 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 				readVec::getMaxLength(contigsKmerReads, maxLen);
 				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
-				std::vector<kmerInfo> inputSeqsKmerInfos;
+				std::vector<kmerInfo> refSeqsKmerInfos;
 				for(const auto & input : refSeqs){
-					inputSeqsKmerInfos.emplace_back(input.seq_, 7, false);
+					refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 				}
-				readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, inputSeqsKmerInfos, alignerObj	);
-				//alignerObj.processAlnInfoOutputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
 
+				//readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, refSeqsKmerInfos, alignerObj);
 				std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs;
-				for(auto & seq : contigsKmerReads){
-					bool found = false;
-					for(const auto & finalSeq : finalSeqs){
-						if(finalSeq->seqBase_.seq_ == seq->seqBase_.seq_){
-							found = true;
-							break;
+				std::unordered_map<std::string, uint32_t> finalSeqCounts;
+				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
+				for(const auto & seq : contigsKmerReads){
+					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
+					for(auto & seq : trimmed){
+						bool found = false;
+						for(const auto & finalSeq : finalSeqs){
+							if(finalSeq->seqBase_.seq_ == seq.seq_){
+								found = true;
+								break;
+							}
 						}
-					}
-					if(!found){
-						finalSeqs.emplace_back(seq);
+						if(!found){
+							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
+							++finalSeqCounts[seq.name_];
+						}
 					}
 				}
 				double totalCoverage = 0;
@@ -850,6 +875,10 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 					seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 					seqMeta.addMeta("regionUID", regionUid);
 					seqMeta.addMeta("sample", sample);
+					if(finalSeqCounts[seq->seqBase_.name_] > 1){
+						seqMeta.addMeta("seqTrimmedCount", finalSeqCountsWritten[seq->seqBase_.name_]);
+						++finalSeqCountsWritten[seq->seqBase_.name_];
+					}
 					seqMeta.resetMetaInName(seq->seqBase_.name_);
 					seq->seqBase_.cnt_ = (assembleInfo.coverage_/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
 					seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
@@ -1023,11 +1052,11 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 	auto inputRegions = gatherRegions(bedFile.string(), "", setUp.pars_.verbose_);
 	sortGRegionsByStart(inputRegions);
 
-	VecStr regionNames;
+	std::set<std::string> regionNames;
 	for(const auto & reg : inputRegions){
-		regionNames.emplace_back(reg.uid_);
+		regionNames.emplace(reg.uid_);
 	}
-	njh::sort(regionNames);
+	//njh::sort(regionNames);
 	njh::concurrent::LockableQueue<std::string> regionsQueue(regionNames);
 
 	bfs::path finalDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("final"));
@@ -1138,11 +1167,17 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 				SeqInput refReader(SeqIOOptions::genFastaIn(refFnp));
 				auto refSeqs = refReader.readAllReads<seqInfo>();
 				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
+				std::vector<seqInfo> revComp_refSeqs;
+				std::vector<kmerInfo> revComp_refSeqsKInfos;
 				for (const auto & seq : refSeqs) {
 					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
 				allSetKmers(refKmerReads, reOrientingKmerLength, true);
-
+				for(const auto & rSeq : refSeqs){
+					revComp_refSeqs.emplace_back(rSeq);
+					revComp_refSeqs.back().reverseComplementRead(false, true);
+					revComp_refSeqsKInfos.emplace_back(revComp_refSeqs.back().seq_, 7, false);
+				}
 				for(const auto & seqKmer : contigsKmerReads) {
 					uint32_t forwardWinners = 0;
 					uint32_t revWinners = 0;
@@ -1186,26 +1221,32 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 				readVec::getMaxLength(contigsKmerReads, maxLen);
 				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
-				std::vector<kmerInfo> inputSeqsKmerInfos;
+				std::vector<kmerInfo> refSeqsKmerInfos;
 				for(const auto & input : refSeqs){
-					inputSeqsKmerInfos.emplace_back(input.seq_, 7, false);
+					refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 				}
-				readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, inputSeqsKmerInfos, alignerObj	);
-				//alignerObj.processAlnInfoOutputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
 
+				//readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, refSeqsKmerInfos, alignerObj);
 				std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs;
-				for(auto & seq : contigsKmerReads){
-					bool found = false;
-					for(const auto & finalSeq : finalSeqs){
-						if(finalSeq->seqBase_.seq_ == seq->seqBase_.seq_){
-							found = true;
-							break;
+				std::unordered_map<std::string, uint32_t> finalSeqCounts;
+				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
+				for(const auto & seq : contigsKmerReads){
+					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
+					for(auto & seq : trimmed){
+						bool found = false;
+						for(const auto & finalSeq : finalSeqs){
+							if(finalSeq->seqBase_.seq_ == seq.seq_){
+								found = true;
+								break;
+							}
+						}
+						if(!found){
+							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
+							++finalSeqCounts[seq.name_];
 						}
 					}
-					if(!found){
-						finalSeqs.emplace_back(seq);
-					}
 				}
+
 				double totalCoverage = 0;
 				for(auto & seq : finalSeqs){
 					//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
@@ -1220,6 +1261,10 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 					seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 					seqMeta.addMeta("regionUID", regionUid);
 					seqMeta.addMeta("sample", sample);
+					if(finalSeqCounts[seq->seqBase_.name_] > 1){
+						seqMeta.addMeta("seqTrimmedCount", finalSeqCountsWritten[seq->seqBase_.name_]);
+						++finalSeqCountsWritten[seq->seqBase_.name_];
+					}
 					//seq->seqBase_.cnt_ = (defaultCoverage/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
 //					std::cout << "kmerCoverage[seq->seqBase_.name_]: " << kmerCoverage[seq->seqBase_.name_] << std::endl;
 //					std::cout << "totalCoverage: " << totalCoverage << std::endl;
@@ -1393,11 +1438,11 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 	auto inputRegions = gatherRegions(bedFile.string(), "", setUp.pars_.verbose_);
 	sortGRegionsByStart(inputRegions);
 
-	VecStr regionNames;
+	std::set<std::string> regionNames;
 	for(const auto & reg : inputRegions){
-		regionNames.emplace_back(reg.uid_);
+		regionNames.emplace(reg.uid_);
 	}
-	njh::sort(regionNames);
+	//njh::sort(regionNames);
 	njh::concurrent::LockableQueue<std::string> regionsQueue(regionNames);
 
 	bfs::path finalDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("final"));
@@ -1511,11 +1556,17 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 				SeqInput refReader(SeqIOOptions::genFastaIn(refFnp));
 				auto refSeqs = refReader.readAllReads<seqInfo>();
 				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
+				std::vector<seqInfo> revComp_refSeqs;
+				std::vector<kmerInfo> revComp_refSeqsKInfos;
 				for (const auto & seq : refSeqs) {
 					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
 				allSetKmers(refKmerReads, reOrientingKmerLength, true);
-
+				for(const auto & rSeq : refSeqs){
+					revComp_refSeqs.emplace_back(rSeq);
+					revComp_refSeqs.back().reverseComplementRead(false, true);
+					revComp_refSeqsKInfos.emplace_back(revComp_refSeqs.back().seq_, 7, false);
+				}
 				for(const auto & seqKmer : contigsKmerReads) {
 					uint32_t forwardWinners = 0;
 					uint32_t revWinners = 0;
@@ -1561,24 +1612,28 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 				readVec::getMaxLength(contigsKmerReads, maxLen);
 				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
-				std::vector<kmerInfo> inputSeqsKmerInfos;
+				std::vector<kmerInfo> refSeqsKmerInfos;
 				for(const auto & input : refSeqs){
-					inputSeqsKmerInfos.emplace_back(input.seq_, 7, false);
+					refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 				}
-				readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, inputSeqsKmerInfos, alignerObj	);
-				//alignerObj.processAlnInfoOutputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
-
+				//readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, refSeqsKmerInfos, alignerObj);
 				std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs;
-				for(auto & seq : contigsKmerReads){
-					bool found = false;
-					for(const auto & finalSeq : finalSeqs){
-						if(finalSeq->seqBase_.seq_ == seq->seqBase_.seq_){
-							found = true;
-							break;
+				std::unordered_map<std::string, uint32_t> finalSeqCounts;
+				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
+				for(const auto & seq : contigsKmerReads){
+					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
+					for(auto & seq : trimmed){
+						bool found = false;
+						for(const auto & finalSeq : finalSeqs){
+							if(finalSeq->seqBase_.seq_ == seq.seq_){
+								found = true;
+								break;
+							}
 						}
-					}
-					if(!found){
-						finalSeqs.emplace_back(seq);
+						if(!found){
+							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
+							++finalSeqCounts[seq.name_];
+						}
 					}
 				}
 				double totalCoverage = defaultCoverage * finalSeqs.size();
@@ -1597,6 +1652,10 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 					seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 					seqMeta.addMeta("regionUID", regionUid);
 					seqMeta.addMeta("sample", sample);
+					if(finalSeqCounts[seq->seqBase_.name_] > 1){
+						seqMeta.addMeta("seqTrimmedCount", finalSeqCountsWritten[seq->seqBase_.name_]);
+						++finalSeqCountsWritten[seq->seqBase_.name_];
+					}
 					//seq->seqBase_.cnt_ = (defaultCoverage/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
 //					std::cout << "kmerCoverage[seq->seqBase_.name_]: " << kmerCoverage[seq->seqBase_.name_] << std::endl;
 //					std::cout << "totalCoverage: " << totalCoverage << std::endl;
@@ -1769,11 +1828,11 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegions(con
 	auto inputRegions = gatherRegions(bedFile.string(), "", setUp.pars_.verbose_);
 	sortGRegionsByStart(inputRegions);
 
-	VecStr regionNames;
+	std::set<std::string> regionNames;
 	for(const auto & reg : inputRegions){
-		regionNames.emplace_back(reg.uid_);
+		regionNames.emplace(reg.uid_);
 	}
-	njh::sort(regionNames);
+	//njh::sort(regionNames);
 	njh::concurrent::LockableQueue<std::string> regionsQueue(regionNames);
 
 	bfs::path finalDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("final"));
@@ -1874,11 +1933,17 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegions(con
 				SeqInput refReader(SeqIOOptions::genFastaIn(refFnp));
 				auto refSeqs = refReader.readAllReads<seqInfo>();
 				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
+				std::vector<seqInfo> revComp_refSeqs;
+				std::vector<kmerInfo> revComp_refSeqsKInfos;
 				for (const auto & seq : refSeqs) {
 					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
 				allSetKmers(refKmerReads, reOrientingKmerLength, true);
-
+				for(const auto & rSeq : refSeqs){
+					revComp_refSeqs.emplace_back(rSeq);
+					revComp_refSeqs.back().reverseComplementRead(false, true);
+					revComp_refSeqsKInfos.emplace_back(revComp_refSeqs.back().seq_, 7, false);
+				}
 				for(const auto & seqKmer : contigsKmerReads) {
 					uint32_t forwardWinners = 0;
 					uint32_t revWinners = 0;
@@ -1921,24 +1986,28 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegions(con
 				readVec::getMaxLength(contigsKmerReads, maxLen);
 				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
-				std::vector<kmerInfo> inputSeqsKmerInfos;
+				std::vector<kmerInfo> refSeqsKmerInfos;
 				for(const auto & input : refSeqs){
-					inputSeqsKmerInfos.emplace_back(input.seq_, 7, false);
+					refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 				}
-				readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, inputSeqsKmerInfos, alignerObj	);
-				//alignerObj.processAlnInfoOutputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
-
+				//readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, refSeqsKmerInfos, alignerObj);
 				std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs;
-				for(auto & seq : contigsKmerReads){
-					bool found = false;
-					for(const auto & finalSeq : finalSeqs){
-						if(finalSeq->seqBase_.seq_ == seq->seqBase_.seq_){
-							found = true;
-							break;
+				std::unordered_map<std::string, uint32_t> finalSeqCounts;
+				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
+				for(const auto & seq : contigsKmerReads){
+					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
+					for(auto & seq : trimmed){
+						bool found = false;
+						for(const auto & finalSeq : finalSeqs){
+							if(finalSeq->seqBase_.seq_ == seq.seq_){
+								found = true;
+								break;
+							}
 						}
-					}
-					if(!found){
-						finalSeqs.emplace_back(seq);
+						if(!found){
+							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
+							++finalSeqCounts[seq.name_];
+						}
 					}
 				}
 				double totalCoverage = finalSeqs.size() * defaultCoverage;
@@ -1956,6 +2025,10 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegions(con
 					seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 					seqMeta.addMeta("regionUID", regionUid);
 					seqMeta.addMeta("sample", sample);
+					if(finalSeqCounts[seq->seqBase_.name_] > 1){
+						seqMeta.addMeta("seqTrimmedCount", finalSeqCountsWritten[seq->seqBase_.name_]);
+						++finalSeqCountsWritten[seq->seqBase_.name_];
+					}
 					seqMeta.resetMetaInName(seq->seqBase_.name_);
 					seq->seqBase_.cnt_ = (defaultCoverage/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
 					//seq->seqBase_.cnt_ = (assembleInfo.coverage_/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
@@ -2124,11 +2197,11 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegions(con
 	auto inputRegions = gatherRegions(bedFile.string(), "", setUp.pars_.verbose_);
 	sortGRegionsByStart(inputRegions);
 
-	VecStr regionNames;
+	std::set<std::string> regionNames;
 	for(const auto & reg : inputRegions){
-		regionNames.emplace_back(reg.uid_);
+		regionNames.emplace(reg.uid_);
 	}
-	njh::sort(regionNames);
+	//njh::sort(regionNames);
 	njh::concurrent::LockableQueue<std::string> regionsQueue(regionNames);
 
 	bfs::path finalDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("final"));
@@ -2226,11 +2299,17 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegions(con
 				SeqInput refReader(SeqIOOptions::genFastaIn(refFnp));
 				auto refSeqs = refReader.readAllReads<seqInfo>();
 				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
+				std::vector<seqInfo> revComp_refSeqs;
+				std::vector<kmerInfo> revComp_refSeqsKInfos;
 				for (const auto & seq : refSeqs) {
 					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
 				allSetKmers(refKmerReads, reOrientingKmerLength, true);
-
+				for(const auto & rSeq : refSeqs){
+					revComp_refSeqs.emplace_back(rSeq);
+					revComp_refSeqs.back().reverseComplementRead(false, true);
+					revComp_refSeqsKInfos.emplace_back(revComp_refSeqs.back().seq_, 7, false);
+				}
 				for(const auto & seqKmer : contigsKmerReads) {
 					uint32_t forwardWinners = 0;
 					uint32_t revWinners = 0;
@@ -2272,24 +2351,28 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegions(con
 				readVec::getMaxLength(contigsKmerReads, maxLen);
 				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
-				std::vector<kmerInfo> inputSeqsKmerInfos;
+				std::vector<kmerInfo> refSeqsKmerInfos;
 				for(const auto & input : refSeqs){
-					inputSeqsKmerInfos.emplace_back(input.seq_, 7, false);
+					refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 				}
-				readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, inputSeqsKmerInfos, alignerObj	);
-				//alignerObj.processAlnInfoOutputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
-
+				//readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, refSeqsKmerInfos, alignerObj);
 				std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs;
-				for(auto & seq : contigsKmerReads){
-					bool found = false;
-					for(const auto & finalSeq : finalSeqs){
-						if(finalSeq->seqBase_.seq_ == seq->seqBase_.seq_){
-							found = true;
-							break;
+				std::unordered_map<std::string, uint32_t> finalSeqCounts;
+				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
+				for(const auto & seq : contigsKmerReads){
+					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
+					for(auto & seq : trimmed){
+						bool found = false;
+						for(const auto & finalSeq : finalSeqs){
+							if(finalSeq->seqBase_.seq_ == seq.seq_){
+								found = true;
+								break;
+							}
 						}
-					}
-					if(!found){
-						finalSeqs.emplace_back(seq);
+						if(!found){
+							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
+							++finalSeqCounts[seq.name_];
+						}
 					}
 				}
 				double totalCoverage = 0;
@@ -2306,6 +2389,10 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegions(con
 					seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 					seqMeta.addMeta("regionUID", regionUid);
 					seqMeta.addMeta("sample", sample);
+					if(finalSeqCounts[seq->seqBase_.name_] > 1){
+						seqMeta.addMeta("seqTrimmedCount", finalSeqCountsWritten[seq->seqBase_.name_]);
+						++finalSeqCountsWritten[seq->seqBase_.name_];
+					}
 					seqMeta.resetMetaInName(seq->seqBase_.name_);
 					seq->seqBase_.cnt_ = (assembleInfo.coverage_/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
 					seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
@@ -2477,11 +2564,11 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 	auto inputRegions = gatherRegions(bedFile.string(), "", setUp.pars_.verbose_);
 	sortGRegionsByStart(inputRegions);
 
-	VecStr regionNames;
+	std::set<std::string> regionNames;
 	for(const auto & reg : inputRegions){
-		regionNames.emplace_back(reg.uid_);
+		regionNames.emplace(reg.uid_);
 	}
-	njh::sort(regionNames);
+	//njh::sort(regionNames);
 	njh::concurrent::LockableQueue<std::string> regionsQueue(regionNames);
 
 	bfs::path finalDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("final"));
@@ -2585,11 +2672,17 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 				SeqInput refReader(SeqIOOptions::genFastaIn(refFnp));
 				auto refSeqs = refReader.readAllReads<seqInfo>();
 				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
+				std::vector<seqInfo> revComp_refSeqs;
+				std::vector<kmerInfo> revComp_refSeqsKInfos;
 				for (const auto & seq : refSeqs) {
 					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
 				allSetKmers(refKmerReads, reOrientingKmerLength, true);
-
+				for(const auto & rSeq : refSeqs){
+					revComp_refSeqs.emplace_back(rSeq);
+					revComp_refSeqs.back().reverseComplementRead(false, true);
+					revComp_refSeqsKInfos.emplace_back(revComp_refSeqs.back().seq_, 7, false);
+				}
 				for(const auto & seqKmer : contigsKmerReads) {
 					uint32_t forwardWinners = 0;
 					uint32_t revWinners = 0;
@@ -2630,24 +2723,28 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 				readVec::getMaxLength(contigsKmerReads, maxLen);
 				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
-				std::vector<kmerInfo> inputSeqsKmerInfos;
+				std::vector<kmerInfo> refSeqsKmerInfos;
 				for(const auto & input : refSeqs){
-					inputSeqsKmerInfos.emplace_back(input.seq_, 7, false);
+					refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 				}
-				readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, inputSeqsKmerInfos, alignerObj	);
-				//alignerObj.processAlnInfoOutputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
-
+				//readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, refSeqsKmerInfos, alignerObj);
 				std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs;
-				for(auto & seq : contigsKmerReads){
-					bool found = false;
-					for(const auto & finalSeq : finalSeqs){
-						if(finalSeq->seqBase_.seq_ == seq->seqBase_.seq_){
-							found = true;
-							break;
+				std::unordered_map<std::string, uint32_t> finalSeqCounts;
+				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
+				for(const auto & seq : contigsKmerReads){
+					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
+					for(auto & seq : trimmed){
+						bool found = false;
+						for(const auto & finalSeq : finalSeqs){
+							if(finalSeq->seqBase_.seq_ == seq.seq_){
+								found = true;
+								break;
+							}
 						}
-					}
-					if(!found){
-						finalSeqs.emplace_back(seq);
+						if(!found){
+							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
+							++finalSeqCounts[seq.name_];
+						}
 					}
 				}
 				double totalCoverage = finalSeqs.size();
@@ -2660,6 +2757,10 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 					seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 					seqMeta.addMeta("regionUID", regionUid);
 					seqMeta.addMeta("sample", sample);
+					if(finalSeqCounts[seq->seqBase_.name_] > 1){
+						seqMeta.addMeta("seqTrimmedCount", finalSeqCountsWritten[seq->seqBase_.name_]);
+						++finalSeqCountsWritten[seq->seqBase_.name_];
+					}
 					seqMeta.resetMetaInName(seq->seqBase_.name_);
 					seq->seqBase_.cnt_ = (1/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
 					seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
@@ -2882,11 +2983,11 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	auto inputRegions = gatherRegions(bedFile.string(), "", setUp.pars_.verbose_);
 	sortGRegionsByStart(inputRegions);
 
-	VecStr regionNames;
+	std::set<std::string> regionNames;
 	for(const auto & reg : inputRegions){
-		regionNames.emplace_back(reg.uid_);
+		regionNames.emplace(reg.uid_);
 	}
-	njh::sort(regionNames);
+	//njh::sort(regionNames);
 	njh::concurrent::LockableQueue<std::string> regionsQueue(regionNames);
 
 	bfs::path finalDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("final"));
@@ -3167,11 +3268,17 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					SeqInput refReader(SeqIOOptions::genFastaIn( refFnp ) );
 					auto refSeqs = refReader.readAllReads<seqInfo>();
 					std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
+					std::vector<seqInfo> revComp_refSeqs;
+					std::vector<kmerInfo> revComp_refSeqsKInfos;
 					for (const auto & seq : refSeqs) {
 						refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 					}
 					allSetKmers(refKmerReads, reOrientingKmerLength, true);
-
+					for(const auto & rSeq : refSeqs){
+						revComp_refSeqs.emplace_back(rSeq);
+						revComp_refSeqs.back().reverseComplementRead(false, true);
+						revComp_refSeqsKInfos.emplace_back(revComp_refSeqs.back().seq_, 7, false);
+					}
 					for(const auto & seqKmer : contigsKmerReads) {
 						uint32_t forwardWinners = 0;
 						uint32_t revWinners = 0;
@@ -3217,23 +3324,28 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					readVec::getMaxLength(contigsKmerReads, maxLen);
 					aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 					//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
-					std::vector<kmerInfo> inputSeqsKmerInfos;
+					std::vector<kmerInfo> refSeqsKmerInfos;
 					for(const auto & input : refSeqs){
-						inputSeqsKmerInfos.emplace_back(input.seq_, 7, false);
+						refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 					}
-					readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, inputSeqsKmerInfos, alignerObj	);
-					//alignerObj.processAlnInfoOutputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
+					//readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, refSeqsKmerInfos, alignerObj);
 					std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs;
-					for(auto & seq : contigsKmerReads){
-						bool found = false;
-						for(const auto & finalSeq : finalSeqs){
-							if(finalSeq->seqBase_.seq_ == seq->seqBase_.seq_){
-								found = true;
-								break;
+					std::unordered_map<std::string, uint32_t> finalSeqCounts;
+					std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
+					for(const auto & seq : contigsKmerReads){
+						auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
+						for(auto & seq : trimmed){
+							bool found = false;
+							for(const auto & finalSeq : finalSeqs){
+								if(finalSeq->seqBase_.seq_ == seq.seq_){
+									found = true;
+									break;
+								}
 							}
-						}
-						if(!found){
-							finalSeqs.emplace_back(seq);
+							if(!found){
+								finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
+								++finalSeqCounts[seq.name_];
+							}
 						}
 					}
 
@@ -3251,6 +3363,10 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 						seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 						seqMeta.addMeta("regionUID", regionUid);
 						seqMeta.addMeta("sample", sample);
+						if(finalSeqCounts[seq->seqBase_.name_] > 1){
+							seqMeta.addMeta("seqTrimmedCount", finalSeqCountsWritten[seq->seqBase_.name_]);
+							++finalSeqCountsWritten[seq->seqBase_.name_];
+						}
 						seqMeta.resetMetaInName(seq->seqBase_.name_);
 						seq->seqBase_.cnt_ = (assembleInfo.coverage_/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
 						seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
@@ -3504,11 +3620,17 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					SeqInput refReader(SeqIOOptions::genFastaIn( refFnp ) );
 					auto refSeqs = refReader.readAllReads<seqInfo>();
 					std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
+					std::vector<seqInfo> revComp_refSeqs;
+					std::vector<kmerInfo> revComp_refSeqsKInfos;
 					for (const auto & seq : refSeqs) {
 						refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 					}
 					allSetKmers(refKmerReads, reOrientingKmerLength, true);
-
+					for(const auto & rSeq : refSeqs){
+						revComp_refSeqs.emplace_back(rSeq);
+						revComp_refSeqs.back().reverseComplementRead(false, true);
+						revComp_refSeqsKInfos.emplace_back(revComp_refSeqs.back().seq_, 7, false);
+					}
 					for(const auto & seqKmer : contigsKmerReads) {
 						uint32_t forwardWinners = 0;
 						uint32_t revWinners = 0;
@@ -3553,23 +3675,28 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					readVec::getMaxLength(contigsKmerReads, maxLen);
 					aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 					//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
-					std::vector<kmerInfo> inputSeqsKmerInfos;
+					std::vector<kmerInfo> refSeqsKmerInfos;
 					for(const auto & input : refSeqs){
-						inputSeqsKmerInfos.emplace_back(input.seq_, 7, false);
+						refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 					}
-					readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, inputSeqsKmerInfos, alignerObj	);
-					//alignerObj.processAlnInfoOutputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
+					//readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, refSeqsKmerInfos, alignerObj);
 					std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs;
-					for(auto & seq : contigsKmerReads){
-						bool found = false;
-						for(const auto & finalSeq : finalSeqs){
-							if(finalSeq->seqBase_.seq_ == seq->seqBase_.seq_){
-								found = true;
-								break;
+					std::unordered_map<std::string, uint32_t> finalSeqCounts;
+					std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
+					for(const auto & seq : contigsKmerReads){
+						auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
+						for(auto & seq : trimmed){
+							bool found = false;
+							for(const auto & finalSeq : finalSeqs){
+								if(finalSeq->seqBase_.seq_ == seq.seq_){
+									found = true;
+									break;
+								}
 							}
-						}
-						if(!found){
-							finalSeqs.emplace_back(seq);
+							if(!found){
+								finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
+								++finalSeqCounts[seq.name_];
+							}
 						}
 					}
 
@@ -3587,6 +3714,10 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 						seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 						seqMeta.addMeta("regionUID", regionUid);
 						seqMeta.addMeta("sample", sample);
+						if(finalSeqCounts[seq->seqBase_.name_] > 1){
+							seqMeta.addMeta("seqTrimmedCount", finalSeqCountsWritten[seq->seqBase_.name_]);
+							++finalSeqCountsWritten[seq->seqBase_.name_];
+						}
 						seqMeta.resetMetaInName(seq->seqBase_.name_);
 						seq->seqBase_.cnt_ = (assembleInfo.coverage_/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
 						seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
@@ -3819,11 +3950,11 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegions(const
 	auto inputRegions = gatherRegions(bedFile.string(), "", setUp.pars_.verbose_);
 	sortGRegionsByStart(inputRegions);
 
-	VecStr regionNames;
+	std::set<std::string> regionNames;
 	for(const auto & reg : inputRegions){
-		regionNames.emplace_back(reg.uid_);
+		regionNames.emplace(reg.uid_);
 	}
-	njh::sort(regionNames);
+	//njh::sort(regionNames);
 	njh::concurrent::LockableQueue<std::string> regionsQueue(regionNames);
 
 	bfs::path finalDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("final"));
@@ -3968,11 +4099,17 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegions(const
 				SeqInput refReader(SeqIOOptions::genFastaIn(refFnp));
 				auto refSeqs = refReader.readAllReads<seqInfo>();
 				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
+				std::vector<seqInfo> revComp_refSeqs;
+				std::vector<kmerInfo> revComp_refSeqsKInfos;
 				for (const auto & seq : refSeqs) {
 					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
 				allSetKmers(refKmerReads, reOrientingKmerLength, true);
-
+				for(const auto & rSeq : refSeqs){
+					revComp_refSeqs.emplace_back(rSeq);
+					revComp_refSeqs.back().reverseComplementRead(false, true);
+					revComp_refSeqsKInfos.emplace_back(revComp_refSeqs.back().seq_, 7, false);
+				}
 				for(const auto & seqKmer : contigsKmerReads) {
 					uint32_t forwardWinners = 0;
 					uint32_t revWinners = 0;
@@ -4015,24 +4152,28 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegions(const
 				readVec::getMaxLength(contigsKmerReads, maxLen);
 				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
-				std::vector<kmerInfo> inputSeqsKmerInfos;
+				std::vector<kmerInfo> refSeqsKmerInfos;
 				for(const auto & input : refSeqs){
-					inputSeqsKmerInfos.emplace_back(input.seq_, 7, false);
+					refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 				}
-				readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, inputSeqsKmerInfos, alignerObj	);
-				//alignerObj.processAlnInfoOutputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
-
+				//readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, refSeqsKmerInfos, alignerObj);
 				std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs;
-				for(auto & seq : contigsKmerReads){
-					bool found = false;
-					for(const auto & finalSeq : finalSeqs){
-						if(finalSeq->seqBase_.seq_ == seq->seqBase_.seq_){
-							found = true;
-							break;
+				std::unordered_map<std::string, uint32_t> finalSeqCounts;
+				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
+				for(const auto & seq : contigsKmerReads){
+					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
+					for(auto & seq : trimmed){
+						bool found = false;
+						for(const auto & finalSeq : finalSeqs){
+							if(finalSeq->seqBase_.seq_ == seq.seq_){
+								found = true;
+								break;
+							}
 						}
-					}
-					if(!found){
-						finalSeqs.emplace_back(seq);
+						if(!found){
+							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
+							++finalSeqCounts[seq.name_];
+						}
 					}
 				}
 				double totalCoverage = finalSeqs.size() * defaultCoverage;
@@ -4049,6 +4190,10 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegions(const
 					seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 					seqMeta.addMeta("regionUID", regionUid);
 					seqMeta.addMeta("sample", sample);
+					if(finalSeqCounts[seq->seqBase_.name_] > 1){
+						seqMeta.addMeta("seqTrimmedCount", finalSeqCountsWritten[seq->seqBase_.name_]);
+						++finalSeqCountsWritten[seq->seqBase_.name_];
+					}
 					seqMeta.resetMetaInName(seq->seqBase_.name_);
 					seq->seqBase_.cnt_ = (defaultCoverage/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
 					seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);

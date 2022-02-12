@@ -848,6 +848,8 @@ int seqUtilsInfoRunner::fastaIdenticalInfo(const njh::progutils::CmdArgs & input
 
 int seqUtilsInfoRunner::countLetters(const njh::progutils::CmdArgs & inputCommands) {
 	// parameters
+	std::string id = "";
+	bool addQualities = false;
 	seqUtilsInfoSetUp setUp(inputCommands);
 	if (setUp.needsHelp()) {
 		std::cout << "countLetters" << std::endl;
@@ -856,7 +858,7 @@ int seqUtilsInfoRunner::countLetters(const njh::progutils::CmdArgs & inputComman
 		exit(1);
 	}
 	if (!setUp.processSeq(false)) {
-		setUp.processDefaultReader(true);
+		setUp.processReadInNames(true);
 	}
 	bool resetAlph = false;
 	bool keepDNA = false;
@@ -865,9 +867,15 @@ int seqUtilsInfoRunner::countLetters(const njh::progutils::CmdArgs & inputComman
 		setUp.setOption(resetAlph, "-resetAlphabet", "Reset Alphabet");
 		setUp.setOption(keepDNA, "-keepDNA", "keepDNA");
 	}
+	setUp.setOption(addQualities, "--addQualities", "add Qualities", false);
+
+	setUp.setOption(id, "--id", "optional ID to add to the output", false);
+	OutOptions outOpts(bfs::path(""), ".tab.txt");
+	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 	SeqInput reader(setUp.pars_.ioOptions_);
 	reader.openIn();
+	OutputStream out(outOpts);
 	auto inReads = reader.readAllReads<readObject>();
 	std::vector<char> alphVec = processAlphStrVecChar(alphabet, ",");
 	charCounter counter(alphVec);
@@ -885,7 +893,12 @@ int seqUtilsInfoRunner::countLetters(const njh::progutils::CmdArgs & inputComman
 		counter.resetAlphabet(keepDNA);
 	}
 	counter.setFractions();
-	counter.outPutInfo(std::cout, false);
+	auto tabInfo = counter.createOutputTab(addQualities);
+	if("" != id){
+		tabInfo.addColumn(std::vector<std::string>{id}, "id");
+	}
+	tabInfo.outPutContents(out, "\t");
+
 	return 0;
 }
 
