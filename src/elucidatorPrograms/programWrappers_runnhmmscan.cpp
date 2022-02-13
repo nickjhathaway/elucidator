@@ -266,8 +266,12 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 					meta.addMeta("hmmTo", domain.hmmTo_, true);
 					meta.addMeta("trimStart", region.chromStart_, true);
 					meta.addMeta("trimEnd", region.chromEnd_, true);
+					meta.addMeta("trimLen", region.length(), true);
+					meta.addMeta("score", domain.modelScore_, true);
+					meta.addMeta("evalue", domain.modelEvalue_, true);
 					meta.addMeta("model", domain.targetName_);
 					meta.addMeta("ID", domain.targetDesc_);
+
 					meta.resetMetaInName(subSeq.name_);
 					writer.write(subSeq);
 				}
