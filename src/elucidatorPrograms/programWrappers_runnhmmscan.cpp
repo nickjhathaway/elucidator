@@ -261,13 +261,17 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 				for(const auto & domain : domainsPerSeq[seq.name_]){
 					Bed6RecordCore region = domain.genBed6_env();
 					auto subSeq = seq.getSubRead(region.chromStart_, region.length());
+					if(region.reverseStrand()){
+						subSeq.reverseComplementRead(false, true);
+					}
 					MetaDataInName meta;
-					meta.addMeta("hmmFrom", domain.hmmFrom_ - 1, true);
+					meta.addMeta("hmmFrom", domain.hmmFrom_, true);
 					meta.addMeta("hmmTo", domain.hmmTo_, true);
 					meta.addMeta("hmmCovered", domain.modelCoverage());
 					meta.addMeta("trimStart", region.chromStart_, true);
 					meta.addMeta("trimEnd", region.chromEnd_, true);
 					meta.addMeta("trimLen", region.length(), true);
+					meta.addMeta("strand", region.reverseStrand(), true);
 					meta.addMeta("score", domain.modelScore_, true);
 					meta.addMeta("evalue", domain.modelEvalue_, true);
 					meta.addMeta("model", domain.targetName_);
