@@ -264,6 +264,7 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 					MetaDataInName meta;
 					meta.addMeta("hmmFrom", domain.hmmFrom_ - 1, true);
 					meta.addMeta("hmmTo", domain.hmmTo_, true);
+					meta.addMeta("hmmCovered", domain.modelCoverage());
 					meta.addMeta("trimStart", region.chromStart_, true);
 					meta.addMeta("trimEnd", region.chromEnd_, true);
 					meta.addMeta("trimLen", region.length(), true);
