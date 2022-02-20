@@ -271,7 +271,7 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 					meta.addMeta("trimStart", region.chromStart_, true);
 					meta.addMeta("trimEnd", region.chromEnd_, true);
 					meta.addMeta("trimLen", region.length(), true);
-					meta.addMeta("strand", region.reverseStrand(), true);
+					meta.addMeta("revStrand", region.reverseStrand(), true);
 					meta.addMeta("score", domain.modelScore_, true);
 					meta.addMeta("evalue", domain.modelEvalue_, true);
 					meta.addMeta("model", domain.targetName_);
