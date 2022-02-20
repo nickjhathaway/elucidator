@@ -127,7 +127,7 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	//convert domain hits table into a real table and
 	//filter table
 	auto rawDomainHitsFnp = njh::files::make_path(setUp.pars_.directoryName_, "raw_all_domain_hits_table.txt");
-	//auto rawDomainHitsFnp = njh::files::make_path(setUp.pars_.directoryName_, "nhmmscan_raw_output.txt");
+	auto nhmmscan_raw_outputFnp = njh::files::make_path(setUp.pars_.directoryName_, "nhmmscan_raw_output.txt");
 
 	auto allDomainHitsFnp = njh::files::make_path(setUp.pars_.directoryName_, "all_domain_hits_table.tab.txt");
 	auto filtDomainHitsFnp = njh::files::make_path(setUp.pars_.directoryName_, "filt_domain_hits_table.tab.txt");
@@ -137,6 +137,15 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	auto domainLocationBedsFnp = njh::files::make_path(setUp.pars_.directoryName_, "all_domain_hits_table.bed");
 	auto domainCountsFnp = njh::files::make_path(setUp.pars_.directoryName_, "seqDomainCounts.tab.txt");
 
+	{
+		OutOptions hitTableOutOpts = njh::files::make_path(setUp.pars_.directoryName_, "nhmmscan_hits_table.tab.txt");
+		nhmmscanOutput outputParsed = nhmmscanOutput::parseRawOutput(nhmmscan_raw_outputFnp);
+		for(auto & query : outputParsed.qResults_){
+			query.queryName_ = seqKey[njh::StrToNumConverter::stoToNum<uint32_t>(query.queryName_)];;
+		}
+		outputParsed.outputCustomHitsTable(hitTableOutOpts);
+
+	}
 	{
 		OutputStream out(allDomainHitsFnp);
 		OutputStream outFilt(filtDomainHitsFnp);
@@ -271,8 +280,10 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 					meta.addMeta("trimStart", region.chromStart_, true);
 					meta.addMeta("trimEnd", region.chromEnd_, true);
 					meta.addMeta("trimLen", region.length(), true);
+					meta.addMeta("trimCov", region.length()/static_cast<double>(len(seq)), true);
 					meta.addMeta("revStrand", region.reverseStrand(), true);
 					meta.addMeta("score", domain.modelScore_, true);
+					meta.addMeta("scoreNorm", domain.modelScore_/region.length(), true);
 					meta.addMeta("evalue", domain.modelEvalue_, true);
 					meta.addMeta("model", domain.targetName_);
 					meta.addMeta("ID", domain.targetDesc_);
@@ -296,6 +307,4 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 
 
 } // namespace njhseq
-
-
 
