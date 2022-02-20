@@ -39,6 +39,9 @@ class fileFormatExpRunner : public njh::progutils::ProgramRunner {
 	static int extractRefSeqRecords(const njh::progutils::CmdArgs & inputCommands);
 
 	static int parsePf3kEmblFilesToGff3(const njh::progutils::CmdArgs & inputCommands);
+
+	static int parsenhmmscanRaw(const njh::progutils::CmdArgs & inputCommands);
+
 };
 } /* namespace njhseq */
 

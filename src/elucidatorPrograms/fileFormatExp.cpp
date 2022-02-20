@@ -35,7 +35,8 @@ fileFormatExpRunner::fileFormatExpRunner()
     : njh::progutils::ProgramRunner(
           {
 					 addFunc("extractRefSeqRecords", extractRefSeqRecords, false),
-					 addFunc("parsePf3kEmblFilesToGff3", parsePf3kEmblFilesToGff3, false)
+					 addFunc("parsePf3kEmblFilesToGff3", parsePf3kEmblFilesToGff3, false),
+					 addFunc("parsenhmmscanRaw", parsenhmmscanRaw, false)
            },//
           "fileFormatExp") {}
 
