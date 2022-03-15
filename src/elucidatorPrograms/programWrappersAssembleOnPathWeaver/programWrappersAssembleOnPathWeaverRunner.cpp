@@ -834,7 +834,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 
 					for(const auto & contigsKmerRead : contigsKmerReads){
 						auto assembleInfo = DefaultAssembleNameInfo(contigsKmerRead->seqBase_.name_, unicyclerNamePat);
-						assembleInfo.coverage_ *= totalReads;
+						assembleInfo.coverage_ = (assembleInfo.coverage_ * totalReads)/assembleInfo.len_;
 						contigInfoOut << contigsKmerRead->seqBase_.name_
 													<< "\t" << len(contigsKmerRead->seqBase_)
 													<< "\t" << assembleInfo.coverage_ << std::endl;
@@ -876,13 +876,13 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 					double totalCoverage = 0;
 					for(auto & seq : finalSeqs){
 						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, unicyclerNamePat);
-						assembleInfo.coverage_ *= totalReads;
+						assembleInfo.coverage_ = (assembleInfo.coverage_ * totalReads)/assembleInfo.len_;
 						totalCoverage += assembleInfo.coverage_;
 					}
 
 					for(auto & seq : finalSeqs){
 						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, unicyclerNamePat);
-						assembleInfo.coverage_ *= totalReads;
+						assembleInfo.coverage_ = (assembleInfo.coverage_ * totalReads)/assembleInfo.len_;
 						MetaDataInName seqMeta;
 						seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
 						seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
