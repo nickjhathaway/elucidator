@@ -754,9 +754,9 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 						ss << __PRETTY_FUNCTION__ << ", couldn't find " << pairedR1 << " or " << singles << ", need to have at least one of them" << "\n";
 						throw std::runtime_error{ss.str()};
 					}
-					std::stringstream unicyclerCmdStream;
-					unicyclerCmdStream << "cd " << regionOutputDir;
-					unicyclerCmdStream << " && unicycler ";
+					std::stringstream raw_unicyclerCmdStream;
+					raw_unicyclerCmdStream << "cd " << regionOutputDir;
+					raw_unicyclerCmdStream << " && unicycler ";
 
 					if(exists(pairedR1)){
 						if(!exists(pairedR2)){
@@ -764,21 +764,37 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 							ss << __PRETTY_FUNCTION__ << ", found: " << pairedR1 << " but cound't find it's mate file: " << pairedR2 << "\n";
 							throw std::runtime_error{ss.str()};
 						}else{
-							unicyclerCmdStream << " -1 " << pairedR1.filename() << " -2 " << pairedR2.filename() << " ";
+							raw_unicyclerCmdStream << " -1 " << pairedR1.filename() << " -2 " << pairedR2.filename() << " ";
 						}
 					}
 					if(exists(singles)){
-						unicyclerCmdStream << " -s  " << singles.filename();
+						raw_unicyclerCmdStream << " -s  " << singles.filename();
 					}
-					unicyclerCmdStream  << " -t " << unicyclerNumThreads
+					raw_unicyclerCmdStream  << " -t " << unicyclerNumThreads
 													 << " " << extraUnicyclerOptions
-													 << " -o " << unicyclerOutDir
-													 << " > unicyclerRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
+													 << " -o " << unicyclerOutDir;
+					std::string raw_unicyclerCmd = raw_unicyclerCmdStream.str();
+					std::stringstream unicyclerCmdStream;
+					unicyclerCmdStream << raw_unicyclerCmd << " > unicyclerRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
 					auto unicyclerFullOutputDir = njh::files::make_path(regionOutputDir, unicyclerOutDir);
 
 					auto unicyclerRunOutput = njh::sys::run({unicyclerCmdStream.str()});
+					if(!unicyclerRunOutput.success_){
+						std::stringstream unicyclerCmdStream_reAttempt;
+						//sometimes unicycler fails at the spades correction step, so try re-runing without correcting
+						unicyclerCmdStream_reAttempt << raw_unicyclerCmd << " --no_correct  > unicyclerReRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
+						if(bfs::exists(unicyclerFullOutputDir)){
+							bfs::rename(unicyclerFullOutputDir, njh::files::make_path(regionOutputDir, "failed_" + unicyclerOutDir.string()));
+						}
+						auto unicyclerReRunOutput = njh::sys::run({unicyclerCmdStream_reAttempt.str()});
+						if(!unicyclerReRunOutput.success_ && !unicyclerRunOutput.success_){
+							//throw if they both failed
+							std::stringstream ss;
+							ss << __PRETTY_FUNCTION__ << ", error:\n" << unicyclerRunOutput.stdErr_ << "\n" << unicyclerReRunOutput.stdErr_ << "\n";
+							throw std::runtime_error{ss.str()};
+						}
+					}
 
-					BioCmdsUtils::checkRunOutThrow(unicyclerRunOutput, __PRETTY_FUNCTION__);
 
 					OutOptions unicyclerRunOutputLogOpts(njh::files::make_path(unicyclerFullOutputDir, "unicyclerRunOutput.json"));
 					OutputStream unicyclerRunOutputLogOut(unicyclerRunOutputLogOpts);
