@@ -29,7 +29,9 @@ namespace njhseq {
 programWrappersAssembleOnPathWeaverRunner::programWrappersAssembleOnPathWeaverRunner()
     : njh::progutils::ProgramRunner(
           {
+
 					 addFunc("runSpadesOnPathWeaverRegions", runSpadesOnPathWeaverRegions, false),
+					 addFunc("runUnicyclerOnPathWeaverRegions", runUnicyclerOnPathWeaverRegions, false),
 					 addFunc("runMegahitOnPathWeaverRegions", runMegahitOnPathWeaverRegions, false),
 					 addFunc("runPRICEOnPathWeaverRegions", runPRICEOnPathWeaverRegions, false),
 
@@ -632,6 +634,369 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 
 	return 0;
 }
+//
+	int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands) {
+		bfs::path bedFile = "";
+		bfs::path pwOutputDir = "";
+		std::string sample;
+
+		uint32_t unicyclerNumThreads = 1;
+		std::string extraUnicyclerOptions;
+		uint32_t reOrientingKmerLength = 9;
+		uint32_t minFinalLength = 40;
+		bfs::path unicyclerOutDir = "unicyclerOut";
+		uint32_t numThreads = 1;
+		seqSetUp setUp(inputCommands);
+		setUp.processDebug();
+		setUp.processVerbose();
+		setUp.setOption(bedFile, "--bed", "The Regions to analyze", true);
+		setUp.setOption(pwOutputDir, "--pwOutputDir", "The PathWeaver directory", true);
+		setUp.setOption(sample, "--sample", "sample name", true);
+
+		setUp.setOption(numThreads, "--numThreads", "num Threads");
+
+
+		setUp.setOption(unicyclerNumThreads, "--unicyclerNumThreads", "unicycler Num Threads");
+		setUp.setOption(extraUnicyclerOptions, "--extraUnicyclerOptions", "extra Unicycler Options");
+
+		setUp.setOption(minFinalLength, "--minFinalLength", "min Final Length");
+		setUp.setOption(reOrientingKmerLength, "--reOrientingKmerLength", "re-orienting K-mer Length");
+		setUp.setOption(unicyclerOutDir,     "--unicyclerOutDir",     "unicycler Out Directory name, will be relative to final pass directory");
+
+
+		setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(pwOutputDir), "_unicycler_TODAY"), true);
+		setUp.finishSetUp(std::cout);
+		setUp.startARunLog(setUp.pars_.directoryName_);
+		njh::sys::requireExternalProgramThrow("unicycler");
+
+		auto inputRegions = gatherRegions(bedFile.string(), "", setUp.pars_.verbose_);
+		sortGRegionsByStart(inputRegions);
+
+		std::set<std::string> regionNames;
+		for(const auto & reg : inputRegions){
+			regionNames.emplace(reg.uid_);
+		}
+		//njh::sort(regionNames);
+		njh::concurrent::LockableQueue<std::string> regionsQueue(regionNames);
+
+		bfs::path finalDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("final"));
+		bfs::path partialDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("partial"));
+		auto allFinalSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(finalDirectory, "allFinal.fasta"));
+		auto allPartialSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(partialDirectory, "allPartial.fasta"));
+		SeqOutput allFinalWriter(allFinalSeqOpts);
+		SeqOutput allPartialWriter(allPartialSeqOpts);
+		allFinalWriter.openOut();
+		allPartialWriter.openOut();
+		std::mutex allFinalWriterMut;
+		std::mutex allPartialWriterMut;
+
+
+		std::unordered_map<std::string,
+						std::vector<std::shared_ptr<BamRegionInvestigator::RegionInfo>> >regInfosByUID;
+		for (const auto & reg : inputRegions) {
+			regInfosByUID[reg.uid_].emplace_back(std::make_shared<BamRegionInvestigator::RegionInfo>(reg));
+		}
+
+		std::unordered_map<std::string, std::string> exceptions;
+		std::mutex exceptionsMut;
+
+		std::function<void()> runUnicyclerOnRegion = [&](){
+			std::string regionUid = "";
+			while(regionsQueue.getVal(regionUid)){
+				const auto & regInfo = njh::mapAt(regInfosByUID, regionUid);
+				auto regionOutputDir = njh::files::make_path(setUp.pars_.directoryName_, regionUid, sample);
+				njh::files::makeDirP(njh::files::MkdirPar{regionOutputDir});
+
+				//
+
+				bfs::path refFnp = njh::files::make_path(pwOutputDir, regionUid, "allRefs.fasta");
+
+
+				//first extract the reads
+				bfs::path extractBam = njh::files::make_path(pwOutputDir, regionUid, sample + "_extraction", "extracted.bam");
+				OutOptions outOpts(njh::files::make_path(regionOutputDir, "extracted"));
+				auto readCounts = rawWriteExtractReadsFromBamOnlyMapped(extractBam, outOpts);
+				bfs::path pairedR1 = njh::files::make_path(regionOutputDir, "extracted_R1.fastq");
+				bfs::path pairedR2 = njh::files::make_path(regionOutputDir, "extracted_R2.fastq");
+				bfs::path singles =  njh::files::make_path(regionOutputDir, "extracted.fastq");
+				for(auto & reg : regInfo){
+					reg->totalPairedReads_ = readCounts.pairedReads_;
+					reg->totalReads_ = readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_;
+					reg->totalFinalReads_ = readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_;
+				}
+				try {
+					if(!exists(pairedR1) && !exists(singles)){
+						std::stringstream ss;
+						ss << __PRETTY_FUNCTION__ << ", couldn't find " << pairedR1 << " or " << singles << ", need to have at least one of them" << "\n";
+						throw std::runtime_error{ss.str()};
+					}
+					std::stringstream unicyclerCmdStream;
+					unicyclerCmdStream << "cd " << regionOutputDir;
+					unicyclerCmdStream << " && unicycler ";
+
+					if(exists(pairedR1)){
+						if(!exists(pairedR2)){
+							std::stringstream ss;
+							ss << __PRETTY_FUNCTION__ << ", found: " << pairedR1 << " but cound't find it's mate file: " << pairedR2 << "\n";
+							throw std::runtime_error{ss.str()};
+						}else{
+							unicyclerCmdStream << " -1 " << pairedR1.filename() << " -2 " << pairedR2.filename() << " ";
+						}
+					}
+					if(exists(singles)){
+						unicyclerCmdStream << " -s  " << singles.filename();
+					}
+					unicyclerCmdStream  << " -t " << unicyclerNumThreads
+													 << " " << extraUnicyclerOptions
+													 << " -o " << unicyclerOutDir
+													 << " > unicyclerRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
+					auto unicyclerFullOutputDir = njh::files::make_path(regionOutputDir, unicyclerOutDir);
+
+					auto unicyclerRunOutput = njh::sys::run({unicyclerCmdStream.str()});
+
+					BioCmdsUtils::checkRunOutThrow(unicyclerRunOutput, __PRETTY_FUNCTION__);
+
+					OutOptions unicyclerRunOutputLogOpts(njh::files::make_path(unicyclerFullOutputDir, "unicyclerRunOutput.json"));
+					OutputStream unicyclerRunOutputLogOut(unicyclerRunOutputLogOpts);
+					unicyclerRunOutputLogOut << njh::json::toJson(unicyclerRunOutput) << std::endl;
+
+					auto contigsFnp = njh::files::make_path(unicyclerFullOutputDir, "contigs.fasta");
+
+
+					auto contigsSeqIoOpts = SeqIOOptions::genFastaIn(contigsFnp);
+//				contigsSeqIoOpts.includeWhiteSpaceInName_ = false;
+					contigsSeqIoOpts.lowerCaseBases_ = "upper";
+					SeqInput contigsReader(contigsSeqIoOpts);
+					auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
+					std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+					for (const auto & seq : contigsSeqs) {
+						contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
+					}
+					allSetKmers(contigsKmerReads, reOrientingKmerLength, true);
+
+					SeqInput refReader(SeqIOOptions::genFastaIn(refFnp));
+					auto refSeqs = refReader.readAllReads<seqInfo>();
+					std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
+					std::vector<seqInfo> revComp_refSeqs;
+					std::vector<kmerInfo> revComp_refSeqsKInfos;
+					for (const auto & seq : refSeqs) {
+						refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
+					}
+					allSetKmers(refKmerReads, reOrientingKmerLength, true);
+					for(const auto & rSeq : refSeqs){
+						revComp_refSeqs.emplace_back(rSeq);
+						revComp_refSeqs.back().reverseComplementRead(false, true);
+						revComp_refSeqsKInfos.emplace_back(revComp_refSeqs.back().seq_, 7, false);
+					}
+					for(const auto & seqKmer : contigsKmerReads) {
+						uint32_t forwardWinners = 0;
+						uint32_t revWinners = 0;
+						for (const auto & refSeq : refKmerReads) {
+							auto forDist = refSeq->compareKmers(*seqKmer);
+							auto revDist = refSeq->compareKmersRevComp(*seqKmer);
+							if (forDist.first < revDist.first) {
+								++revWinners;
+							} else {
+								++forwardWinners;
+							}
+						}
+						if (revWinners > forwardWinners) {
+							seqKmer->seqBase_.reverseComplementRead(true, true);
+						}
+					}
+
+					//sort by sequence length;
+					njh::sort(contigsKmerReads, [](const std::shared_ptr<seqWithKmerInfo> & seq1, const std::shared_ptr<seqWithKmerInfo> & seq2){
+						return len(seq1->seqBase_) > len(seq2->seqBase_);
+					});
+
+					OutOptions contigInfoOpts(njh::files::make_path(unicyclerFullOutputDir, "contigs_outputInfo.tab.txt"));
+					OutputStream contigInfoOut(contigInfoOpts);
+					contigInfoOut << "name\tlength\tcoverage" << std::endl;
+
+					for(const auto & contigsKmerRead : contigsKmerReads){
+						auto assembleInfo = DefaultAssembleNameInfo(contigsKmerRead->seqBase_.name_);
+						contigInfoOut << contigsKmerRead->seqBase_.name_
+													<< "\t" << len(contigsKmerRead->seqBase_)
+													<< "\t" << assembleInfo.coverage_ << std::endl;
+					}
+					auto reOrientedContigsFnp = njh::files::make_path(unicyclerFullOutputDir, "reOriented_contigs.fasta");
+
+					SeqOutput::write(contigsKmerReads, SeqIOOptions::genFastaOut(reOrientedContigsFnp));
+
+					uint64_t maxLen = 0;
+					readVec::getMaxLength(refSeqs, maxLen);
+					readVec::getMaxLength(contigsKmerReads, maxLen);
+					aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
+					//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
+					std::vector<kmerInfo> refSeqsKmerInfos;
+					for(const auto & input : refSeqs){
+						refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
+					}
+
+					//readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, refSeqsKmerInfos, alignerObj);
+					std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs;
+					std::unordered_map<std::string, uint32_t> finalSeqCounts;
+					std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
+					for(const auto & seq : contigsKmerReads){
+						auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
+						for(auto & seq : trimmed){
+							bool found = false;
+							for(const auto & finalSeq : finalSeqs){
+								if(finalSeq->seqBase_.seq_ == seq.seq_){
+									found = true;
+									break;
+								}
+							}
+							if(!found){
+								finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
+								++finalSeqCounts[seq.name_];
+							}
+						}
+					}
+					double totalCoverage = 0;
+					for(auto & seq : finalSeqs){
+						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_);
+						totalCoverage += assembleInfo.coverage_;
+					}
+
+					for(auto & seq : finalSeqs){
+						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_);
+						MetaDataInName seqMeta;
+						seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
+						seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
+						seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
+						seqMeta.addMeta("regionUID", regionUid);
+						seqMeta.addMeta("sample", sample);
+						if(finalSeqCounts[seq->seqBase_.name_] > 1){
+							seqMeta.addMeta("seqTrimmedCount", finalSeqCountsWritten[seq->seqBase_.name_]);
+							++finalSeqCountsWritten[seq->seqBase_.name_];
+						}
+						seqMeta.resetMetaInName(seq->seqBase_.name_);
+						seq->seqBase_.cnt_ = (assembleInfo.coverage_/totalCoverage) * (readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_);
+						seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
+					}
+
+					OutOptions trimmedContigInfoOpts(njh::files::make_path(unicyclerFullOutputDir, "trimmed_reOriented_contigs_outputInfo.tab.txt"));
+					OutputStream trimmedContigInfoOut(trimmedContigInfoOpts);
+					trimmedContigInfoOut << "name\tlength\tcoverage" << std::endl;
+					auto trimmkedReOrientedContigsFnp = njh::files::make_path(unicyclerFullOutputDir, "trimmed_reOriented_contigs.fasta");
+					SeqOutput outputWriter(SeqIOOptions::genFastaOut(trimmkedReOrientedContigsFnp));
+					auto trimmkedReOrientedContigsFnp_belowCutOff = njh::files::make_path(unicyclerFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
+					SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmkedReOrientedContigsFnp_belowCutOff));
+
+					uint32_t belowCutOff = 0;
+					uint32_t aboveCutOff = 0;
+					bool allPassTrim = true;
+					for (const auto & contigsKmerRead : finalSeqs) {
+						if (len(contigsKmerRead->seqBase_) < minFinalLength) {
+							++belowCutOff;
+							belowCutOffOutputWriter.openWrite(contigsKmerRead);
+							contigsKmerRead->seqBase_.on_ = false;
+						} else {
+							MetaDataInName seqMeta(contigsKmerRead->seqBase_.name_);
+							trimmedContigInfoOut << contigsKmerRead->seqBase_.name_
+																	 << "\t" << len(contigsKmerRead->seqBase_)
+																	 << "\t" << seqMeta.getMeta("estimatedPerBaseCoverage")
+																	 << std::endl;
+							if(!contigsKmerRead->seqBase_.on_){
+								allPassTrim = false;
+							}else{
+								++aboveCutOff;
+							}
+							outputWriter.openWrite(contigsKmerRead);
+						}
+					}
+					if(allPassTrim){
+						std::lock_guard<std::mutex> lock(allFinalWriterMut);
+						for (const auto & contigsKmerRead : finalSeqs) {
+							if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
+								allFinalWriter.write(contigsKmerRead);
+							}
+						}
+						for(auto & reg : regInfo){
+							reg->infoCalled_ = true;
+							reg->uniqHaps_ = aboveCutOff;
+						}
+					}else{
+						std::lock_guard<std::mutex> lock(allPartialWriterMut);
+						for (const auto & contigsKmerRead : finalSeqs) {
+							if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
+								allPartialWriter.write(contigsKmerRead);
+							}
+						}
+					}
+				} catch (std::exception & e) {
+					std::lock_guard<std::mutex> lock(exceptionsMut);
+					exceptions[regionUid] = e.what();
+					for(auto & reg : regInfo){
+						reg->infoCalled_ = false;
+						reg->uniqHaps_ = 0;
+					}
+				}
+			}
+		};
+
+
+		njh::concurrent::runVoidFunctionThreaded(runUnicyclerOnRegion, numThreads);
+		allFinalWriter.closeOut();
+		allPartialWriter.closeOut();
+		//sample,readTotal,readTotalUsed, success, name
+		//
+		OutputStream basicInfo(njh::files::make_path(finalDirectory, "basicInfoPerRegion.tab.txt"));
+
+		basicInfo << "#chrom\tstart\tend\tname\tlength\tstrand\tsuccess\tuniqHaps\treadTotal\treadTotalUsed\ttotalPairedReads";
+		basicInfo << "\tsample";
+		uint32_t maxExtraFields = 0;
+		for(const auto & p : inputRegions){
+
+			auto bedOut = p.genBedRecordCore();
+			if(bedOut.extraFields_.size() > maxExtraFields){
+				maxExtraFields = bedOut.extraFields_.size();
+			}
+		}
+		for(uint32_t t = 0; t < maxExtraFields; ++t){
+			basicInfo << "\textraField"<<t;
+		}
+		basicInfo << "\n";
+
+		std::map<uint32_t, uint32_t> coiCounts;
+
+		for (const auto & reg : inputRegions) {
+			const auto & regInfo = njh::mapAt(regInfosByUID, reg.uid_);
+			++coiCounts[regInfo.front()->uniqHaps_];
+			for(auto & reg : regInfo){
+				auto bedOut = reg->region_.genBedRecordCore();
+				basicInfo << bedOut.toDelimStr();
+				basicInfo << "\t" << njh::boolToStr(reg->infoCalled_)
+									<< "\t" << reg->uniqHaps_
+									<< "\t" << reg->totalReads_
+									<< "\t" << reg->totalFinalReads_
+									<< "\t" << reg->totalPairedReads_
+									<< "\t" << sample;
+				for(const auto & extra : bedOut.extraFields_){
+					basicInfo << "\t" << extra;
+				}
+				basicInfo << std::endl;
+			}
+		}
+
+		OutputStream coiOut(njh::files::make_path(finalDirectory, "coiCounts.tab.txt"));
+		coiOut << "coi\tcount" << std::endl;
+		for(const auto & count : coiCounts){
+			coiOut << count.first << "\t" << count.second << std::endl;
+		}
+
+		OutputStream exceptionsOut(njh::files::make_path(finalDirectory, "exceptionsMessages.tab.txt"));
+		exceptionsOut << "regionUID\tmessage" << std::endl;
+		for(const auto & exp : exceptions){
+			exceptionsOut << exp.first << "\t" << exp.second << std::endl;
+		}
+
+
+
+		return 0;
+	}
 
 int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile = "";

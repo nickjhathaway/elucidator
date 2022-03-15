@@ -17,8 +17,7 @@
 namespace njhseq {
 
 
-
-int seqUtilsTrimRunner::trimToRefWithGlobalAlignmentNonOverlappingRegions(const njh::progutils::CmdArgs & inputCommands){
+	int seqUtilsTrimRunner::trimToRefWithGlobalAlignmentNonOverlappingRegions(const njh::progutils::CmdArgs & inputCommands){
 	//bool mark = false;
 	bool getRevComp = false;
 	bool mark = false;
@@ -64,8 +63,9 @@ int seqUtilsTrimRunner::trimToRefWithGlobalAlignmentNonOverlappingRegions(const 
 		for(const auto & rSeq : refSeqs){
 			revComp_refSeqs.emplace_back(rSeq);
 			revComp_refSeqs.back().reverseComplementRead(false, true);
-
-			revComp_refSeqsKInfos.emplace_back(revComp_refSeqs.back().seq_, 7, false);
+			if(refSeqs.size() != 1){
+				revComp_refSeqsKInfos.emplace_back(revComp_refSeqs.back().seq_, 7, false);
+			}
 		}
 	}
 
@@ -78,9 +78,9 @@ int seqUtilsTrimRunner::trimToRefWithGlobalAlignmentNonOverlappingRegions(const 
 	while(reader.readNextRead(seq)){
 		std::vector<seqInfo> trimmed;
 		if(getRevComp){
-			trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKInfos, revComp_refSeqsKInfos, alignerObj, mark);;
+			trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKInfos, revComp_refSeqsKInfos, alignerObj, mark);
 		}else{
-			trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlap(seq, refSeqs, refSeqsKInfos, alignerObj, mark);;
+			trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlap(seq, refSeqs, refSeqsKInfos, alignerObj, mark);
 		}
 //		trimSeqToRefByGlobalAln(seq, refSeqs, refSeqsKInfos, alignerObj);
 //		alignerObj.alignObjectA_.seqBase_.outPutSeq(std::cout);

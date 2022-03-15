@@ -1645,18 +1645,28 @@ int bamExpRunner::BamRefIdsToBed(const njh::progutils::CmdArgs & inputCommands) 
 
 int bamExpRunner::bamToFastq(const njh::progutils::CmdArgs & inputCommands) {
 	bool onlyMapped = false;
+	std::unordered_set<std::string> names;
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
 	setUp.processVerbose();
 	setUp.setOption(onlyMapped, "--onlyMapped", "Extract only mapped alignments");
 	setUp.processDefaultReader( { "-bam" }, true);
+	setUp.setOption(names, "--names", "Extract only alignments with these names");
 
 	setUp.finishSetUp(std::cout);
 	BamExtractor bExtractor(setUp.pars_.verbose_);
 	if (onlyMapped) {
-		bExtractor.writeExtractReadsFromBamOnlyMapped(setUp.pars_.ioOptions_.firstName_, setUp.pars_.ioOptions_.out_);
+		if(!names.empty()){
+			bExtractor.writeExtractReadsFromBamOnlyMapped(setUp.pars_.ioOptions_.firstName_, setUp.pars_.ioOptions_.out_, names);
+		}else{
+			bExtractor.writeExtractReadsFromBamOnlyMapped(setUp.pars_.ioOptions_.firstName_, setUp.pars_.ioOptions_.out_);
+		}
 	} else {
-		bExtractor.writeExtractReadsFromBam(setUp.pars_.ioOptions_.firstName_, setUp.pars_.ioOptions_.out_);
+		if(!names.empty()){
+			bExtractor.writeExtractReadsFromBam(setUp.pars_.ioOptions_.firstName_, setUp.pars_.ioOptions_.out_, names);
+		}else{
+			bExtractor.writeExtractReadsFromBam(setUp.pars_.ioOptions_.firstName_, setUp.pars_.ioOptions_.out_);
+		}
 	}
 	return 0;
 }
