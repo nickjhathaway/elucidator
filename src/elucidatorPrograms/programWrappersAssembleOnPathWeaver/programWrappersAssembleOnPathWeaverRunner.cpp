@@ -150,6 +150,23 @@ struct DefaultAssembleNameInfo{
 		}
 	}
 
+	/**@brief set node name, length and coverage if all exists within name, must be in that group order in the regex pattern
+	 *
+	 * @param fullname
+	 * @param pat
+	 */
+	DefaultAssembleNameInfo(const std::string & fullname, const std::regex & pat):fullname_(fullname){
+		std::smatch match;
+		if(!std::regex_match(fullname_, match, pat)){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error in processing " << fullname_ << " for basic assembly info" << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		nodeName_ = match[1];
+		len_ =  njh::StrToNumConverter::stoToNum<uint32_t>(match[2]);
+		coverage_ =  njh::StrToNumConverter::stoToNum<double>(match[3]);
+	}
+
 	std::string fullname_;
 
 	void setInfoFromName(){
@@ -719,10 +736,11 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 				bfs::path pairedR1 = njh::files::make_path(regionOutputDir, "extracted_R1.fastq");
 				bfs::path pairedR2 = njh::files::make_path(regionOutputDir, "extracted_R2.fastq");
 				bfs::path singles =  njh::files::make_path(regionOutputDir, "extracted.fastq");
+				uint64_t totalReads = readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_;
 				for(auto & reg : regInfo){
 					reg->totalPairedReads_ = readCounts.pairedReads_;
-					reg->totalReads_ = readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_;
-					reg->totalFinalReads_ = readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_;
+					reg->totalReads_ = totalReads;
+					reg->totalFinalReads_ = totalReads;
 				}
 				try {
 					if(!exists(pairedR1) && !exists(singles)){
@@ -760,8 +778,8 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 					OutputStream unicyclerRunOutputLogOut(unicyclerRunOutputLogOpts);
 					unicyclerRunOutputLogOut << njh::json::toJson(unicyclerRunOutput) << std::endl;
 
-					auto contigsFnp = njh::files::make_path(unicyclerFullOutputDir, "contigs.fasta");
-
+					auto contigsFnp = njh::files::make_path(unicyclerFullOutputDir, "assembly.fasta");
+					std::regex unicyclerNamePat{R"(^(\d+) length=(\d+) depth=([0-9.]+)x.*)"};
 
 					auto contigsSeqIoOpts = SeqIOOptions::genFastaIn(contigsFnp);
 //				contigsSeqIoOpts.includeWhiteSpaceInName_ = false;
@@ -815,7 +833,8 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 					contigInfoOut << "name\tlength\tcoverage" << std::endl;
 
 					for(const auto & contigsKmerRead : contigsKmerReads){
-						auto assembleInfo = DefaultAssembleNameInfo(contigsKmerRead->seqBase_.name_);
+						auto assembleInfo = DefaultAssembleNameInfo(contigsKmerRead->seqBase_.name_, unicyclerNamePat);
+						assembleInfo.coverage_ *= totalReads;
 						contigInfoOut << contigsKmerRead->seqBase_.name_
 													<< "\t" << len(contigsKmerRead->seqBase_)
 													<< "\t" << assembleInfo.coverage_ << std::endl;
@@ -856,12 +875,14 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 					}
 					double totalCoverage = 0;
 					for(auto & seq : finalSeqs){
-						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_);
+						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, unicyclerNamePat);
+						assembleInfo.coverage_ *= totalReads;
 						totalCoverage += assembleInfo.coverage_;
 					}
 
 					for(auto & seq : finalSeqs){
-						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_);
+						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, unicyclerNamePat);
+						assembleInfo.coverage_ *= totalReads;
 						MetaDataInName seqMeta;
 						seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
 						seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
