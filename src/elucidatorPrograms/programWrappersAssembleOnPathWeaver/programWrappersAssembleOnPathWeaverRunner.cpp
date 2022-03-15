@@ -44,15 +44,19 @@ programWrappersAssembleOnPathWeaverRunner::programWrappersAssembleOnPathWeaverRu
 					 addFunc("runRayOnPathWeaverRegions", runRayOnPathWeaverRegions, false),
 					 addFunc("runMIRAOnPathWeaverRegions", runMIRAOnPathWeaverRegions, false),
            },//,
-          "programWrappersAssembleOnPathWeaverRunner") {}
+          "programWrappersAssembleOnPathWeaverRunner") {
 
+}
 
+struct ExtractCountsRaw : BamExtractor::ExtractCounts{
 
+	double medianReadLength_ = 0;
+};
 
-BamExtractor::ExtractCounts rawWriteExtractReadsFromBamOnlyMapped(const bfs::path & bamFnp,
-		const OutOptions & outOpts,
-		bool keepRefStrainDir = false) {
-	BamExtractor::ExtractCounts ret;
+ExtractCountsRaw rawWriteExtractReadsFromBamOnlyMapped(const bfs::path &bamFnp,
+																											 const OutOptions &outOpts,
+																											 bool keepRefStrainDir = false) {
+	ExtractCountsRaw ret;
 	BamTools::BamReader bReader;
 	BamTools::BamAlignment bAln;
 	bReader.Open(bamFnp.string());
@@ -74,7 +78,7 @@ BamExtractor::ExtractCounts rawWriteExtractReadsFromBamOnlyMapped(const bfs::pat
 	SeqIOOptions outOptsSingle(outOpts.outFilename_,
 			SeqIOOptions::outFormats::FASTQ, outOpts);
 	SeqOutput writer(outOptsSingle);
-
+	std::vector<uint64_t> readLens;
 	while (bReader.GetNextAlignment(bAln)) {
 		//skip secondary alignments
 		if (!bAln.IsPrimaryAlignment()) {
@@ -94,6 +98,8 @@ BamExtractor::ExtractCounts rawWriteExtractReadsFromBamOnlyMapped(const bfs::pat
 				continue;
 			} else {
 				auto search = alnCache.get(bAln.Name);
+				readLens.emplace_back(bAln.QueryBases.size());
+				readLens.emplace_back(search->QueryBases.size());
 				if (bAln.IsFirstMate()) {
 					pairWriter.openWrite(
 							PairedRead(bamAlnToSeqInfo(bAln, keepRefStrainDir), bamAlnToSeqInfo(*search, keepRefStrainDir),
@@ -111,11 +117,9 @@ BamExtractor::ExtractCounts rawWriteExtractReadsFromBamOnlyMapped(const bfs::pat
 		} else {
 			//unpaired read
 			++ret.unpaiedReads_;
-			if (!bAln.IsMapped()) {
-				// do non-mapping operation
-				writer.openWrite(bamAlnToSeqInfo(bAln, keepRefStrainDir));
-			} else {
-				//do unpaired read operation
+			if (bAln.IsMapped()) {
+				// do unpaired read operation
+				readLens.emplace_back(bAln.QueryBases.size());
 				writer.openWrite(bamAlnToSeqInfo(bAln, keepRefStrainDir));
 			}
 		}
@@ -126,10 +130,12 @@ BamExtractor::ExtractCounts rawWriteExtractReadsFromBamOnlyMapped(const bfs::pat
 		for (const auto & name : names) {
 			++ret.orphans_;
 			auto search = alnCache.get(name);
+			readLens.emplace_back(search->QueryBases.size());
 			writer.openWrite(bamAlnToSeqInfo(*search, keepRefStrainDir));
 			alnCache.remove(name);
 		}
 	}
+	ret.medianReadLength_ = vectorMedianRef(readLens);
 	return ret;
 }
 
@@ -834,7 +840,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 
 					for(const auto & contigsKmerRead : contigsKmerReads){
 						auto assembleInfo = DefaultAssembleNameInfo(contigsKmerRead->seqBase_.name_, unicyclerNamePat);
-						assembleInfo.coverage_ = (assembleInfo.coverage_ * totalReads)/assembleInfo.len_;
+						assembleInfo.coverage_ = (assembleInfo.coverage_ * totalReads * readCounts.medianReadLength_)/assembleInfo.len_;
 						contigInfoOut << contigsKmerRead->seqBase_.name_
 													<< "\t" << len(contigsKmerRead->seqBase_)
 													<< "\t" << assembleInfo.coverage_ << std::endl;
@@ -876,13 +882,13 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 					double totalCoverage = 0;
 					for(auto & seq : finalSeqs){
 						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, unicyclerNamePat);
-						assembleInfo.coverage_ = (assembleInfo.coverage_ * totalReads)/assembleInfo.len_;
+						assembleInfo.coverage_ = (assembleInfo.coverage_ * totalReads * readCounts.medianReadLength_)/assembleInfo.len_;
 						totalCoverage += assembleInfo.coverage_;
 					}
 
 					for(auto & seq : finalSeqs){
 						auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, unicyclerNamePat);
-						assembleInfo.coverage_ = (assembleInfo.coverage_ * totalReads)/assembleInfo.len_;
+						assembleInfo.coverage_ = (assembleInfo.coverage_ * totalReads * readCounts.medianReadLength_)/assembleInfo.len_;
 						MetaDataInName seqMeta;
 						seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
 						seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
