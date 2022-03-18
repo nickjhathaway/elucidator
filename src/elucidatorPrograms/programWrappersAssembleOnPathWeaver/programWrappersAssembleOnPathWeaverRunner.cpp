@@ -5,8 +5,7 @@
  *      Author: nick
  */
 
-#include "elucidator/simulation.h"
-#include "elucidator/BamToolsUtils.h"
+
 #include "elucidator/objects/seqContainers.h"
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/seqToolsUtils/seqToolsUtils.hpp"
@@ -16,15 +15,11 @@
 #include <njhseq/system.h>
 #include <njhseq/BamToolsUtils.h>
 #include <PathWeaver/objects/bam/RegionInvestigatorInBam.hpp>
+#include <utility>
 
 #include "programWrappersAssembleOnPathWeaverRunner.hpp"
 
 namespace njhseq {
-
-
-
-
-
 
 programWrappersAssembleOnPathWeaverRunner::programWrappersAssembleOnPathWeaverRunner()
     : njh::progutils::ProgramRunner(
@@ -148,7 +143,7 @@ struct DefaultAssembleNameInfo{
 //		setInfoFromName();
 //	}
 
-	DefaultAssembleNameInfo(const std::string & fullname, bool megahit = false):fullname_(fullname){
+	explicit DefaultAssembleNameInfo(std::string fullname, bool megahit = false):fullname_(std::move(fullname)){
 		if(megahit){
 			setInfoFromNameMegahit();
 		}else{
@@ -161,7 +156,7 @@ struct DefaultAssembleNameInfo{
 	 * @param fullname
 	 * @param pat
 	 */
-	DefaultAssembleNameInfo(const std::string & fullname, const std::regex & pat):fullname_(fullname){
+	DefaultAssembleNameInfo(std::string fullname, const std::regex & pat):fullname_(std::move(fullname)){
 		std::smatch match;
 		if(!std::regex_match(fullname_, match, pat)){
 			std::stringstream ss;
@@ -202,9 +197,10 @@ struct DefaultAssembleNameInfo{
 
 		len_ =  njh::StrToNumConverter::stoToNum<uint32_t>(match[3]);
 	}
-	std::string nodeName_;
-	uint32_t len_;
-	double coverage_;
+
+	[[maybe_unused]] std::string nodeName_;
+	uint32_t len_ {0};
+	double coverage_ {0.0};
 
 };
 
@@ -214,7 +210,7 @@ struct MIRAAssembleNameInfo{
 //		setInfoFromName();
 //	}
 
-	MIRAAssembleNameInfo(const std::string & fullname):fullname_(fullname){
+	explicit MIRAAssembleNameInfo(std::string fullname):fullname_(std::move(fullname)){
 		setInfoFromName();
 	}
 
@@ -236,16 +232,11 @@ struct MIRAAssembleNameInfo{
 
 	}
 
-	/*
-	 * mira_output_c1    cov=133.76 len=537 gc=31.10 nseq=743
-mira_output_c2    cov=76.99 len=205 gc=20.00 nseq=171
-mira_output_c3    cov=18.37 len=349 gc=32.38 nseq=66
-	 */
-	std::string nodeName_;
-	uint32_t len_;
-	double coverage_;
-	double gcContent_;
-	uint32_t seqNumber_;
+	[[maybe_unused]] std::string nodeName_;
+	[[maybe_unused]] uint32_t len_ {std::numeric_limits<uint32_t>::max()};
+	double coverage_{std::numeric_limits<double>::max()};
+	[[maybe_unused]] double gcContent_{std::numeric_limits<double>::max()};
+	uint32_t seqNumber_ {std::numeric_limits<uint32_t>::max()};
 
 };
 
@@ -254,10 +245,10 @@ mira_output_c3    cov=18.37 len=349 gc=32.38 nseq=66
 int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile = "";
 	bfs::path pwOutputDir = "";
-	std::string sample = "";
+	std::string sample;
 
 	uint32_t MIRANumThreads = 1;
-	std::string extraMIRAOptions = "";
+	std::string extraMIRAOptions;
 	uint32_t reOrientingKmerLength = 9;
 	uint32_t minFinalLength = 40;
 	bfs::path MIRAOutDir = "MIRAOut";
@@ -321,7 +312,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 	std::mutex exceptionsMut;
 
 	std::function<void()> runMIRAOnRegion = [&](){
-		std::string regionUid = "";
+		std::string regionUid;
 		while(regionsQueue.getVal(regionUid)){
 			const auto & regInfo = njh::mapAt(regInfosByUID, regionUid);
 			auto regionOutputDir = njh::files::make_path(setUp.pars_.directoryName_, regionUid, sample);
@@ -429,6 +420,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 				SeqInput contigsReader(contigsSeqIoOpts);
 				auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
 				std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+				contigsKmerReads.reserve(contigsSeqs.size());
 				for (const auto & seq : contigsSeqs) {
 					contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
@@ -439,6 +431,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
 				std::vector<seqInfo> revComp_refSeqs;
 				std::vector<kmerInfo> revComp_refSeqsKInfos;
+				refKmerReads.reserve(refSeqs.size());
 				for (const auto & seq : refSeqs) {
 					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
@@ -491,6 +484,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
 				std::vector<kmerInfo> refSeqsKmerInfos;
+				refSeqsKmerInfos.reserve(refSeqs.size());
 				for(const auto & input : refSeqs){
 					refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 				}
@@ -499,18 +493,18 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 				std::unordered_map<std::string, uint32_t> finalSeqCounts;
 				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
 				for(const auto & seq : contigsKmerReads){
-					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
-					for(auto & seq : trimmed){
+					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);
+					for(auto & trimmedSeq : trimmed){
 						bool found = false;
 						for(const auto & finalSeq : finalSeqs){
-							if(finalSeq->seqBase_.seq_ == seq.seq_){
+							if(finalSeq->seqBase_.seq_ == trimmedSeq.seq_){
 								found = true;
 								break;
 							}
 						}
 						if(!found){
-							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
-							++finalSeqCounts[seq.name_];
+							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(trimmedSeq, 7, false));
+							++finalSeqCounts[trimmedSeq.name_];
 						}
 					}
 				}
@@ -623,16 +617,16 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 	std::map<uint32_t, uint32_t> coiCounts;
 
 	for (const auto & reg : inputRegions) {
-		const auto & regInfo = njh::mapAt(regInfosByUID, reg.uid_);
-		++coiCounts[regInfo.front()->uniqHaps_];
-		for(auto & reg : regInfo){
-			auto bedOut = reg->region_.genBedRecordCore();
+		const auto & regInfos = njh::mapAt(regInfosByUID, reg.uid_);
+		++coiCounts[regInfos.front()->uniqHaps_];
+		for(auto & regInfo : regInfos){
+			auto bedOut = regInfo->region_.genBedRecordCore();
 			basicInfo << bedOut.toDelimStr();
-			basicInfo << "\t" << njh::boolToStr(reg->infoCalled_)
-								<< "\t" << reg->uniqHaps_
-								<< "\t" << reg->totalReads_
-								<< "\t" << reg->totalFinalReads_
-								<< "\t" << reg->totalPairedReads_
+			basicInfo << "\t" << njh::boolToStr(regInfo->infoCalled_)
+								<< "\t" << regInfo->uniqHaps_
+								<< "\t" << regInfo->totalReads_
+								<< "\t" << regInfo->totalFinalReads_
+								<< "\t" << regInfo->totalPairedReads_
 								<< "\t" << sample;
 			for(const auto & extra : bedOut.extraFields_){
 				basicInfo << "\t" << extra;
@@ -724,7 +718,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 		std::mutex exceptionsMut;
 
 		std::function<void()> runUnicyclerOnRegion = [&](){
-			std::string regionUid = "";
+			std::string regionUid;
 			while(regionsQueue.getVal(regionUid)){
 				const auto & regInfo = njh::mapAt(regInfosByUID, regionUid);
 				auto regionOutputDir = njh::files::make_path(setUp.pars_.directoryName_, regionUid, sample);
@@ -809,6 +803,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 					SeqInput contigsReader(contigsSeqIoOpts);
 					auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
 					std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+					contigsKmerReads.reserve(contigsSeqs.size());
 					for (const auto & seq : contigsSeqs) {
 						contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 					}
@@ -819,6 +814,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 					std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
 					std::vector<seqInfo> revComp_refSeqs;
 					std::vector<kmerInfo> revComp_refSeqsKInfos;
+					refKmerReads.reserve(refSeqs.size());
 					for (const auto & seq : refSeqs) {
 						refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 					}
@@ -871,6 +867,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 					aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 					//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
 					std::vector<kmerInfo> refSeqsKmerInfos;
+					refSeqsKmerInfos.reserve(refSeqs.size());
 					for(const auto & input : refSeqs){
 						refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 					}
@@ -880,18 +877,18 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 					std::unordered_map<std::string, uint32_t> finalSeqCounts;
 					std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
 					for(const auto & seq : contigsKmerReads){
-						auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
-						for(auto & seq : trimmed){
+						auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);
+						for(auto & trimmedSeq : trimmed){
 							bool found = false;
 							for(const auto & finalSeq : finalSeqs){
-								if(finalSeq->seqBase_.seq_ == seq.seq_){
+								if(finalSeq->seqBase_.seq_ == trimmedSeq.seq_){
 									found = true;
 									break;
 								}
 							}
 							if(!found){
-								finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
-								++finalSeqCounts[seq.name_];
+								finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(trimmedSeq, 7, false));
+								++finalSeqCounts[trimmedSeq.name_];
 							}
 						}
 					}
@@ -1006,16 +1003,16 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 		std::map<uint32_t, uint32_t> coiCounts;
 
 		for (const auto & reg : inputRegions) {
-			const auto & regInfo = njh::mapAt(regInfosByUID, reg.uid_);
-			++coiCounts[regInfo.front()->uniqHaps_];
-			for(auto & reg : regInfo){
-				auto bedOut = reg->region_.genBedRecordCore();
+			const auto & regInfos = njh::mapAt(regInfosByUID, reg.uid_);
+			++coiCounts[regInfos.front()->uniqHaps_];
+			for(auto & regInfo : regInfos){
+				auto bedOut = regInfo->region_.genBedRecordCore();
 				basicInfo << bedOut.toDelimStr();
-				basicInfo << "\t" << njh::boolToStr(reg->infoCalled_)
-									<< "\t" << reg->uniqHaps_
-									<< "\t" << reg->totalReads_
-									<< "\t" << reg->totalFinalReads_
-									<< "\t" << reg->totalPairedReads_
+				basicInfo << "\t" << njh::boolToStr(regInfo->infoCalled_)
+									<< "\t" << regInfo->uniqHaps_
+									<< "\t" << regInfo->totalReads_
+									<< "\t" << regInfo->totalFinalReads_
+									<< "\t" << regInfo->totalPairedReads_
 									<< "\t" << sample;
 				for(const auto & extra : bedOut.extraFields_){
 					basicInfo << "\t" << extra;
@@ -1044,10 +1041,10 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile = "";
 	bfs::path pwOutputDir = "";
-	std::string sample = "";
+	std::string sample;
 
 	uint32_t spadesNumThreads = 1;
-	std::string extraSpadesOptions = "";
+	std::string extraSpadesOptions;
 	uint32_t reOrientingKmerLength = 9;
 	uint32_t minFinalLength = 40;
 	bool runMeta = false;
@@ -1112,7 +1109,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 	std::mutex exceptionsMut;
 
 	std::function<void()> runSpadesOnRegion = [&](){
-		std::string regionUid = "";
+		std::string regionUid;
 		while(regionsQueue.getVal(regionUid)){
 			const auto & regInfo = njh::mapAt(regInfosByUID, regionUid);
 			auto regionOutputDir = njh::files::make_path(setUp.pars_.directoryName_, regionUid, sample);
@@ -1184,6 +1181,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 				SeqInput contigsReader(contigsSeqIoOpts);
 				auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
 				std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+				contigsKmerReads.reserve(contigsSeqs.size());
 				for (const auto & seq : contigsSeqs) {
 					contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
@@ -1194,6 +1192,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
 				std::vector<seqInfo> revComp_refSeqs;
 				std::vector<kmerInfo> revComp_refSeqsKInfos;
+				refKmerReads.reserve(refSeqs.size());
 				for (const auto & seq : refSeqs) {
 					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
@@ -1245,6 +1244,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
 				std::vector<kmerInfo> refSeqsKmerInfos;
+				refSeqsKmerInfos.reserve(refSeqs.size());
 				for(const auto & input : refSeqs){
 					refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 				}
@@ -1254,18 +1254,18 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 				std::unordered_map<std::string, uint32_t> finalSeqCounts;
 				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
 				for(const auto & seq : contigsKmerReads){
-					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
-					for(auto & seq : trimmed){
+					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);
+					for(auto & trimmedSeq : trimmed){
 						bool found = false;
 						for(const auto & finalSeq : finalSeqs){
-							if(finalSeq->seqBase_.seq_ == seq.seq_){
+							if(finalSeq->seqBase_.seq_ == trimmedSeq.seq_){
 								found = true;
 								break;
 							}
 						}
 						if(!found){
-							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
-							++finalSeqCounts[seq.name_];
+							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(trimmedSeq, 7, false));
+							++finalSeqCounts[trimmedSeq.name_];
 						}
 					}
 				}
@@ -1378,16 +1378,16 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 	std::map<uint32_t, uint32_t> coiCounts;
 
 	for (const auto & reg : inputRegions) {
-		const auto & regInfo = njh::mapAt(regInfosByUID, reg.uid_);
-		++coiCounts[regInfo.front()->uniqHaps_];
-		for(auto & reg : regInfo){
-			auto bedOut = reg->region_.genBedRecordCore();
+		const auto & regInfos = njh::mapAt(regInfosByUID, reg.uid_);
+		++coiCounts[regInfos.front()->uniqHaps_];
+		for(auto & regInfo : regInfos){
+			auto bedOut = regInfo->region_.genBedRecordCore();
 			basicInfo << bedOut.toDelimStr();
-			basicInfo << "\t" << njh::boolToStr(reg->infoCalled_)
-								<< "\t" << reg->uniqHaps_
-								<< "\t" << reg->totalReads_
-								<< "\t" << reg->totalFinalReads_
-								<< "\t" << reg->totalPairedReads_
+			basicInfo << "\t" << njh::boolToStr(regInfo->infoCalled_)
+								<< "\t" << regInfo->uniqHaps_
+								<< "\t" << regInfo->totalReads_
+								<< "\t" << regInfo->totalFinalReads_
+								<< "\t" << regInfo->totalPairedReads_
 								<< "\t" << sample;
 			for(const auto & extra : bedOut.extraFields_){
 				basicInfo << "\t" << extra;
@@ -1422,10 +1422,10 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile = "";
 	bfs::path pwOutputDir = "";
-	std::string sample = "";
+	std::string sample;
 
 	//uint32_t RayNumThreads = 1;
-	std::string extraRayOptions = "";
+	std::string extraRayOptions;
 	uint32_t reOrientingKmerLength = 9;
 	uint32_t minFinalLength = 40;
 	uint32_t RayKmerLength = std::numeric_limits<uint32_t>::max();
@@ -1489,7 +1489,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 	std::mutex exceptionsMut;
 
 	std::function<void()> runRayOnRegion = [&](){
-		std::string regionUid = "";
+		std::string regionUid;
 		while(regionsQueue.getVal(regionUid)){
 			const auto & regInfo = njh::mapAt(regInfosByUID, regionUid);
 			auto regionOutputDir = njh::files::make_path(setUp.pars_.directoryName_, regionUid, sample);
@@ -1567,6 +1567,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 				SeqInput contigsReader(contigsSeqIoOpts);
 				auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
 				std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+				contigsKmerReads.reserve(contigsSeqs.size());
 				for (const auto & seq : contigsSeqs) {
 					contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
@@ -1577,6 +1578,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
 				std::vector<seqInfo> revComp_refSeqs;
 				std::vector<kmerInfo> revComp_refSeqsKInfos;
+				refKmerReads.reserve(refSeqs.size());
 				for (const auto & seq : refSeqs) {
 					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
@@ -1630,6 +1632,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
 				std::vector<kmerInfo> refSeqsKmerInfos;
+				refSeqsKmerInfos.reserve(refSeqs.size());
 				for(const auto & input : refSeqs){
 					refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 				}
@@ -1639,18 +1642,18 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 				std::unordered_map<std::string, uint32_t> finalSeqCounts;
 				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
 				for(const auto & seq : contigsKmerReads){
-					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
-					for(auto & seq : trimmed){
+					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);
+					for(auto & trimmedSeq : trimmed){
 						bool found = false;
 						for(const auto & finalSeq : finalSeqs){
-							if(finalSeq->seqBase_.seq_ == seq.seq_){
+							if(finalSeq->seqBase_.seq_ == trimmedSeq.seq_){
 								found = true;
 								break;
 							}
 						}
 						if(!found){
-							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
-							++finalSeqCounts[seq.name_];
+							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(trimmedSeq, 7, false));
+							++finalSeqCounts[trimmedSeq.name_];
 						}
 					}
 				}
@@ -1768,16 +1771,16 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 	std::map<uint32_t, uint32_t> coiCounts;
 
 	for (const auto & reg : inputRegions) {
-		const auto & regInfo = njh::mapAt(regInfosByUID, reg.uid_);
-		++coiCounts[regInfo.front()->uniqHaps_];
-		for(auto & reg : regInfo){
-			auto bedOut = reg->region_.genBedRecordCore();
+		const auto & regInfos = njh::mapAt(regInfosByUID, reg.uid_);
+		++coiCounts[regInfos.front()->uniqHaps_];
+		for(auto & regInfo : regInfos){
+			auto bedOut = regInfo->region_.genBedRecordCore();
 			basicInfo << bedOut.toDelimStr();
-			basicInfo << "\t" << njh::boolToStr(reg->infoCalled_)
-								<< "\t" << reg->uniqHaps_
-								<< "\t" << reg->totalReads_
-								<< "\t" << reg->totalFinalReads_
-								<< "\t" << reg->totalPairedReads_
+			basicInfo << "\t" << njh::boolToStr(regInfo->infoCalled_)
+								<< "\t" << regInfo->uniqHaps_
+								<< "\t" << regInfo->totalReads_
+								<< "\t" << regInfo->totalFinalReads_
+								<< "\t" << regInfo->totalPairedReads_
 								<< "\t" << sample;
 			for(const auto & extra : bedOut.extraFields_){
 				basicInfo << "\t" << extra;
@@ -1807,10 +1810,10 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile = "";
 	bfs::path pwOutputDir = "";
-	std::string sample = "";
+	std::string sample;
 
 	uint32_t IDBAUDNumThreads = 1;
-	std::string extraIDBAUDOptions = "";
+	std::string extraIDBAUDOptions;
 	uint32_t reOrientingKmerLength = 9;
 	uint32_t minFinalLength = 40;
 	uint32_t IDBAUDKmerLength = std::numeric_limits<uint32_t>::max();
@@ -1875,7 +1878,7 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 	std::mutex exceptionsMut;
 
 	std::function<void()> runIDBAUDOnRegion = [&](){
-		std::string regionUid = "";
+		std::string regionUid;
 		while(regionsQueue.getVal(regionUid)){
 			const auto & regInfo = njh::mapAt(regInfosByUID, regionUid);
 			auto regionOutputDir = njh::files::make_path(setUp.pars_.directoryName_, regionUid, sample);
@@ -1956,6 +1959,7 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 				SeqInput contigsReader(contigsSeqIoOpts);
 				auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
 				std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+				contigsKmerReads.reserve(contigsSeqs.size());
 				for (const auto & seq : contigsSeqs) {
 					contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
@@ -1966,6 +1970,7 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
 				std::vector<seqInfo> revComp_refSeqs;
 				std::vector<kmerInfo> revComp_refSeqsKInfos;
+				refKmerReads.reserve(refSeqs.size());
 				for (const auto & seq : refSeqs) {
 					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
@@ -2021,6 +2026,7 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
 				std::vector<kmerInfo> refSeqsKmerInfos;
+				refSeqsKmerInfos.reserve(refSeqs.size());
 				for(const auto & input : refSeqs){
 					refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 				}
@@ -2029,18 +2035,18 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 				std::unordered_map<std::string, uint32_t> finalSeqCounts;
 				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
 				for(const auto & seq : contigsKmerReads){
-					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
-					for(auto & seq : trimmed){
+					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);
+					for(auto & trimmedSeq : trimmed){
 						bool found = false;
 						for(const auto & finalSeq : finalSeqs){
-							if(finalSeq->seqBase_.seq_ == seq.seq_){
+							if(finalSeq->seqBase_.seq_ == trimmedSeq.seq_){
 								found = true;
 								break;
 							}
 						}
 						if(!found){
-							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
-							++finalSeqCounts[seq.name_];
+							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(trimmedSeq, 7, false));
+							++finalSeqCounts[trimmedSeq.name_];
 						}
 					}
 				}
@@ -2159,16 +2165,16 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 	std::map<uint32_t, uint32_t> coiCounts;
 
 	for (const auto & reg : inputRegions) {
-		const auto & regInfo = njh::mapAt(regInfosByUID, reg.uid_);
-		++coiCounts[regInfo.front()->uniqHaps_];
-		for(auto & reg : regInfo){
-			auto bedOut = reg->region_.genBedRecordCore();
+		const auto & regInfos = njh::mapAt(regInfosByUID, reg.uid_);
+		++coiCounts[regInfos.front()->uniqHaps_];
+		for(auto & regInfo : regInfos){
+			auto bedOut = regInfo->region_.genBedRecordCore();
 			basicInfo << bedOut.toDelimStr();
-			basicInfo << "\t" << njh::boolToStr(reg->infoCalled_)
-								<< "\t" << reg->uniqHaps_
-								<< "\t" << reg->totalReads_
-								<< "\t" << reg->totalFinalReads_
-								<< "\t" << reg->totalPairedReads_
+			basicInfo << "\t" << njh::boolToStr(regInfo->infoCalled_)
+								<< "\t" << regInfo->uniqHaps_
+								<< "\t" << regInfo->totalReads_
+								<< "\t" << regInfo->totalFinalReads_
+								<< "\t" << regInfo->totalPairedReads_
 								<< "\t" << sample;
 			for(const auto & extra : bedOut.extraFields_){
 				basicInfo << "\t" << extra;
@@ -2199,11 +2205,11 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile = "";
 	bfs::path pwOutputDir = "";
-	std::string sample = "";
+	std::string sample;
 
 	uint32_t TrinityNumThreads = 1;
 	uint32_t TrinityMaxMemory = 10;
-	std::string extraTrinityOptions = "";
+	std::string extraTrinityOptions;
 	uint32_t reOrientingKmerLength = 9;
 	uint32_t minFinalLength = 40;
 	bfs::path TrinityOutDir = "TrinityOut";
@@ -2265,7 +2271,7 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegions(con
 	std::mutex exceptionsMut;
 
 	std::function<void()> runTrinityOnRegion = [&](){
-		std::string regionUid = "";
+		std::string regionUid;
 		while(regionsQueue.getVal(regionUid)){
 			const auto & regInfo = njh::mapAt(regInfosByUID, regionUid);
 			auto regionOutputDir = njh::files::make_path(setUp.pars_.directoryName_, regionUid, sample);
@@ -2333,6 +2339,7 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegions(con
 				SeqInput contigsReader(contigsSeqIoOpts);
 				auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
 				std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+				contigsKmerReads.reserve(contigsSeqs.size());
 				for (const auto & seq : contigsSeqs) {
 					contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
@@ -2343,6 +2350,7 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegions(con
 				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
 				std::vector<seqInfo> revComp_refSeqs;
 				std::vector<kmerInfo> revComp_refSeqsKInfos;
+				refKmerReads.reserve(refSeqs.size());
 				for (const auto & seq : refSeqs) {
 					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
@@ -2395,6 +2403,7 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegions(con
 				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
 				std::vector<kmerInfo> refSeqsKmerInfos;
+				refSeqsKmerInfos.reserve(refSeqs.size());
 				for(const auto & input : refSeqs){
 					refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 				}
@@ -2403,18 +2412,18 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegions(con
 				std::unordered_map<std::string, uint32_t> finalSeqCounts;
 				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
 				for(const auto & seq : contigsKmerReads){
-					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
-					for(auto & seq : trimmed){
+					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);
+					for(auto & trimmedSeq : trimmed){
 						bool found = false;
 						for(const auto & finalSeq : finalSeqs){
-							if(finalSeq->seqBase_.seq_ == seq.seq_){
+							if(finalSeq->seqBase_.seq_ == trimmedSeq.seq_){
 								found = true;
 								break;
 							}
 						}
 						if(!found){
-							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
-							++finalSeqCounts[seq.name_];
+							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(trimmedSeq, 7, false));
+							++finalSeqCounts[trimmedSeq.name_];
 						}
 					}
 				}
@@ -2529,16 +2538,16 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegions(con
 	std::map<uint32_t, uint32_t> coiCounts;
 
 	for (const auto & reg : inputRegions) {
-		const auto & regInfo = njh::mapAt(regInfosByUID, reg.uid_);
-		++coiCounts[regInfo.front()->uniqHaps_];
-		for(auto & reg : regInfo){
-			auto bedOut = reg->region_.genBedRecordCore();
+		const auto & regInfos = njh::mapAt(regInfosByUID, reg.uid_);
+		++coiCounts[regInfos.front()->uniqHaps_];
+		for(auto & regInfo : regInfos){
+			auto bedOut = regInfo->region_.genBedRecordCore();
 			basicInfo << bedOut.toDelimStr();
-			basicInfo << "\t" << njh::boolToStr(reg->infoCalled_)
-								<< "\t" << reg->uniqHaps_
-								<< "\t" << reg->totalReads_
-								<< "\t" << reg->totalFinalReads_
-								<< "\t" << reg->totalPairedReads_
+			basicInfo << "\t" << njh::boolToStr(regInfo->infoCalled_)
+								<< "\t" << regInfo->uniqHaps_
+								<< "\t" << regInfo->totalReads_
+								<< "\t" << regInfo->totalFinalReads_
+								<< "\t" << regInfo->totalPairedReads_
 								<< "\t" << sample;
 			for(const auto & extra : bedOut.extraFields_){
 				basicInfo << "\t" << extra;
@@ -2570,10 +2579,10 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegions(con
 int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile = "";
 	bfs::path pwOutputDir = "";
-	std::string sample = "";
+	std::string sample;
 
 	uint32_t megahitNumThreads = 1;
-	std::string extraMegahitOptions = "";
+	std::string extraMegahitOptions;
 	uint32_t reOrientingKmerLength = 9;
 	uint32_t minFinalLength = 40;
 	bfs::path megahitOutDir = "megahitOut";
@@ -2634,7 +2643,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegions(con
 	std::mutex exceptionsMut;
 
 	std::function<void()> runMegahitOnRegion = [&](){
-		std::string regionUid = "";
+		std::string regionUid;
 		while(regionsQueue.getVal(regionUid)){
 			const auto & regInfo = njh::mapAt(regInfosByUID, regionUid);
 			auto regionOutputDir = njh::files::make_path(setUp.pars_.directoryName_, regionUid, sample);
@@ -2699,6 +2708,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegions(con
 				SeqInput contigsReader(contigsSeqIoOpts);
 				auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
 				std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+				contigsKmerReads.reserve(contigsSeqs.size());
 				for (const auto & seq : contigsSeqs) {
 					contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
@@ -2709,6 +2719,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegions(con
 				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
 				std::vector<seqInfo> revComp_refSeqs;
 				std::vector<kmerInfo> revComp_refSeqsKInfos;
+				refKmerReads.reserve(refSeqs.size());
 				for (const auto & seq : refSeqs) {
 					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
@@ -2760,6 +2771,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegions(con
 				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
 				std::vector<kmerInfo> refSeqsKmerInfos;
+				refSeqsKmerInfos.reserve(refSeqs.size());
 				for(const auto & input : refSeqs){
 					refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 				}
@@ -2768,18 +2780,18 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegions(con
 				std::unordered_map<std::string, uint32_t> finalSeqCounts;
 				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
 				for(const auto & seq : contigsKmerReads){
-					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
-					for(auto & seq : trimmed){
+					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);
+					for(auto & trimmedSeq : trimmed){
 						bool found = false;
 						for(const auto & finalSeq : finalSeqs){
-							if(finalSeq->seqBase_.seq_ == seq.seq_){
+							if(finalSeq->seqBase_.seq_ == trimmedSeq.seq_){
 								found = true;
 								break;
 							}
 						}
 						if(!found){
-							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
-							++finalSeqCounts[seq.name_];
+							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(trimmedSeq, 7, false));
+							++finalSeqCounts[trimmedSeq.name_];
 						}
 					}
 				}
@@ -2892,16 +2904,16 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegions(con
 	std::map<uint32_t, uint32_t> coiCounts;
 
 	for (const auto & reg : inputRegions) {
-		const auto & regInfo = njh::mapAt(regInfosByUID, reg.uid_);
-		++coiCounts[regInfo.front()->uniqHaps_];
-		for(auto & reg : regInfo){
-			auto bedOut = reg->region_.genBedRecordCore();
+		const auto & regInfos = njh::mapAt(regInfosByUID, reg.uid_);
+		++coiCounts[regInfos.front()->uniqHaps_];
+		for(auto & regInfo : regInfos){
+			auto bedOut = regInfo->region_.genBedRecordCore();
 			basicInfo << bedOut.toDelimStr();
-			basicInfo << "\t" << njh::boolToStr(reg->infoCalled_)
-								<< "\t" << reg->uniqHaps_
-								<< "\t" << reg->totalReads_
-								<< "\t" << reg->totalFinalReads_
-								<< "\t" << reg->totalPairedReads_
+			basicInfo << "\t" << njh::boolToStr(regInfo->infoCalled_)
+								<< "\t" << regInfo->uniqHaps_
+								<< "\t" << regInfo->totalReads_
+								<< "\t" << regInfo->totalFinalReads_
+								<< "\t" << regInfo->totalPairedReads_
 								<< "\t" << sample;
 			for(const auto & extra : bedOut.extraFields_){
 				basicInfo << "\t" << extra;
@@ -2933,13 +2945,13 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegions(con
 int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile = "";
 	bfs::path pwOutputDir = "";
-	std::string sample = "";
+	std::string sample;
 
 	bfs::path haploconductPath = "/home/hathawan/sourceCodes/savage/HaploConduct/haploconduct";
 
 
 	uint32_t savageNumThreads = 1;
-	std::string extraSavageOptions = "";
+	std::string extraSavageOptions;
 	uint32_t reOrientingKmerLength = 9;
 	uint32_t minFinalLength = 40;
 	bfs::path savageOutDir = "savageOut";
@@ -3001,7 +3013,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 	std::mutex exceptionsMut;
 
 	std::function<void()> runSavageOnRegion = [&](){
-		std::string regionUid = "";
+		std::string regionUid;
 		while(regionsQueue.getVal(regionUid)){
 			const auto & regInfo = njh::mapAt(regInfosByUID, regionUid);
 			auto regionOutputDir = njh::files::make_path(setUp.pars_.directoryName_, regionUid, sample);
@@ -3072,6 +3084,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 				SeqInput contigsReader(contigsSeqIoOpts);
 				auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
 				std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+				contigsKmerReads.reserve(contigsSeqs.size());
 				for (const auto & seq : contigsSeqs) {
 					contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
@@ -3082,6 +3095,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
 				std::vector<seqInfo> revComp_refSeqs;
 				std::vector<kmerInfo> revComp_refSeqsKInfos;
+				refKmerReads.reserve(refSeqs.size());
 				for (const auto & seq : refSeqs) {
 					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
@@ -3132,6 +3146,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
 				std::vector<kmerInfo> refSeqsKmerInfos;
+				refSeqsKmerInfos.reserve(refSeqs.size());
 				for(const auto & input : refSeqs){
 					refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 				}
@@ -3140,18 +3155,18 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 				std::unordered_map<std::string, uint32_t> finalSeqCounts;
 				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
 				for(const auto & seq : contigsKmerReads){
-					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
-					for(auto & seq : trimmed){
+					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);
+					for(auto & trimmedSeq : trimmed){
 						bool found = false;
 						for(const auto & finalSeq : finalSeqs){
-							if(finalSeq->seqBase_.seq_ == seq.seq_){
+							if(finalSeq->seqBase_.seq_ == trimmedSeq.seq_){
 								found = true;
 								break;
 							}
 						}
 						if(!found){
-							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
-							++finalSeqCounts[seq.name_];
+							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(trimmedSeq, 7, false));
+							++finalSeqCounts[trimmedSeq.name_];
 						}
 					}
 				}
@@ -3260,16 +3275,16 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 	std::map<uint32_t, uint32_t> coiCounts;
 
 	for (const auto & reg : inputRegions) {
-		const auto & regInfo = njh::mapAt(regInfosByUID, reg.uid_);
-		++coiCounts[regInfo.front()->uniqHaps_];
-		for(auto & reg : regInfo){
-			auto bedOut = reg->region_.genBedRecordCore();
+		const auto & regInfos = njh::mapAt(regInfosByUID, reg.uid_);
+		++coiCounts[regInfos.front()->uniqHaps_];
+		for(auto & regInfo : regInfos){
+			auto bedOut = regInfo->region_.genBedRecordCore();
 			basicInfo << bedOut.toDelimStr();
-			basicInfo << "\t" << njh::boolToStr(reg->infoCalled_)
-								<< "\t" << reg->uniqHaps_
-								<< "\t" << reg->totalReads_
-								<< "\t" << reg->totalFinalReads_
-								<< "\t" << reg->totalPairedReads_
+			basicInfo << "\t" << njh::boolToStr(regInfo->infoCalled_)
+								<< "\t" << regInfo->uniqHaps_
+								<< "\t" << regInfo->totalReads_
+								<< "\t" << regInfo->totalFinalReads_
+								<< "\t" << regInfo->totalPairedReads_
 								<< "\t" << sample;
 			for(const auto & extra : bedOut.extraFields_){
 				basicInfo << "\t" << extra;
@@ -3301,7 +3316,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile = "";
 	bfs::path pwOutputDir = "";
-	std::string sample = "";
+	std::string sample;
 
 	uint32_t velvetStartKmer = 31;
 	uint32_t velvetEndKmer = 71;
@@ -3319,7 +3334,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	bool breakUpAmbigousContigs = true;
 	double coverageCutOff = 2.0;
 
-	std::string extraVelvetOptimiserOptions = "";
+	std::string extraVelvetOptimiserOptions;
 	bfs::path VelvetOptimiserOutDir = "VelvetOptimiserOutDir";
 
 
@@ -3443,7 +3458,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	std::mutex exceptionsMut;
 
 	std::function<void()> runVelvetsOnRegion = [&](){
-		std::string regionUid = "";
+		std::string regionUid;
 		while(regionsQueue.getVal(regionUid)){
 			const auto & metav_regInfo = njh::mapAt(metav_regInfosByUID, regionUid);
 
@@ -3600,60 +3615,13 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 						SeqIO contigsReader(contigsOpts);
 						auto contigsSeqs = contigsReader.in_.readAllReads<seqInfo>();
 						contigsReader.out_.openOut();
-						struct PatPosSize{
-							PatPosSize(const std::string & pat, size_t pos): pat_(pat), pos_(pos){
-
-							}
-							std::string pat_;
-							size_t pos_;
-
-							size_t end(){
-								return pos_ + pat_.size();
-							}
-						};
-
 						for (const auto & seq : contigsSeqs) {
-							std::sregex_iterator iter(seq.seq_.begin(), seq.seq_.end(), pat);
-							std::sregex_iterator end;
-							std::vector<PatPosSize> pats;
-							while (iter != end) {
-								pats.emplace_back((*iter)[0], iter->position());
-								++iter;
-							}
-
-							if(!pats.empty()){
-								if(0 != pats.front().pos_ ){
-									size_t start = 0;
-									size_t end = pats.front().pos_;
-									auto subSeq = seq.getSubRead(start, end - start);
-									if(mark){
-										subSeq.name_.append(njh::pasteAsStr("-s", start, "-e", end));
-									}
-									contigsReader.write(subSeq);
+							auto trimmedSeqs = readVecTrimmer::breakUpSeqOnPat(seq, pat);
+							for(auto & trimmedSeq : trimmedSeqs){
+								if(mark && 0 != trimmedSeq.start_ && len(seq) != trimmedSeq.end_){
+									trimmedSeq.seqBase_.name_.append(njh::pasteAsStr("-s", trimmedSeq.start_, "-e", trimmedSeq.end_));
 								}
-								if(pats.size() > 1){
-									for(const auto patPos : iter::range(pats.size() - 1)){
-										const auto & p = pats[patPos];
-										size_t start = p.pos_ + p.pat_.size();
-										size_t end = pats[patPos + 1].pos_;
-										auto subSeq = seq.getSubRead(start, end - start);
-										if(mark){
-											subSeq.name_.append(njh::pasteAsStr("-s", start, "-e", end));
-										}
-										contigsReader.write(subSeq);
-									}
-								}
-								if(seq.seq_.size() != pats.back().end()){
-									size_t start = pats.back().end();
-									size_t end = seq.seq_.size();
-									auto subSeq = seq.getSubRead(start, end - start);
-									if(mark){
-										subSeq.name_.append(njh::pasteAsStr("-s", start, "-e", end));
-									}
-									contigsReader.write(subSeq);
-								}
-							}else{
-								contigsReader.write(seq);
+								contigsReader.write(trimmedSeq.seqBase_);
 							}
 						}
 					}
@@ -3667,6 +3635,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
 
 					std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+					contigsKmerReads.reserve(contigsSeqs.size());
 					for (const auto & seq : contigsSeqs) {
 						contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 					}
@@ -3678,6 +3647,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
 					std::vector<seqInfo> revComp_refSeqs;
 					std::vector<kmerInfo> revComp_refSeqsKInfos;
+					refKmerReads.reserve(refSeqs.size());
 					for (const auto & seq : refSeqs) {
 						refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 					}
@@ -3733,6 +3703,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 					//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
 					std::vector<kmerInfo> refSeqsKmerInfos;
+					refSeqsKmerInfos.reserve(refSeqs.size());
 					for(const auto & input : refSeqs){
 						refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 					}
@@ -3741,18 +3712,18 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					std::unordered_map<std::string, uint32_t> finalSeqCounts;
 					std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
 					for(const auto & seq : contigsKmerReads){
-						auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
-						for(auto & seq : trimmed){
+						auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);
+						for(auto & trimmedSeq : trimmed){
 							bool found = false;
 							for(const auto & finalSeq : finalSeqs){
-								if(finalSeq->seqBase_.seq_ == seq.seq_){
+								if(finalSeq->seqBase_.seq_ == trimmedSeq.seq_){
 									found = true;
 									break;
 								}
 							}
 							if(!found){
-								finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
-								++finalSeqCounts[seq.name_];
+								finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(trimmedSeq, 7, false));
+								++finalSeqCounts[trimmedSeq.name_];
 							}
 						}
 					}
@@ -3864,13 +3835,13 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 				InputStream logFileIn(InOptions(logfiles.front()));
 				std::string line;
 				bool encounteredFinalInfo = false;
-				std::string velvethArgs = "";
-				std::string velvetgArgs = "";
+				std::string velvethArgs;
+				std::string velvetgArgs;
 				while(njh::files::crossPlatGetline(logFileIn, line)){
 					if(njh::beginsWith(line, "Final optimised assembly details")){
 						encounteredFinalInfo = true;
 					}
-					if(encounteredFinalInfo && std::string::npos != line.find(":")){
+					if(encounteredFinalInfo && std::string::npos != line.find(':')){
 						auto toks = tokenizeString(line, ":");
 						if(toks.size() == 2 && "Velveth parameter string" == toks[0]){
 							njh::trim(toks[1]);
@@ -3883,13 +3854,13 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					}
 				}
 
-				if("" == velvethArgs){
+				if(velvethArgs.empty()){
 					std::stringstream ss;
 					ss << __PRETTY_FUNCTION__ << ", error " << "couldn't determine velveth args from " << logfiles.front()<< "\n";
 					throw std::runtime_error{ss.str()};
 				}
 
-				if("" == velvetgArgs){
+				if(velvetgArgs.empty()){
 					std::stringstream ss;
 					ss << __PRETTY_FUNCTION__ << ", error " << "couldn't determine velvetg args from " << logfiles.front()<< "\n";
 					throw std::runtime_error{ss.str()};
@@ -3900,10 +3871,10 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 				bfs::path velvetOutputDir = njh::files::make_path(VelvetOptimiserOutDir, "MetaVelvetOutDir", velvetOutputDirStr);
 
 				std::stringstream velvethCmd;
-				velvethCmd << "cd " << vOptFullOutputDir << "/../ && velveth " << velvetOutputDir << " " << velvethArgs.substr(velvethArgs.find(" "));
+				velvethCmd << "cd " << vOptFullOutputDir << "/../ && velveth " << velvetOutputDir << " " << velvethArgs.substr(velvethArgs.find(' '));
 
 				std::stringstream velvetgCmd;
-				velvetgCmd << "cd " << vOptFullOutputDir << "/../ && velvetg " << velvetOutputDir << " " << velvetgArgs.substr(velvetgArgs.find(" "));
+				velvetgCmd << "cd " << vOptFullOutputDir << "/../ && velvetg " << velvetOutputDir << " " << velvetgArgs.substr(velvetgArgs.find(' '));
 
 				std::stringstream metavelvetgCmd;
 				metavelvetgCmd << "cd " << vOptFullOutputDir << "/../ && meta-velvetg " << velvetOutputDir;
@@ -3952,60 +3923,13 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 						SeqIO contigsReader(contigsOpts);
 						auto contigsSeqs = contigsReader.in_.readAllReads<seqInfo>();
 						contigsReader.out_.openOut();
-						struct PatPosSize{
-							PatPosSize(const std::string & pat, size_t pos): pat_(pat), pos_(pos){
-
-							}
-							std::string pat_;
-							size_t pos_;
-
-							size_t end(){
-								return pos_ + pat_.size();
-							}
-						};
-
 						for (const auto & seq : contigsSeqs) {
-							std::sregex_iterator iter(seq.seq_.begin(), seq.seq_.end(), pat);
-							std::sregex_iterator end;
-							std::vector<PatPosSize> pats;
-							while (iter != end) {
-								pats.emplace_back((*iter)[0], iter->position());
-								++iter;
-							}
-
-							if(!pats.empty()){
-								if(0 != pats.front().pos_ ){
-									size_t start = 0;
-									size_t end = pats.front().pos_;
-									auto subSeq = seq.getSubRead(start, end - start);
-									if(mark){
-										subSeq.name_.append(njh::pasteAsStr("-s", start, "-e", end));
-									}
-									contigsReader.write(subSeq);
+							auto trimmedSeqs = readVecTrimmer::breakUpSeqOnPat(seq, pat);
+							for(auto & trimmedSeq : trimmedSeqs){
+								if(mark && 0 != trimmedSeq.start_ && len(seq) != trimmedSeq.end_){
+									trimmedSeq.seqBase_.name_.append(njh::pasteAsStr("-s", trimmedSeq.start_, "-e", trimmedSeq.end_));
 								}
-								if(pats.size() > 1){
-									for(const auto patPos : iter::range(pats.size() - 1)){
-										const auto & p = pats[patPos];
-										size_t start = p.pos_ + p.pat_.size();
-										size_t end = pats[patPos + 1].pos_;
-										auto subSeq = seq.getSubRead(start, end - start);
-										if(mark){
-											subSeq.name_.append(njh::pasteAsStr("-s", start, "-e", end));
-										}
-										contigsReader.write(subSeq);
-									}
-								}
-								if(seq.seq_.size() != pats.back().end()){
-									size_t start = pats.back().end();
-									size_t end = seq.seq_.size();
-									auto subSeq = seq.getSubRead(start, end - start);
-									if(mark){
-										subSeq.name_.append(njh::pasteAsStr("-s", start, "-e", end));
-									}
-									contigsReader.write(subSeq);
-								}
-							}else{
-								contigsReader.write(seq);
+								contigsReader.write(trimmedSeq.seqBase_);
 							}
 						}
 					}
@@ -4019,6 +3943,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
 
 					std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+					contigsKmerReads.reserve(contigsSeqs.size());
 					for (const auto & seq : contigsSeqs) {
 						contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 					}
@@ -4030,6 +3955,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
 					std::vector<seqInfo> revComp_refSeqs;
 					std::vector<kmerInfo> revComp_refSeqsKInfos;
+					refKmerReads.reserve(refSeqs.size());
 					for (const auto & seq : refSeqs) {
 						refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 					}
@@ -4084,6 +4010,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 					//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
 					std::vector<kmerInfo> refSeqsKmerInfos;
+					refSeqsKmerInfos.reserve(refSeqs.size());
 					for(const auto & input : refSeqs){
 						refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 					}
@@ -4092,18 +4019,18 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					std::unordered_map<std::string, uint32_t> finalSeqCounts;
 					std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
 					for(const auto & seq : contigsKmerReads){
-						auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
-						for(auto & seq : trimmed){
+						auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);
+						for(auto & trimmedSeq : trimmed){
 							bool found = false;
 							for(const auto & finalSeq : finalSeqs){
-								if(finalSeq->seqBase_.seq_ == seq.seq_){
+								if(finalSeq->seqBase_.seq_ == trimmedSeq.seq_){
 									found = true;
 									break;
 								}
 							}
 							if(!found){
-								finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
-								++finalSeqCounts[seq.name_];
+								finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(trimmedSeq, 7, false));
+								++finalSeqCounts[trimmedSeq.name_];
 							}
 						}
 					}
@@ -4222,16 +4149,16 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 		std::map<uint32_t, uint32_t> coiCounts;
 
 		for (const auto & reg : inputRegions) {
-			const auto & regInfo = njh::mapAt(regInfosByUID, reg.uid_);
-			++coiCounts[regInfo.front()->uniqHaps_];
-			for(auto & reg : regInfo){
-				auto bedOut = reg->region_.genBedRecordCore();
+			const auto & regInfos = njh::mapAt(regInfosByUID, reg.uid_);
+			++coiCounts[regInfos.front()->uniqHaps_];
+			for(auto & regInfo : regInfos){
+				auto bedOut = regInfo->region_.genBedRecordCore();
 				basicInfo << bedOut.toDelimStr();
-				basicInfo << "\t" << njh::boolToStr(reg->infoCalled_)
-									<< "\t" << reg->uniqHaps_
-									<< "\t" << reg->totalReads_
-									<< "\t" << reg->totalFinalReads_
-									<< "\t" << reg->totalPairedReads_
+				basicInfo << "\t" << njh::boolToStr(regInfo->infoCalled_)
+									<< "\t" << regInfo->uniqHaps_
+									<< "\t" << regInfo->totalReads_
+									<< "\t" << regInfo->totalFinalReads_
+									<< "\t" << regInfo->totalPairedReads_
 									<< "\t" << sample;
 				for(const auto & extra : bedOut.extraFields_){
 					basicInfo << "\t" << extra;
@@ -4273,16 +4200,16 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 		std::map<uint32_t, uint32_t> coiCounts;
 
 		for (const auto & reg : inputRegions) {
-			const auto & regInfo = njh::mapAt(metav_regInfosByUID, reg.uid_);
-			++coiCounts[regInfo.front()->uniqHaps_];
-			for(auto & reg : regInfo){
-				auto bedOut = reg->region_.genBedRecordCore();
+			const auto & regInfos = njh::mapAt(metav_regInfosByUID, reg.uid_);
+			++coiCounts[regInfos.front()->uniqHaps_];
+			for(auto & regInfo : regInfos){
+				auto bedOut = regInfo->region_.genBedRecordCore();
 				basicInfo << bedOut.toDelimStr();
-				basicInfo << "\t" << njh::boolToStr(reg->infoCalled_)
-									<< "\t" << reg->uniqHaps_
-									<< "\t" << reg->totalReads_
-									<< "\t" << reg->totalFinalReads_
-									<< "\t" << reg->totalPairedReads_
+				basicInfo << "\t" << njh::boolToStr(regInfo->infoCalled_)
+									<< "\t" << regInfo->uniqHaps_
+									<< "\t" << regInfo->totalReads_
+									<< "\t" << regInfo->totalFinalReads_
+									<< "\t" << regInfo->totalPairedReads_
 									<< "\t" << sample;
 				for(const auto & extra : bedOut.extraFields_){
 					basicInfo << "\t" << extra;
@@ -4315,10 +4242,10 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile = "";
 	bfs::path pwOutputDir = "";
-	std::string sample = "";
+	std::string sample;
 
 	uint32_t PRICENumThreads = 1;
-	std::string extraPRICEOptions = "";
+	std::string extraPRICEOptions;
 	uint32_t reOrientingKmerLength = 9;
 	uint32_t minFinalLength = 40;
 
@@ -4387,7 +4314,7 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegions(const
 	std::mutex exceptionsMut;
 
 	std::function<void()> runPRICEOnRegion = [&](){
-		std::string regionUid = "";
+		std::string regionUid;
 		while(regionsQueue.getVal(regionUid)){
 			const auto & regInfo = njh::mapAt(regInfosByUID, regionUid);
 			auto regionOutputDir = njh::files::make_path(setUp.pars_.directoryName_, regionUid, sample);
@@ -4499,6 +4426,7 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegions(const
 				SeqInput contigsReader(contigsSeqIoOpts);
 				auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
 				std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+				contigsKmerReads.reserve(contigsSeqs.size());
 				for (const auto & seq : contigsSeqs) {
 					contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
@@ -4509,6 +4437,7 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegions(const
 				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
 				std::vector<seqInfo> revComp_refSeqs;
 				std::vector<kmerInfo> revComp_refSeqsKInfos;
+				refKmerReads.reserve(refSeqs.size());
 				for (const auto & seq : refSeqs) {
 					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 				}
@@ -4561,6 +4490,7 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegions(const
 				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
 				std::vector<kmerInfo> refSeqsKmerInfos;
+				refSeqsKmerInfos.reserve(refSeqs.size());
 				for(const auto & input : refSeqs){
 					refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
 				}
@@ -4569,18 +4499,18 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegions(const
 				std::unordered_map<std::string, uint32_t> finalSeqCounts;
 				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
 				for(const auto & seq : contigsKmerReads){
-					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);;
-					for(auto & seq : trimmed){
+					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);
+					for(auto & trimmedSeq : trimmed){
 						bool found = false;
 						for(const auto & finalSeq : finalSeqs){
-							if(finalSeq->seqBase_.seq_ == seq.seq_){
+							if(finalSeq->seqBase_.seq_ == trimmedSeq.seq_){
 								found = true;
 								break;
 							}
 						}
 						if(!found){
-							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(seq, 7, false));
-							++finalSeqCounts[seq.name_];
+							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(trimmedSeq, 7, false));
+							++finalSeqCounts[trimmedSeq.name_];
 						}
 					}
 				}
@@ -4693,16 +4623,16 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegions(const
 	std::map<uint32_t, uint32_t> coiCounts;
 
 	for (const auto & reg : inputRegions) {
-		const auto & regInfo = njh::mapAt(regInfosByUID, reg.uid_);
-		++coiCounts[regInfo.front()->uniqHaps_];
-		for(auto & reg : regInfo){
-			auto bedOut = reg->region_.genBedRecordCore();
+		const auto & regInfos = njh::mapAt(regInfosByUID, reg.uid_);
+		++coiCounts[regInfos.front()->uniqHaps_];
+		for(auto & regInfo : regInfos){
+			auto bedOut = regInfo->region_.genBedRecordCore();
 			basicInfo << bedOut.toDelimStr();
-			basicInfo << "\t" << njh::boolToStr(reg->infoCalled_)
-								<< "\t" << reg->uniqHaps_
-								<< "\t" << reg->totalReads_
-								<< "\t" << reg->totalFinalReads_
-								<< "\t" << reg->totalPairedReads_
+			basicInfo << "\t" << njh::boolToStr(regInfo->infoCalled_)
+								<< "\t" << regInfo->uniqHaps_
+								<< "\t" << regInfo->totalReads_
+								<< "\t" << regInfo->totalFinalReads_
+								<< "\t" << regInfo->totalPairedReads_
 								<< "\t" << sample;
 			for(const auto & extra : bedOut.extraFields_){
 				basicInfo << "\t" << extra;
