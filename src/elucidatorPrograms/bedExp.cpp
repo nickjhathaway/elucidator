@@ -28,8 +28,6 @@
 
 #include "bedExp.hpp"
 #include <njhseq/objects/BioDataObject.h>
-
-#include "elucidator/objects/BioDataObject.h"
 #include "elucidator/BioRecordsUtils/BedUtility.hpp"
 #include "elucidator/objects/counters/DNABaseCounter.hpp"
 #include <njhseq/programUtils/seqSetUp.hpp>
@@ -234,7 +232,7 @@ int bedExpRunner::reverseComplementRegion(const njh::progutils::CmdArgs & inputC
 		if(njh::mapAt(lengths, b->chrom_) < b->chromStart_ || njh::mapAt(lengths, b->chrom_) < b->chromEnd_){
 			std::stringstream ss;
 			std::string name = njh::pasteAsStr(b->chrom_, "-", b->chromStart_, "-", b->chromEnd_);
-			if(b->extraFields_.size() >0){
+			if(!b->extraFields_.empty()){
 				name = b->extraFields_[0];
 			}
 			ss << __PRETTY_FUNCTION__ << ", error for region: " <<  name << "start: " << b->chromStart_ << " or end: " << b->chromEnd_ << " is greater than given chromosome length: " << chromLen<< "\n";
@@ -1268,7 +1266,7 @@ int bedExpRunner::getDegreeOfOverlappingBedRegions(const njh::progutils::CmdArgs
 	while(reader.readNextRecord(reg)){
 		std::vector<Bed6RecordCore> intersectingRegions;
 		for(const auto & bed : intersectingBed6s){
-			if(ignoreSameID && reg.extraFields_.size() >=1 &&  bed->name_ == reg.extraFields_[0]){
+			if(ignoreSameID && !reg.extraFields_.empty() &&  bed->name_ == reg.extraFields_[0]){
 				continue;
 			}
 			//a overlapLen of 0 indicates to find only regions that completely overlap with each other
@@ -1325,7 +1323,7 @@ int bedExpRunner::getOverlappingBedRegions(const njh::progutils::CmdArgs & input
 	while(reader.readNextRecord(reg)){
 		VecStr intersectingRegions;
 		for(const auto & bed : intersectingBed6s){
-			if(ignoreSameID && reg.extraFields_.size() >=1 &&  bed->name_ == reg.extraFields_[0]){
+			if(ignoreSameID && !reg.extraFields_.empty() &&  bed->name_ == reg.extraFields_[0]){
 				continue;
 			}
 			//a overlapLen of 0 indicates to find only regions that completely overlap with each other

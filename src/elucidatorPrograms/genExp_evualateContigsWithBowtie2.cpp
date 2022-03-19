@@ -14,6 +14,7 @@
 #include "elucidator/objects/dataContainers/graphs.h"
 #include <njhseq/GenomeUtils.h>
 #include <njhseq/objects/seqContainers/refVariants.hpp>
+#include <utility>
 
 
 namespace njhseq {
@@ -136,11 +137,9 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 	//align to genomes in parallel
 
 	struct GenomeWithProgram {
-		GenomeWithProgram() {
-
-		}
-		GenomeWithProgram(bool lastz, const std::string & genome) :
-				lastz_(lastz), genome_(genome) {
+		GenomeWithProgram() = default;
+		GenomeWithProgram(bool lastz, std::string  genome) :
+				lastz_(lastz), genome_(std::move(genome)) {
 		}
 		bool lastz_ { false };
 		std::string genome_;

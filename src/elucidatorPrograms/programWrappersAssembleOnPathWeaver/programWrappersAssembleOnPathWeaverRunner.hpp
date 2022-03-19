@@ -30,6 +30,19 @@ class programWrappersAssembleOnPathWeaverRunner : public njh::progutils::Program
 	static int runIDBAUDOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int runMIRAOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 
+
+	static int runUnicyclerOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
+	static int runSpadesOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
+	static int runMegahitOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
+	static int runSavageOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
+	static int runVelvetOptimizerAndMetaVelvetOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
+	static int runPRICEOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
+	static int runTrinityOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
+	static int runRayOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
+	static int runIDBAUDOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
+	static int runMIRAOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
+
+
 };
 
 

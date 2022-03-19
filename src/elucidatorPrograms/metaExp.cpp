@@ -152,7 +152,7 @@ int metaExpRunner::addMetaBySampleName(const njh::progutils::CmdArgs & inputComm
 	setUp.description_ = "Set meta data in sequence names by matching either the meta filed sample or just by seq name";
 	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --metaDataFnp meta.tab.txt --fasta infile.fasta");
 	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --metaDataFnp meta.tab.txt --fasta infile.fasta --overWriteMeta #over write meta fields already present");
-	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --metaDataFnp meta.tab.txt --fasta infile.fasta --out outfille.fasta");
+	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --metaDataFnp meta.tab.txt --fasta infile.fasta --out outfile.fasta");
 
 	setUp.finishSetUp(std::cout);
 
@@ -218,8 +218,8 @@ int metaExpRunner::addMetaBySampleName(const njh::progutils::CmdArgs & inputComm
 int metaExpRunner::addMetaFieldToAll(const njh::progutils::CmdArgs & inputCommands){
 	bool overWriteMeta = false;
 
-	std::string metaField = "";
-	std::string metaData = "";
+	std::string metaField;
+	std::string metaData;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -259,7 +259,7 @@ int metaExpRunner::addMetaByMetaField(const njh::progutils::CmdArgs & inputComma
 	bool overWriteMeta = false;
 	bool useName = false;
 	bool addLengthMeta = false;
-	std::string metaField = "";
+	std::string metaField;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -273,7 +273,7 @@ int metaExpRunner::addMetaByMetaField(const njh::progutils::CmdArgs & inputComma
 	setUp.description_ = "Set meta data in sequence names by matching either the meta filed sample or just by seq name";
 	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --metaDataFnp meta.tab.txt --fasta infile.fasta");
 	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --metaDataFnp meta.tab.txt --fasta infile.fasta --overWriteMeta #over write meta fields already present");
-	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --metaDataFnp meta.tab.txt --fasta infile.fasta --out outfille.fasta");
+	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --metaDataFnp meta.tab.txt --fasta infile.fasta --out outfile.fasta");
 
 	setUp.finishSetUp(std::cout);
 
@@ -341,7 +341,7 @@ int metaExpRunner::addMetaByMetaField(const njh::progutils::CmdArgs & inputComma
 }
 
 int metaExpRunner::selectMetaFieldsToKeep(const njh::progutils::CmdArgs & inputCommands) {
-	std::string metaFields = "";
+	std::string metaFields ;
 	seqSetUp setUp(inputCommands);
 	setUp.description_ = "Take a sequence file with meta data in names and keep just the given fields";
 	setUp.processDebug();
@@ -449,7 +449,7 @@ int metaExpRunner::selectMetaFieldsToKeep(const njh::progutils::CmdArgs & inputC
 }
 
 int metaExpRunner::splitSeqFileWithMeta(const njh::progutils::CmdArgs & inputCommands) {
-	std::string metaField = "";
+	std::string metaField;
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
 	setUp.processVerbose();
@@ -501,11 +501,11 @@ int metaExpRunner::splitSeqFileWithMeta(const njh::progutils::CmdArgs & inputCom
 		MultiSeqOutCache<PairedRead> writers;
 		PairedRead seq;
 		while(reader.readNextRead(seq)){
-			std::string uid = "";
+			std::string uid;
 			if(MetaDataInName::nameHasMetaData(seq.seqBase_.name_)){
 				MetaDataInName seqMeta(seq.seqBase_.name_);
 				for(const auto & m : metaToks){
-					if("" != uid){
+					if(!uid.empty()){
 						uid += "_";
 					}
 					if(njh::in(m, seqMeta.meta_)){
@@ -528,11 +528,11 @@ int metaExpRunner::splitSeqFileWithMeta(const njh::progutils::CmdArgs & inputCom
 		MultiSeqOutCache<seqInfo> writers;
 		seqInfo seq;
 		while(reader.readNextRead(seq)){
-			std::string uid = "";
+			std::string uid;
 			if(MetaDataInName::nameHasMetaData(seq.name_)){
 				MetaDataInName seqMeta(seq.name_);
 				for(const auto & m : metaToks){
-					if("" != uid){
+					if(!uid.empty()){
 						uid += "_";
 					}
 					if(njh::in(m, seqMeta.meta_)){
@@ -547,7 +547,7 @@ int metaExpRunner::splitSeqFileWithMeta(const njh::progutils::CmdArgs & inputCom
 			if(!writers.containsReader(uid)){
 				auto opts = SeqIOOptions(setUp.pars_.ioOptions_.out_.outFilename_.string() + "_" + uid, setUp.pars_.ioOptions_.outFormat_);
 				if("" == setUp.pars_.ioOptions_.out_.outFilename_){
-					opts = SeqIOOptions(uid, setUp.pars_.ioOptions_.outFormat_);;
+					opts = SeqIOOptions(uid, setUp.pars_.ioOptions_.outFormat_);
 				}
 				opts.out_.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
 				writers.addReader(uid, opts );
@@ -561,7 +561,7 @@ int metaExpRunner::splitSeqFileWithMeta(const njh::progutils::CmdArgs & inputCom
 }
 
 int metaExpRunner::excludeSeqsFileWithNumericMetaCutOff(const njh::progutils::CmdArgs & inputCommands) {
-	std::string metaField = "";
+	std::string metaField;
 	double metaValue = std::numeric_limits<double>::max();
 	bool aboveCutOff = false;
 	seqSetUp setUp(inputCommands);
@@ -643,8 +643,8 @@ int metaExpRunner::excludeSeqsFileWithNumericMetaCutOff(const njh::progutils::Cm
 }
 
 int metaExpRunner::excludeSeqsFileWithMatchingMeta(const njh::progutils::CmdArgs & inputCommands) {
-	std::string metaField = "";
-	std::string metaValue = "";
+	std::string metaField;
+	std::string metaValue;
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
 	setUp.processVerbose();
@@ -712,7 +712,7 @@ int metaExpRunner::excludeSeqsFileWithMatchingMeta(const njh::progutils::CmdArgs
 }
 
 int metaExpRunner::splitSeqFileWithExternalMeta(const njh::progutils::CmdArgs & inputCommands) {
-	std::string metaField = "";
+	std::string metaField;
 	bfs::path metaFnp = "";
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
@@ -764,10 +764,10 @@ int metaExpRunner::splitSeqFileWithExternalMeta(const njh::progutils::CmdArgs & 
 		MultiSeqOutCache<PairedRead> writers;
 		PairedRead seq;
 		while(reader.readNextRead(seq)){
-			std::string uid = "";
+			std::string uid;
 			MetaDataInName seqMeta = externalMeta.getMetaForSample(seq.seqBase_.name_, metaToks);
 			for(const auto & m : metaToks){
-				if("" != uid){
+				if(!uid.empty()){
 					uid += "_";
 				}
 				if(njh::in(m, seqMeta.meta_)){
@@ -785,10 +785,10 @@ int metaExpRunner::splitSeqFileWithExternalMeta(const njh::progutils::CmdArgs & 
 		MultiSeqOutCache<seqInfo> writers;
 		seqInfo seq;
 		while(reader.readNextRead(seq)){
-			std::string uid = "";
+			std::string uid;
 			MetaDataInName seqMeta = externalMeta.getMetaForSample(seq.name_, metaToks);
 			for(const auto & m : metaToks){
-				if("" != uid){
+				if(!uid.empty()){
 					uid += "_";
 				}
 				if(njh::in(m, seqMeta.meta_)){
@@ -800,7 +800,7 @@ int metaExpRunner::splitSeqFileWithExternalMeta(const njh::progutils::CmdArgs & 
 			if(!writers.containsReader(uid)){
 				auto opts = SeqIOOptions(setUp.pars_.ioOptions_.out_.outFilename_.string() + "_" + uid, setUp.pars_.ioOptions_.outFormat_);
 				if("" == setUp.pars_.ioOptions_.out_.outFilename_){
-					opts = SeqIOOptions(uid, setUp.pars_.ioOptions_.outFormat_);;
+					opts = SeqIOOptions(uid, setUp.pars_.ioOptions_.outFormat_);
 				}
 				opts.out_.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
 				writers.addReader(uid, opts );
@@ -815,7 +815,7 @@ int metaExpRunner::splitSeqFileWithExternalMeta(const njh::progutils::CmdArgs & 
 
 int metaExpRunner::printMetaFieldsFromSeqs(const njh::progutils::CmdArgs & inputCommands) {
 	auto tabOpts = TableIOOpts::genTabFileOut("", true);
-	std::string fields = "";
+	std::string fields;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processReadInNames(true);
@@ -836,7 +836,7 @@ int metaExpRunner::printMetaFieldsFromSeqs(const njh::progutils::CmdArgs & input
 		}
 	}
 
-	out << njh::conToStr(allMetaKeys, "\t") << std::endl;;
+	out << njh::conToStr(allMetaKeys, "\t") << std::endl;
 
 	return 0;
 }
@@ -845,8 +845,8 @@ int metaExpRunner::printMetaFieldsFromSeqs(const njh::progutils::CmdArgs & input
 
 int metaExpRunner::createTableFromSeqs(const njh::progutils::CmdArgs & inputCommands) {
 	auto tabOpts = TableIOOpts::genTabFileOut("", true);
-	std::string fields = "";
-	std::string excludeFields = "";
+	std::string fields;
+	std::string excludeFields;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processReadInNames(true);
@@ -876,7 +876,7 @@ int metaExpRunner::createTableFromSeqs(const njh::progutils::CmdArgs & inputComm
 	table outTab;
 	auto fieldToks = tokenizeString(fields, ",");
 	auto excludeFieldToks = tokenizeString(excludeFields, ",");
-	if("" != fields || "" != excludeFields){
+	if(!fields.empty() || !excludeFields.empty()){
 		std::set<std::string> exportFields;
 		for(const auto & col : allMetaKeys){
 			if( (fieldToks.empty()        ||  njh::in(col, fieldToks) ) &&

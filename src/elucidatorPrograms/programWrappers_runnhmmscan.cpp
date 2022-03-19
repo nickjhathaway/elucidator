@@ -12,8 +12,6 @@
 
 #include "programWrappers.hpp"
 #include <njhseq/IO/SeqIO/SeqIO.hpp>
-#include <njhseq/readVectorManipulation/readVectorHelpers/readVecTrimmer.hpp>
-#include <njhseq/system/Muscler.hpp>
 #include <njhseq/objects/BioDataObject/BioDataFileIO.hpp>
 #include <njhseq/objects/BioDataObject/BedRecordCore.hpp>
 #include <njhseq/objects/BioDataObject/BioRecordsUtils/BedUtility.hpp>
@@ -141,7 +139,7 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 		OutOptions hitTableOutOpts = njh::files::make_path(setUp.pars_.directoryName_, "nhmmscan_hits_table.tab.txt");
 		nhmmscanOutput outputParsed = nhmmscanOutput::parseRawOutput(nhmmscan_raw_outputFnp);
 		for(auto & query : outputParsed.qResults_){
-			query.queryName_ = seqKey[njh::StrToNumConverter::stoToNum<uint32_t>(query.queryName_)];;
+			query.queryName_ = seqKey[njh::StrToNumConverter::stoToNum<uint32_t>(query.queryName_)];
 		}
 		outputParsed.outputCustomHitsTable(hitTableOutOpts);
 
