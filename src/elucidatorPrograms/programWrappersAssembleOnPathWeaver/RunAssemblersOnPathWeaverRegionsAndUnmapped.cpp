@@ -18,13 +18,55 @@
 
 namespace njhseq {
 
+class OtherAssemblersUtility{
+public:
+	struct InputPars{
+		std::string regionUid_;
+		bfs::path pwOutputDir_;
+		std::string sample_;
+		bfs::path bedFile_;
+
+		void setPars(seqSetUp & setUp){
+			setUp.setOption(bedFile_, "--bed", "The Regions to analyze", true);
+			setUp.setOption(pwOutputDir_, "--pwOutputDir", "The PathWeaver directory", true);
+			setUp.setOption(sample_, "--sample", "sample name", true);
+			setUp.setOption(regionUid_, "--regionUid", "region ID", true);
+		}
+	};
+
+	explicit OtherAssemblersUtility(InputPars pars): inputPars_(std::move(pars)){
+		regInfo_ = std::make_shared<BamRegionInvestigator::RegionInfo>(GenomicRegion(Bed3RecordCore(inputPars_.regionUid_, 0, 1) ) );
+		refFnp_ = njh::files::make_path(inputPars_.pwOutputDir_, "inputRegions.fasta");
+		extractionFilesDir_ = njh::files::make_path(inputPars_.pwOutputDir_, "originalExtractionFiles");
+		//first extract the reads
+		pairedR1Fnp_ = njh::files::make_path(extractionFilesDir_, "allRaw_R1.fastq.gz");
+		pairedR2Fnp_ = njh::files::make_path(extractionFilesDir_, "allRaw_R2.fastq.gz");
+		singlesFnp_ =  njh::files::make_path(extractionFilesDir_, "allRaw.fastq.gz");
+		pairedReads_ = countSeqs(SeqIOOptions::genFastqInGz(pairedR1Fnp_), false);
+		singleReads_ = countSeqs(SeqIOOptions::genFastqInGz(singlesFnp_), false);
+		regInfo_->totalPairedReads_ = pairedReads_;
+		regInfo_->totalReads_ = pairedReads_ + singleReads_;
+		regInfo_->totalFinalReads_ = regInfo_->totalReads_;
+		inputRegions_ = gatherRegions(inputPars_.bedFile_.string(), "", false);
+		sortGRegionsByStart(inputRegions_);
+	}
+
+	InputPars inputPars_;
+	std::shared_ptr<BamRegionInvestigator::RegionInfo> regInfo_;
+	std::vector<GenomicRegion> inputRegions_;
+	bfs::path refFnp_;
+	bfs::path extractionFilesDir_;
+	//first extract the reads
+	bfs::path pairedR1Fnp_;
+	bfs::path pairedR2Fnp_;
+	bfs::path singlesFnp_;
+	uint32_t pairedReads_;
+	uint32_t singleReads_;
+};
 
 
 int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands) {
-	bfs::path bedFile = "";
-	bfs::path pwOutputDir = "";
-	std::string sample;
-
+	OtherAssemblersUtility::InputPars inPars;
 	uint32_t MIRANumThreads = 1;
 	std::string extraMIRAOptions;
 	uint32_t reOrientingKmerLength = 9;
@@ -35,14 +77,9 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnma
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
 	setUp.processVerbose();
-	setUp.setOption(bedFile, "--bed", "The Regions to analyze", true);
-	setUp.setOption(pwOutputDir, "--pwOutputDir", "The PathWeaver directory", true);
-	setUp.setOption(sample, "--sample", "sample name", true);
-
+	inPars.setPars(setUp);
 	setUp.setOption(numThreads, "--numThreads", "num Threads");
 	setUp.setOption(miraAttempts, "--miraAttempts", "mira Attempts");
-
-
 	setUp.setOption(MIRANumThreads, "--MIRANumThreads", "MIRA Num Threads");
 	setUp.setOption(extraMIRAOptions, "--extraMIRAOptions", "extra MIRA Options");
 
@@ -52,21 +89,15 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnma
 	setUp.setOption(MIRAOutDir,     "--MIRAOutDir",     "MIRA Out Directory name, will be relative to final pass directory");
 
 
-	setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(pwOutputDir), "_MIRA_TODAY"), true);
+	setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(inPars.pwOutputDir_), "_MIRA_TODAY"), true);
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
 	njh::sys::requireExternalProgramThrow("mira");
 	njh::sys::requireExternalProgramThrow("miraconvert");
 
-	auto inputRegions = gatherRegions(bedFile.string(), "", setUp.pars_.verbose_);
-	sortGRegionsByStart(inputRegions);
 
-	std::set<std::string> regionNames;
-	for(const auto & reg : inputRegions){
-		regionNames.emplace(reg.uid_);
-	}
-	//njh::sort(regionNames);
-	njh::concurrent::LockableQueue<std::string> regionsQueue(regionNames);
+	OtherAssemblersUtility utility(inPars);
+
 
 	bfs::path finalDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("final"));
 	bfs::path partialDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("partial"));
@@ -76,352 +107,227 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnma
 	SeqOutput allPartialWriter(allPartialSeqOpts);
 	allFinalWriter.openOut();
 	allPartialWriter.openOut();
-	std::mutex allFinalWriterMut;
-	std::mutex allPartialWriterMut;
+
+	std::string exceptionMess;
 
 
-	std::unordered_map<std::string,
-					std::vector<std::shared_ptr<BamRegionInvestigator::RegionInfo>> >regInfosByUID;
-	for (const auto & reg : inputRegions) {
-		regInfosByUID[reg.uid_].emplace_back(std::make_shared<BamRegionInvestigator::RegionInfo>(reg));
-	}
+	auto regionOutputDir = njh::files::make_path(setUp.pars_.directoryName_, utility.inputPars_.regionUid_, utility.inputPars_.sample_);
+	njh::files::makeDirP(njh::files::MkdirPar{regionOutputDir});
+	try {
+		if(!exists(utility.pairedR1Fnp_) && !exists(utility.singlesFnp_)){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", couldn't find " << utility.pairedR1Fnp_ << " or " << utility.singlesFnp_ << ", need to have at least one of them" << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		std::stringstream MIRACmdStream;
+		MIRACmdStream << "cd " << regionOutputDir;
+		MIRACmdStream << " && mira ";
 
-	std::unordered_map<std::string, std::string> exceptions;
-	std::mutex exceptionsMut;
+		{
+			OutputStream miramanifestOutput(njh::files::make_path(regionOutputDir, "mira_manifest.txt"));
+			miramanifestOutput << "project = " << MIRAOutDir.filename().string() << std::endl;
+			miramanifestOutput << "job = genome,denovo,accurate"<< std::endl;
 
-	std::function<void()> runMIRAOnRegion = [&](){
-		std::string regionUid;
-		while(regionsQueue.getVal(regionUid)){
-			const auto & regInfo = njh::mapAt(regInfosByUID, regionUid);
-			auto regionOutputDir = njh::files::make_path(setUp.pars_.directoryName_, regionUid, sample);
-			njh::files::makeDirP(njh::files::MkdirPar{regionOutputDir});
-			bfs::path refFnp = njh::files::make_path(pwOutputDir, regionUid, "allRefs.fasta");
-			//first extract the reads
-			bfs::path extractBam = njh::files::make_path(pwOutputDir, regionUid, sample + "_extraction", "extracted.bam");
-			OutOptions outOpts(njh::files::make_path(regionOutputDir, "extracted"));
-			auto readCounts = rawWriteExtractReadsFromBamOnlyMapped(extractBam, outOpts);
-			bfs::path pairedR1 = njh::files::make_path(regionOutputDir, "extracted_R1.fastq");
-			bfs::path pairedR2 = njh::files::make_path(regionOutputDir, "extracted_R2.fastq");
-			bfs::path singles =  njh::files::make_path(regionOutputDir, "extracted.fastq");
-			for(auto & reg : regInfo){
-				reg->totalPairedReads_ = readCounts.pairedReads_;
-				reg->totalReads_ = readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_;
-				reg->totalFinalReads_ = readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_;
-			}
-			try {
-				if(!exists(pairedR1) && !exists(singles)){
+
+			miramanifestOutput << "parameters = -CO:force_nonIUPACconsensus_perseqtype=yes -GENERAL:number_of_threads=" << MIRANumThreads << " COMMON_SETTINGS -NW:cmrnl=no -NW:cac=warn -NW:csrn=no -NW:cdrn=no"<< std::endl;
+			//-EDIT:edit_homopolymer_overcalls=yes
+			if(exists(utility.pairedR1Fnp_)){
+				if(!exists(utility.pairedR2Fnp_)){
 					std::stringstream ss;
-					ss << __PRETTY_FUNCTION__ << ", couldn't find " << pairedR1 << " or " << singles << ", need to have at least one of them" << "\n";
+					ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but cound't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
 					throw std::runtime_error{ss.str()};
 				}
-				std::stringstream MIRACmdStream;
-				MIRACmdStream << "cd " << regionOutputDir;
-				MIRACmdStream << " && mira ";
-
-				{
-					OutputStream miramanifestOutput(njh::files::make_path(regionOutputDir, "mira_manifest.txt"));
-					miramanifestOutput << "project = " << MIRAOutDir.filename().string() << std::endl;
-					miramanifestOutput << "job = genome,denovo,accurate"<< std::endl;
-
-
-					miramanifestOutput << "parameters = -CO:force_nonIUPACconsensus_perseqtype=yes -GENERAL:number_of_threads=" << MIRANumThreads << " COMMON_SETTINGS -NW:cmrnl=no -NW:cac=warn -NW:csrn=no -NW:cdrn=no"<< std::endl;
-					//-EDIT:edit_homopolymer_overcalls=yes
-					if(exists(pairedR1)){
-						if(!exists(pairedR2)){
-							std::stringstream ss;
-							ss << __PRETTY_FUNCTION__ << ", found: " << pairedR1 << " but cound't find it's mate file: " << pairedR2 << "\n";
-							throw std::runtime_error{ss.str()};
-						}
-						bfs::path pairedR1_app = njh::files::make_path(regionOutputDir, "appended_extracted_R1.fastq");
-						bfs::path pairedR2_app = njh::files::make_path(regionOutputDir, "appended_extracted_R2.fastq");
-						SeqOutput pairedR1_app_writer(SeqIOOptions::genFastqOut(pairedR1_app));
-						pairedR1_app_writer.openOut();
-						SeqOutput pairedR2_app_writer(SeqIOOptions::genFastqOut(pairedR2_app));
-						pairedR2_app_writer.openOut();
-						seqInfo seq;
-						SeqInput pairedR1_reading(SeqIOOptions::genFastqIn(pairedR1));
-						pairedR1_reading.openIn();
-						while(pairedR1_reading.readNextRead(seq)){
-							seq.name_.append("/1");
-							pairedR1_app_writer.write(seq);
-						}
-						SeqInput pairedR2_reading(SeqIOOptions::genFastqIn(pairedR2));
-						pairedR2_reading.openIn();
-						while(pairedR2_reading.readNextRead(seq)){
-							seq.name_.append("/2");
-							pairedR2_app_writer.write(seq);
-						}
-
-						miramanifestOutput << "readgroup = " << sample << "--" << regionUid << std::endl;
-						miramanifestOutput << "autopairing"<< std::endl;
-
-						miramanifestOutput << "data = appended_extracted_R1.fastq appended_extracted_R2.fastq"<< std::endl;
-						miramanifestOutput << "technology = solexa"<< std::endl;
-						miramanifestOutput << "template_size = 50 1000 autorefine"<< std::endl;
-						miramanifestOutput << "segment_placement = ---> <---"<< std::endl;
-					}
-					if(exists(singles)){
-						miramanifestOutput << "readgroup = " << sample << "--" << regionUid << "-single" << std::endl;
-						miramanifestOutput << "data = extracted.fastq"<< std::endl;
-						miramanifestOutput << "technology = solexa"<< std::endl;
-					}
+				bfs::path pairedR1_app = njh::files::make_path(regionOutputDir, "appended_extracted_R1.fastq");
+				bfs::path pairedR2_app = njh::files::make_path(regionOutputDir, "appended_extracted_R2.fastq");
+				SeqOutput pairedR1_app_writer(SeqIOOptions::genFastqOut(pairedR1_app));
+				pairedR1_app_writer.openOut();
+				SeqOutput pairedR2_app_writer(SeqIOOptions::genFastqOut(pairedR2_app));
+				pairedR2_app_writer.openOut();
+				seqInfo seq;
+				SeqInput pairedR1_reading(SeqIOOptions::genFastqIn(utility.pairedR1Fnp_));
+				pairedR1_reading.openIn();
+				while(pairedR1_reading.readNextRead(seq)){
+					seq.name_.append("/1");
+					pairedR1_app_writer.write(seq);
+				}
+				SeqInput pairedR2_reading(SeqIOOptions::genFastqIn(utility.pairedR2Fnp_));
+				pairedR2_reading.openIn();
+				while(pairedR2_reading.readNextRead(seq)){
+					seq.name_.append("/2");
+					pairedR2_app_writer.write(seq);
 				}
 
-				MIRACmdStream  << " mira_manifest.txt "
-											 << " >> MIRARunLog_" << njh::getCurrentDate() << ".txt 2>&1";
-				auto MIRAFullOutputDir = njh::files::make_path(regionOutputDir, MIRAOutDir.filename().string() + "_assembly");
+				miramanifestOutput << "readgroup = " << utility.inputPars_.sample_ << "--" << utility.inputPars_.regionUid_ << std::endl;
+				miramanifestOutput << "autopairing"<< std::endl;
 
-				auto MIRARunOutput = njh::sys::run({MIRACmdStream.str()});
-				uint32_t currentMiraAttempt = 1;
-				while(!MIRARunOutput.success_ && currentMiraAttempt <= miraAttempts){
-					MIRARunOutput = njh::sys::run({MIRACmdStream.str()});
+				miramanifestOutput << "data = appended_extracted_R1.fastq appended_extracted_R2.fastq"<< std::endl;
+				miramanifestOutput << "technology = solexa"<< std::endl;
+				miramanifestOutput << "template_size = 50 1000 autorefine"<< std::endl;
+				miramanifestOutput << "segment_placement = ---> <---"<< std::endl;
+			}
+			if(exists(utility.singlesFnp_)){
+				miramanifestOutput << "readgroup = " << utility.inputPars_.sample_ << "--" << utility.inputPars_.regionUid_ << "-single" << std::endl;
+				miramanifestOutput << "data = extracted.fastq"<< std::endl;
+				miramanifestOutput << "technology = solexa"<< std::endl;
+			}
+		}
 
-					++currentMiraAttempt;
-				}
-				BioCmdsUtils::checkRunOutThrow(MIRARunOutput, __PRETTY_FUNCTION__);
+		MIRACmdStream  << " mira_manifest.txt "
+									 << " >> MIRARunLog_" << njh::getCurrentDate() << ".txt 2>&1";
+		auto MIRAFullOutputDir = njh::files::make_path(regionOutputDir, MIRAOutDir.filename().string() + "_assembly");
 
-				OutOptions MIRARunOutputLogOpts(njh::files::make_path(MIRAFullOutputDir, "MIRARunOutput.json"));
-				OutputStream MIRARunOutputLogOut(MIRARunOutputLogOpts);
-				MIRARunOutputLogOut << njh::json::toJson(MIRARunOutput) << std::endl;
+		auto MIRARunOutput = njh::sys::run({MIRACmdStream.str()});
+		uint32_t currentMiraAttempt = 1;
+		while(!MIRARunOutput.success_ && currentMiraAttempt <= miraAttempts){
+			MIRARunOutput = njh::sys::run({MIRACmdStream.str()});
 
-				auto contigsFnp = njh::files::make_path(regionOutputDir, MIRAOutDir.filename().string() + "_assembly/", MIRAOutDir.filename().string() + "_d_results", MIRAOutDir.filename().string() + "_out.unpadded.fasta");
+			++currentMiraAttempt;
+		}
+		BioCmdsUtils::checkRunOutThrow(MIRARunOutput, __PRETTY_FUNCTION__);
+
+		OutOptions MIRARunOutputLogOpts(njh::files::make_path(MIRAFullOutputDir, "MIRARunOutput.json"));
+		OutputStream MIRARunOutputLogOut(MIRARunOutputLogOpts);
+		MIRARunOutputLogOut << njh::json::toJson(MIRARunOutput) << std::endl;
+
+		auto contigsFnp = njh::files::make_path(regionOutputDir, MIRAOutDir.filename().string() + "_assembly/", MIRAOutDir.filename().string() + "_d_results", MIRAOutDir.filename().string() + "_out.unpadded.fasta");
 
 
-				auto contigsSeqIoOpts = SeqIOOptions::genFastaIn(contigsFnp);
+		auto contigsSeqIoOpts = SeqIOOptions::genFastaIn(contigsFnp);
 //				contigsSeqIoOpts.includeWhiteSpaceInName_ = false;
-				contigsSeqIoOpts.lowerCaseBases_ = "upper";
-				SeqInput contigsReader(contigsSeqIoOpts);
-				auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
-				std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
-				contigsKmerReads.reserve(contigsSeqs.size());
-				for (const auto & seq : contigsSeqs) {
-					contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
-				}
-				allSetKmers(contigsKmerReads, reOrientingKmerLength, true);
+		contigsSeqIoOpts.lowerCaseBases_ = "upper";
+		SeqInput contigsReader(contigsSeqIoOpts);
+		auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
+		std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+		contigsKmerReads.reserve(contigsSeqs.size());
+		for (const auto & seq : contigsSeqs) {
+			contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
+		}
+		allSetKmers(contigsKmerReads, reOrientingKmerLength, true);
 
-				SeqInput refReader(SeqIOOptions::genFastaIn(refFnp));
-				auto refSeqs = refReader.readAllReads<seqInfo>();
-				std::vector<std::shared_ptr<seqWithKmerInfo>> refKmerReads;
-				std::vector<seqInfo> revComp_refSeqs;
-				std::vector<kmerInfo> revComp_refSeqsKInfos;
-				refKmerReads.reserve(refSeqs.size());
-				for (const auto & seq : refSeqs) {
-					refKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
-				}
-				allSetKmers(refKmerReads, reOrientingKmerLength, true);
-				for(const auto & rSeq : refSeqs){
-					revComp_refSeqs.emplace_back(rSeq);
-					revComp_refSeqs.back().reverseComplementRead(false, true);
-					revComp_refSeqsKInfos.emplace_back(revComp_refSeqs.back().seq_, 7, false);
-				}
-				for(const auto & seqKmer : contigsKmerReads) {
-					uint32_t forwardWinners = 0;
-					uint32_t revWinners = 0;
-					for (const auto & refSeq : refKmerReads) {
-						auto forDist = refSeq->compareKmers(*seqKmer);
-						auto revDist = refSeq->compareKmersRevComp(*seqKmer);
-						if (forDist.first < revDist.first) {
-							++revWinners;
-						} else {
-							++forwardWinners;
-						}
-					}
-					if (revWinners > forwardWinners) {
-						seqKmer->seqBase_.reverseComplementRead(true, true);
-					}
-				}
+		RefSeqsWithKmers refSeqs(utility.refFnp_, reOrientingKmerLength);
+		readVec::reorientSeqs(contigsKmerReads, refSeqs.refKmerReads_);
+		//sort by sequence length;
+		njh::sort(contigsKmerReads, [](const std::shared_ptr<seqWithKmerInfo> & seq1, const std::shared_ptr<seqWithKmerInfo> & seq2){
+			return len(seq1->seqBase_) > len(seq2->seqBase_);
+		});
 
-				//sort by sequence length;
-				njh::sort(contigsKmerReads, [](const std::shared_ptr<seqWithKmerInfo> & seq1, const std::shared_ptr<seqWithKmerInfo> & seq2){
-					return len(seq1->seqBase_) > len(seq2->seqBase_);
-				});
+		OutOptions contigInfoOpts(njh::files::make_path(MIRAFullOutputDir, "contigs_outputInfo.tab.txt"));
+		OutputStream contigInfoOut(contigInfoOpts);
+		contigInfoOut << "name\tlength\tcoverage" << std::endl;
 
-				OutOptions contigInfoOpts(njh::files::make_path(MIRAFullOutputDir, "contigs_outputInfo.tab.txt"));
-				OutputStream contigInfoOut(contigInfoOpts);
-				contigInfoOut << "name\tlength\tcoverage" << std::endl;
+		for(const auto & contigsKmerRead : contigsKmerReads){
+			auto assembleInfo = MIRAAssembleNameInfo(contigsKmerRead->seqBase_.name_);
 
-				for(const auto & contigsKmerRead : contigsKmerReads){
-					auto assembleInfo = MIRAAssembleNameInfo(contigsKmerRead->seqBase_.name_);
+			contigInfoOut << contigsKmerRead->seqBase_.name_
+										<< "\t" << len(contigsKmerRead->seqBase_)
+										<< "\t" << assembleInfo.coverage_ << std::endl;
+		}
+		auto reOrientedContigsFnp = njh::files::make_path(MIRAFullOutputDir, "reOriented_contigs.fasta");
 
-					contigInfoOut << contigsKmerRead->seqBase_.name_
-												<< "\t" << len(contigsKmerRead->seqBase_)
-												<< "\t" << assembleInfo.coverage_ << std::endl;
-				}
-				auto reOrientedContigsFnp = njh::files::make_path(MIRAFullOutputDir, "reOriented_contigs.fasta");
+		SeqOutput::write(contigsKmerReads, SeqIOOptions::genFastaOut(reOrientedContigsFnp));
 
-				SeqOutput::write(contigsKmerReads, SeqIOOptions::genFastaOut(reOrientedContigsFnp));
+		std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs = trimToFinalSeqs(contigsKmerReads, refSeqs);
+		std::unordered_map<std::string, uint32_t> finalSeqCounts;
+		for(const auto & seq : finalSeqs){
+			++finalSeqCounts[seq->seqBase_.name_];
+		}
+		double totalCoverage = 0;
+		for(auto & seq : finalSeqs){
+			auto assembleInfo = MIRAAssembleNameInfo(seq->seqBase_.name_);
+			totalCoverage += assembleInfo.coverage_;
+		}
+		std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
+		for(auto & seq : finalSeqs){
+			auto assembleInfo = MIRAAssembleNameInfo(seq->seqBase_.name_);
+			MetaDataInName seqMeta;
+			seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
+			seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
+			seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
+			seqMeta.addMeta("regionUID", utility.inputPars_.regionUid_);
+			seqMeta.addMeta("sample", utility.inputPars_.sample_);
+			if(finalSeqCounts[seq->seqBase_.name_] > 1){
+				seqMeta.addMeta("seqTrimmedCount", finalSeqCountsWritten[seq->seqBase_.name_]);
+				++finalSeqCountsWritten[seq->seqBase_.name_];
+			}
+			seqMeta.resetMetaInName(seq->seqBase_.name_);
+			seq->seqBase_.cnt_ = assembleInfo.seqNumber_;
+			seq->seqBase_.name_ += njh::pasteAsStr("_t", assembleInfo.seqNumber_);
+		}
 
-				uint64_t maxLen = 0;
-				readVec::getMaxLength(refSeqs, maxLen);
-				readVec::getMaxLength(contigsKmerReads, maxLen);
-				aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
-				//alignerObj.processAlnInfoInputNoCheck(njh::files::make_path(resultsDirectory, "trimAlnCache").string(), setUp.pars_.verbose_);
-				std::vector<kmerInfo> refSeqsKmerInfos;
-				refSeqsKmerInfos.reserve(refSeqs.size());
-				for(const auto & input : refSeqs){
-					refSeqsKmerInfos.emplace_back(input.seq_, 7, false);
-				}
-				//readVecTrimmer::trimSeqToRefByGlobalAln(contigsKmerReads, refSeqs, refSeqsKmerInfos, alignerObj);
-				std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs;
-				std::unordered_map<std::string, uint32_t> finalSeqCounts;
-				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
-				for(const auto & seq : contigsKmerReads){
-					auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs, revComp_refSeqs, refSeqsKmerInfos, revComp_refSeqsKInfos, alignerObj, false);
-					for(auto & trimmedSeq : trimmed){
-						bool found = false;
-						for(const auto & finalSeq : finalSeqs){
-							if(finalSeq->seqBase_.seq_ == trimmedSeq.seq_){
-								found = true;
-								break;
-							}
-						}
-						if(!found){
-							finalSeqs.emplace_back(std::make_shared<seqWithKmerInfo>(trimmedSeq, 7, false));
-							++finalSeqCounts[trimmedSeq.name_];
-						}
-					}
-				}
-				double totalCoverage = 0;
-				for(auto & seq : finalSeqs){
-					auto assembleInfo = MIRAAssembleNameInfo(seq->seqBase_.name_);
-					totalCoverage += assembleInfo.coverage_;
-				}
+		OutOptions trimmedContigInfoOpts(njh::files::make_path(MIRAFullOutputDir, "trimmed_reOriented_contigs_outputInfo.tab.txt"));
+		OutputStream trimmedContigInfoOut(trimmedContigInfoOpts);
+		trimmedContigInfoOut << "name\tlength\tcoverage" << std::endl;
+		auto trimmedReOrientedContigsFnp = njh::files::make_path(MIRAFullOutputDir, "trimmed_reOriented_contigs.fasta");
+		SeqOutput outputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp));
+		auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(MIRAFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
+		SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
 
-				for(auto & seq : finalSeqs){
-					auto assembleInfo = MIRAAssembleNameInfo(seq->seqBase_.name_);
-					MetaDataInName seqMeta;
-					seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
-					seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
-					seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
-					seqMeta.addMeta("regionUID", regionUid);
-					seqMeta.addMeta("sample", sample);
-					if(finalSeqCounts[seq->seqBase_.name_] > 1){
-						seqMeta.addMeta("seqTrimmedCount", finalSeqCountsWritten[seq->seqBase_.name_]);
-						++finalSeqCountsWritten[seq->seqBase_.name_];
-					}
-					seqMeta.resetMetaInName(seq->seqBase_.name_);
-					seq->seqBase_.cnt_ = assembleInfo.seqNumber_;
-					seq->seqBase_.name_ += njh::pasteAsStr("_t", assembleInfo.seqNumber_);
-				}
-
-				OutOptions trimmedContigInfoOpts(njh::files::make_path(MIRAFullOutputDir, "trimmed_reOriented_contigs_outputInfo.tab.txt"));
-				OutputStream trimmedContigInfoOut(trimmedContigInfoOpts);
-				trimmedContigInfoOut << "name\tlength\tcoverage" << std::endl;
-				auto trimmedReOrientedContigsFnp = njh::files::make_path(MIRAFullOutputDir, "trimmed_reOriented_contigs.fasta");
-				SeqOutput outputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp));
-				auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(MIRAFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
-				SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
-
-				uint32_t belowCutOff = 0;
-				uint32_t aboveCutOff = 0;
-				bool allPassTrim = true;
-				for (const auto & contigsKmerRead : finalSeqs) {
-					if (len(contigsKmerRead->seqBase_) < minFinalLength) {
-						++belowCutOff;
-						belowCutOffOutputWriter.openWrite(contigsKmerRead);
-						contigsKmerRead->seqBase_.on_ = false;
-					} else {
-						MetaDataInName seqMeta(contigsKmerRead->seqBase_.name_);
-						trimmedContigInfoOut << contigsKmerRead->seqBase_.name_
-																 << "\t" << len(contigsKmerRead->seqBase_)
-																 << "\t" << seqMeta.getMeta("estimatedPerBaseCoverage")
-																 << std::endl;
-						if(!contigsKmerRead->seqBase_.on_){
-							allPassTrim = false;
-						}else{
-							++aboveCutOff;
-						}
-						outputWriter.openWrite(contigsKmerRead);
-					}
-				}
-				if(allPassTrim){
-					std::lock_guard<std::mutex> lock(allFinalWriterMut);
-					for (const auto & contigsKmerRead : finalSeqs) {
-						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
-							allFinalWriter.write(contigsKmerRead);
-						}
-					}
-					for(auto & reg : regInfo){
-						reg->infoCalled_ = true;
-						reg->uniqHaps_ = aboveCutOff;
-					}
+		uint32_t belowCutOff = 0;
+		uint32_t aboveCutOff = 0;
+		bool allPassTrim = true;
+		for (const auto & contigsKmerRead : finalSeqs) {
+			if (len(contigsKmerRead->seqBase_) < minFinalLength) {
+				++belowCutOff;
+				belowCutOffOutputWriter.openWrite(contigsKmerRead);
+				contigsKmerRead->seqBase_.on_ = false;
+			} else {
+				MetaDataInName seqMeta(contigsKmerRead->seqBase_.name_);
+				trimmedContigInfoOut << contigsKmerRead->seqBase_.name_
+														 << "\t" << len(contigsKmerRead->seqBase_)
+														 << "\t" << seqMeta.getMeta("estimatedPerBaseCoverage")
+														 << std::endl;
+				if(!contigsKmerRead->seqBase_.on_){
+					allPassTrim = false;
 				}else{
-					std::lock_guard<std::mutex> lock(allPartialWriterMut);
-					for (const auto & contigsKmerRead : finalSeqs) {
-						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
-							allPartialWriter.write(contigsKmerRead);
-						}
-					}
+					++aboveCutOff;
 				}
-			} catch (std::exception & e) {
-				std::lock_guard<std::mutex> lock(exceptionsMut);
-				exceptions[regionUid] = e.what();
-				for(auto & reg : regInfo){
-					reg->infoCalled_ = false;
-					reg->uniqHaps_ = 0;
+				outputWriter.openWrite(contigsKmerRead);
+			}
+		}
+		if(allPassTrim){
+			for (const auto & contigsKmerRead : finalSeqs) {
+				if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
+					allFinalWriter.write(contigsKmerRead);
+				}
+			}
+			utility.regInfo_->infoCalled_ = true;
+			utility.regInfo_->uniqHaps_ = aboveCutOff;
+		}else{
+			for (const auto & contigsKmerRead : finalSeqs) {
+				if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
+					allPartialWriter.write(contigsKmerRead);
 				}
 			}
 		}
-	};
+	} catch (std::exception & e) {
+		exceptionMess = e.what();
+		utility.regInfo_->infoCalled_ = false;
+		utility.regInfo_->uniqHaps_ = 0;
+	}
 
-
-	njh::concurrent::runVoidFunctionThreaded(runMIRAOnRegion, numThreads);
 	allFinalWriter.closeOut();
 	allPartialWriter.closeOut();
-	//sample,readTotal,readTotalUsed, success, name
-	//
 	OutputStream basicInfo(njh::files::make_path(finalDirectory, "basicInfoPerRegion.tab.txt"));
 
-	basicInfo << "#chrom\tstart\tend\tname\tlength\tstrand\tsuccess\tuniqHaps\treadTotal\treadTotalUsed\ttotalPairedReads";
+	basicInfo << "name\tsuccess\tuniqHaps\treadTotal\treadTotalUsed\ttotalPairedReads";
 	basicInfo << "\tsample";
-	uint32_t maxExtraFields = 0;
-	for(const auto & p : inputRegions){
-
-		auto bedOut = p.genBedRecordCore();
-		if(bedOut.extraFields_.size() > maxExtraFields){
-			maxExtraFields = bedOut.extraFields_.size();
-		}
-	}
-	for(uint32_t t = 0; t < maxExtraFields; ++t){
-		basicInfo << "\textraField"<<t;
-	}
 	basicInfo << "\n";
-
-	std::map<uint32_t, uint32_t> coiCounts;
-
-	for (const auto & reg : inputRegions) {
-		const auto & regInfos = njh::mapAt(regInfosByUID, reg.uid_);
-		++coiCounts[regInfos.front()->uniqHaps_];
-		for(auto & regInfo : regInfos){
-			auto bedOut = regInfo->region_.genBedRecordCore();
-			basicInfo << bedOut.toDelimStr();
-			basicInfo << "\t" << njh::boolToStr(regInfo->infoCalled_)
-								<< "\t" << regInfo->uniqHaps_
-								<< "\t" << regInfo->totalReads_
-								<< "\t" << regInfo->totalFinalReads_
-								<< "\t" << regInfo->totalPairedReads_
-								<< "\t" << sample;
-			for(const auto & extra : bedOut.extraFields_){
-				basicInfo << "\t" << extra;
-			}
-			basicInfo << std::endl;
-		}
-	}
-
-	OutputStream coiOut(njh::files::make_path(finalDirectory, "coiCounts.tab.txt"));
-	coiOut << "coi\tcount" << std::endl;
-	for(const auto & count : coiCounts){
-		coiOut << count.first << "\t" << count.second << std::endl;
-	}
+	basicInfo << utility.inputPars_.regionUid_;
+	basicInfo << "\t" << njh::boolToStr(utility.regInfo_->infoCalled_)
+						<< "\t" << utility.regInfo_->uniqHaps_
+						<< "\t" << utility.regInfo_->totalReads_
+						<< "\t" << utility.regInfo_->totalFinalReads_
+						<< "\t" << utility.regInfo_->totalPairedReads_
+						<< "\t" << utility.inputPars_.sample_;
 
 	OutputStream exceptionsOut(njh::files::make_path(finalDirectory, "exceptionsMessages.tab.txt"));
 	exceptionsOut << "regionUID\tmessage" << std::endl;
-	for(const auto & exp : exceptions){
-		exceptionsOut << exp.first << "\t" << exp.second << std::endl;
-	}
+	exceptionsOut << utility.inputPars_.regionUid_ << "\t" << exceptionMess << std::endl;
 	return 0;
 }
 //
+
+
 int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile = "";
 	bfs::path pwOutputDir = "";
@@ -506,7 +412,7 @@ int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnPathWeaverRegionsAn
 			bfs::path pairedR1 = njh::files::make_path(regionOutputDir, "extracted_R1.fastq");
 			bfs::path pairedR2 = njh::files::make_path(regionOutputDir, "extracted_R2.fastq");
 			bfs::path singles =  njh::files::make_path(regionOutputDir, "extracted.fastq");
-			uint64_t totalReads = readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_;
+			uint32_t totalReads = readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_;
 			for(auto & reg : regInfo){
 				reg->totalPairedReads_ = readCounts.pairedReads_;
 				reg->totalReads_ = totalReads;
@@ -2888,7 +2794,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegionsAndUn
 						}
 					}
 				}
-				double totalCoverage = finalSeqs.size();
+				auto totalCoverage = static_cast<double>(finalSeqs.size());
 
 				for(auto & seq : finalSeqs){
 					//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
