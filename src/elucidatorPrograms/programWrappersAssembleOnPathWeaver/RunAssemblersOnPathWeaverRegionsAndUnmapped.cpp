@@ -167,7 +167,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnma
 			}
 			if(exists(utility.singlesFnp_)){
 				miramanifestOutput << "readgroup = " << utility.inputPars_.sample_ << "--" << utility.inputPars_.regionUid_ << "-single" << std::endl;
-				miramanifestOutput << "data = extracted.fastq"<< std::endl;
+				miramanifestOutput << "data = " << njh::files::normalize(utility.singlesFnp_) << std::endl;
 				miramanifestOutput << "technology = solexa"<< std::endl;
 			}
 		}
