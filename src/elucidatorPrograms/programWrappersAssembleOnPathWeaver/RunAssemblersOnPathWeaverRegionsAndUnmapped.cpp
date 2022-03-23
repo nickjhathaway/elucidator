@@ -62,7 +62,7 @@ public:
 		inputRegions_ = gatherRegions(inputPars_.bedFile_.string(), "", false);
 		sortGRegionsByStart(inputRegions_);
 
-		finalPassDir_ = njh::files::make_path(inputPars_.outputDir_, inputPars_.sample_, "-finalPass");
+		finalPassDir_ = njh::files::make_path(inputPars_.outputDir_, inputPars_.sample_ + "-finalPass");
 		outputFnp_ = njh::files::make_path(finalPassDir_, "output.fasta");
 		outputAboveCutOffFnp_ = njh::files::make_path(finalPassDir_, "output_aboveCutOff.fasta");
 		njh::files::makeDir(njh::files::MkdirPar(finalPassDir_));
