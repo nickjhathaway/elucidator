@@ -25,12 +25,24 @@ public:
 		bfs::path pwOutputDir_;
 		std::string sample_;
 		bfs::path bedFile_;
+		std::string extraProgramOptions_;
+		uint32_t reOrientingKmerLength_ = 9;
+		uint32_t minFinalLength_ = 40;
+		uint32_t numThreads_ = 1;
+		std::string programName_;
+		bfs::path outputDir_;
 
 		void setPars(seqSetUp & setUp){
 			setUp.setOption(bedFile_, "--bed", "The Regions to analyze", true);
 			setUp.setOption(pwOutputDir_, "--pwOutputDir", "The PathWeaver directory", true);
 			setUp.setOption(sample_, "--sample", "sample name", true);
 			setUp.setOption(regionUid_, "--regionUid", "region ID", true);
+			setUp.setOption(numThreads_, "--numThreads", "num Threads");
+			setUp.setOption(extraProgramOptions_, "--extraProgramOptions", "extra program Options");
+			setUp.setOption(minFinalLength_, "--minFinalLength", "min Final Length");
+			setUp.setOption(reOrientingKmerLength_, "--reOrientingKmerLength", "reOrientingKmerLength Length");
+			setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(pwOutputDir_), "_" + programName_ + "_TODAY"), true);
+			outputDir_ = setUp.pars_.directoryName_;
 		}
 	};
 
@@ -49,6 +61,11 @@ public:
 		regInfo_->totalFinalReads_ = regInfo_->totalReads_;
 		inputRegions_ = gatherRegions(inputPars_.bedFile_.string(), "", false);
 		sortGRegionsByStart(inputRegions_);
+
+		finalPassDir_ = njh::files::make_path(inputPars_.outputDir_, inputPars_.sample_, "-finalPass");
+		outputFnp_ = njh::files::make_path(finalPassDir_, "output.fasta");
+		outputAboveCutOffFnp_ = njh::files::make_path(finalPassDir_, "output_aboveCutOff.fasta");
+		njh::files::makeDir(njh::files::MkdirPar(finalPassDir_));
 	}
 
 	InputPars inputPars_;
@@ -62,34 +79,23 @@ public:
 	bfs::path singlesFnp_;
 	uint32_t pairedReads_;
 	uint32_t singleReads_;
+
+	bfs::path finalPassDir_;
+	bfs::path outputFnp_;
+	bfs::path outputAboveCutOffFnp_;
 };
 
 
 int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands) {
 	OtherAssemblersUtility::InputPars inPars;
-	uint32_t MIRANumThreads = 1;
-	std::string extraMIRAOptions;
-	uint32_t reOrientingKmerLength = 9;
-	uint32_t minFinalLength = 40;
+	inPars.programName_ = "MIRA";
 	bfs::path MIRAOutDir = "MIRAOut";
-	uint32_t numThreads = 1;
 	uint32_t miraAttempts = 3 ;
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
 	setUp.processVerbose();
 	inPars.setPars(setUp);
-	setUp.setOption(numThreads, "--numThreads", "num Threads");
 	setUp.setOption(miraAttempts, "--miraAttempts", "mira Attempts");
-	setUp.setOption(MIRANumThreads, "--MIRANumThreads", "MIRA Num Threads");
-	setUp.setOption(extraMIRAOptions, "--extraMIRAOptions", "extra MIRA Options");
-
-	setUp.setOption(minFinalLength, "--minFinalLength", "min Final Length");
-	setUp.setOption(reOrientingKmerLength, "--reOrientingKmerLength", "re-orienting K-mer Length");
-
-	setUp.setOption(MIRAOutDir,     "--MIRAOutDir",     "MIRA Out Directory name, will be relative to final pass directory");
-
-
-	setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(inPars.pwOutputDir_), "_MIRA_TODAY"), true);
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
 	njh::sys::requireExternalProgramThrow("mira");
@@ -99,14 +105,11 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnma
 	OtherAssemblersUtility utility(inPars);
 
 
-	bfs::path finalDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("final"));
-	bfs::path partialDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("partial"));
-	auto allFinalSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(finalDirectory, "allFinal.fasta"));
-	auto allPartialSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(partialDirectory, "allPartial.fasta"));
-	SeqOutput allFinalWriter(allFinalSeqOpts);
-	SeqOutput allPartialWriter(allPartialSeqOpts);
-	allFinalWriter.openOut();
-	allPartialWriter.openOut();
+
+
+	auto outputAboveCutOffSeqOpts = SeqIOOptions::genFastaOut(utility.outputAboveCutOffFnp_);
+	SeqOutput outputAboveCutOffWriter(outputAboveCutOffSeqOpts);
+	outputAboveCutOffWriter.openOut();
 
 	std::string exceptionMess;
 
@@ -129,7 +132,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnma
 			miramanifestOutput << "job = genome,denovo,accurate"<< std::endl;
 
 
-			miramanifestOutput << "parameters = -CO:force_nonIUPACconsensus_perseqtype=yes -GENERAL:number_of_threads=" << MIRANumThreads << " COMMON_SETTINGS -NW:cmrnl=no -NW:cac=warn -NW:csrn=no -NW:cdrn=no"<< std::endl;
+			miramanifestOutput << "parameters = -CO:force_nonIUPACconsensus_perseqtype=yes -GENERAL:number_of_threads=" << utility.inputPars_.numThreads_ << " COMMON_SETTINGS -NW:cmrnl=no -NW:cac=warn -NW:csrn=no -NW:cdrn=no"<< std::endl;
 			//-EDIT:edit_homopolymer_overcalls=yes
 			if(exists(utility.pairedR1Fnp_)){
 				if(!exists(utility.pairedR2Fnp_)){
@@ -202,9 +205,9 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnma
 		for (const auto & seq : contigsSeqs) {
 			contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
 		}
-		allSetKmers(contigsKmerReads, reOrientingKmerLength, true);
+		allSetKmers(contigsKmerReads, utility.inputPars_.reOrientingKmerLength_, true);
 
-		RefSeqsWithKmers refSeqs(utility.refFnp_, reOrientingKmerLength);
+		RefSeqsWithKmers refSeqs(utility.refFnp_, utility.inputPars_.reOrientingKmerLength_);
 		readVec::reorientSeqs(contigsKmerReads, refSeqs.refKmerReads_);
 		//sort by sequence length;
 		njh::sort(contigsKmerReads, [](const std::shared_ptr<seqWithKmerInfo> & seq1, const std::shared_ptr<seqWithKmerInfo> & seq2){
@@ -223,8 +226,19 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnma
 										<< "\t" << assembleInfo.coverage_ << std::endl;
 		}
 		auto reOrientedContigsFnp = njh::files::make_path(MIRAFullOutputDir, "reOriented_contigs.fasta");
-
+		for(auto & seq : contigsKmerReads){
+			auto assembleInfo = MIRAAssembleNameInfo(seq->seqBase_.name_);
+			MetaDataInName seqMeta;
+			seqMeta.addMeta("length", len(seq->seqBase_));
+			seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
+			seqMeta.addMeta("regionUID", utility.inputPars_.regionUid_);
+			seqMeta.addMeta("sample", utility.inputPars_.sample_);
+			seqMeta.resetMetaInName(seq->seqBase_.name_);
+			seq->seqBase_.cnt_ = assembleInfo.seqNumber_;
+			seq->seqBase_.name_ += njh::pasteAsStr("_t", assembleInfo.seqNumber_);
+		}
 		SeqOutput::write(contigsKmerReads, SeqIOOptions::genFastaOut(reOrientedContigsFnp));
+		SeqOutput::write(contigsKmerReads, SeqIOOptions::genFastaOut(utility.outputFnp_));
 
 		std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs = trimToFinalSeqs(contigsKmerReads, refSeqs);
 		std::unordered_map<std::string, uint32_t> finalSeqCounts;
@@ -258,7 +272,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnma
 		OutputStream trimmedContigInfoOut(trimmedContigInfoOpts);
 		trimmedContigInfoOut << "name\tlength\tcoverage" << std::endl;
 		auto trimmedReOrientedContigsFnp = njh::files::make_path(MIRAFullOutputDir, "trimmed_reOriented_contigs.fasta");
-		SeqOutput outputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp));
+		SeqOutput outputTrimmedWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp));
 		auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(MIRAFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
 		SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
 
@@ -266,7 +280,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnma
 		uint32_t aboveCutOff = 0;
 		bool allPassTrim = true;
 		for (const auto & contigsKmerRead : finalSeqs) {
-			if (len(contigsKmerRead->seqBase_) < minFinalLength) {
+			if (len(contigsKmerRead->seqBase_) < utility.inputPars_.minFinalLength_) {
 				++belowCutOff;
 				belowCutOffOutputWriter.openWrite(contigsKmerRead);
 				contigsKmerRead->seqBase_.on_ = false;
@@ -281,23 +295,16 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnma
 				}else{
 					++aboveCutOff;
 				}
-				outputWriter.openWrite(contigsKmerRead);
+				outputAboveCutOffWriter.openWrite(contigsKmerRead);
+				outputTrimmedWriter.openWrite(contigsKmerRead);
 			}
 		}
 		if(allPassTrim){
-			for (const auto & contigsKmerRead : finalSeqs) {
-				if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
-					allFinalWriter.write(contigsKmerRead);
-				}
-			}
 			utility.regInfo_->infoCalled_ = true;
 			utility.regInfo_->uniqHaps_ = aboveCutOff;
 		}else{
-			for (const auto & contigsKmerRead : finalSeqs) {
-				if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
-					allPartialWriter.write(contigsKmerRead);
-				}
-			}
+			utility.regInfo_->infoCalled_ = false;
+			utility.regInfo_->uniqHaps_ = 0;
 		}
 	} catch (std::exception & e) {
 		exceptionMess = e.what();
@@ -305,9 +312,8 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnma
 		utility.regInfo_->uniqHaps_ = 0;
 	}
 
-	allFinalWriter.closeOut();
-	allPartialWriter.closeOut();
-	OutputStream basicInfo(njh::files::make_path(finalDirectory, "basicInfoPerRegion.tab.txt"));
+	outputAboveCutOffWriter.closeOut();
+	OutputStream basicInfo(njh::files::make_path(utility.finalPassDir_, "basicInfoPerRegion.tab.txt"));
 
 	basicInfo << "name\tsuccess\tuniqHaps\treadTotal\treadTotalUsed\ttotalPairedReads";
 	basicInfo << "\tsample";
@@ -320,7 +326,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnma
 						<< "\t" << utility.regInfo_->totalPairedReads_
 						<< "\t" << utility.inputPars_.sample_;
 
-	OutputStream exceptionsOut(njh::files::make_path(finalDirectory, "exceptionsMessages.tab.txt"));
+	OutputStream exceptionsOut(njh::files::make_path(utility.finalPassDir_, "exceptionsMessages.tab.txt"));
 	exceptionsOut << "regionUID\tmessage" << std::endl;
 	exceptionsOut << utility.inputPars_.regionUid_ << "\t" << exceptionMess << std::endl;
 	return 0;
