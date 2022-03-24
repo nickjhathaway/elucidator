@@ -47,6 +47,7 @@ public:
 	};
 
 	explicit OtherAssemblersUtility(InputPars pars): inputPars_(std::move(pars)){
+		std::cout << __PRETTY_FUNCTION__  << " " << __LINE__ << std::endl;
 		regInfo_ = std::make_shared<BamRegionInvestigator::RegionInfo>(GenomicRegion(Bed3RecordCore(inputPars_.regionUid_, 0, 1) ) );
 		refFnp_ = njh::files::make_path(inputPars_.pwOutputDir_, "inputRegions.fasta");
 		extractionFilesDir_ = njh::files::make_path(inputPars_.pwOutputDir_, "originalExtractionFiles");
@@ -54,20 +55,27 @@ public:
 		pairedR1Fnp_ = njh::files::make_path(extractionFilesDir_, "allRaw_R1.fastq.gz");
 		pairedR2Fnp_ = njh::files::make_path(extractionFilesDir_, "allRaw_R2.fastq.gz");
 		singlesFnp_ =  njh::files::make_path(extractionFilesDir_, "allRaw.fastq.gz");
+		std::cout << "pairedR1Fnp_:"  << " " << pairedR1Fnp_ << std::endl;
+		std::cout << "pairedR2Fnp_:"  << " " << pairedR2Fnp_ << std::endl;
+		std::cout << "singlesFnp_:"  << " " << singlesFnp_ << std::endl;
 
+
+		std::cout << __PRETTY_FUNCTION__  << " " << __LINE__ << std::endl;
 		{
 			std::vector<uint32_t> readLens;
-			{
+			if(bfs::exists(pairedR1Fnp_)){
 				seqInfo seq;
 				SeqInput reader(SeqIOOptions::genFastqInGz(pairedR1Fnp_));
+				reader.openIn();
 				while(reader.readNextRead(seq)){
 					readLens.emplace_back(len(seq));
 					++pairedReads_;
 				}
 			}
-			{
+			if(bfs::exists(singlesFnp_)){
 				seqInfo seq;
 				SeqInput reader(SeqIOOptions::genFastqInGz(singlesFnp_));
+				reader.openIn();
 				while (reader.readNextRead(seq)) {
 					readLens.emplace_back(len(seq));
 					++singleReads_;
@@ -75,6 +83,7 @@ public:
 			}
 			medianReadLen_ = vectorMedianRef(readLens);
 		}
+		std::cout << __PRETTY_FUNCTION__  << " " << __LINE__ << std::endl;
 		regInfo_->totalPairedReads_ = pairedReads_;
 		regInfo_->totalReads_ = pairedReads_ + singleReads_;
 		regInfo_->totalFinalReads_ = regInfo_->totalReads_;
@@ -370,7 +379,6 @@ int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnPathWeaverRegionsAn
 	setUp.startARunLog(setUp.pars_.directoryName_);
 	njh::sys::requireExternalProgramThrow("unicycler");
 	OtherAssemblersUtility utility(inPars);
-
 	auto outputAboveCutOffSeqOpts = SeqIOOptions::genFastaOut(utility.outputAboveCutOffFnp_);
 	SeqOutput outputAboveCutOffWriter(outputAboveCutOffSeqOpts);
 	outputAboveCutOffWriter.openOut();
@@ -396,11 +404,11 @@ int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnPathWeaverRegionsAn
 				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but cound't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
 				throw std::runtime_error{ss.str()};
 			}else{
-				raw_unicyclerCmdStream << " -1 " << utility.pairedR1Fnp_.filename() << " -2 " << utility.pairedR2Fnp_.filename() << " ";
+				raw_unicyclerCmdStream << " -1 " << njh::files::normalize(utility.pairedR1Fnp_) << " -2 " << njh::files::normalize(utility.pairedR2Fnp_) << " ";
 			}
 		}
 		if(exists(utility.singlesFnp_)){
-			raw_unicyclerCmdStream << " -s  " << utility.singlesFnp_.filename();
+			raw_unicyclerCmdStream << " -s  " << njh::files::normalize(utility.singlesFnp_);
 		}
 		raw_unicyclerCmdStream  << " -t " << utility.inputPars_.numThreads_
 														<< " " << utility.inputPars_.extraProgramOptions_
@@ -631,11 +639,11 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegionsAndUn
 				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but cound't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
 				throw std::runtime_error{ss.str()};
 			}else{
-				spadesCmdStream << " -1 " << utility.pairedR1Fnp_.filename() << " -2 " << utility.pairedR2Fnp_.filename() << " ";
+				spadesCmdStream << " -1 " << njh::files::normalize(utility.pairedR1Fnp_) << " -2 " << njh::files::normalize(utility.pairedR2Fnp_) << " ";
 			}
 		}
 		if(exists(utility.singlesFnp_)){
-			spadesCmdStream << " -s  " << utility.singlesFnp_.filename();
+			spadesCmdStream << " -s  " << njh::files::normalize(utility.singlesFnp_);
 		}
 		spadesCmdStream  << " -t " << utility.inputPars_.numThreads_
 										 << " " << utility.inputPars_.extraProgramOptions_
@@ -863,7 +871,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegionsAndUnmap
 //
 //
 		RayCmdStream    << " -k " << RayKmerLength
-										<< " -p " << utility.pairedR1Fnp_.filename() << " " <<  utility.pairedR2Fnp_.filename()
+										<< " -p " << njh::files::normalize(utility.pairedR1Fnp_) << " " <<  njh::files::normalize(utility.pairedR2Fnp_)
 										<< " " << utility.inputPars_.extraProgramOptions_
 										<< " -o " << RayOutDir
 										<< " > RayRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
@@ -1311,10 +1319,10 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegionsAndU
 				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but cound't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
 				throw std::runtime_error{ss.str()};
 			}else{
-				TrinityCmdStream << " --left " << utility.pairedR1Fnp_.filename() << " --right " << utility.pairedR2Fnp_.filename() << " ";
+				TrinityCmdStream << " --left " << njh::files::normalize(utility.pairedR1Fnp_) << " --right " << njh::files::normalize(utility.pairedR2Fnp_) << " ";
 			}
 		}else if(exists(utility.singlesFnp_)){
-			TrinityCmdStream << " --single  " << utility.singlesFnp_.filename();
+			TrinityCmdStream << " --single  " << njh::files::normalize(utility.singlesFnp_);
 		}
 
 		TrinityCmdStream  << " --seqType fq  --CPU " << utility.inputPars_.numThreads_
@@ -1521,10 +1529,10 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegionsAndU
 				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but cound't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
 				throw std::runtime_error{ss.str()};
 			}else{
-				megahitCmdStream << " -1 " << utility.pairedR1Fnp_.filename() << " -2 " << utility.pairedR2Fnp_.filename() << " ";
+				megahitCmdStream << " -1 " << njh::files::normalize(utility.pairedR1Fnp_) << " -2 " << njh::files::normalize(utility.pairedR2Fnp_) << " ";
 			}
 		}else if(exists(utility.singlesFnp_)){
-			megahitCmdStream << " -r  " << utility.singlesFnp_.filename();
+			megahitCmdStream << " -r  " << njh::files::normalize(utility.singlesFnp_);
 		}
 		megahitCmdStream  << " -t " << utility.inputPars_.numThreads_
 											<< " " << utility.inputPars_.extraProgramOptions_
@@ -1723,11 +1731,11 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegionsAndUn
 				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but cound't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
 				throw std::runtime_error{ss.str()};
 			}else{
-				savageCmdStream << " -p1 " << utility.pairedR1Fnp_.filename() << " -p2 " << utility.pairedR2Fnp_.filename() << " ";
+				savageCmdStream << " -p1 " << njh::files::normalize(utility.pairedR1Fnp_) << " -p2 " << njh::files::normalize(utility.pairedR2Fnp_) << " ";
 			}
 		}
 		if(exists(utility.singlesFnp_)){
-			savageCmdStream << " -s  " << utility.singlesFnp_.filename();
+			savageCmdStream << " -s  " << njh::files::normalize(utility.singlesFnp_);
 		}
 		savageCmdStream  << " -t " << utility.inputPars_.numThreads_
 										 << " --split 1 "
@@ -1973,13 +1981,13 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegionsAndUnm
 			throw std::runtime_error { ss.str() };
 		} else {
 			PriceTICmdStream
-							<< " -fpp " << utility.pairedR1Fnp_.filename() << " " << utility.pairedR2Fnp_.filename() << " " << insertSize << " 95 ";
+							<< " -fpp " << njh::files::normalize(utility.pairedR1Fnp_) << " " << njh::files::normalize(utility.pairedR2Fnp_) << " " << insertSize << " 95 ";
 			PriceTICmdStream << " -nc " << numberOfCycles;
 		}
 		if(exists(utility.singlesFnp_)){
-			PriceTICmdStream << " -icf " << utility.singlesFnp_.filename() << " 2 1 1 ";
+			PriceTICmdStream << " -icf " << njh::files::normalize(utility.singlesFnp_) << " 2 1 1 ";
 		}else{
-			PriceTICmdStream << " -picf 400 " << utility.pairedR1Fnp_.filename() << " 1 1 1 -picf 400 " << utility.pairedR2Fnp_.filename() << " 1 1 1 ";
+			PriceTICmdStream << " -picf 400 " << njh::files::normalize(utility.pairedR1Fnp_) << " 1 1 1 -picf 400 " << njh::files::normalize(utility.pairedR2Fnp_) << " 1 1 1 ";
 		}
 		PriceTICmdStream << " -o " << priceOutputDir << "/price_out.fasta";
 
@@ -2254,12 +2262,12 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					 << utility.pairedR2Fnp_ << "\n";
 				throw std::runtime_error{ss.str()};
 			} else {
-				vOptCmdStream << " -fastq -shortPaired -separate " << utility.pairedR1Fnp_.filename() << " "
-											<< utility.pairedR2Fnp_.filename() << " ";
+				vOptCmdStream << " -fastq -shortPaired -separate " << njh::files::normalize(utility.pairedR1Fnp_) << " "
+											<< njh::files::normalize(utility.pairedR2Fnp_) << " ";
 			}
 		}
 		if (exists(utility.singlesFnp_)) {
-			vOptCmdStream << " -fastq -short " << utility.singlesFnp_.filename() << " ";
+			vOptCmdStream << " -fastq -short " << njh::files::normalize(utility.singlesFnp_) << " ";
 		}
 		vOptCmdStream << "'";
 		//VelvetOptimiser.pl  -x 2 -f ' '  --d withRevComp_optimize_n50
