@@ -1597,7 +1597,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegionsAndU
 			totalCoverage += assembleInfo.coverage_;
 		}
 		for(auto & seq : contigsKmerReads){
-			auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_);
+			auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
 			MetaDataInName seqMeta;
 			seqMeta.addMeta("length", len(seq->seqBase_));
 			seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
