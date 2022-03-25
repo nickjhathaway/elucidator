@@ -890,6 +890,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegionsAndUnmap
 		table covTab(coverageInfo, "\t", true);
 		for(const auto & row : covTab){
 			kmerCoverage[row[covTab.getColPos("#Contig name")]] = njh::StrToNumConverter::stoToNum<double>(row[covTab.getColPos("Mode k-mer coverage depth")]);
+			kmerCoverage[row[covTab.getColPos("#Contig name")] + "_Comp"] = njh::StrToNumConverter::stoToNum<double>(row[covTab.getColPos("Mode k-mer coverage depth")]);
 		}
 		auto contigsSeqIoOpts = SeqIOOptions::genFastaIn(contigsFnp);
 		contigsSeqIoOpts.includeWhiteSpaceInName_ = false;
@@ -942,6 +943,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegionsAndUnmap
 			seqMeta.addMeta("regionUID", utility.inputPars_.regionUid_);
 			seqMeta.addMeta("sample", utility.inputPars_.sample_);
 			seqMeta.resetMetaInName(seq->seqBase_.name_);
+			std::cout << "utility.totalCount(): " << utility.totalCount() << std::endl;
 			seq->seqBase_.cnt_ = (kmerCoverage[seq->seqBase_.name_]/totalCoverage) * (utility.totalCount());
 			seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
 		}
