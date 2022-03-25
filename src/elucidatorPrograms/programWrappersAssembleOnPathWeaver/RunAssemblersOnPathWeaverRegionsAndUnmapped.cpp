@@ -47,7 +47,6 @@ public:
 	};
 
 	explicit OtherAssemblersUtility(InputPars pars): inputPars_(std::move(pars)){
-		std::cout << __PRETTY_FUNCTION__  << " " << __LINE__ << std::endl;
 		regInfo_ = std::make_shared<BamRegionInvestigator::RegionInfo>(GenomicRegion(Bed3RecordCore(inputPars_.regionUid_, 0, 1) ) );
 		refFnp_ = njh::files::make_path(inputPars_.pwOutputDir_, "inputRegions.fasta");
 		extractionFilesDir_ = njh::files::make_path(inputPars_.pwOutputDir_, "originalExtractionFiles");
@@ -55,12 +54,6 @@ public:
 		pairedR1Fnp_ = njh::files::make_path(extractionFilesDir_, "allRaw_R1.fastq.gz");
 		pairedR2Fnp_ = njh::files::make_path(extractionFilesDir_, "allRaw_R2.fastq.gz");
 		singlesFnp_ =  njh::files::make_path(extractionFilesDir_, "allRaw.fastq.gz");
-		std::cout << "pairedR1Fnp_:"  << " " << pairedR1Fnp_ << std::endl;
-		std::cout << "pairedR2Fnp_:"  << " " << pairedR2Fnp_ << std::endl;
-		std::cout << "singlesFnp_:"  << " " << singlesFnp_ << std::endl;
-
-
-		std::cout << __PRETTY_FUNCTION__  << " " << __LINE__ << std::endl;
 		{
 			std::vector<uint32_t> readLens;
 			if(bfs::exists(pairedR1Fnp_)){
@@ -846,7 +839,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegionsAndUnmap
 
 
 	try {
-		bfs::path optimJsonFnp = njh::files::make_path(utility.inputPars_.pwOutputDir_, utility.inputPars_.regionUid_, utility.inputPars_.sample_, "optimizationInfoBest.json");
+		bfs::path optimJsonFnp = njh::files::make_path(utility.inputPars_.pwOutputDir_, utility.inputPars_.sample_ + "-finalPass", "optimizationInfoBest.json");
 		Json::Value optimJson = njh::json::parseFile(optimJsonFnp.string());
 		if(std::numeric_limits<uint32_t>::max() == RayKmerLength){
 			RayKmerLength = optimJson["runParams_"]["klen_"].asUInt64() ;
@@ -1074,7 +1067,7 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegionsAndUn
 
 
 	try {
-		bfs::path optimJsonFnp = njh::files::make_path(utility.inputPars_.pwOutputDir_, utility.inputPars_.regionUid_, utility.inputPars_.sample_, "optimizationInfoBest.json");
+		bfs::path optimJsonFnp = njh::files::make_path(utility.inputPars_.pwOutputDir_, utility.inputPars_.sample_ + "-finalPass", "optimizationInfoBest.json");
 		Json::Value optimJson = njh::json::parseFile(optimJsonFnp.string());
 		if(std::numeric_limits<uint32_t>::max() == IDBAUDKmerLength){
 			IDBAUDKmerLength = optimJson["runParams_"]["klen_"].asUInt64() ;
@@ -1388,7 +1381,6 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegionsAndU
 			MetaDataInName seqMeta;
 			seqMeta.addMeta("length", len(seq->seqBase_));
 			seqMeta.addMeta("estimatedPerBaseCoverage", defaultCoverage);
-			seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 			seqMeta.addMeta("regionUID", utility.inputPars_.regionUid_);
 			seqMeta.addMeta("sample", utility.inputPars_.sample_);
 			seqMeta.resetMetaInName(seq->seqBase_.name_);
