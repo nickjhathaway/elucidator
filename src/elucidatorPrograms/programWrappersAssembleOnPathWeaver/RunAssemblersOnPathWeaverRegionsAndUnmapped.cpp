@@ -935,7 +935,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegionsAndUnmap
 			totalCoverage += kmerCoverage[seq->seqBase_.name_];
 		}
 		for(auto & seq : contigsKmerReads){
-			auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_);
+			//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_);
 			MetaDataInName seqMeta;
 			seqMeta.addMeta("length", len(seq->seqBase_));
 			seqMeta.addMeta("estimatedPerBaseCoverage", kmerCoverage[seq->seqBase_.name_]);
