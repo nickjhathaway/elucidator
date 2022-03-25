@@ -2239,9 +2239,13 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	njh::sys::requireExternalProgramThrow("velvetg");
 	njh::sys::requireExternalProgramThrow("VelvetOptimiser.pl");
 
-	auto outputAboveCutOffSeqOpts = SeqIOOptions::genFastaOut(utility.outputAboveCutOffFnp_);
-	SeqOutput outputAboveCutOffWriter(outputAboveCutOffSeqOpts);
-	outputAboveCutOffWriter.openOut();
+	auto outputAboveCutOffSeqOptsvOpt = SeqIOOptions::genFastaOut(utility.outputAboveCutOffFnp_);
+	SeqOutput outputAboveCutOffvOptWriter(outputAboveCutOffSeqOptsvOpt);
+	outputAboveCutOffvOptWriter.openOut();
+
+	auto outputAboveCutOffSeqOptsMetaVel = SeqIOOptions::genFastaOut(utilityMetaVelvet.outputAboveCutOffFnp_);
+	SeqOutput outputAboveCutOffMetaVelWriter(outputAboveCutOffSeqOptsMetaVel);
+	outputAboveCutOffMetaVelWriter.openOut();
 
 	std::string exceptionMess;
 
@@ -2505,7 +2509,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					} else {
 						++aboveCutOff;
 					}
-					outputAboveCutOffWriter.openWrite(contigsKmerRead);
+					outputAboveCutOffvOptWriter.openWrite(contigsKmerRead);
 					outputTrimmedWriter.openWrite(contigsKmerRead);
 				}
 			}
@@ -2524,7 +2528,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	}
 
 	{
-		outputAboveCutOffWriter.closeOut();
+		outputAboveCutOffvOptWriter.closeOut();
 		OutputStream basicInfo(njh::files::make_path(utility.finalPassDir_, "basicInfoPerRegion.tab.txt"));
 
 		basicInfo << "name\tsuccess\tuniqHaps\treadTotal\treadTotalUsed\ttotalPairedReads";
@@ -2771,7 +2775,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					} else {
 						++aboveCutOff;
 					}
-					outputAboveCutOffWriter.openWrite(contigsKmerRead);
+					outputAboveCutOffMetaVelWriter.openWrite(contigsKmerRead);
 					outputTrimmedWriter.openWrite(contigsKmerRead);
 				}
 			}
@@ -2790,7 +2794,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	}
 
 	{
-		outputAboveCutOffWriter.closeOut();
+		outputAboveCutOffMetaVelWriter.closeOut();
 		OutputStream basicInfo(njh::files::make_path(utilityMetaVelvet.finalPassDir_, "basicInfoPerRegion.tab.txt"));
 
 		basicInfo << "name\tsuccess\tuniqHaps\treadTotal\treadTotalUsed\ttotalPairedReads";
