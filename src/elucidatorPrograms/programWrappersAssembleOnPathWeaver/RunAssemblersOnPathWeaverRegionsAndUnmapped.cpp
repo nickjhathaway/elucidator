@@ -860,10 +860,15 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegionsAndUnmap
 			ss << __PRETTY_FUNCTION__ << ", error " << "Ray requires paired reads"<< "\n";
 			throw std::runtime_error{ss.str()};
 		}
+		//unzip files since Ray is the worst
+		{
+			concatenateFiles({utility.pairedR1Fnp_}, njh::files::make_path(regionOutputDir, utility.pairedR1Fnp_.filename().replace_extension("")));
+			concatenateFiles({utility.pairedR2Fnp_}, njh::files::make_path(regionOutputDir, utility.pairedR2Fnp_.filename().replace_extension("")));
+		}
 //
 //
 		RayCmdStream    << " -k " << RayKmerLength
-										<< " -p " << njh::files::normalize(utility.pairedR1Fnp_) << " " <<  njh::files::normalize(utility.pairedR2Fnp_)
+										<< " -p " << utility.pairedR1Fnp_.filename().replace_extension("") << " " <<  utility.pairedR2Fnp_.filename().replace_extension("")
 										<< " " << utility.inputPars_.extraProgramOptions_
 										<< " -o " << RayOutDir
 										<< " > RayRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
