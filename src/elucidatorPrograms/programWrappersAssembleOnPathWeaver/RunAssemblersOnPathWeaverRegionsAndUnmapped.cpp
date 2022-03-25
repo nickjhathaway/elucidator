@@ -1734,18 +1734,24 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegionsAndUn
 		}
 		std::stringstream savageCmdStream;
 		savageCmdStream << "cd " << regionOutputDir << " && " << haploconductPath << " savage ";
-
+		if(bfs::exists(utility.pairedR1Fnp_)){
+			concatenateFiles({utility.pairedR1Fnp_}, njh::files::make_path(regionOutputDir, utility.pairedR1Fnp_.filename().replace_extension("")));
+			concatenateFiles({utility.pairedR2Fnp_}, njh::files::make_path(regionOutputDir, utility.pairedR2Fnp_.filename().replace_extension("")));
+		}
+		if(bfs::exists(utility.singlesFnp_)){
+			concatenateFiles({utility.singlesFnp_}, njh::files::make_path(regionOutputDir, utility.singlesFnp_.filename().replace_extension("")));
+		}
 		if(exists(utility.pairedR1Fnp_)){
 			if(!exists(utility.pairedR2Fnp_)){
 				std::stringstream ss;
 				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but cound't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
 				throw std::runtime_error{ss.str()};
 			}else{
-				savageCmdStream << " -p1 " << njh::files::normalize(utility.pairedR1Fnp_) << " -p2 " << njh::files::normalize(utility.pairedR2Fnp_) << " ";
+				savageCmdStream << " -p1 " << utility.pairedR1Fnp_.filename().replace_extension("") << " -p2 " << utility.pairedR2Fnp_.filename().replace_extension("") << " ";
 			}
 		}
 		if(exists(utility.singlesFnp_)){
-			savageCmdStream << " -s  " << njh::files::normalize(utility.singlesFnp_);
+			savageCmdStream << " -s  " << utility.singlesFnp_.filename().replace_extension("");
 		}
 		savageCmdStream  << " -t " << utility.inputPars_.numThreads_
 										 << " --split 1 "
