@@ -1097,18 +1097,19 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegionsAndUn
 			ss << __PRETTY_FUNCTION__ << ", couldn't find " << utility.pairedR1Fnp_ << " or " << utility.singlesFnp_ << ", need to have at least one of them" << "\n";
 			throw std::runtime_error{ss.str()};
 		}
-		std::stringstream IDBAUDCmdStream;
-
-		IDBAUDCmdStream << "cd " << regionOutputDir ;
-
-		IDBAUDCmdStream << " && fq2fa --merge extracted_R1.fastq extracted_R2.fastq extracted.fasta";
-
-		IDBAUDCmdStream << " && idba_ud ";
 		if(!exists(utility.pairedR1Fnp_)){
 			std::stringstream ss;
 			ss << __PRETTY_FUNCTION__ << ", error " << "IDBAUD requires paired reads"<< "\n";
 			throw std::runtime_error{ss.str()};
 		}
+		std::stringstream IDBAUDCmdStream;
+
+		IDBAUDCmdStream << "cd " << regionOutputDir ;
+
+		IDBAUDCmdStream << " && fq2fa --merge " << njh::files::normalize(utility.pairedR1Fnp_) << " " << njh::files::normalize(utility.pairedR2Fnp_) << " extracted.fasta";
+
+		IDBAUDCmdStream << " && idba_ud ";
+
 //
 //
 		//
