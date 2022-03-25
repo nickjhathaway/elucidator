@@ -1990,16 +1990,24 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegionsAndUnm
 			throw std::runtime_error { ss.str() };
 		} else {
 			PriceTICmdStream
-							<< " -fpp " << njh::files::normalize(utility.pairedR1Fnp_) << " " << njh::files::normalize(utility.pairedR2Fnp_) << " " << insertSize << " 95 ";
+							<< " -fpp " << "extracted_R1.fastq" << " " << "extracted_R2.fastq" << " " << insertSize << " 95 ";
 			PriceTICmdStream << " -nc " << numberOfCycles;
 		}
 		if(exists(utility.singlesFnp_)){
-			PriceTICmdStream << " -icf " << njh::files::normalize(utility.singlesFnp_) << " 2 1 1 ";
+			PriceTICmdStream << " -icf " << "extracted.fastq" << " 2 1 1 ";
 		}else{
-			PriceTICmdStream << " -picf 400 " << njh::files::normalize(utility.pairedR1Fnp_) << " 1 1 1 -picf 400 " << njh::files::normalize(utility.pairedR2Fnp_) << " 1 1 1 ";
+			PriceTICmdStream << " -picf 400 " << "extracted_R1.fastq" << " 1 1 1 -picf 400 " << "extracted_R2.fastq" << " 1 1 1 ";
 		}
 		PriceTICmdStream << " -o " << priceOutputDir << "/price_out.fasta";
 
+		if(bfs::exists(utility.singlesFnp_)){
+			concatenateFiles({utility.singlesFnp_}, njh::files::make_path(regionOutputDir, "extracted.fastq"));
+		}
+
+		if(bfs::exists(utility.pairedR1Fnp_)){
+			concatenateFiles({utility.pairedR1Fnp_}, njh::files::make_path(regionOutputDir, "extracted_R1.fastq"));
+			concatenateFiles({utility.pairedR2Fnp_}, njh::files::make_path(regionOutputDir, "extracted_R2.fastq"));
+		}
 
 
 		auto PRICEFullOutputDir = njh::files::make_path(regionOutputDir, priceOutputDir);
