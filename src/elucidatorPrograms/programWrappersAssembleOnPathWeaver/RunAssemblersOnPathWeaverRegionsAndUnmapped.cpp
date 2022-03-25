@@ -76,7 +76,7 @@ public:
 			}
 			medianReadLen_ = vectorMedianRef(readLens);
 		}
-		std::cout << __PRETTY_FUNCTION__  << " " << __LINE__ << std::endl;
+
 		regInfo_->totalPairedReads_ = pairedReads_;
 		regInfo_->totalReads_ = pairedReads_ + singleReads_;
 		regInfo_->totalFinalReads_ = regInfo_->totalReads_;
@@ -942,10 +942,18 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegionsAndUnmap
 			seqMeta.addMeta("estimatedPerBaseCoverage", kmerCoverage[seq->seqBase_.name_]);
 			seqMeta.addMeta("regionUID", utility.inputPars_.regionUid_);
 			seqMeta.addMeta("sample", utility.inputPars_.sample_);
-			seqMeta.resetMetaInName(seq->seqBase_.name_);
+
+
 			std::cout << "utility.totalCount(): " << utility.totalCount() << std::endl;
+			std::cout << "totalCoverage: " << totalCoverage << std::endl;
+			std::cout << "kmerCoverage[seq->seqBase_.name_]: " << kmerCoverage[seq->seqBase_.name_] << std::endl;
+			std::cout << "kmerCoverage[seq->seqBase_.name_]/totalCoverage: " << kmerCoverage[seq->seqBase_.name_]/totalCoverage << std::endl;
 			seq->seqBase_.cnt_ = (kmerCoverage[seq->seqBase_.name_]/totalCoverage) * (utility.totalCount());
+			std::string oldName = seq->seqBase_.name_;
+			seqMeta.resetMetaInName(seq->seqBase_.name_);
+			kmerCoverage[seq->seqBase_.name_] = kmerCoverage[oldName];
 			seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
+
 		}
 		SeqOutput::write(contigsKmerReads, SeqIOOptions::genFastaOut(reOrientedContigsFnp));
 		SeqOutput::write(contigsKmerReads, SeqIOOptions::genFastaOut(utility.outputFnp_));
@@ -968,8 +976,10 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegionsAndUnmap
 //					std::cout << "totalCoverage: " << totalCoverage << std::endl;
 //					std::cout << "reads: " << readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_ << std::endl;
 
-			seqMeta.resetMetaInName(seq->seqBase_.name_);
 			seq->seqBase_.cnt_ = (kmerCoverage[seq->seqBase_.name_]/totalCoverage) * (utility.totalCount());
+			std::string oldName = seq->seqBase_.name_;
+			seqMeta.resetMetaInName(seq->seqBase_.name_);
+			kmerCoverage[seq->seqBase_.name_] = kmerCoverage[oldName];
 			seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
 		}
 
