@@ -1185,7 +1185,7 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegionsAndUn
 		double totalCoverage = defaultCoverage * finalSeqs.size();
 
 		for(auto & seq : contigsKmerReads){
-			auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_);
+			//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_);
 			MetaDataInName seqMeta;
 			seqMeta.addMeta("length", len(seq->seqBase_));
 			seqMeta.addMeta("estimatedPerBaseCoverage", defaultCoverage);
