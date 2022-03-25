@@ -704,7 +704,6 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegionsAndUn
 			MetaDataInName seqMeta;
 			seqMeta.addMeta("length", len(seq->seqBase_));
 			seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
-			seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 			seqMeta.addMeta("regionUID", utility.inputPars_.regionUid_);
 			seqMeta.addMeta("sample", utility.inputPars_.sample_);
 			seqMeta.resetMetaInName(seq->seqBase_.name_);
@@ -935,7 +934,6 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegionsAndUnmap
 			MetaDataInName seqMeta;
 			seqMeta.addMeta("length", len(seq->seqBase_));
 			seqMeta.addMeta("estimatedPerBaseCoverage", kmerCoverage[seq->seqBase_.name_]);
-			seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 			seqMeta.addMeta("regionUID", utility.inputPars_.regionUid_);
 			seqMeta.addMeta("sample", utility.inputPars_.sample_);
 			seqMeta.resetMetaInName(seq->seqBase_.name_);
@@ -1169,7 +1167,6 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegionsAndUn
 			MetaDataInName seqMeta;
 			seqMeta.addMeta("length", len(seq->seqBase_));
 			seqMeta.addMeta("estimatedPerBaseCoverage", defaultCoverage);
-			seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 			seqMeta.addMeta("regionUID", utility.inputPars_.regionUid_);
 			seqMeta.addMeta("sample", utility.inputPars_.sample_);
 			seqMeta.resetMetaInName(seq->seqBase_.name_);
@@ -1587,7 +1584,6 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegionsAndU
 			MetaDataInName seqMeta;
 			seqMeta.addMeta("length", len(seq->seqBase_));
 			seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
-			seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 			seqMeta.addMeta("regionUID", utility.inputPars_.regionUid_);
 			seqMeta.addMeta("sample", utility.inputPars_.sample_);
 			seqMeta.resetMetaInName(seq->seqBase_.name_);
@@ -1793,7 +1789,6 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegionsAndUn
 			MetaDataInName seqMeta;
 			seqMeta.addMeta("length", len(seq->seqBase_));
 			seqMeta.addMeta("estimatedPerBaseCoverage", 10);
-			seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 			seqMeta.addMeta("regionUID", utility.inputPars_.regionUid_);
 			seqMeta.addMeta("sample", utility.inputPars_.sample_);
 			seqMeta.resetMetaInName(seq->seqBase_.name_);
@@ -2047,7 +2042,6 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegionsAndUnm
 			MetaDataInName seqMeta;
 			seqMeta.addMeta("length", len(seq->seqBase_));
 			seqMeta.addMeta("estimatedPerBaseCoverage", 10);
-			seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 			seqMeta.addMeta("regionUID", utility.inputPars_.regionUid_);
 			seqMeta.addMeta("sample", utility.inputPars_.sample_);
 			seqMeta.resetMetaInName(seq->seqBase_.name_);
@@ -2431,7 +2425,6 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 				MetaDataInName seqMeta;
 				seqMeta.addMeta("length", len(seq->seqBase_));
 				seqMeta.addMeta("estimatedPerBaseCoverage", 10);
-				seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 				seqMeta.addMeta("regionUID", utility.inputPars_.regionUid_);
 				seqMeta.addMeta("sample", utility.inputPars_.sample_);
 				seqMeta.resetMetaInName(seq->seqBase_.name_);
@@ -2699,7 +2692,6 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 				MetaDataInName seqMeta;
 				seqMeta.addMeta("length", len(seq->seqBase_));
 				seqMeta.addMeta("estimatedPerBaseCoverage", 10);
-				seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 				seqMeta.addMeta("regionUID", utilityMetaVelvet.inputPars_.regionUid_);
 				seqMeta.addMeta("sample", utilityMetaVelvet.inputPars_.sample_);
 				seqMeta.resetMetaInName(seq->seqBase_.name_);
