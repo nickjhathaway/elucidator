@@ -1525,12 +1525,12 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 						allRegionsNotCovered.emplace_back(region);
 					}
 				}
-				OutputStream allRegionsNotCoveredOut(njh::files::make_path(setUp.pars_.directoryName_, gene.uid_ + "_notCoveredRegions.bed"));
-				for(const auto & region : allRegionsNotCovered) {
-					allRegionsNotCoveredOut << region.toDelimStr() << std::endl;
-				}
 			}
-			
+			OutputStream allRegionsNotCoveredOut(njh::files::make_path(setUp.pars_.directoryName_, "allNotCoveredRegions.bed"));
+			for(const auto & region : allRegionsNotCovered) {
+				allRegionsNotCoveredOut << region.toDelimStr() << std::endl;
+			}
+
 			coveredCountsTab.addColumn(VecStr{program}, "program");
 			coveredCountsTab.addColumn(VecStr{sample}, "sample");
 			coveredCountsTab.addColumn(VecStr{target}, "target");
