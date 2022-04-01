@@ -693,7 +693,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	BioCmdsUtils::LastZPars lzPars;
 	lzPars.coverage = 95;
 	lzPars.identity = 90;
-
+	//VecStr features{"genes","pseudogene"};
 	uint32_t nBowtie2Alns = 100;
 
 
@@ -707,6 +707,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	setUp.setOption(lzPars.coverage, "--coverage", "coverage for lastz");
 	setUp.setOption(lzPars.identity, "--identity", "identity for lastz");
 	setUp.setOption(calcSpecificCoverage, "--calcSpecificCoverage", "calculate coverage of regions specific to each input reference");
+	//setUp.setOption(features, "--features", "features to look for");
 
   setUp.setOption(program, "--program", "Name of the program to output with the report", true);
   setUp.setOption(sample,  "--sample",  "Name of the sample to output with the report",  true);
@@ -818,7 +819,8 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 				GFFCore gff;
 				std::string line = "";
 				while(gffIo.readNextRecord(gff)){
-					if("gene" == gff.type_&& gff.hasAttr("ID") && njh::in(gff.getAttr("ID"), ids)){
+					//if("gene" == gff.type_&& gff.hasAttr("ID") && njh::in(gff.getAttr("ID"), ids)){
+					if(gff.hasAttr("ID") && njh::in(gff.getAttr("ID"), ids)){
 						requiredRegions.emplace_back(GenomicRegion(gff));
 						foundIds.emplace_back(gff.getAttr("ID"));
 					}
@@ -858,6 +860,15 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 			refSeq.reverseComplementRead(false, true);
 		}
 		requiredRegionsSeqs.emplace_back(refSeq);
+	}
+
+	{
+		auto expectedRegionsDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("expectedRegionsInputInfo"));
+		SeqOutput::write(requiredRegionsSeqs, SeqIOOptions::genFastaOutGz(njh::files::make_path(expectedRegionsDir, "expectedRegionsSeqs.fasta.gz")));
+		OutputStream expectedRegionsOut(njh::files::make_path(expectedRegionsDir, "expectedRegions.bed"));
+		for(const auto & region : requiredRegions){
+			expectedRegionsOut << region.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+		}
 	}
 
 	std::unordered_map<std::string, std::vector<GenomicRegion>> specificRegions;
@@ -1175,9 +1186,6 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 
 
 	//get best hits only
-
-
-
 	auto regionsExtractedOpts = SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "bestRegions"));
 	SeqOutput extractedWriter(regionsExtractedOpts);
 	extractedWriter.openOut();
@@ -1201,6 +1209,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 
 	uint32_t readNumber = 0;
 	std::unordered_map<std::string, std::vector<Bed6RecordCore>> bestRegionsByGenome;
+	std::unordered_map<std::string, std::string> regionNameToInputName;
 
 	auto allAlnResultsKeys = getVectorOfMapKeys(allAlnResults);
 	njh::sort(allAlnResultsKeys, [&nameToPositionKey](const std::string & name1, const std::string & name2){
@@ -1224,9 +1233,11 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 					bestResults.clear();
 					bestResults.emplace_back(res);
 					regionNameToGenome[res->gRegion_.genBedRecordCore().toDelimStrWithExtra()] = genomeRes.first;
+					regionNameToInputName[res->gRegion_.genBedRecordCore().genUIDFromCoordsWithStrand()] = res->bAln_.Name;
 				}else if(res->comp_.alnScore_  == bestScore){
 					bestResults.emplace_back(res);
 					regionNameToGenome[res->gRegion_.genBedRecordCore().toDelimStrWithExtra()] = genomeRes.first;
+					regionNameToInputName[res->gRegion_.genBedRecordCore().genUIDFromCoordsWithStrand()] = res->bAln_.Name;
 				}
 			}
 		}
@@ -1299,10 +1310,6 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 		}
 	}
 
-
-
-
-
 	//write out ref seqs;
 	//read names for ref seqs
 	OutOptions readNamesOpts(
@@ -1374,10 +1381,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	bfs::remove(tempSeqBowtie2Opts.out_.outName());
 	bfs::remove(tempSeqLastzOpts.out_.outName());
 
-
-
 	{
-
 		// determine regions covered
 		std::unordered_map<std::string, std::map<uint32_t, uint32_t>> simpleCoverageCounts;
 		for(const auto & seqAlnResults : bestAlnResults){
@@ -1616,6 +1620,27 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 						njh::files::make_path(setUp.pars_.directoryName_,
 								"contigsLengthsInfo.tab.txt"), true));
 	}
+
+	//grouping
+	OutputStream groupedRegionsOut(njh::files::make_path(setUp.pars_.directoryName_, "groupedRegions.bed"));
+
+	uint32_t distanceWithin = 100;
+	for(const auto & expectedRegion : requiredRegions){
+		std::vector<Bed6RecordCore> associatedRegions;
+		for(const auto & best : bestRegionsByGenome){
+			for(const auto & region : best.second){
+				if(region.getDistanceBetween(expectedRegion.genBed3RecordCore()) < distanceWithin){
+					associatedRegions.emplace_back(region);
+				}
+			}
+		}
+		uint32_t count = 0;
+		for(const auto & region : associatedRegions){
+			groupedRegionsOut << region.toDelimStr() << "\t" << expectedRegion.uid_ << "\t" << regionNameToInputName[region.genUIDFromCoordsWithStrand()] << "\t" << count << std::endl;
+			++count;
+		}
+	}
+
 	return 0;
 }
 
