@@ -682,13 +682,13 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 
 
 int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs & inputCommands){
-	std::string genomesStr = "";
+	std::string genomesStr;
 	uint32_t numThreads = 1;
 	bfs::path bedFnp = "";
 	bfs::path idsRequired = "";
-	std::string program = "";
-	std::string sample  = "";
-	std::string target = "";
+	std::string program;
+	std::string sample;
+	std::string target;
 	uint32_t lencutOffForBowtie = 200;
 	BioCmdsUtils::LastZPars lzPars;
 	lzPars.coverage = 95;
@@ -946,11 +946,9 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	//align to genomes in parallel
 
 	struct GenomeWithProgram {
-		GenomeWithProgram() {
-
-		}
-		GenomeWithProgram(bool lastz, const std::string & genome) :
-				lastz_(lastz), genome_(genome) {
+		GenomeWithProgram() = default;
+		GenomeWithProgram(bool lastz, std::string genome) :
+				lastz_(lastz), genome_(std::move(genome)) {
 		}
 		bool lastz_ { false };
 		std::string genome_;
@@ -1253,7 +1251,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 
 			kmerInfo refInfo(results->refSeq_->seq_, 5, false);
 			kmerInfo seqKInfo(results->alnSeq_->seq_, 5, false);
-			std::string appName = "";
+			std::string appName;
 			MetaDataInName rangeMeta;
 			if('H' == results->bAln_.CigarData.front().Type ){
 				rangeMeta.addMeta("start",results->bAln_.CigarData.front().Length);
@@ -1456,6 +1454,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 			}
 			std::vector<std::shared_ptr<Bed6RecordCore>> allRegionsNotExpectedB6;
 
+			allRegionsNotExpectedB6.reserve(allRegionsNotExpected.size());
 			for(const auto & notExp : allRegionsNotExpected){
 				allRegionsNotExpectedB6.emplace_back(std::make_shared<Bed6RecordCore>(GenomicRegion(notExp).genBedRecordCore()));
 			}
@@ -1482,6 +1481,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 
 		//
 		{
+			std::vector<Bed6RecordCore> allRegionsNotCovered;
 			table coveredCountsTab(VecStr{"Region", "basesCovered", "totalBases", "fractionCovered"});
 			for(const auto & gene: requiredRegions){
 				uint32_t covered = 0;
@@ -1495,8 +1495,10 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 				}
 				coveredCountsTab.addRow(gene.uid_, covered, gene.getLen(), static_cast<double>(covered)/gene.getLen());
 
-				if(positionsNotCovered.size() > 0){
+				if(!positionsNotCovered.empty()){
+
 					std::vector<Bed6RecordCore> regionsNotCoveredRaw;
+					regionsNotCoveredRaw.reserve(positionsNotCovered.size());
 					for(const auto & pos : positionsNotCovered){
 						regionsNotCoveredRaw.emplace_back(Bed6RecordCore(gene.chrom_, pos, pos + 1, gene.uid_, 1, gene.reverseSrand_? '-':'+'));
 					}
@@ -1520,11 +1522,15 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 					OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, gene.uid_ + "_notCoveredRegions.bed"));
 					for(const auto & region : regionsNotCovered){
 						out << region.toDelimStr() << std::endl;
+						allRegionsNotCovered.emplace_back(region);
 					}
 				}
+				OutputStream allRegionsNotCoveredOut(njh::files::make_path(setUp.pars_.directoryName_, gene.uid_ + "_notCoveredRegions.bed"));
+				for(const auto & region : allRegionsNotCovered) {
+					allRegionsNotCoveredOut << region.toDelimStr() << std::endl;
+				}
 			}
-
-
+			
 			coveredCountsTab.addColumn(VecStr{program}, "program");
 			coveredCountsTab.addColumn(VecStr{sample}, "sample");
 			coveredCountsTab.addColumn(VecStr{target}, "target");
@@ -1555,8 +1561,9 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 					}
 				}
 				specifcCoveredCountsTab.addRow(regions.first, totalCovered, totalRegionBases, static_cast<double>(totalCovered)/totalRegionBases);
-				if(positionsNotCovered.size() > 0){
+				if(!positionsNotCovered.empty()){
 					std::vector<Bed6RecordCore> regionsNotCoveredRaw;
+					regionsNotCoveredRaw.reserve(positionsNotCovered.size());
 					for(const auto & pos : positionsNotCovered){
 						regionsNotCoveredRaw.emplace_back(Bed6RecordCore(regions.second.front().chrom_, pos, pos + 1, regions.second.front().uid_, 1, regions.second.front().reverseSrand_? '-':'+'));
 					}
