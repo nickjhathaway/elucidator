@@ -880,6 +880,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 			readVec::getMaxLength(requiredRegionsSeqs, maxLen);
 			std::vector<refVariants> refVariationInfo;
 			aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
+			alignerObj.weighHomopolymers_ = true;
 			std::unordered_map<std::string, GenomicRegion> regionByName;
 
 
