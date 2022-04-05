@@ -695,7 +695,9 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	lzPars.identity = 90;
 	//VecStr features{"genes","pseudogene"};
 	uint32_t nBowtie2Alns = 100;
-
+	aligner alignerObj(10, gapScoringParameters(5,1), substituteMatrix::createDegenScoreMatrix(1,-1));
+	alignerObj.weighHomopolymers_ = false;
+	alignerObj.countEndGaps_ = false;
 
 	bool calcSpecificCoverage = false;
 	comparison amountOfErrorForCoverageCalc;
@@ -708,6 +710,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	setUp.setOption(lzPars.identity, "--identity", "identity for lastz");
 	setUp.setOption(calcSpecificCoverage, "--calcSpecificCoverage", "calculate coverage of regions specific to each input reference");
 	//setUp.setOption(features, "--features", "features to look for");
+	setUp.setOption(alignerObj.weighHomopolymers_, "--weighHomopolymers", "weigh Homopolymers");
 
   setUp.setOption(program, "--program", "Name of the program to output with the report", true);
   setUp.setOption(sample,  "--sample",  "Name of the sample to output with the report",  true);
@@ -879,8 +882,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 			uint64_t maxLen = 0;
 			readVec::getMaxLength(requiredRegionsSeqs, maxLen);
 			std::vector<refVariants> refVariationInfo;
-			aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
-			alignerObj.weighHomopolymers_ = true;
+			aligner alignerObjForComps(maxLen, gapScoringParameters(5, 1, 0, 0, 0, 0), substituteMatrix(2, -2), false);
 			std::unordered_map<std::string, GenomicRegion> regionByName;
 
 
@@ -894,7 +896,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 						continue;
 					}
 					refVariationInfo[refPos].addVariant(requiredRegionsSeqs[refSubPos],
-							alignerObj, false);
+																							alignerObjForComps, false);
 				}
 			}
 			for (const auto refPos : iter::range(requiredRegionsSeqs.size())) {
@@ -1085,6 +1087,9 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 		njh::sort(bamAlignKeys, [&nameToPositionKey](const std::string & name1, const std::string & name2){
 			return nameToPositionKey[name1] < nameToPositionKey[name2];
 		});
+
+
+
 		for (const auto & bamAlignKey : bamAlignKeys) {
 			const auto & alnForRead = bamAligns[bamAlignKey];
 			++mapCounts[alnForRead.size()];
@@ -1105,11 +1110,11 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 				kmerInfo refInfo(results->refSeq_->seq_, 5, false);
 				kmerInfo seqKInfo(results->alnSeq_->seq_, 5, false);
 				//results->setComparison(false);
-				results->setComparison(true);
+				results->setComparison(true, alignerObj);
 				writer.write(results->refSeqAligned_);
 				writer.write(results->alnSeqAligned_);
 				alignedRegions.emplace_back(results->gRegion_.genBedRecordCore());
-				std::string appName = "";
+				std::string appName;
 				MetaDataInName rangeMeta;
 				if('H' == results->bAln_.CigarData.front().Type ){
 					rangeMeta.addMeta("start",results->bAln_.CigarData.front().Length);
