@@ -1301,20 +1301,24 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	}
 
 
-
-	for(auto & best : bestRegionsByGenome){
-		OutOptions bestRegionsBedOpts(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr("bestRegions_", best.first, ".bed")));
-		OutputStream bestRegionsBedOut(bestRegionsBedOpts);
-		if(bfs::exists(gMapper.genomes_.at(best.first)->gffFnp_)){
-			intersectBedLocsWtihGffRecordsPars gffPars = gMapper.pars_.gffIntersectPars_;
-			gffPars.gffFnp_ = gMapper.genomes_.at(best.first)->gffFnp_;
-			intersectBedLocsWtihGffRecords(best.second, gffPars);
-		}
-		BedUtility::coordSort(best.second);
-		for(const auto & reg : best.second){
-			bestRegionsBedOut << reg.toDelimStrWithExtra() << std::endl;
+	{
+		OutputStream allBestRegionsBedOut(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr("bestRegions_", "all", ".bed")));
+		for(auto & best : bestRegionsByGenome){
+			OutOptions bestRegionsBedOpts(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr("bestRegions_", best.first, ".bed")));
+			OutputStream bestRegionsBedOut(bestRegionsBedOpts);
+			if(bfs::exists(gMapper.genomes_.at(best.first)->gffFnp_)){
+				intersectBedLocsWtihGffRecordsPars gffPars = gMapper.pars_.gffIntersectPars_;
+				gffPars.gffFnp_ = gMapper.genomes_.at(best.first)->gffFnp_;
+				intersectBedLocsWtihGffRecords(best.second, gffPars);
+			}
+			BedUtility::coordSort(best.second);
+			for(const auto & reg : best.second){
+				bestRegionsBedOut << reg.toDelimStrWithExtra() << std::endl;
+				allBestRegionsBedOut << reg.toDelimStrWithExtra() << std::endl;
+			}
 		}
 	}
+
 
 	//write out ref seqs;
 	//read names for ref seqs
