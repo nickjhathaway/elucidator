@@ -36,6 +36,9 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	setUp.setOption(postProcessPars.accCutOff, "--accCutOff", "accuracy cut off");
 	setUp.setOption(postProcessPars.scoreCutOff, "--scoreCutOff", "score cut off");
 
+	setUp.setOption(postProcessPars.hardAccCutOff, "--hardAccCutOff", "hard accuracy cut off");
+	setUp.setOption(postProcessPars.hardScoreCutOff, "--hardScoreCutOff", "hard score cut off");
+
 	setUp.processDirectoryOutputName(true);
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
@@ -56,7 +59,7 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 
 	std::stringstream cmdSs;
 	cmdSs << "nhmmscan " << defaultParameters
-			<< " " << "--tblout " << "raw_all_domain_hits_table.txt"
+			<< " " << "--tblout " << "raw_all_hits_table.txt"
 			<< " " << "hmmModel.txt"
 			<< " " << "inputSeqs.fasta"
 			<< " " << " > " << "nhmmscan_raw_output.txt";
@@ -75,24 +78,13 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 		nhmmscanOutput << cmdOutput.toJson() << std::endl;
 	}
 
-	//convert hits table into a real table and
-	//filter table
-//	auto rawDomainHitsFnp = njh::files::make_path(setUp.pars_.directoryName_, "raw_all_domain_hits_table.txt");
-//
-//	auto allDomainHitsFnp = njh::files::make_path(setUp.pars_.directoryName_, "all_domain_hits_table.tab.txt");
-//	auto filtDomainHitsFnp = njh::files::make_path(setUp.pars_.directoryName_, "filt_domain_hits_table.tab.txt");
-//	auto nonOverlappingDomainHitsFnp = njh::files::make_path(setUp.pars_.directoryName_, "nonOverlappingBestdomain_hits_table.tab.txt");
-//	auto bedRegionsFnp = njh::files::make_path(setUp.pars_.directoryName_, "nonOverlappingBestdomain_hits.bed");
-//
-//	auto domainCountsFnp = njh::files::make_path(setUp.pars_.directoryName_, "seqDomainCounts.tab.txt");
+
 
 	auto nhmmscan_raw_outputFnp = njh::files::make_path(setUp.pars_.directoryName_, "nhmmscan_raw_output.txt");
 	auto seqsWithNoDomainHitsFnp = njh::files::make_path(setUp.pars_.directoryName_, "seqsWithNoDomainHits.tab.txt");
-
-
-
 	nhmmscanOutput outputParsed = nhmmscanOutput::parseRawOutput(nhmmscan_raw_outputFnp, seqKey);
 	auto postProcessResults = outputParsed.postProcessHits(postProcessPars);
+	//convert hits table into a real table and
 	outputParsed.writeInfoFiles(postProcessResults, setUp.pars_.directoryName_);
 
 	//trim seqs to best overlapping positions sub seqs
@@ -139,119 +131,6 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 			noDomainHits << name << std::endl;
 		}
 	}
-
-//	{
-//		OutputStream out(allDomainHitsFnp);
-//		OutputStream outFilt(filtDomainHitsFnp);
-//
-//		BioDataFileIO<HmmerSeqHitTab> reader{IoOptions(InOptions(rawDomainHitsFnp))};
-//		HmmerSeqHitTab domain;
-//		reader.openIn();
-//		uint32_t count = 0;
-//		out << "#" << njh::conToStr(HmmerSeqHitTab::toDelimStrHeader(), "\t") << std::endl;
-//		outFilt << "#" << njh::conToStr(HmmerSeqHitTab::toDelimStrHeader(), "\t") << std::endl;
-//
-//		while(reader.readNextRecord(domain)){
-//			out << domain.toDelimStr() << std::endl;
-//			if(!(domain.envFrom_ > hmmStartFilter && domain.hmmFrom_ > hmmStartFilter )){
-//				outFilt << domain.toDelimStr() << std::endl;
-//			}
-//			++count;
-//		}
-//	}
-//	//get best non-overlapping positions
-//	std::vector<Bed6RecordCore> filteredRegions;
-//
-//	std::unordered_map<std::string, std::vector<HmmerSeqHitTab>> domainsPerSeq;
-//
-//	{
-//		std::vector<HmmerSeqHitTab> domains;
-//		std::vector<Bed6RecordCore> locations;
-////		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-//		{
-//			BioDataFileIO<HmmerSeqHitTab> reader{IoOptions(InOptions(filtDomainHitsFnp))};
-//
-//			HmmerSeqHitTab domain;
-//			reader.openIn();
-//			uint32_t count = 0;
-//			while(reader.readNextRecord(domain)){
-//				if(domain.genBed6_env().length() < minLength){
-//					continue;
-//				}
-//
-////				std::cout << __FILE__ << " " << __LINE__ << std::endl;
-//				domain.queryName_ = seqKey[njh::StrToNumConverter::stoToNum<uint32_t>(domain.queryName_)];
-//				domains.emplace_back(domain);
-////				std::cout << __FILE__ << " " << __LINE__ << std::endl;
-//				auto genLoc = domain.genBed6_env();
-//				genLoc.name_ = njh::pasteAsStr(count);
-//				locations.emplace_back(genLoc);
-////				std::cout << __FILE__ << " " << __LINE__ << std::endl;
-//
-//				++count;
-//			}
-//		}
-//
-////		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-//		//sort by scores, with lowest e-score on top
-//		njh::sort(locations,[&domains](const Bed6RecordCore & rec1, const Bed6RecordCore & rec2){
-//			if(domains[njh::StrToNumConverter::stoToNum<uint32_t>(rec1.name_)].modelEvalue_ == domains[njh::StrToNumConverter::stoToNum<uint32_t>(rec2.name_)].modelEvalue_){
-//				if(domains[njh::StrToNumConverter::stoToNum<uint32_t>(rec1.name_)].modelScore_ == domains[njh::StrToNumConverter::stoToNum<uint32_t>(rec2.name_)].modelScore_){
-//					return rec1.length() > rec2.length();
-//				}else{
-//					return domains[njh::StrToNumConverter::stoToNum<uint32_t>(rec1.name_)].modelScore_ > domains[njh::StrToNumConverter::stoToNum<uint32_t>(rec2.name_)].modelScore_;
-//				}
-//			}else{
-//				return domains[njh::StrToNumConverter::stoToNum<uint32_t>(rec1.name_)].modelEvalue_ < domains[njh::StrToNumConverter::stoToNum<uint32_t>(rec2.name_)].modelEvalue_;
-//			}
-//		});
-
-////		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-//		for(const auto & region : locations){
-//			bool overlap = false;
-//			for(const auto & outRegion : filteredRegions){
-//				if(region.overlaps(outRegion,1)){
-//					overlap = true;
-//					break;
-//				}
-//			}
-//			if(!overlap){
-//				filteredRegions.emplace_back(region);
-//			}
-//		}
-////		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-//		OutputStream outFiltNonOverlap(nonOverlappingDomainHitsFnp);
-//		outFiltNonOverlap << "#" << njh::conToStr(HmmerSeqHitTab::toDelimStrHeader(), "\t") << "\tbedName" << std::endl;
-//		BedUtility::coordSort(filteredRegions);
-//		OutputStream bedRegionsOut(bedRegionsFnp);
-////		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-//		std::unordered_map<std::string, uint32_t> modelCounts;
-//		for(auto & region : filteredRegions){
-//			const auto & domForReg  = domains[njh::StrToNumConverter::stoToNum<uint32_t>(region.name_)];
-//
-//			auto bedNewName = njh::pasteAsStr(domForReg.targetName_, ".", modelCounts[domForReg.targetName_]);
-//			++modelCounts[domForReg.targetName_];
-//			outFiltNonOverlap << domForReg.toDelimStr() << "\t" << bedNewName<< std::endl;
-//			region.name_ = bedNewName;
-//			bedRegionsOut << region.toDelimStrWithExtra() << std::endl;
-//			domainsPerSeq[domForReg.queryName_].emplace_back(domForReg);
-//			domainsPerSeq[domForReg.queryName_].back().targetDesc_ = bedNewName;
-//		}
-////		std::cout << __FILE__ << " " << __LINE__ << std::endl;
-//
-//
-//		BedUtility::coordSort(locations, false);
-//		OutputStream domainLocationBedsOut(domainLocationBedsFnp);
-//		for( auto & reg : locations){
-//			reg.score_ = reg.length();
-//			const auto & domForReg  = domains[njh::StrToNumConverter::stoToNum<uint32_t>(reg.name_)];
-//			reg.name_ = domForReg.queryName_;
-//			domainLocationBedsOut << reg.toDelimStrWithExtra() << std::endl;
-// 		}
-//	}
-//
-
-//
 
 	return 0;
 }
