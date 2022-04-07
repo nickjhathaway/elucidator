@@ -251,8 +251,8 @@ int seqUtilsExtractRunner::greedyKmerCluster(const njh::progutils::CmdArgs & inp
 				return kClus1.reads_.size() > kClus2.reads_.size();});
 
 	for (const auto pos : iter::range(kClusters.size())) {
-		auto outOpts = SeqIOOptions::genFastqOut(setUp.pars_.directoryName_
-						+ estd::to_string(leftPadNumStr(pos, kClusters.size())));
+		auto outOpts = SeqIOOptions(setUp.pars_.directoryName_
+																+ estd::to_string(leftPadNumStr(pos, kClusters.size())), setUp.pars_.ioOptions_.outFormat_);
 		kClusters[pos].writeInfo(outOpts);
 		infoFile << pos << "\t"
 				<< getPercentageString(kClusters[pos].reads_.size(), inReads.size())
