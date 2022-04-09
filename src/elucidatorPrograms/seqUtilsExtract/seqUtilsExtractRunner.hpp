@@ -47,7 +47,7 @@ class seqUtilsExtractRunner : public njh::progutils::ProgramRunner {
   static int binOnNucComp(const njh::progutils::CmdArgs & inputCommands);
   static int binOnNucCompFaster(const njh::progutils::CmdArgs & inputCommands);
   static int greedyKmerCluster(const njh::progutils::CmdArgs & inputCommands);
-
+	static int clusterByKmerSim(const njh::progutils::CmdArgs & inputCommands);
 
 
   static int extractByIlluminaAaptors(const njh::progutils::CmdArgs & inputCommands);

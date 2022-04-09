@@ -48,6 +48,7 @@ seqUtilsExtractRunner::seqUtilsExtractRunner()
 	addFunc("extractSeqsBeginsWithEndsWith", extractSeqsBeginsWithEndsWith, false),
 	addFunc("extractByIlluminaAaptors", extractByIlluminaAaptors, false),
 	addFunc("extractByName", extractByName, false),
+	addFunc("clusterByKmerSim", clusterByKmerSim, false),
 },
                     "seqUtilsExtract") {}
 //
