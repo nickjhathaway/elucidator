@@ -92,11 +92,13 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 		for(const auto & filteredHits : postProcessResults.filteredHitsByQuery_){
 			auto mergedResults = nhmmscanOutput::QueryResults::mergeOverlapingHits(filteredHits.second);
 			for(const auto & merged : mergedResults){
-				std::cout << merged.region_.genBedRecordCore().toDelimStrWithExtra() << std::endl;
-				for(const auto & hit : merged.hits_){
-					std::cout << "\t" << hit.genBed6_env().toDelimStrWithExtra() << std::endl;
+				if(merged.hits_.size() > 1){
+					std::cout << merged.region_.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+					for(const auto & hit : merged.hits_){
+						std::cout << "\t" << hit.genBed6_env().toDelimStrWithExtra() << std::endl;
+					}
+					std::cout << std::endl;
 				}
-				std::cout << std::endl;
 			}
 		}
 	}
