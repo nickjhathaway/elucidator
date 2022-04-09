@@ -87,6 +87,20 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	//convert hits table into a real table and
 	outputParsed.writeInfoFiles(postProcessResults, setUp.pars_.directoryName_);
 
+	{
+		//merging
+		for(const auto & filteredHits : postProcessResults.filteredHitsByQuery_){
+			auto mergedResults = nhmmscanOutput::QueryResults::mergeOverlapingHits(filteredHits.second);
+			for(const auto & merged : mergedResults){
+				std::cout << merged.region_.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+				for(const auto & hit : merged.hits_){
+					std::cout << "\t" << hit.genBed6_env().toDelimStrWithExtra() << std::endl;
+				}
+				std::cout << std::endl;
+			}
+		}
+	}
+
 	//trim seqs to best overlapping positions sub seqs
 	{
 		VecStr seqsWithNoDomains;

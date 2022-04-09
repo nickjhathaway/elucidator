@@ -1138,6 +1138,7 @@ int gffExpRunner::gffToBedByFeature(
 int gffExpRunner::gffToBedByDescription(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path inputFile;
 	VecStr features;
+	VecStr excludeFeatures;
 
 	OutOptions outOpts(bfs::path("out"));
 	outOpts.outExtention_ = ".bed";
@@ -1146,13 +1147,15 @@ int gffExpRunner::gffToBedByDescription(const njh::progutils::CmdArgs & inputCom
 	setUp.setOption(inputFile, "--gff", "Input gff file", true);
 	setUp.setOption(description, "--description", "description of gff to extract", true);
 	setUp.setOption(features, "--features,--feature", "Only extract records of that match this feature or features");
+	setUp.setOption(excludeFeatures, "--excludeFeatures", "Exclude records of that match this feature or features");
+
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
 	reader.openIn();
 	uint32_t count = 0;
-	std::string line = "";
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	std::ofstream outFile;
 	outOpts.openFile(outFile);
@@ -1165,7 +1168,8 @@ int gffExpRunner::gffToBedByDescription(const njh::progutils::CmdArgs & inputCom
 
 	Json::Value outJson;
 	while (nullptr != gRecord) {
-		if(features.empty() || njh::in(gRecord->type_, features)){
+		if( !njh::in(gRecord->type_, excludeFeatures)&&
+		(features.empty() || njh::in(gRecord->type_, features))){
 			if(njh::in(gRecord->getAttr("description"), description)){
 				outJson[gRecord->getAttr("ID")] = gRecord->toJson();
 				auto bedOut = GenomicRegion(*gRecord).genBedRecordCore();

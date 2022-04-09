@@ -365,6 +365,7 @@ int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnPathWeaverRegionsAn
 	setUp.processVerbose();
 	OtherAssemblersUtility::InputPars inPars;
 	inPars.programName_ = "unicycler";
+	inPars.extraProgramOptions_ = "--no_pilon";
 	inPars.setPars(setUp);
 
 	setUp.setOption(unicyclerOutDir,     "--unicyclerOutDir",     "unicycler Out Directory name, will be relative to final pass directory");

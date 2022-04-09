@@ -460,7 +460,7 @@ int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnPathWeaverRegions(c
 		std::string sample;
 
 		uint32_t unicyclerNumThreads = 1;
-		std::string extraUnicyclerOptions;
+		std::string extraUnicyclerOptions = "--no_pilon";
 		uint32_t reOrientingKmerLength = 9;
 		uint32_t minFinalLength = 40;
 		uint32_t numThreads = 1;
