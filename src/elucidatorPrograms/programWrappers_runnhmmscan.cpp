@@ -24,7 +24,7 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	std::string defaultParameters = "--nonull2 --incT 20 --incdomT 20 -T 20 --notextw";
 	bfs::path hmmModel;
 	nhmmscanOutput::PostProcessHitsPars postProcessPars;
-
+	nhmmscanOutput::QueryResults::mergeOverlapingHitsPars mergePars;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -33,12 +33,28 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	setUp.setOption(hmmModel, "--hmmModel", "hmm model database, created by hmmbuild", true);
 	setUp.setOption(postProcessPars.hmmStartFilter, "--hmmStartFilter", "Filter partial hmms domain hits if they start or end this far into the model");
 	setUp.setOption(postProcessPars.minLength, "--minLength", "Minimum output domain hit length");
-	setUp.setOption(postProcessPars.accCutOff, "--accCutOff", "accuracy cut off");
-	setUp.setOption(postProcessPars.scoreCutOff, "--scoreCutOff", "score cut off");
+
+	setUp.setOption(postProcessPars.accCutOff, "--accCutOff", "soft accuracy cut off");
+	setUp.setOption(postProcessPars.scoreCutOff, "--scoreCutOff", "soft score cut off");
+	setUp.setOption(postProcessPars.evalueCutOff, "--evalueCutOff", "soft evalue cut off");
+	setUp.setOption(postProcessPars.scoreNormCutOff, "--scoreNormCutOff", "soft scoreNorm cut off");
 
 	setUp.setOption(postProcessPars.hardAccCutOff, "--hardAccCutOff", "hard accuracy cut off");
+	if(postProcessPars.hardAccCutOff > postProcessPars.accCutOff){
+		postProcessPars.accCutOff = postProcessPars.hardAccCutOff;
+	}
 	setUp.setOption(postProcessPars.hardScoreCutOff, "--hardScoreCutOff", "hard score cut off");
-
+	if(postProcessPars.hardScoreCutOff > postProcessPars.scoreCutOff){
+		postProcessPars.scoreCutOff = postProcessPars.hardScoreCutOff;
+	}
+	setUp.setOption(postProcessPars.hardEvalueCutOff, "--hardEvalueCutOff", "hard evalue cut off");
+	if(postProcessPars.hardEvalueCutOff > postProcessPars.evalueCutOff){
+		postProcessPars.evalueCutOff = postProcessPars.hardEvalueCutOff;
+	}
+	setUp.setOption(postProcessPars.hardScoreNormCutOff, "--hardScoreNormCutOff", "hard scoreNorm cut off");
+	if(postProcessPars.hardScoreNormCutOff > postProcessPars.scoreNormCutOff){
+		postProcessPars.scoreNormCutOff = postProcessPars.hardScoreNormCutOff;
+	}
 	setUp.processDirectoryOutputName(true);
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
@@ -90,7 +106,7 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	{
 		//merging
 		for(const auto & filteredHits : postProcessResults.filteredHitsByQuery_){
-			auto mergedResults = nhmmscanOutput::QueryResults::mergeOverlapingHits(filteredHits.second);
+			auto mergedResults = nhmmscanOutput::QueryResults::mergeOverlapingHits(filteredHits.second, mergePars);
 			for(const auto & merged : mergedResults){
 				if(merged.hits_.size() > 1){
 					std::cout << merged.region_.genBedRecordCore().toDelimStrWithExtra() << std::endl;
