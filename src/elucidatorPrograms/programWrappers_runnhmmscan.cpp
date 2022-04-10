@@ -21,9 +21,13 @@ namespace njhseq {
 
 
 int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputCommands){
-	std::string defaultParameters = "--nonull2 --incT 20 --incdomT 20 -T 20 --notextw";
+	std::string defaultParameters = "--nonull2 --incT 50 --incdomT 50 -T 50 --notextw";
 	bfs::path hmmModel;
 	nhmmscanOutput::PostProcessHitsPars postProcessPars;
+	postProcessPars.accCutOff = 0.80;
+	postProcessPars.scoreCutOff = 200;
+	postProcessPars.evalueCutOff = 1e-100;
+	postProcessPars.scoreNormCutOff = 0.50;
 	nhmmscanOutput::QueryResults::mergeOverlapingHitsPars mergePars;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
