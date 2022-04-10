@@ -140,7 +140,7 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 					if(region.reverseStrand()){
 						subSeq.reverseComplementRead(false, true);
 					}
-					MetaDataInName meta = hitGroup.region_.meta_;
+					MetaDataInName meta = hitGroup.genOutRegion().meta_;
 					meta.addMeta("trimStart", region.chromStart_, true);
 					meta.addMeta("trimEnd", region.chromEnd_, true);
 					meta.addMeta("trimLen", region.length(), true);
