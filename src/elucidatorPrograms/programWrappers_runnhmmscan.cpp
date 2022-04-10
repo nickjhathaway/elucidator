@@ -103,8 +103,8 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	//convert hits table into a real table and
 	outputParsed.writeInfoFiles(postProcessResults, setUp.pars_.directoryName_);
 
-	{
-		//merging
+	if(setUp.pars_.debug_){
+		//merging debugging
 		for(const auto & filteredHits : postProcessResults.filteredHitsByQuery_){
 			auto mergedResults = nhmmscanOutput::QueryResults::mergeOverlapingHits(filteredHits.second, mergePars);
 			for(const auto & merged : mergedResults){
