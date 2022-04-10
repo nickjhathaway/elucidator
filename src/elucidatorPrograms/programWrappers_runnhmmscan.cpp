@@ -62,7 +62,8 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	//convert to fasta and non-gz hmm model
 
 	auto inputSeqFnp = njh::files::make_path(setUp.pars_.directoryName_, "inputSeqs.fasta");
-	auto inputSeqSubDomainsFnp = njh::files::make_path(setUp.pars_.directoryName_, "nonOverlapFiltHits.fasta");
+	auto noOverlapFiltFnp = njh::files::make_path(setUp.pars_.directoryName_, "noOverlapFiltHits.fasta");
+	auto noOverlapMergedFiltFnp = njh::files::make_path(setUp.pars_.directoryName_, "noOverlapMergedFiltHits.fasta");
 	auto hmmModelFnp = njh::files::make_path(setUp.pars_.directoryName_, "hmmModel.txt");
 	auto seqKey = SeqIO::rewriteSeqsWithIndexAsName(
 					setUp.pars_.ioOptions_,
@@ -124,11 +125,31 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 		VecStr seqsWithNoDomains;
 		seqInfo seq;
 		SeqInput reader(setUp.pars_.ioOptions_);
-		SeqOutput writer(SeqIOOptions::genFastaOut(inputSeqSubDomainsFnp));
+		SeqOutput noOverlapFiltWriter(SeqIOOptions::genFastaOut(noOverlapFiltFnp));
+		SeqOutput noOverlapMergedFiltWriter(SeqIOOptions::genFastaOut(noOverlapMergedFiltFnp));
+
 		reader.openIn();
-		writer.openOut();
+		noOverlapFiltWriter.openOut();
+		noOverlapMergedFiltWriter.openOut();
 
 		while(reader.readNextRead(seq)){
+			if(njh::in(seq.name_, postProcessResults.filteredHitsMergedNonOverlapByQuery_)){
+				for(const auto & hitGroup : postProcessResults.filteredHitsMergedNonOverlapByQuery_[seq.name_]){
+					Bed6RecordCore region = hitGroup.region_.genBedRecordCore();
+					auto subSeq = seq.getSubRead(region.chromStart_, region.length());
+					if(region.reverseStrand()){
+						subSeq.reverseComplementRead(false, true);
+					}
+					MetaDataInName meta = hitGroup.region_.meta_;
+					meta.addMeta("trimStart", region.chromStart_, true);
+					meta.addMeta("trimEnd", region.chromEnd_, true);
+					meta.addMeta("trimLen", region.length(), true);
+					meta.addMeta("trimCov", region.length()/static_cast<double>(len(seq)), true);
+					meta.addMeta("revStrand", region.reverseStrand(), true);
+					meta.resetMetaInName(subSeq.name_);
+					noOverlapMergedFiltWriter.write(subSeq);
+				}
+			}
 			if(njh::in(seq.name_, postProcessResults.filteredNonOverlapHitsByQuery_)){
 				for(const auto & hit : postProcessResults.filteredNonOverlapHitsByQuery_[seq.name_]){
 					Bed6RecordCore region = hit.genBed6_env();
@@ -152,7 +173,7 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 					meta.addMeta("model", hit.targetName_);
 					meta.addMeta("ID", hit.targetDesc_);
 					meta.resetMetaInName(subSeq.name_);
-					writer.write(subSeq);
+					noOverlapFiltWriter.write(subSeq);
 				}
 			} else {
 				seqsWithNoDomains.emplace_back(seq.name_);
