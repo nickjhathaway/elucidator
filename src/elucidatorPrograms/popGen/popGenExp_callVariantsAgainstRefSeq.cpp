@@ -73,7 +73,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 		setUp.setOption(bedFnp,    "--bed",    "A bed file of the location for the extraction", true);
 		gPars.genomeDir_ = njh::files::normalize(genomeFnp.parent_path());
 		gPars.primaryGenome_ = bfs::basename(genomeFnp);
-		gPars.primaryGenome_ = gPars.primaryGenome_.substr(0, gPars.primaryGenome_.rfind("."));
+		gPars.primaryGenome_ = gPars.primaryGenome_.substr(0, gPars.primaryGenome_.rfind('.'));
 		gPars.selectedGenomes_ = {gPars.primaryGenome_};
 	}
 
@@ -109,8 +109,23 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 			ss << __PRETTY_FUNCTION__ << ", error no records found in " << bedFnp << "\n";
 			throw std::runtime_error{ss.str()};
 		}
-
-		gPos = beds.front();
+		if(identifier.empty()){
+			gPos = std::make_shared<Bed6RecordCore>(*beds.front());
+		} else {
+			bool found = false;
+			for(const auto & region : beds){
+				if(region->name_ == identifier){
+					gPos = std::make_shared<Bed6RecordCore>(*region);
+					found = true;
+					break;
+				}
+			}
+			if(!found){
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "didn't find " << identifier << " in " << bedFnp << "\n";
+				throw std::runtime_error{ss.str()};
+			}
+		}
 		//get reference seq
 		//get region and ref seq for mapping of variants
 		OutputStream inputRegionBeforeExpandOut(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "inputRegionBeforeExpand.bed")));
@@ -140,8 +155,8 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 						njh::files::make_path(setUp.pars_.directoryName_,
 								"inputRegion.fasta")));
 	}
-	//get identifer for sequences
-	if("" == identifier){
+	//get identifier for sequences
+	if(identifier.empty()){
 		identifier = gPos->name_;
 	}
 	//read in meta if available
