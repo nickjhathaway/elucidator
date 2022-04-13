@@ -1357,7 +1357,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	auto conservedRegionInfoDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{"subRegionInfo"});
 	auto subsegmentInfoDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{"subsegmentInfo"});
 
-	if (!refSeq.name_.empty()) {
+	if (!refSeq.name_.empty() && refBedFnp.empty()) {
 		auto refName = bfs::path(bfs::basename(genomeFnp)).replace_extension("").string();
 		refSeq.name_ = refName;
 		MetaDataInName refSeqMeta;
