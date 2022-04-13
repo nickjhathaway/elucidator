@@ -1284,8 +1284,9 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	//	uint32_t kmerOccurenceCutOff = 0;
 	//	uint32_t correctionOccurenceCutOff = 2;
 	ContigsCompareGraphDev::correctSeqsByGraphPars graphCorrectingPars;
-
-	std::string refSeqName = "";
+	bfs::path refBedFnp;
+	std::string refBedName;
+	std::string refSeqName;
 	bfs::path genomeFnp = "";
 	seqInfo refSeq;
 	//bool filterRegionsWithinRegions = false;
@@ -1309,6 +1310,8 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
+	bool refBedUsed = setUp.setOption(refBedFnp, "--refBedFnp", "Reference bed file with location of ref seq in it");
+	setUp.setOption(refBedName, "--refBedID", "name of the region to use for the reference comparison", refBedUsed);
 
 	bool refNameRequired = setUp.processSeq(refSeq, "--refSeq", "Reference seq", false);
 	setUp.setOption(numThreads, "--numThreads", "num Threads");
@@ -1339,7 +1342,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	setUp.setOption(graphCorrectingPars.doNotCollapseLowFreqNodes, "--doNotCollapseLowFreqNodes", "don't collapse Low Freq Nodes");
 	setUp.setOption(graphCorrectingPars.lowFreqCutOff, "--lowFreqCutOff", "Low Freq Cut Off");
 	setUp.setOption(graphCorrectingPars.correctionOccurenceCutOff, "--correctionOccurenceCutOff", "correction Occurrence Cut Off");
-	if(setUp.setOption(refSeqName, "--refSeqName", "The sample name of the sequence to output reference to", !refNameRequired)){
+	if(setUp.setOption(refSeqName, "--refSeqName", "The sample name of the sequence to output reference to", !refNameRequired && !refBedUsed)){
 		refSeq = seqInfo();//create empty refSeq if setting a ref seqname
 	}
 
@@ -1354,7 +1357,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	auto conservedRegionInfoDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{"subRegionInfo"});
 	auto subsegmentInfoDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{"subsegmentInfo"});
 
-	if ("" != refSeq.name_) {
+	if (!refSeq.name_.empty()) {
 		auto refName = bfs::path(bfs::basename(genomeFnp)).replace_extension("").string();
 		refSeq.name_ = refName;
 		MetaDataInName refSeqMeta;
@@ -1365,6 +1368,30 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 		refSeqMeta.addMeta("site", "LabIsolate", true);
 		refSeqMeta.addMeta("IsFieldSample", false, true);
 		refSeqMeta.resetMetaInName(refSeq.name_);
+	} else if (!refBedFnp.empty()){
+		GenomicRegion refRegion;
+		BioDataFileIO<Bed6RecordCore> reader(IoOptions{InOptions {refBedFnp}});
+		reader.openIn();
+		Bed6RecordCore region;
+		while(reader.readNextRecord(region)){
+			if(region.name_ == refBedName){
+				refRegion = GenomicRegion(region);
+				break;
+			}
+		}
+		if(refRegion.uid_.empty()){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "error, did not find " << refBedName << " in " << refBedFnp << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		std::string genomeName = genomeFnp.filename().replace_extension("").string();
+		MultiGenomeMapper::inputParameters gmPars(genomeFnp.parent_path(), genomeName);
+		gmPars.selectedGenomes_ = std::set<std::string>{genomeName};
+		MultiGenomeMapper genomeMapper(gmPars);
+		genomeMapper.loadInGenomes();
+		TwoBit::TwoBitFile tReader(genomeMapper.genomes_.at(genomeName)->fnpTwoBit_);
+		refSeq = refRegion.extractSeq(tReader);
+
 	}
 	std::vector<seqInfo> seqs = ContigsCompareGraphDev::readInSeqs(setUp.pars_.ioOptions_, refSeq, refSeqName);
 
