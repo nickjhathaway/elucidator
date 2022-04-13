@@ -1391,7 +1391,14 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 		genomeMapper.loadInGenomes();
 		TwoBit::TwoBitFile tReader(genomeMapper.genomes_.at(genomeName)->fnpTwoBit_);
 		refSeq = refRegion.extractSeq(tReader);
-
+		MetaDataInName refSeqMeta;
+		if (MetaDataInName::nameHasMetaData(refSeq.name_)) {
+			refSeqMeta = MetaDataInName(refSeq.name_);
+		}
+		refSeqMeta.addMeta("sample", refSeq.name_, true);
+		refSeqMeta.addMeta("site", "LabIsolate", true);
+		refSeqMeta.addMeta("IsFieldSample", false, true);
+		refSeqMeta.resetMetaInName(refSeq.name_);
 	}
 	std::vector<seqInfo> seqs = ContigsCompareGraphDev::readInSeqs(setUp.pars_.ioOptions_, refSeq, refSeqName);
 
