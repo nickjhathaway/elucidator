@@ -7,7 +7,7 @@
 #include "elucidator/utils/KmerUtils.hpp"
 #include "elucidator/objects/seqObjects/seqKmers.h"
 #include <njhseq/IO/SeqIO.h>
-
+#include <njhseq/concurrency/PairwisePairFactory.hpp>
 namespace njhseq {
 
 
@@ -69,17 +69,22 @@ heatmaply(dist_mat, plot_method = "plotly")
 int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inputCommands) {
 	uint32_t kmerLength = 7;
 	uint32_t numThreads = 1;
+	uint32_t proposedClusters = std::numeric_limits<uint32_t>::max();
 	readDistGraph<double>::dbscanPars dbPars_;
 	dbPars_.minEpNeighbors_ = 2;
 	dbPars_.eps_ = .20;
 
+	bool useHDBS = false;
 
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.processReadInNames(true);
+	setUp.setOption(proposedClusters, "--HDBSproposedClusters", "HDBS proposed number of clusters");
+
 	setUp.setOption(numThreads, "--numThreads", "numThreads");
 	setUp.setOption(kmerLength, "--kmerLength", "kmer Length");
+	setUp.setOption(useHDBS, "--useHDBS", "useHDBS");
 
 	setUp.setOption(dbPars_.eps_, "--epsilon", "min distance for connecting neighbors");
 	setUp.setOption(dbPars_.minEpNeighbors_, "--minEpNeighbors", "min epsilon neighbors");
@@ -105,8 +110,395 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 
 	auto dist = getDistance(reads, numThreads, disFun);
 	readDistGraph<double> distGraph(dist, reads);
-	distGraph.dbscan(dbPars_);
-	distGraph.assignNoiseNodesAGroup();
+
+	if(useHDBS){
+		auto hdbsDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{"HDBScan"});
+		OutputStream hdbsRunInfoOut(njh::files::make_path(hdbsDir, "runInfo.tab.txt"));
+		hdbsRunInfoOut << "Run\tnonSingletGroupCounts\ttotalGroupCount\tlowestCentroidDist" << std::endl;
+		uint32_t minimum_minPts = 3;
+		if(std::numeric_limits<uint32_t>::max() == proposedClusters){
+			proposedClusters = reads.size()/minimum_minPts;
+		}
+		//HDBS
+
+		uint32_t maximum_minPts = reads.size()/proposedClusters;
+
+		double minEps = std::numeric_limits<double>::max();
+		std::vector<double> neighbor2Dists;
+		for(const auto & n : distGraph.nodes_){
+			//sort so edges are sorted from lowest dist to highest dist
+			n->sortEdges([](const std::shared_ptr<readDistGraph<double>::edge> & e1,
+											const std::shared_ptr<readDistGraph<double>::edge> & e2){
+				return *e1 < *e2;
+			});
+
+			uint32_t total = 0;
+			uint32_t count = 0;
+			while(count < 2 && total < n->edges_.size()){
+				for(const auto & e : n->edges_){
+					++total;
+					if(e->dist_ != 0){
+						++count;
+						if((minimum_minPts - 1) == count){
+							neighbor2Dists.emplace_back(e->dist_);
+							if(e->dist_ < minEps){
+								minEps = e->dist_;
+							}
+						}
+					}
+				}
+			}
+		}
+		njh::sort(neighbor2Dists);
+		std::vector<double> eps;
+		uint32_t sq = std::round(std::sqrt(reads.size()));
+		for(uint32_t i = sq; i < reads.size(); i += sq){
+			eps.emplace_back(neighbor2Dists[i]);
+		}
+		double maxEps = std::numeric_limits<double>::lowest();
+		for(const auto & n : distGraph.nodes_){
+			//since all nodes are connected no need to check size edge
+			if(n->edges_[maximum_minPts]->dist_ > maxEps){
+				maxEps = n->edges_[maximum_minPts]->dist_;
+			}
+		}
+		//std::cout << __FILE__ << " : " << __LINE__ << " : " << __PRETTY_FUNCTION__ << std::endl;
+
+		//reset node's visited and group values
+		distGraph.resetAllNodes();
+		//turn off whole graph
+		distGraph.turnOffAllCons();
+		distGraph.turnOffAllNodes();
+		//set number of groups to be 0
+		distGraph.numberOfGroups_ = 0;
+		for(const auto & epEnum : iter::enumerate(eps)){
+			readDistGraph<double>::dbscanPars currentPars;
+			currentPars.eps_ = epEnum.second;
+			currentPars.minEpNeighbors_ = minimum_minPts;
+			for (auto & n : distGraph.nodes_) {
+				//if the node has not be visited by an expand or spread try to expand it
+				if (!n->visited_) {
+					//std::cout << n->value_->name_ << std::endl;
+					n->dbscanExpand(distGraph.numberOfGroups_, currentPars);
+					//if it was assigned a group and expanded, increase group number
+					if (std::numeric_limits<uint32_t>::max() != n->group_) {
+						++distGraph.numberOfGroups_;
+					}
+				}
+			}
+			if(epEnum.index + 1 != eps.size()){
+				//reset unclustered nodes back on and unvisted for the next eps
+				for(auto & n : distGraph.nodes_){
+					if(!n->on_){
+						n->visitedAmount_ = 0;
+						n->visited_ = false;
+						n->on_ = true;
+					}
+				}
+			}
+		}
+		distGraph.assignNoiseNodesAGroup();
+		double lowestCentroidDistInitial = std::numeric_limits<double>::max();
+		{
+			//initial centroid info
+			//compute centroid distances
+			std::map<uint32_t, std::vector<uint32_t>> groupNodes;
+			for(const auto & node : distGraph.nodes_){
+				groupNodes[node->group_].emplace_back(distGraph.nameToNodePos_[node->name_]);
+			}
+			std::vector<std::vector<double>> centroidDistances;
+			for(const auto pos : iter::range(groupNodes.size())) {
+				centroidDistances.emplace_back(std::vector<double>(pos + 1));
+			}
+			//set the zeros
+			for(const auto pos : iter::range(groupNodes.size())) {
+				centroidDistances[pos][pos] = 0;
+			}
+			auto groups = getVectorOfMapKeys(groupNodes);
+			PairwisePairFactory pFac(groups.size());
+			PairwisePairFactory::PairwisePair pair;
+			while(pFac.setNextPair(pair)){
+				//group1 == row_
+				//group2 == col_
+				uint32_t group1 = groups[pair.row_];
+				uint32_t group2 = groups[pair.col_];
+				uint32_t group1Size = groupNodes[group1].size();
+				uint32_t group2Size = groupNodes[group2].size();
+				double sumOfSquaresAll = 0;
+				double sumOfSquaresGroup1 = 0;
+				double sumOfSquaresGroup2 = 0;
+				//group 1
+				if(group1Size > 1){
+					PairwisePairFactory group1_pFac(group1Size);
+					PairwisePairFactory::PairwisePair group1_pair;
+					while(group1_pFac.setNextPair(group1_pair)){
+
+						uint32_t node1 = groupNodes[group1][group1_pair.col_];
+						uint32_t node2 = groupNodes[group1][group1_pair.row_];
+						uint32_t distRow = std::max(node1,  node2);
+						uint32_t distCol = std::min(node1,  node2);
+						double squareDist = std::pow(dist[distRow][distCol], 2.0);
+						sumOfSquaresGroup1 += squareDist;
+						sumOfSquaresAll += squareDist;
+					}
+				}
+				//group 2
+				if(group2Size > 1){
+					PairwisePairFactory group2_pFac(group2Size);
+					PairwisePairFactory::PairwisePair group2_pair;
+					while(group2_pFac.setNextPair(group2_pair)){
+						uint32_t node1 = groupNodes[group2][group2_pair.col_];
+						uint32_t node2 = groupNodes[group2][group2_pair.row_];
+						uint32_t distRow = std::max(node1,  node2);
+						uint32_t distCol = std::min(node1,  node2);
+						double squareDist = std::pow(dist[distRow][distCol], 2.0);
+						sumOfSquaresGroup2 += squareDist;
+						sumOfSquaresAll += squareDist;
+					}
+				}
+				//between group
+				for(const auto & group1Node : groupNodes[group1]){
+					for(const auto & group2Node : groupNodes[group2]){
+						uint32_t distRow = std::max(group1Node,  group2Node);
+						uint32_t distCol = std::min(group1Node,  group2Node);
+						double squareDist = std::pow(dist[distRow][distCol], 2.0);
+						sumOfSquaresAll += squareDist;
+					}
+				}
+				double distBetweenCentroids = (sumOfSquaresAll - (group1Size + group2Size) * (sumOfSquaresGroup1 / group1Size + sumOfSquaresGroup2 / group2Size)) / (group1Size * group2Size);
+				centroidDistances[pair.row_][pair.col_] = distBetweenCentroids;
+				if(distBetweenCentroids < lowestCentroidDistInitial) {
+					lowestCentroidDistInitial = distBetweenCentroids;
+				}
+			}
+			//
+			{
+				OutOptions distOutOpts(njh::files::make_path(hdbsDir, "initial_centroidDistances.tab.txt"));
+				OutputStream distOut(distOutOpts);
+				//write out distance matrix
+				uint32_t rowCount = 0;
+				printVector(njh::getVecOfMapKeys(groupNodes), "\t", distOut);
+				for (const auto & row : centroidDistances) {
+					distOut << njh::conToStr(row, "\t") << std::endl;
+					++rowCount;
+				}
+			}
+		}
+
+
+		uint32_t numberOfNonSingletClusters = 0;
+		{
+			auto groupCounts = distGraph.getGroupCounts();
+			for(const auto & count : groupCounts){
+				if(count.second > 1){
+					++numberOfNonSingletClusters;
+				}
+			}
+		}
+		hdbsRunInfoOut << "0\t" << numberOfNonSingletClusters << "\t" << distGraph.numberOfGroups_ << "\t" << lowestCentroidDistInitial << std::endl;
+
+		uint32_t runCount = 0;
+		if(setUp.pars_.verbose_){
+			std::cout << "Initial Number of Clusters: " << numberOfNonSingletClusters << std::endl;
+			std::cout << "Proposed Clusters: " << proposedClusters << std::endl;
+		}
+
+		while(numberOfNonSingletClusters > proposedClusters){
+			++runCount;
+			if(setUp.pars_.verbose_){
+				std::cout << "Run: " << runCount << std::endl;
+				std::cout << "Current Number of Clusters: " << numberOfNonSingletClusters << std::endl;
+				std::cout << "Proposed Clusters: " << proposedClusters << std::endl;
+			}
+			double lowestCentroidDist = std::numeric_limits<double>::max();
+			std::set<uint32_t> groupsToCollapse;
+			//compute centroid distances
+			std::map<uint32_t, std::vector<uint32_t>> groupNodes;
+			for(const auto & node : distGraph.nodes_){
+				groupNodes[node->group_].emplace_back(distGraph.nameToNodePos_[node->name_]);
+			}
+			std::vector<std::vector<double>> centroidDistances;
+			for(const auto pos : iter::range(groupNodes.size())) {
+				centroidDistances.emplace_back(std::vector<double>(pos + 1));
+			}
+			//set the zeros
+			for(const auto pos : iter::range(groupNodes.size())) {
+				centroidDistances[pos][pos] = 0;
+			}
+			auto groups = getVectorOfMapKeys(groupNodes);
+			PairwisePairFactory pFac(groups.size());
+			PairwisePairFactory::PairwisePair pair;
+			while(pFac.setNextPair(pair)){
+				//group1 == row_
+				//group2 == col_
+				uint32_t group1 = groups[pair.row_];
+				uint32_t group2 = groups[pair.col_];
+				uint32_t group1Size = groupNodes[group1].size();
+				uint32_t group2Size = groupNodes[group2].size();
+				double sumOfSquaresAll = 0;
+				double sumOfSquaresGroup1 = 0;
+				double sumOfSquaresGroup2 = 0;
+				//group 1
+				if(group1Size > 1){
+					PairwisePairFactory group1_pFac(group1Size);
+					PairwisePairFactory::PairwisePair group1_pair;
+					while(group1_pFac.setNextPair(group1_pair)){
+
+						uint32_t node1 = groupNodes[group1][group1_pair.col_];
+						uint32_t node2 = groupNodes[group1][group1_pair.row_];
+						uint32_t distRow = std::max(node1,  node2);
+						uint32_t distCol = std::min(node1,  node2);
+						double squareDist = std::pow(dist[distRow][distCol], 2.0);
+						sumOfSquaresGroup1 += squareDist;
+						sumOfSquaresAll += squareDist;
+					}
+				}
+				//group 2
+				if(group2Size > 1){
+					PairwisePairFactory group2_pFac(group2Size);
+					PairwisePairFactory::PairwisePair group2_pair;
+					while(group2_pFac.setNextPair(group2_pair)){
+						uint32_t node1 = groupNodes[group2][group2_pair.col_];
+						uint32_t node2 = groupNodes[group2][group2_pair.row_];
+						uint32_t distRow = std::max(node1,  node2);
+						uint32_t distCol = std::min(node1,  node2);
+						double squareDist = std::pow(dist[distRow][distCol], 2.0);
+						sumOfSquaresGroup2 += squareDist;
+						sumOfSquaresAll += squareDist;
+					}
+				}
+				//between group
+				for(const auto & group1Node : groupNodes[group1]){
+					for(const auto & group2Node : groupNodes[group2]){
+						uint32_t distRow = std::max(group1Node,  group2Node);
+						uint32_t distCol = std::min(group1Node,  group2Node);
+						double squareDist = std::pow(dist[distRow][distCol], 2.0);
+						sumOfSquaresAll += squareDist;
+					}
+				}
+				double distBetweenCentroids = (sumOfSquaresAll - (group1Size + group2Size) * (sumOfSquaresGroup1 / group1Size + sumOfSquaresGroup2 / group2Size)) / (group1Size * group2Size);
+				centroidDistances[pair.row_][pair.col_] = distBetweenCentroids;
+				if(distBetweenCentroids < lowestCentroidDist){
+					lowestCentroidDist = distBetweenCentroids;
+					groupsToCollapse.clear();
+					groupsToCollapse.emplace(groups[pair.row_]);
+					groupsToCollapse.emplace(groups[pair.col_]);
+				}else if(distBetweenCentroids == lowestCentroidDist){
+					groupsToCollapse.emplace(groups[pair.row_]);
+					groupsToCollapse.emplace(groups[pair.col_]);
+				}
+			}
+			if(setUp.pars_.verbose_){
+				std::cout << "lowestCentroidDist: " << lowestCentroidDist << std::endl;
+			}
+			//collapse group by setting group value
+			for(const auto & group : groupsToCollapse){
+				for(const auto & nodeIdx : groupNodes[group]){
+					distGraph.nodes_[nodeIdx]->group_ = *groupsToCollapse.begin();
+				}
+			}
+			numberOfNonSingletClusters = 0;
+			{
+				auto groupCounts = distGraph.getGroupCounts();
+				distGraph.numberOfGroups_ = groupCounts.size();
+				for(const auto & count : groupCounts){
+					if(count.second > 1){
+						++numberOfNonSingletClusters;
+					}
+				}
+			}
+			hdbsRunInfoOut << runCount << "\t" << numberOfNonSingletClusters << "\t" << distGraph.numberOfGroups_ << "\t" << lowestCentroidDist << std::endl;
+		}
+		//final centroid
+		{
+			//compute centroid distances
+			std::map<uint32_t, std::vector<uint32_t>> groupNodes;
+			for(const auto & node : distGraph.nodes_){
+				groupNodes[node->group_].emplace_back(distGraph.nameToNodePos_[node->name_]);
+			}
+			std::vector<std::vector<double>> centroidDistances;
+			for(const auto pos : iter::range(groupNodes.size())) {
+				centroidDistances.emplace_back(std::vector<double>(pos + 1));
+			}
+			//set the zeros
+			for(const auto pos : iter::range(groupNodes.size())) {
+				centroidDistances[pos][pos] = 0;
+			}
+			auto groups = getVectorOfMapKeys(groupNodes);
+			PairwisePairFactory pFac(groups.size());
+			PairwisePairFactory::PairwisePair pair;
+			while(pFac.setNextPair(pair)){
+				//group1 == row_
+				//group2 == col_
+				uint32_t group1 = groups[pair.row_];
+				uint32_t group2 = groups[pair.col_];
+				uint32_t group1Size = groupNodes[group1].size();
+				uint32_t group2Size = groupNodes[group2].size();
+				double sumOfSquaresAll = 0;
+				double sumOfSquaresGroup1 = 0;
+				double sumOfSquaresGroup2 = 0;
+				//group 1
+				if(group1Size > 1){
+					PairwisePairFactory group1_pFac(group1Size);
+					PairwisePairFactory::PairwisePair group1_pair;
+					while(group1_pFac.setNextPair(group1_pair)){
+
+						uint32_t node1 = groupNodes[group1][group1_pair.col_];
+						uint32_t node2 = groupNodes[group1][group1_pair.row_];
+						uint32_t distRow = std::max(node1,  node2);
+						uint32_t distCol = std::min(node1,  node2);
+						double squareDist = std::pow(dist[distRow][distCol], 2.0);
+						sumOfSquaresGroup1 += squareDist;
+						sumOfSquaresAll += squareDist;
+					}
+				}
+				//group 2
+				if(group2Size > 1){
+					PairwisePairFactory group2_pFac(group2Size);
+					PairwisePairFactory::PairwisePair group2_pair;
+					while(group2_pFac.setNextPair(group2_pair)){
+						uint32_t node1 = groupNodes[group2][group2_pair.col_];
+						uint32_t node2 = groupNodes[group2][group2_pair.row_];
+						uint32_t distRow = std::max(node1,  node2);
+						uint32_t distCol = std::min(node1,  node2);
+						double squareDist = std::pow(dist[distRow][distCol], 2.0);
+						sumOfSquaresGroup2 += squareDist;
+						sumOfSquaresAll += squareDist;
+					}
+				}
+				//between group
+				for(const auto & group1Node : groupNodes[group1]){
+					for(const auto & group2Node : groupNodes[group2]){
+						uint32_t distRow = std::max(group1Node,  group2Node);
+						uint32_t distCol = std::min(group1Node,  group2Node);
+						double squareDist = std::pow(dist[distRow][distCol], 2.0);
+						sumOfSquaresAll += squareDist;
+					}
+				}
+				double distBetweenCentroids = (sumOfSquaresAll - (group1Size + group2Size) * (sumOfSquaresGroup1 / group1Size + sumOfSquaresGroup2 / group2Size)) / (group1Size * group2Size);
+				centroidDistances[pair.row_][pair.col_] = distBetweenCentroids;
+			}
+
+			//
+			{
+				OutOptions distOutOpts(njh::files::make_path(hdbsDir, "final_centroidDistances.tab.txt"));
+				OutputStream distOut(distOutOpts);
+				//write out distance matrix
+				uint32_t rowCount = 0;
+				printVector(njh::getVecOfMapKeys(groupNodes), "\t", distOut);
+				for (const auto & row : centroidDistances) {
+					distOut << njh::conToStr(row, "\t") << std::endl;
+					++rowCount;
+				}
+			}
+		}
+	} else {
+		distGraph.dbscan(dbPars_);
+		distGraph.assignNoiseNodesAGroup();
+	}
+
+
+
 	{
 		OutOptions distOutOpts(njh::files::make_path(setUp.pars_.directoryName_, "distance.tab.txt"));
 		OutputStream distOut(distOutOpts);
@@ -151,15 +543,60 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 	}
 
 	{
+		OutOptions errorOutOpts(njh::files::make_path(setUp.pars_.directoryName_, "variance.tab.txt"));
+		OutputStream errorOut(errorOutOpts);
+		errorOut << "group\tnum\tmeanDiff\tvariance" << std::endl;
+
+		std::map<uint32_t, std::vector<uint32_t>> groupNodes;
+		for(const auto & node : distGraph.nodes_){
+			groupNodes[node->group_].emplace_back(distGraph.nameToNodePos_[node->name_]);
+		}
+		for(const auto & group : groupNodes){
+			if(group.second.size() < dbPars_.minEpNeighbors_){
+				continue;
+			}
+			PairwisePairFactory pFactor(group.second.size());
+			PairwisePairFactory::PairwisePair pair;
+			std::vector<double> distancesWithinGroup;
+			while(pFactor.setNextPair(pair)){
+				uint32_t node1 = group.second[pair.col_];
+				uint32_t node2 = group.second[pair.row_];
+				uint32_t distRow = std::max(node1,  node2);
+				uint32_t distCol = std::min(node1,  node2);
+				distancesWithinGroup.emplace_back(dist[distRow][distCol]);
+			}
+
+			auto meanDist = vectorMean(distancesWithinGroup);
+			auto var = vectorStandardDeviationPop(distancesWithinGroup);
+			errorOut << group.first
+			<< "\t" << group.second.size()
+			<< "\t" << meanDist
+			<< "\t" << var
+			<< std::endl;
+		}
+	}
+
+	{
 		//write out groups
 		MultiSeqIO seqWriter;
-		for (const auto group: iter::range(0U, distGraph.numberOfGroups_)) {
+		std::map<uint32_t, uint32_t> groupCounts = distGraph.getGroupCounts();
+		auto maxGroup = vectorMaximum(getVectorOfMapKeys(groupCounts));
+		for (const auto group: njh::getVecOfMapKeys(groupCounts)) {
 			seqWriter.addReader(njh::pasteAsStr(group), SeqIOOptions(
-							njh::files::make_path(setUp.pars_.directoryName_, njh::leftPadNumStr(group, distGraph.numberOfGroups_)),
+							njh::files::make_path(setUp.pars_.directoryName_, njh::leftPadNumStr<uint32_t>(group, maxGroup)),
 							setUp.pars_.ioOptions_.outFormat_));
 		}
 		for(const auto & n : distGraph.nodes_){
 			seqWriter.openWrite(estd::to_string(n->group_), n->value_);
+		}
+	}
+
+	{
+		OutOptions groupNamesOutOpts(njh::files::make_path(setUp.pars_.directoryName_, "groupNames.tab.txt"));
+		OutputStream groupNamesOut(groupNamesOutOpts);
+		groupNamesOut << "name\tgroup" << std::endl;
+		for(const auto & n : distGraph.nodes_){
+			groupNamesOut << n->name_ << "\t" << n->group_ << std::endl;
 		}
 	}
 
@@ -174,10 +611,7 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 	{
 		auto subGroupVisDir = njh::files::make_path(setUp.pars_.directoryName_, "visulation");
 		njh::files::makeDir(njh::files::MkdirPar{subGroupVisDir});
-		VecStr groups;
-		for(const auto group : iter::range(distGraph.numberOfGroups_)){
-			groups.emplace_back(estd::to_string(group));
-		}
+		VecStr groups = toVecStr(getVectorOfMapKeys(distGraph.getGroupCounts()));
 		auto colors = getColorsForNames(groups);
 		std::unordered_map<std::string, std::string> nameToColor;
 		for(const auto & n : distGraph.nodes_){
