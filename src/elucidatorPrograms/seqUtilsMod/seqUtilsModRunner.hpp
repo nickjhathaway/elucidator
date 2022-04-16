@@ -45,6 +45,7 @@ class seqUtilsModRunner : public njh::progutils::ProgramRunner {
 	static int sortReadsByNameNaturalSort(const njh::progutils::CmdArgs & inputCommands);
 
   static int renameIDs(const njh::progutils::CmdArgs & inputCommands);
+	static int renameSeqNameToUniqueNames(const njh::progutils::CmdArgs & inputCommands);
 
   static int increaseQualityScores(const njh::progutils::CmdArgs & inputCommands);
   static int removeLowQualityBases(const njh::progutils::CmdArgs & inputCommands);

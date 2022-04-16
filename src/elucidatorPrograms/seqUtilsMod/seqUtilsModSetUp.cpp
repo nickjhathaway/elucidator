@@ -92,9 +92,10 @@ void seqUtilsModSetUp::setUpRenameIDs(std::string& stub, std::string& sortBy,
   if (pars_.ioOptions_.out_.outFilename_ == "out") {
   	pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(njh::files::removeExtension(pars_.ioOptions_.firstName_), "renamed_");
   }
-  setOption(stub, "-name", "NewStubName");
-  setOption(sortBy, "-sortBy", "SortOption");
-  setOption(keepChimeraFlag, "-keepChimeraFlag", "KeepChimeraFlag");
+	setOption(sortBy, "--sortBy", "SortOption");
+  setOption(stub, "--name", "NewStubName");
+
+  setOption(keepChimeraFlag, "--keepChimeraFlag", "KeepChimeraFlag");
   finishSetUp(std::cout);
 }
 

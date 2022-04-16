@@ -69,6 +69,7 @@ heatmaply(dist_mat, plot_method = "plotly")
 int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inputCommands) {
 	uint32_t kmerLength = 7;
 	uint32_t numThreads = 1;
+	bool HDBSCountSingletGroups = false;
 	uint32_t proposedClusters = std::numeric_limits<uint32_t>::max();
 	readDistGraph<double>::dbscanPars dbPars_;
 	dbPars_.minEpNeighbors_ = 2;
@@ -81,6 +82,7 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 	setUp.processDebug();
 	setUp.processReadInNames(true);
 	setUp.setOption(proposedClusters, "--HDBSproposedClusters", "HDBS proposed number of clusters");
+	setUp.setOption(HDBSCountSingletGroups, "--HDBSCountSingletGroups", "For HD DBscan count Singlet Groups, by default these are not included in towards the proposed group counts");
 
 	setUp.setOption(numThreads, "--numThreads", "numThreads");
 	setUp.setOption(kmerLength, "--kmerLength", "kmer Length");
@@ -199,20 +201,20 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 		}
 		distGraph.assignNoiseNodesAGroup();
 		double lowestCentroidDistInitial = std::numeric_limits<double>::max();
+		std::vector<std::vector<double>> centroidDistances;
+		for(const auto pos : iter::range(distGraph.numberOfGroups_)) {
+			centroidDistances.emplace_back(std::vector<double>(pos + 1));
+		}
+		//set the zeros
+		for(const auto pos : iter::range(distGraph.numberOfGroups_)) {
+			centroidDistances[pos][pos] = 0;
+		}
 		{
 			//initial centroid info
 			//compute centroid distances
 			std::map<uint32_t, std::vector<uint32_t>> groupNodes;
 			for(const auto & node : distGraph.nodes_){
 				groupNodes[node->group_].emplace_back(distGraph.nameToNodePos_[node->name_]);
-			}
-			std::vector<std::vector<double>> centroidDistances;
-			for(const auto pos : iter::range(groupNodes.size())) {
-				centroidDistances.emplace_back(std::vector<double>(pos + 1));
-			}
-			//set the zeros
-			for(const auto pos : iter::range(groupNodes.size())) {
-				centroidDistances[pos][pos] = 0;
 			}
 			auto groups = getVectorOfMapKeys(groupNodes);
 			PairwisePairFactory pFac(groups.size());
@@ -266,7 +268,7 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 					}
 				}
 				double distBetweenCentroids = (sumOfSquaresAll - (group1Size + group2Size) * (sumOfSquaresGroup1 / group1Size + sumOfSquaresGroup2 / group2Size)) / (group1Size * group2Size);
-				centroidDistances[pair.row_][pair.col_] = distBetweenCentroids;
+				centroidDistances[std::max(group1,  group2)][std::min(group1,  group2)] = distBetweenCentroids;
 				if(distBetweenCentroids < lowestCentroidDistInitial) {
 					lowestCentroidDistInitial = distBetweenCentroids;
 				}
@@ -290,7 +292,7 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 		{
 			auto groupCounts = distGraph.getGroupCounts();
 			for(const auto & count : groupCounts){
-				if(count.second > 1){
+				if(HDBSCountSingletGroups || count.second > 1){
 					++numberOfNonSingletClusters;
 				}
 			}
@@ -312,72 +314,18 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 			}
 			double lowestCentroidDist = std::numeric_limits<double>::max();
 			std::set<uint32_t> groupsToCollapse;
-			//compute centroid distances
+			//get lowest centroid distances
 			std::map<uint32_t, std::vector<uint32_t>> groupNodes;
 			for(const auto & node : distGraph.nodes_){
 				groupNodes[node->group_].emplace_back(distGraph.nameToNodePos_[node->name_]);
-			}
-			std::vector<std::vector<double>> centroidDistances;
-			for(const auto pos : iter::range(groupNodes.size())) {
-				centroidDistances.emplace_back(std::vector<double>(pos + 1));
-			}
-			//set the zeros
-			for(const auto pos : iter::range(groupNodes.size())) {
-				centroidDistances[pos][pos] = 0;
 			}
 			auto groups = getVectorOfMapKeys(groupNodes);
 			PairwisePairFactory pFac(groups.size());
 			PairwisePairFactory::PairwisePair pair;
 			while(pFac.setNextPair(pair)){
-				//group1 == row_
-				//group2 == col_
 				uint32_t group1 = groups[pair.row_];
 				uint32_t group2 = groups[pair.col_];
-				uint32_t group1Size = groupNodes[group1].size();
-				uint32_t group2Size = groupNodes[group2].size();
-				double sumOfSquaresAll = 0;
-				double sumOfSquaresGroup1 = 0;
-				double sumOfSquaresGroup2 = 0;
-				//group 1
-				if(group1Size > 1){
-					PairwisePairFactory group1_pFac(group1Size);
-					PairwisePairFactory::PairwisePair group1_pair;
-					while(group1_pFac.setNextPair(group1_pair)){
-
-						uint32_t node1 = groupNodes[group1][group1_pair.col_];
-						uint32_t node2 = groupNodes[group1][group1_pair.row_];
-						uint32_t distRow = std::max(node1,  node2);
-						uint32_t distCol = std::min(node1,  node2);
-						double squareDist = std::pow(dist[distRow][distCol], 2.0);
-						sumOfSquaresGroup1 += squareDist;
-						sumOfSquaresAll += squareDist;
-					}
-				}
-				//group 2
-				if(group2Size > 1){
-					PairwisePairFactory group2_pFac(group2Size);
-					PairwisePairFactory::PairwisePair group2_pair;
-					while(group2_pFac.setNextPair(group2_pair)){
-						uint32_t node1 = groupNodes[group2][group2_pair.col_];
-						uint32_t node2 = groupNodes[group2][group2_pair.row_];
-						uint32_t distRow = std::max(node1,  node2);
-						uint32_t distCol = std::min(node1,  node2);
-						double squareDist = std::pow(dist[distRow][distCol], 2.0);
-						sumOfSquaresGroup2 += squareDist;
-						sumOfSquaresAll += squareDist;
-					}
-				}
-				//between group
-				for(const auto & group1Node : groupNodes[group1]){
-					for(const auto & group2Node : groupNodes[group2]){
-						uint32_t distRow = std::max(group1Node,  group2Node);
-						uint32_t distCol = std::min(group1Node,  group2Node);
-						double squareDist = std::pow(dist[distRow][distCol], 2.0);
-						sumOfSquaresAll += squareDist;
-					}
-				}
-				double distBetweenCentroids = (sumOfSquaresAll - (group1Size + group2Size) * (sumOfSquaresGroup1 / group1Size + sumOfSquaresGroup2 / group2Size)) / (group1Size * group2Size);
-				centroidDistances[pair.row_][pair.col_] = distBetweenCentroids;
+				double distBetweenCentroids = centroidDistances[std::max(group1,  group2)][std::min(group1,  group2)];
 				if(distBetweenCentroids < lowestCentroidDist){
 					lowestCentroidDist = distBetweenCentroids;
 					groupsToCollapse.clear();
@@ -396,14 +344,74 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 				for(const auto & nodeIdx : groupNodes[group]){
 					distGraph.nodes_[nodeIdx]->group_ = *groupsToCollapse.begin();
 				}
+				if(*groupsToCollapse.begin() != group){
+					//add this group's nodes to the collapsed to group
+					njh::addOtherVec(groupNodes[*groupsToCollapse.begin()], groupNodes[group]);
+				}
 			}
 			numberOfNonSingletClusters = 0;
 			{
 				auto groupCounts = distGraph.getGroupCounts();
 				distGraph.numberOfGroups_ = groupCounts.size();
 				for(const auto & count : groupCounts){
-					if(count.second > 1){
+					if(HDBSCountSingletGroups || count.second > 1){
 						++numberOfNonSingletClusters;
+					}
+				}
+			}
+			//re-compute centroid distances now that clusters have been collapsed
+			{
+				uint32_t modifiedGroup = *groupsToCollapse.begin();
+				njh::concurrent::LockableQueue<uint32_t> groupsQueue(groups);
+				uint32_t otherGroup = std::numeric_limits<uint32_t>::max();
+				while(groupsQueue.getVal(otherGroup)){
+					if(!njh::in(otherGroup, groupsToCollapse)){
+						uint32_t group1 = modifiedGroup;
+						uint32_t group2 = otherGroup;
+						uint32_t group1Size = groupNodes[group1].size();
+						uint32_t group2Size = groupNodes[group2].size();
+						double sumOfSquaresAll = 0;
+						double sumOfSquaresGroup1 = 0;
+						double sumOfSquaresGroup2 = 0;
+						//group 1
+						if(group1Size > 1){
+							PairwisePairFactory group1_pFac(group1Size);
+							PairwisePairFactory::PairwisePair group1_pair;
+							while(group1_pFac.setNextPair(group1_pair)){
+								uint32_t node1 = groupNodes[group1][group1_pair.col_];
+								uint32_t node2 = groupNodes[group1][group1_pair.row_];
+								uint32_t distRow = std::max(node1,  node2);
+								uint32_t distCol = std::min(node1,  node2);
+								double squareDist = std::pow(dist[distRow][distCol], 2.0);
+								sumOfSquaresGroup1 += squareDist;
+								sumOfSquaresAll += squareDist;
+							}
+						}
+						//group 2
+						if(group2Size > 1){
+							PairwisePairFactory group2_pFac(group2Size);
+							PairwisePairFactory::PairwisePair group2_pair;
+							while(group2_pFac.setNextPair(group2_pair)){
+								uint32_t node1 = groupNodes[group2][group2_pair.col_];
+								uint32_t node2 = groupNodes[group2][group2_pair.row_];
+								uint32_t distRow = std::max(node1,  node2);
+								uint32_t distCol = std::min(node1,  node2);
+								double squareDist = std::pow(dist[distRow][distCol], 2.0);
+								sumOfSquaresGroup2 += squareDist;
+								sumOfSquaresAll += squareDist;
+							}
+						}
+						//between group
+						for(const auto & group1Node : groupNodes[group1]){
+							for(const auto & group2Node : groupNodes[group2]){
+								uint32_t distRow = std::max(group1Node,  group2Node);
+								uint32_t distCol = std::min(group1Node,  group2Node);
+								double squareDist = std::pow(dist[distRow][distCol], 2.0);
+								sumOfSquaresAll += squareDist;
+							}
+						}
+						double distBetweenCentroids = (sumOfSquaresAll - (group1Size + group2Size) * (sumOfSquaresGroup1 / group1Size + sumOfSquaresGroup2 / group2Size)) / (group1Size * group2Size);
+						centroidDistances[std::max(group1,  group2)][std::min(group1,  group2)] = distBetweenCentroids;
 					}
 				}
 			}
@@ -416,79 +424,21 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 			for(const auto & node : distGraph.nodes_){
 				groupNodes[node->group_].emplace_back(distGraph.nameToNodePos_[node->name_]);
 			}
-			std::vector<std::vector<double>> centroidDistances;
-			for(const auto pos : iter::range(groupNodes.size())) {
-				centroidDistances.emplace_back(std::vector<double>(pos + 1));
-			}
-			//set the zeros
-			for(const auto pos : iter::range(groupNodes.size())) {
-				centroidDistances[pos][pos] = 0;
-			}
 			auto groups = getVectorOfMapKeys(groupNodes);
-			PairwisePairFactory pFac(groups.size());
-			PairwisePairFactory::PairwisePair pair;
-			while(pFac.setNextPair(pair)){
-				//group1 == row_
-				//group2 == col_
-				uint32_t group1 = groups[pair.row_];
-				uint32_t group2 = groups[pair.col_];
-				uint32_t group1Size = groupNodes[group1].size();
-				uint32_t group2Size = groupNodes[group2].size();
-				double sumOfSquaresAll = 0;
-				double sumOfSquaresGroup1 = 0;
-				double sumOfSquaresGroup2 = 0;
-				//group 1
-				if(group1Size > 1){
-					PairwisePairFactory group1_pFac(group1Size);
-					PairwisePairFactory::PairwisePair group1_pair;
-					while(group1_pFac.setNextPair(group1_pair)){
-
-						uint32_t node1 = groupNodes[group1][group1_pair.col_];
-						uint32_t node2 = groupNodes[group1][group1_pair.row_];
-						uint32_t distRow = std::max(node1,  node2);
-						uint32_t distCol = std::min(node1,  node2);
-						double squareDist = std::pow(dist[distRow][distCol], 2.0);
-						sumOfSquaresGroup1 += squareDist;
-						sumOfSquaresAll += squareDist;
-					}
-				}
-				//group 2
-				if(group2Size > 1){
-					PairwisePairFactory group2_pFac(group2Size);
-					PairwisePairFactory::PairwisePair group2_pair;
-					while(group2_pFac.setNextPair(group2_pair)){
-						uint32_t node1 = groupNodes[group2][group2_pair.col_];
-						uint32_t node2 = groupNodes[group2][group2_pair.row_];
-						uint32_t distRow = std::max(node1,  node2);
-						uint32_t distCol = std::min(node1,  node2);
-						double squareDist = std::pow(dist[distRow][distCol], 2.0);
-						sumOfSquaresGroup2 += squareDist;
-						sumOfSquaresAll += squareDist;
-					}
-				}
-				//between group
-				for(const auto & group1Node : groupNodes[group1]){
-					for(const auto & group2Node : groupNodes[group2]){
-						uint32_t distRow = std::max(group1Node,  group2Node);
-						uint32_t distCol = std::min(group1Node,  group2Node);
-						double squareDist = std::pow(dist[distRow][distCol], 2.0);
-						sumOfSquaresAll += squareDist;
-					}
-				}
-				double distBetweenCentroids = (sumOfSquaresAll - (group1Size + group2Size) * (sumOfSquaresGroup1 / group1Size + sumOfSquaresGroup2 / group2Size)) / (group1Size * group2Size);
-				centroidDistances[pair.row_][pair.col_] = distBetweenCentroids;
-			}
-
 			//
 			{
 				OutOptions distOutOpts(njh::files::make_path(hdbsDir, "final_centroidDistances.tab.txt"));
 				OutputStream distOut(distOutOpts);
 				//write out distance matrix
-				uint32_t rowCount = 0;
 				printVector(njh::getVecOfMapKeys(groupNodes), "\t", distOut);
-				for (const auto & row : centroidDistances) {
-					distOut << njh::conToStr(row, "\t") << std::endl;
-					++rowCount;
+				for(const auto & group1Idx : iter::range(groups.size())){
+					std::vector<double> outVec;
+					uint32_t group1 = groups[group1Idx];
+					for(const auto & group2Idx : iter::range(0UL, group1Idx + 1)){
+						uint32_t group2 = groups[group2Idx];
+						outVec.emplace_back(centroidDistances[std::max(group1,  group2)][std::min(group1,  group2)] );
+					}
+					distOut << njh::conToStr(outVec, "\t") << std::endl;
 				}
 			}
 		}

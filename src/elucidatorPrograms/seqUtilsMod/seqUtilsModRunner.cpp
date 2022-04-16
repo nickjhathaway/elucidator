@@ -53,6 +53,7 @@ seqUtilsModRunner::seqUtilsModRunner()
 		addFunc("sortReadsByKmerEntropy", sortReadsByKmerEntropy, false),
 		addFunc("sortReadsByKCompToTop", sortReadsByKCompToTop, false),
 		addFunc("sortReadsByNameNaturalSort", sortReadsByNameNaturalSort, false),
+		addFunc("renameSeqNameToUniqueNames", renameSeqNameToUniqueNames, false),
 
 
 },//
@@ -722,6 +723,65 @@ int seqUtilsModRunner::prependNames(
 
 
 
+
+int seqUtilsModRunner::renameSeqNameToUniqueNames(const njh::progutils::CmdArgs & inputCommands) {
+	// parameters
+	std::string sortBy = "none";
+	auto outOptsKey = TableIOOpts::genTabFileOut("", true);
+	seqUtilsModSetUp setUp(inputCommands);
+	setUp.setOption(outOptsKey.out_.outFilename_, "--keyOut", "A filename to write a key for the original name to");
+	setUp.processVerbose();
+	setUp.processDefaultReader(true);
+	if (setUp.pars_.ioOptions_.out_.outFilename_ == "out") {
+		setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(njh::files::removeExtension(setUp.pars_.ioOptions_.firstName_), "renamed_");
+	}
+	setUp.setOption(sortBy, "--sortBy", "SortOption");
+	outOptsKey.out_.overWriteFile_ = setUp.pars_.ioOptions_.out_.overWriteFile_;
+	setUp.finishSetUp(std::cout);
+
+
+	SeqIO reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	reader.openOut();
+
+	auto inReads = reader.in_.readAllReads<seqInfo>();
+	if (sortBy != "none") {
+		readVecSorter::sortReadVectorSimple(inReads, sortBy);
+	}
+
+	VecStr originalNames = readVec::getNames(inReads);
+	std::unordered_map<std::string, uint32_t> nameCounts;
+	for(const auto & seqInfo : inReads){
+		++nameCounts[seqInfo.name_];
+	}
+
+	if(nameCounts.size() != originalNames.size()){
+		std::unordered_map<std::string, uint32_t> reNamedCounts;
+		//there are non-unique names so let's rename;
+		for(auto & seqInfo : inReads){
+			if(nameCounts[seqInfo.name_] >1){
+				std::string outName = seqInfo.name_;
+				seqInfo.name_.append(njh::pasteAsStr(".", njh::leftPadNumStr(reNamedCounts[seqInfo.name_], nameCounts[seqInfo.name_])));
+				++reNamedCounts[outName];
+			}
+		}
+	}
+	VecStr newNames = readVec::getNames(inReads);
+	table nameKey(VecStr{"originalName", "newName"});
+	for(const auto pos : iter::range(newNames.size())){
+		nameKey.addRow(originalNames[pos], newNames[pos]);
+	}
+	if("" != outOptsKey.out_.outFilename_){
+		nameKey.outPutContents(outOptsKey);
+	}
+	reader.openWrite(inReads);
+
+
+	if(setUp.pars_.verbose_){
+		setUp.logRunTime(std::cout);
+	}
+	return 0;
+}
 
 
 int seqUtilsModRunner::renameIDs(const njh::progutils::CmdArgs & inputCommands) {
