@@ -253,6 +253,8 @@ int parsingFileExpRunner::parseBlastpHitsTab(const njh::progutils::CmdArgs & inp
 }
 
 int parsingFileExpRunner::BlastpHitsTabToBed(const njh::progutils::CmdArgs & inputCommands) {
+	bool renameWithHitCount = false;
+
 	IoOptions ioOpts;
 	ioOpts.out_.outExtention_ = ".bed";
 	seqSetUp setUp(inputCommands);
@@ -260,14 +262,25 @@ int parsingFileExpRunner::BlastpHitsTabToBed(const njh::progutils::CmdArgs & inp
 	setUp.processVerbose();
 	setUp.processWritingOptions(ioOpts.out_);
 	setUp.setOption(ioOpts.in_.inFilename_, "--hitFnp", "output from blastp filename", true);
+	setUp.setOption(renameWithHitCount, "--renameWithHitCount", "rename With Hit Count");
+
 	setUp.finishSetUp(std::cout);
 
 	BioDataFileIO<BLASTHitTab> reader(ioOpts);
 	reader.openIn();
 	reader.openOut();
 	BLASTHitTab hit;
+	std::unordered_map<std::string, uint32_t> hitCounts;
+
 	while(reader.readNextRecord(hit)){
-		(*reader.out_) << hit.toJson() << std::endl;
+		auto bedLoc = hit.genSubjectBed6();
+		if(renameWithHitCount){
+			++hitCounts[bedLoc.name_];
+			if(hitCounts[bedLoc.name_] > 1){
+				bedLoc.name_.append(njh::pasteAsStr(".",hitCounts[bedLoc.name_] ));
+			}
+		}
+		(*reader.out_) << bedLoc.toDelimStrWithExtra() << std::endl;
 	}
 
 	return 0;
@@ -353,6 +366,7 @@ int parsingFileExpRunner::quickCountDirectory(const njh::progutils::CmdArgs & in
 	setUp.setOption(dirName, "--dirName", "Directory to count all fastas and/or fastqs", true);
 	setUp.finishSetUp(std::cout);
 
+	
 
 	return 0;
 }
