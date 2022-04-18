@@ -69,7 +69,10 @@ heatmaply(dist_mat, plot_method = "plotly")
 int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inputCommands) {
 	uint32_t kmerLength = 7;
 	uint32_t numThreads = 1;
+	bool HDBScountZeroNeighbors = true;
 	bool HDBSCountSingletGroups = false;
+	bool HDBSredetermineMaxEps = false;
+	double HDBSmaxInitialEps = std::numeric_limits<double>::max();
 	uint32_t proposedClusters = std::numeric_limits<uint32_t>::max();
 	readDistGraph<double>::dbscanPars dbPars_;
 	dbPars_.minEpNeighbors_ = 2;
@@ -81,6 +84,12 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.processReadInNames(true);
+
+	setUp.setOption(HDBSredetermineMaxEps, "--HDBSredetermineMaxEps", "HDBS redetermine Max Eps allowed in initial step based by setting it equal to mean of the non-same-group dist minus 2sd");
+	bool doNotCountZeroNeighbors = false;
+	setUp.setOption(doNotCountZeroNeighbors, "--HDBSdoNotCountZeroNeighbors", "HDBS when doing j-th nearest neighbor do Not Count Zero Neighbors");
+	HDBScountZeroNeighbors = !doNotCountZeroNeighbors;
+	setUp.setOption(HDBSmaxInitialEps, "--HDBSmaxInitialEps", "HDBS a hard cut off for max Initial Eps for initial DBSCAN step in H-DBSCAN");
 	setUp.setOption(proposedClusters, "--HDBSproposedClusters", "HDBS proposed number of clusters");
 	setUp.setOption(HDBSCountSingletGroups, "--HDBSCountSingletGroups", "For HD DBscan count Singlet Groups, by default these are not included in towards the proposed group counts");
 
@@ -117,6 +126,8 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 		auto hdbsDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{"HDBScan"});
 		OutputStream hdbsRunInfoOut(njh::files::make_path(hdbsDir, "runInfo.tab.txt"));
 		hdbsRunInfoOut << "Run\tnonSingletGroupCounts\ttotalGroupCount\tlowestCentroidDist" << std::endl;
+		OutputStream nearestNeibhorDistsOut(njh::files::make_path(hdbsDir, "nearestNeighborsDists.tab.txt"));
+		nearestNeibhorDistsOut << "name\tneighbor\tnonZeroNeighborPos\tdist" << std::endl;
 		uint32_t minimum_minPts = 3;
 		if(std::numeric_limits<uint32_t>::max() == proposedClusters){
 			proposedClusters = reads.size()/minimum_minPts;
@@ -136,17 +147,20 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 
 			uint32_t total = 0;
 			uint32_t count = 0;
-			while(count < 2 && total < n->edges_.size()){
-				for(const auto & e : n->edges_){
-					++total;
-					if(e->dist_ != 0){
-						++count;
-						if((minimum_minPts - 1) == count){
-							neighbor2Dists.emplace_back(e->dist_);
-							if(e->dist_ < minEps){
-								minEps = e->dist_;
-							}
+			for(const auto & e : n->edges_){
+				++total;
+				if(HDBScountZeroNeighbors || e->dist_ != 0){
+					++count;
+					nearestNeibhorDistsOut << n->value_->name_
+																 << "\t" << total
+																 << "\t" << count
+																 << "\t" << e->dist_ << std::endl;
+					if((minimum_minPts - 1) == count){
+						neighbor2Dists.emplace_back(e->dist_);
+						if(e->dist_ < minEps){
+							minEps = e->dist_;
 						}
+						break;
 					}
 				}
 			}
@@ -165,7 +179,17 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 			}
 		}
 		//std::cout << __FILE__ << " : " << __LINE__ << " : " << __PRETTY_FUNCTION__ << std::endl;
-
+		if(setUp.pars_.debug_){
+			std::cout << "Eps: " << std::endl;
+			for(const auto & epEnum : iter::enumerate(eps)){
+				std::cout << "\t"<< epEnum.index << ": " << epEnum.second << std::endl;
+			}
+			std::cout << "Max Eps: " << maxEps << std::endl;
+			std::cout << "maximum_minPts: " << maximum_minPts << std::endl;
+			std::cout << "medianNearestNeighbor: " << vectorMedianRef(neighbor2Dists) << std::endl;
+			std::cout << "meanNearestNeighbor: " << vectorMean(neighbor2Dists) << std::endl;
+			std::cout << "  sdNearestNeighbor: " << vectorStandardDeviationPop(neighbor2Dists) << std::endl;
+		}
 		//reset node's visited and group values
 		distGraph.resetAllNodes();
 		//turn off whole graph
@@ -174,6 +198,9 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 		//set number of groups to be 0
 		distGraph.numberOfGroups_ = 0;
 		for(const auto & epEnum : iter::enumerate(eps)){
+			if(epEnum.second > HDBSmaxInitialEps){
+				break;
+			}
 			readDistGraph<double>::dbscanPars currentPars;
 			currentPars.eps_ = epEnum.second;
 			currentPars.minEpNeighbors_ = minimum_minPts;
@@ -188,7 +215,7 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 					}
 				}
 			}
-			if(epEnum.index + 1 != eps.size()){
+			if(epEnum.index + 1 != eps.size() && eps[epEnum.first + 1] < HDBSmaxInitialEps ) {
 				//reset unclustered nodes back on and unvisted for the next eps
 				for(auto & n : distGraph.nodes_){
 					if(!n->on_){
@@ -200,6 +227,63 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 			}
 		}
 		distGraph.assignNoiseNodesAGroup();
+		if(HDBSredetermineMaxEps){
+			std::vector<double> notSameGroupDists;
+			for(const auto & n : distGraph.nodes_){
+				for(const auto & e : n->edges_){
+					if(e->nodeToNode_[n->name_].lock()->group_ != n->group_){
+						notSameGroupDists.emplace_back(e->dist_);
+					}
+				}
+			}
+			auto newHDBSmaxInitialEps = vectorMean(notSameGroupDists) - 2 * vectorStandardDeviationPop(notSameGroupDists);
+
+			if(setUp.pars_.debug_){
+				std::cout << "medianNotSameGroupDists: " << vectorMedianRef(notSameGroupDists) << std::endl;
+				std::cout << "meanNotSameGroupDists: " << vectorMean(notSameGroupDists) << std::endl;
+				std::cout << "  sdNotSameGroupDists: " << vectorStandardDeviationPop(notSameGroupDists) << std::endl;
+				std::cout << std::endl;
+				std::cout << "max eps based on not same group =" << newHDBSmaxInitialEps << std::endl;
+			}
+			//reset node's visited and group values
+			distGraph.resetAllNodes();
+			//turn off whole graph
+			distGraph.turnOffAllCons();
+			distGraph.turnOffAllNodes();
+			//set number of groups to be 0
+			distGraph.numberOfGroups_ = 0;
+			for(const auto & epEnum : iter::enumerate(eps)){
+				if(epEnum.second > newHDBSmaxInitialEps){
+					break;
+				}
+				readDistGraph<double>::dbscanPars currentPars;
+				currentPars.eps_ = epEnum.second;
+				currentPars.minEpNeighbors_ = minimum_minPts;
+				for (auto & n : distGraph.nodes_) {
+					//if the node has not be visited by an expand or spread try to expand it
+					if (!n->visited_) {
+						//std::cout << n->value_->name_ << std::endl;
+						n->dbscanExpand(distGraph.numberOfGroups_, currentPars);
+						//if it was assigned a group and expanded, increase group number
+						if (std::numeric_limits<uint32_t>::max() != n->group_) {
+							++distGraph.numberOfGroups_;
+						}
+					}
+				}
+				if(epEnum.index + 1 != eps.size() && eps[epEnum.first + 1] < newHDBSmaxInitialEps ) {
+					//reset unclustered nodes back on and unvisted for the next eps
+					for(auto & n : distGraph.nodes_){
+						if(!n->on_){
+							n->visitedAmount_ = 0;
+							n->visited_ = false;
+							n->on_ = true;
+						}
+					}
+				}
+			}
+			distGraph.assignNoiseNodesAGroup();
+		}
+
 		double lowestCentroidDistInitial = std::numeric_limits<double>::max();
 		std::vector<std::vector<double>> centroidDistances;
 		for(const auto pos : iter::range(distGraph.numberOfGroups_)) {
@@ -275,6 +359,12 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 			}
 			//
 			{
+				OutOptions initialGroupsOutOpts(njh::files::make_path(hdbsDir, "initialGroupNames.tab.txt"));
+				OutputStream initialGroupsOut(initialGroupsOutOpts);
+				initialGroupsOut << "name\tgroup" << std::endl;
+				for(const auto & n : distGraph.nodes_){
+					initialGroupsOut << n->name_ << "\t" << n->group_ << std::endl;
+				}
 				OutOptions distOutOpts(njh::files::make_path(hdbsDir, "initial_centroidDistances.tab.txt"));
 				OutputStream distOut(distOutOpts);
 				//write out distance matrix
