@@ -402,10 +402,13 @@ int parsingFileExpRunner::quickCountDirectory(const njh::progutils::CmdArgs & in
 					}
 				}
 			}
-			auto count = fileCountingFuncs.at(guessFormat)(f);
+
 			if("unknown" != guessFormat){
-				std::lock_guard<std::mutex> lock(outMut);
-				out << f.filename().string() << "\t" << guessFormat << "\t" << count << std::endl;
+				auto count = fileCountingFuncs.at(guessFormat)(f);
+				{
+					std::lock_guard<std::mutex> lock(outMut);
+					out << f.filename().string() << "\t" << guessFormat << "\t" << count << std::endl;
+				}
 			} else if(setUp.pars_.verbose_){
 				std::cerr << "Unknown file type for " << f << std::endl;
 			}
