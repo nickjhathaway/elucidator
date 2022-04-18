@@ -43,6 +43,9 @@ class parsingFileExpRunner : public njh::progutils::ProgramRunner {
 	static int parseBlastpHitsTab(const njh::progutils::CmdArgs & inputCommands);
 	static int BlastpHitsTabToBed(const njh::progutils::CmdArgs & inputCommands);
 
+	static int parsePrimerFastaToPrimerTxt(const njh::progutils::CmdArgs & inputCommands);
+
+
 	static int parseSTOCKHOLM(const njh::progutils::CmdArgs & inputCommands);
 	static int parseSTOCKHOLMToFasta(const njh::progutils::CmdArgs & inputCommands);
 

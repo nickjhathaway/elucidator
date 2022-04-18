@@ -28,7 +28,7 @@
 #include "parsingFileExp.hpp"
 #include <njhseq/objects/BioDataObject/BioDataFileIO.hpp>
 #include <njhseq/objects/BioDataObject/BLASTHitTabular.hpp>
-
+#include <SeekDeep/objects/TarAmpSetupUtils/PrimersAndMids.hpp>
 
 namespace njhseq {
 parsingFileExpRunner::parsingFileExpRunner()
@@ -45,6 +45,7 @@ parsingFileExpRunner::parsingFileExpRunner()
 					 addFunc("quickCountFasta", quickCountFasta, false),
 					 addFunc("quickCountDirectory", quickCountDirectory, false),
 					 addFunc("BlastpHitsTabToBed", BlastpHitsTabToBed, false),
+					 addFunc("parsePrimerFastaToPrimerTxt", parsePrimerFastaToPrimerTxt, false),
            },
           "parsingFileExp") {}
 //,
@@ -339,7 +340,8 @@ int parsingFileExpRunner::quickCountFastq(const njh::progutils::CmdArgs & inputC
 	setUp.processWritingOptions(ioOpts.out_);
 	setUp.setOption(ioOpts.in_.inFilename_, "--fastq", "fastq file", true);
 	setUp.finishSetUp(std::cout);
-	std::cout << QuickSeqFileCounter::quickCountFastq(ioOpts.in_) << std::endl;
+	OutputStream out(ioOpts.out_);
+	out << QuickSeqFileCounter::quickCountFastq(ioOpts.in_) << std::endl;
 	return 0;
 }
 
@@ -352,7 +354,8 @@ int parsingFileExpRunner::quickCountFasta(const njh::progutils::CmdArgs & inputC
 	setUp.processWritingOptions(ioOpts.out_);
 	setUp.setOption(ioOpts.in_.inFilename_, "--fasta", "fasta file", true);
 	setUp.finishSetUp(std::cout);
-	std::cout << QuickSeqFileCounter::quickCountFasta(ioOpts.in_) << std::endl;
+	OutputStream out(ioOpts.out_);
+	out << QuickSeqFileCounter::quickCountFasta(ioOpts.in_) << std::endl;
 	return 0;
 }
 
@@ -366,10 +369,110 @@ int parsingFileExpRunner::quickCountDirectory(const njh::progutils::CmdArgs & in
 	setUp.setOption(dirName, "--dirName", "Directory to count all fastas and/or fastqs", true);
 	setUp.finishSetUp(std::cout);
 
-	
+	std::unordered_map<std::string, std::set<std::string>> fileExtensions;
+	fileExtensions["fastq"] = std::set<std::string>{".fq", ".fq.gz", ".fastq", ".fastq.gz", ".fnq", ".fnq.gz"};
+	fileExtensions["fasta"] = std::set<std::string>{".fa", ".fa.gz", ".fasta", ".fasta.gz", ".fna", ".fna.gz"};
 
+	std::unordered_map<std::string, std::function<uint32_t(const bfs::path & fnp)>> fileCountingFuncs;
+	fileCountingFuncs.emplace("fasta", [](const bfs::path & fnp){
+		return QuickSeqFileCounter::quickCountFasta(fnp);
+	});
+	fileCountingFuncs.emplace("fastq", [](const bfs::path & fnp){
+		return QuickSeqFileCounter::quickCountFastq(fnp);
+	});
+
+	OutputStream out(outOpts);
+	out << "file\tguessedFormat\tcount" << std::endl;
+
+	auto allFiles = njh::files::filesInFolder(dirName);
+	for(const auto & f : allFiles){
+		std::string guessFormat = "unknown";
+		for(const auto & fileExtens : fileExtensions){
+			for(const auto & ext : fileExtens.second){
+				if(njh::endsWith(f.string(), ext))	{
+					guessFormat = fileExtens.first;
+					break;
+				}
+			}
+		}
+		if("unknown" != guessFormat){
+			out << f.string() << "\t" << guessFormat << "\t" << fileCountingFuncs.at(guessFormat)(f) << std::endl;
+		} else if(setUp.pars_.verbose_){
+			std::cerr << "Unknown file type for " << f << std::endl;
+		}
+	}
 	return 0;
 }
+
+int parsingFileExpRunner::parsePrimerFastaToPrimerTxt(const njh::progutils::CmdArgs &inputCommands){
+	IoOptions ioOpts;
+	std::string forwardRegexStr = "(.+)_[Ff]$";
+	std::string reverseRegexStr = "(.+)_[Rr]$";
+
+	seqSetUp setUp(inputCommands);
+	setUp.processDebug();
+	setUp.processVerbose();
+	setUp.processWritingOptions(ioOpts.out_);
+	setUp.setOption(ioOpts.in_.inFilename_, "--fasta", "fasta file", true);
+	setUp.setOption(forwardRegexStr, "--forwardRegex", "Regex pattern for forward primer");
+	setUp.setOption(reverseRegexStr, "--reverseRegex", "Regex pattern for reverse primer");
+
+	setUp.finishSetUp(std::cout);
+	std::regex forwardRegex{forwardRegexStr};
+	std::regex reverseRegex{reverseRegexStr};
+
+	seqInfo seq;
+	SeqInput reader(SeqIOOptions::genFastaIn(ioOpts.in_.inFilename_));
+	reader.openIn();
+	OutputStream out(ioOpts.out_);
+
+	struct SimplePair{
+		SimplePair() = default;
+		std::string for_;
+		std::string rev_;
+	};
+	std::unordered_map<std::string, SimplePair> primerPairs;
+	while(reader.readNextRead(seq)){
+		std::smatch forwardMatch;
+		std::smatch reverseMatch;
+		if(std::regex_match(seq.name_,forwardMatch,  forwardRegex)){
+			primerPairs[forwardMatch[1]].for_ = seq.seq_;
+		}else if(std::regex_match(seq.name_,reverseMatch,  reverseRegex)){
+			primerPairs[reverseMatch[1]].rev_ = seq.seq_;
+		}else{
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "couldn't match " << seq.name_ << "to either forward pattern: " << forwardRegexStr << " or reversePattern: " << reverseRegexStr << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+	}
+
+	std::map<std::string, PrimersAndMids::Target>	targets;
+
+	//check to see if a forward and reverse was found for all primer pairs;
+	for(const auto & primerPair : primerPairs){
+		if(primerPair.second.for_.empty()){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "no forward primer for " << primerPair.first << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		if(primerPair.second.rev_.empty()){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "no reverse primer for " << primerPair.first << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		targets.emplace(primerPair.first, PrimersAndMids::Target(primerPair.first, primerPair.second.for_, primerPair.second.rev_));
+	}
+
+	out << "target\tforward\treverse" << std::endl;
+	for(const auto & target : targets){
+		out << target.first
+		<< "\t" << target.second.info_.forwardPrimerRaw_
+		<< "\t" << target.second.info_.reversePrimerRaw_
+		<< std::endl;
+	}
+	return 0;
+}
+
 
 
 
