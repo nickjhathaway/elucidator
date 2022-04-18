@@ -35,6 +35,7 @@ programWrappersAssembleOnPathWeaverRunner::programWrappersAssembleOnPathWeaverRu
 					 addFunc("runIDBAUDOnPathWeaverRegions", runIDBAUDOnPathWeaverRegions, false),
 					 addFunc("runRayOnPathWeaverRegions", runRayOnPathWeaverRegions, false),
 					 addFunc("runMIRAOnPathWeaverRegions", runMIRAOnPathWeaverRegions, false),
+					 addFunc("runFermiLiteOnPathWeaverRegions", runFermiLiteOnPathWeaverRegions, false),
 
 					 addFunc("runSpadesOnPathWeaverRegionsAndUnmapped", runSpadesOnPathWeaverRegionsAndUnmapped, false),
 					 addFunc("runUnicyclerOnPathWeaverRegionsAndUnmapped", runUnicyclerOnPathWeaverRegionsAndUnmapped, false),
@@ -46,6 +47,7 @@ programWrappersAssembleOnPathWeaverRunner::programWrappersAssembleOnPathWeaverRu
 					 addFunc("runIDBAUDOnPathWeaverRegionsAndUnmapped", runIDBAUDOnPathWeaverRegionsAndUnmapped, false),
 					 addFunc("runRayOnPathWeaverRegionsAndUnmapped", runRayOnPathWeaverRegionsAndUnmapped, false),
 					 addFunc("runMIRAOnPathWeaverRegionsAndUnmapped", runMIRAOnPathWeaverRegionsAndUnmapped, false),
+					 addFunc("runFermiLiteOnPathWeaverRegionsAndUnmapped", runFermiLiteOnPathWeaverRegionsAndUnmapped, false),
            },//,
           "programWrappersAssembleOnPathWeaverRunner") {
 
@@ -384,6 +386,10 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 							allPartialWriter.write(contigsKmerRead);
 						}
 					}
+					for(auto & reg : regInfo){
+						reg->infoCalled_ = false;
+						reg->uniqHaps_ = 0;
+					}
 				}
 			} catch (std::exception & e) {
 				std::lock_guard<std::mutex> lock(exceptionsMut);
@@ -453,6 +459,343 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const 
 	}
 	return 0;
 }
+
+
+int programWrappersAssembleOnPathWeaverRunner::runFermiLiteOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path bedFile = "";
+	bfs::path pwOutputDir = "";
+	std::string sample;
+
+	uint32_t fermiLiteNumThreads = 1;
+	std::string extraFermiLiteOptions;
+	uint32_t reOrientingKmerLength = 9;
+	uint32_t minFinalLength = 40;
+	uint32_t numThreads = 1;
+	seqSetUp setUp(inputCommands);
+	setUp.processDebug();
+	setUp.processVerbose();
+	setUp.setOption(bedFile, "--bed", "The Regions to analyze", true);
+	setUp.setOption(pwOutputDir, "--pwOutputDir", "The PathWeaver directory", true);
+	setUp.setOption(sample, "--sample", "sample name", true);
+
+	setUp.setOption(numThreads, "--numThreads", "num Threads");
+
+
+	setUp.setOption(fermiLiteNumThreads, "--fermiLiteNumThreads", "fermiLite Num Threads");
+	setUp.setOption(extraFermiLiteOptions, "--extraFermiLiteOptions", "extra FermiLite Options");
+
+	setUp.setOption(minFinalLength, "--minFinalLength", "min Final Length");
+	setUp.setOption(reOrientingKmerLength, "--reOrientingKmerLength", "re-orienting K-mer Length");
+
+	setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(pwOutputDir), "_fermiLite_TODAY"), true);
+	setUp.finishSetUp(std::cout);
+	setUp.startARunLog(setUp.pars_.directoryName_);
+	njh::sys::requireExternalProgramThrow("fml-asm");
+
+	auto inputRegions = gatherRegions(bedFile.string(), "", setUp.pars_.verbose_);
+	sortGRegionsByStart(inputRegions);
+
+	std::set<std::string> regionNames;
+	for(const auto & reg : inputRegions){
+		regionNames.emplace(reg.uid_);
+	}
+	//njh::sort(regionNames);
+	njh::concurrent::LockableQueue<std::string> regionsQueue(regionNames);
+
+	bfs::path finalDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("final"));
+	bfs::path partialDirectory = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar("partial"));
+	auto allFinalSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(finalDirectory, "allFinal.fasta"));
+	auto allPartialSeqOpts = SeqIOOptions::genFastaOut(njh::files::make_path(partialDirectory, "allPartial.fasta"));
+	SeqOutput allFinalWriter(allFinalSeqOpts);
+	SeqOutput allPartialWriter(allPartialSeqOpts);
+	allFinalWriter.openOut();
+	allPartialWriter.openOut();
+	std::mutex allFinalWriterMut;
+	std::mutex allPartialWriterMut;
+
+
+	std::unordered_map<std::string,
+					std::vector<std::shared_ptr<BamRegionInvestigator::RegionInfo>> >regInfosByUID;
+	for (const auto & reg : inputRegions) {
+		regInfosByUID[reg.uid_].emplace_back(std::make_shared<BamRegionInvestigator::RegionInfo>(reg));
+	}
+
+	std::unordered_map<std::string, std::string> exceptions;
+	std::mutex exceptionsMut;
+
+	std::function<void()> runFermiLiteOnRegion = [&](){
+		std::string regionUid;
+		while(regionsQueue.getVal(regionUid)){
+			const auto & regInfo = njh::mapAt(regInfosByUID, regionUid);
+			auto regionOutputDir = njh::files::make_path(setUp.pars_.directoryName_, regionUid, sample);
+			njh::files::makeDirP(njh::files::MkdirPar{regionOutputDir});
+
+			//
+
+			bfs::path refFnp = njh::files::make_path(pwOutputDir, regionUid, "allRefs.fasta");
+			//first extract the reads
+			bfs::path pwRunDir = njh::files::make_path(pwOutputDir, regionUid, sample);
+			bfs::path filtStiched_pairedR1Fnp_ = njh::files::make_path(pwRunDir, "filteredExtractedPairs_R1.fastq");
+			bfs::path filtStiched_pairedR2Fnp_ = njh::files::make_path(pwRunDir, "filteredExtractedPairs_R2.fastq");
+			bfs::path filtStiched_singlesFnp_ =  njh::files::make_path(pwRunDir, "filteredSingles.fastq");
+
+			try {
+				//concatenate into 1 file
+				std::vector<bfs::path> filesToCollapse;
+				if(bfs::exists(filtStiched_pairedR1Fnp_)){
+					filesToCollapse.emplace_back(filtStiched_pairedR1Fnp_);
+					filesToCollapse.emplace_back(filtStiched_pairedR2Fnp_);
+				}
+				if(bfs::exists(filtStiched_singlesFnp_)){
+					filesToCollapse.emplace_back(filtStiched_singlesFnp_);
+				}
+				auto inputFnp = njh::files::make_path(regionOutputDir, "input.fastq.gz");
+				auto outputFnp = njh::files::make_path(regionOutputDir, "raw_output.fastq");
+				concatenateFiles(filesToCollapse, OutOptions(inputFnp));
+				uint64_t totalReads = 0;
+				double medianReadLength = 0;
+				{
+					std::vector<uint32_t> readLens;
+					seqInfo inputSeq;
+					SeqInput reader(SeqIOOptions::genFastqIn(inputFnp));
+					reader.openIn();
+					while(reader.readNextRead(inputSeq)){
+						readLens.emplace_back(len(inputSeq));
+						++totalReads;
+					}
+					medianReadLength = vectorMedianRef(readLens);
+				}
+				uint64_t pairedReads = countSeqs(SeqIOOptions::genFastqIn(filtStiched_pairedR1Fnp_), false);
+
+				for(auto & reg : regInfo){
+					reg->totalPairedReads_ = pairedReads;
+					reg->totalReads_ = totalReads;
+					reg->totalFinalReads_ = totalReads;
+				}
+				if(!exists(filtStiched_pairedR1Fnp_) && !exists(filtStiched_singlesFnp_)){
+					std::stringstream ss;
+					ss << __PRETTY_FUNCTION__ << ", couldn't find " << filtStiched_pairedR1Fnp_ << " or " << filtStiched_singlesFnp_ << ", need to have at least one of them" << "\n";
+					throw std::runtime_error{ss.str()};
+				}
+
+				std::stringstream raw_fermiLiteCmdStream;
+				raw_fermiLiteCmdStream << "cd " << regionOutputDir;
+				raw_fermiLiteCmdStream << " && fml-asm ";
+
+				raw_fermiLiteCmdStream  << " -t " << fermiLiteNumThreads
+																<< " " << extraFermiLiteOptions
+																<< " input.fastq.gz "
+																<< " > " << "raw_output.fastq";
+				std::string raw_fermiLiteCmd = raw_fermiLiteCmdStream.str();
+				std::stringstream fermiLiteCmdStream;
+				fermiLiteCmdStream << raw_fermiLiteCmd << " 2> fermiLiteRunLog_" << njh::getCurrentDate() << ".txt";
+				const auto & fermiLiteFullOutputDir = regionOutputDir;
+
+				auto fermiLiteRunOutput = njh::sys::run({fermiLiteCmdStream.str()});
+
+				OutOptions fermiLiteRunOutputLogOpts(njh::files::make_path(fermiLiteFullOutputDir, "fermiLiteRunOutput.json"));
+				OutputStream fermiLiteRunOutputLogOut(fermiLiteRunOutputLogOpts);
+				fermiLiteRunOutputLogOut << njh::json::toJson(fermiLiteRunOutput) << std::endl;
+
+				auto contigsFnp = njh::files::make_path(fermiLiteFullOutputDir, "raw_output.fastq");
+
+				auto contigsSeqIoOpts = SeqIOOptions::genFastqIn(contigsFnp);
+//				contigsSeqIoOpts.includeWhiteSpaceInName_ = false;
+				contigsSeqIoOpts.lowerCaseBases_ = "upper";
+				SeqInput contigsReader(contigsSeqIoOpts);
+				auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
+				std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+				contigsKmerReads.reserve(contigsSeqs.size());
+				for (const auto & seq : contigsSeqs) {
+					contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
+				}
+				allSetKmers(contigsKmerReads, reOrientingKmerLength, true);
+
+				RefSeqsWithKmers refSeqs(refFnp, reOrientingKmerLength);
+
+				readVec::reorientSeqs(contigsKmerReads, refSeqs.refKmerReads_);
+				//sort by sequence length;
+				njh::sort(contigsKmerReads, [](const std::shared_ptr<seqWithKmerInfo> & seq1, const std::shared_ptr<seqWithKmerInfo> & seq2){
+					return len(seq1->seqBase_) > len(seq2->seqBase_);
+				});
+
+				OutOptions contigInfoOpts(njh::files::make_path(fermiLiteFullOutputDir, "contigs_outputInfo.tab.txt"));
+				OutputStream contigInfoOut(contigInfoOpts);
+				contigInfoOut << "name\tlength\tcoverage" << std::endl;
+
+				for(const auto & contigsKmerRead : contigsKmerReads){
+					auto assembleInfo = FermiLiteNameParse(contigsKmerRead->seqBase_.name_);
+					contigsKmerRead->seqBase_.name_ = assembleInfo.modFullname_; //get rid of the \t characters in the name
+					assembleInfo.coverage_ = (assembleInfo.coverage_ * medianReadLength)/len(contigsKmerRead->seqBase_);
+					contigInfoOut << contigsKmerRead->seqBase_.name_
+												<< "\t" << len(contigsKmerRead->seqBase_)
+												<< "\t" << assembleInfo.coverage_ << std::endl;
+				}
+				auto reOrientedContigsFnp = njh::files::make_path(fermiLiteFullOutputDir, "reOriented_contigs.fasta");
+
+				SeqOutput::write(contigsKmerReads, SeqIOOptions::genFastaOut(reOrientedContigsFnp));
+
+				std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs = trimToFinalSeqs(contigsKmerReads, refSeqs);
+				std::unordered_map<std::string, uint32_t> finalSeqCounts;
+				for(const auto & seq : finalSeqs){
+					++finalSeqCounts[seq->seqBase_.name_];
+				}
+
+				double totalCoverage = 0;
+				for(auto & seq : finalSeqs){
+					auto assembleInfo = FermiLiteNameParse(seq->seqBase_.name_);
+					assembleInfo.coverage_ = (assembleInfo.coverage_ * medianReadLength)/len(seq->seqBase_);
+					totalCoverage += assembleInfo.coverage_;
+				}
+				std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
+				for(auto & seq : finalSeqs){
+					auto assembleInfo = FermiLiteNameParse(seq->seqBase_.name_);
+					assembleInfo.coverage_ = (assembleInfo.coverage_ * medianReadLength)/len(seq->seqBase_);
+					MetaDataInName seqMeta;
+					seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
+					seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
+					seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
+					seqMeta.addMeta("regionUID", regionUid);
+					seqMeta.addMeta("sample", sample);
+					if(finalSeqCounts[seq->seqBase_.name_] > 1){
+						seqMeta.addMeta("seqTrimmedCount", finalSeqCountsWritten[seq->seqBase_.name_]);
+						++finalSeqCountsWritten[seq->seqBase_.name_];
+					}
+					seqMeta.resetMetaInName(seq->seqBase_.name_);
+					seq->seqBase_.cnt_ = (assembleInfo.coverage_/totalCoverage) * (totalReads);
+					seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
+				}
+
+				OutOptions trimmedContigInfoOpts(njh::files::make_path(fermiLiteFullOutputDir, "trimmed_reOriented_contigs_outputInfo.tab.txt"));
+				OutputStream trimmedContigInfoOut(trimmedContigInfoOpts);
+				trimmedContigInfoOut << "name\tlength\tcoverage" << std::endl;
+				auto trimmedReOrientedContigsFnp = njh::files::make_path(fermiLiteFullOutputDir, "trimmed_reOriented_contigs.fasta");
+				SeqOutput outputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp));
+				auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(fermiLiteFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
+				SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
+
+				uint32_t belowCutOff = 0;
+				uint32_t aboveCutOff = 0;
+				bool allPassTrim = true;
+				for (const auto & contigsKmerRead : finalSeqs) {
+					if (len(contigsKmerRead->seqBase_) < minFinalLength) {
+						++belowCutOff;
+						belowCutOffOutputWriter.openWrite(contigsKmerRead);
+						contigsKmerRead->seqBase_.on_ = false;
+					} else {
+						MetaDataInName seqMeta(contigsKmerRead->seqBase_.name_);
+						trimmedContigInfoOut << contigsKmerRead->seqBase_.name_
+																 << "\t" << len(contigsKmerRead->seqBase_)
+																 << "\t" << seqMeta.getMeta("estimatedPerBaseCoverage")
+																 << std::endl;
+						if(!contigsKmerRead->seqBase_.on_){
+							allPassTrim = false;
+						}else{
+							++aboveCutOff;
+						}
+						outputWriter.openWrite(contigsKmerRead);
+					}
+				}
+				if(allPassTrim && !finalSeqs.empty()){
+					std::lock_guard<std::mutex> lock(allFinalWriterMut);
+					for (const auto & contigsKmerRead : finalSeqs) {
+						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
+							allFinalWriter.write(contigsKmerRead);
+						}
+					}
+					for(auto & reg : regInfo){
+						reg->infoCalled_ = true;
+						reg->uniqHaps_ = aboveCutOff;
+					}
+				}else{
+					for(auto & reg : regInfo){
+						reg->infoCalled_ = false;
+						reg->uniqHaps_ = 0;
+					}
+					std::lock_guard<std::mutex> lock(allPartialWriterMut);
+					for (const auto & contigsKmerRead : finalSeqs) {
+						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
+							allPartialWriter.write(contigsKmerRead);
+						}
+					}
+					for(auto & reg : regInfo){
+						reg->infoCalled_ = false;
+						reg->uniqHaps_ = 0;
+					}
+				}
+			} catch (std::exception & e) {
+				std::lock_guard<std::mutex> lock(exceptionsMut);
+				exceptions[regionUid] = e.what();
+				for(auto & reg : regInfo){
+					reg->infoCalled_ = false;
+					reg->uniqHaps_ = 0;
+				}
+			}
+		}
+	};
+
+
+	njh::concurrent::runVoidFunctionThreaded(runFermiLiteOnRegion, numThreads);
+	allFinalWriter.closeOut();
+	allPartialWriter.closeOut();
+	//sample,readTotal,readTotalUsed, success, name
+	//
+	OutputStream basicInfo(njh::files::make_path(finalDirectory, "basicInfoPerRegion.tab.txt"));
+
+	basicInfo << "#chrom\tstart\tend\tname\tlength\tstrand\tsuccess\tuniqHaps\treadTotal\treadTotalUsed\ttotalPairedReads";
+	basicInfo << "\tsample";
+	uint32_t maxExtraFields = 0;
+	for(const auto & p : inputRegions){
+
+		auto bedOut = p.genBedRecordCore();
+		if(bedOut.extraFields_.size() > maxExtraFields){
+			maxExtraFields = bedOut.extraFields_.size();
+		}
+	}
+	for(uint32_t t = 0; t < maxExtraFields; ++t){
+		basicInfo << "\textraField"<<t;
+	}
+	basicInfo << "\n";
+
+	std::map<uint32_t, uint32_t> coiCounts;
+
+	for (const auto & reg : inputRegions) {
+		const auto & regInfos = njh::mapAt(regInfosByUID, reg.uid_);
+		++coiCounts[regInfos.front()->uniqHaps_];
+		for(auto & regInfo : regInfos){
+			auto bedOut = regInfo->region_.genBedRecordCore();
+			basicInfo << bedOut.toDelimStr();
+			basicInfo << "\t" << njh::boolToStr(regInfo->infoCalled_)
+								<< "\t" << regInfo->uniqHaps_
+								<< "\t" << regInfo->totalReads_
+								<< "\t" << regInfo->totalFinalReads_
+								<< "\t" << regInfo->totalPairedReads_
+								<< "\t" << sample;
+			for(const auto & extra : bedOut.extraFields_){
+				basicInfo << "\t" << extra;
+			}
+			basicInfo << std::endl;
+		}
+	}
+
+	OutputStream coiOut(njh::files::make_path(finalDirectory, "coiCounts.tab.txt"));
+	coiOut << "coi\tcount" << std::endl;
+	for(const auto & count : coiCounts){
+		coiOut << count.first << "\t" << count.second << std::endl;
+	}
+
+	OutputStream exceptionsOut(njh::files::make_path(finalDirectory, "exceptionsMessages.tab.txt"));
+	exceptionsOut << "regionUID\tmessage" << std::endl;
+	for(const auto & exp : exceptions){
+		exceptionsOut << exp.first << "\t" << exp.second << std::endl;
+	}
+
+
+
+	return 0;
+}
+
+
 //
 int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands) {
 		bfs::path bedFile = "";
@@ -697,7 +1040,7 @@ int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnPathWeaverRegions(c
 							outputWriter.openWrite(contigsKmerRead);
 						}
 					}
-					if(allPassTrim){
+					if(allPassTrim && !finalSeqs.empty()){
 						std::lock_guard<std::mutex> lock(allFinalWriterMut);
 						for (const auto & contigsKmerRead : finalSeqs) {
 							if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
@@ -714,6 +1057,10 @@ int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnPathWeaverRegions(c
 							if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
 								allPartialWriter.write(contigsKmerRead);
 							}
+						}
+						for(auto & reg : regInfo){
+							reg->infoCalled_ = false;
+							reg->uniqHaps_ = 0;
 						}
 					}
 				} catch (std::exception & e) {
@@ -1072,7 +1419,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 						outputWriter.openWrite(contigsKmerRead);
 					}
 				}
-				if(allPassTrim){
+				if(allPassTrim && !finalSeqs.empty()){
 					std::lock_guard<std::mutex> lock(allFinalWriterMut);
 					for (const auto & contigsKmerRead : finalSeqs) {
 						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
@@ -1089,6 +1436,10 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
 							allPartialWriter.write(contigsKmerRead);
 						}
+					}
+					for(auto & reg : regInfo){
+						reg->infoCalled_ = false;
+						reg->uniqHaps_ = 0;
 					}
 				}
 			} catch (std::exception & e) {
@@ -1465,7 +1816,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 						outputWriter.openWrite(contigsKmerRead);
 					}
 				}
-				if(allPassTrim){
+				if(allPassTrim && !finalSeqs.empty()){
 					std::lock_guard<std::mutex> lock(allFinalWriterMut);
 					for (const auto & contigsKmerRead : finalSeqs) {
 						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
@@ -1482,6 +1833,10 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegions(const n
 						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
 							allPartialWriter.write(contigsKmerRead);
 						}
+					}
+					for(auto & reg : regInfo){
+						reg->infoCalled_ = false;
+						reg->uniqHaps_ = 0;
 					}
 				}
 			} catch (std::exception & e) {
@@ -1859,7 +2214,7 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 						outputWriter.openWrite(contigsKmerRead);
 					}
 				}
-				if(allPassTrim){
+				if(allPassTrim && !finalSeqs.empty()){
 					std::lock_guard<std::mutex> lock(allFinalWriterMut);
 					for (const auto & contigsKmerRead : finalSeqs) {
 						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
@@ -1876,6 +2231,10 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegions(cons
 						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
 							allPartialWriter.write(contigsKmerRead);
 						}
+					}
+					for(auto & reg : regInfo){
+						reg->infoCalled_ = false;
+						reg->uniqHaps_ = 0;
 					}
 				}
 			} catch (std::exception & e) {
@@ -2232,7 +2591,7 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegions(con
 						outputWriter.openWrite(contigsKmerRead);
 					}
 				}
-				if(allPassTrim){
+				if(allPassTrim && !finalSeqs.empty()){
 					std::lock_guard<std::mutex> lock(allFinalWriterMut);
 					for (const auto & contigsKmerRead : finalSeqs) {
 						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
@@ -2249,6 +2608,10 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegions(con
 						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
 							allPartialWriter.write(contigsKmerRead);
 						}
+					}
+					for(auto & reg : regInfo){
+						reg->infoCalled_ = false;
+						reg->uniqHaps_ = 0;
 					}
 				}
 			} catch (std::exception & e) {
@@ -2598,7 +2961,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegions(con
 						outputWriter.openWrite(contigsKmerRead);
 					}
 				}
-				if(allPassTrim){
+				if(allPassTrim && !finalSeqs.empty()){
 					std::lock_guard<std::mutex> lock(allFinalWriterMut);
 					for (const auto & contigsKmerRead : finalSeqs) {
 						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
@@ -2615,6 +2978,10 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegions(con
 						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
 							allPartialWriter.write(contigsKmerRead);
 						}
+					}
+					for(auto & reg : regInfo){
+						reg->infoCalled_ = false;
+						reg->uniqHaps_ = 0;
 					}
 				}
 			} catch (std::exception & e) {
@@ -2969,7 +3336,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 						outputWriter.openWrite(contigsKmerRead);
 					}
 				}
-				if(allPassTrim){
+				if(allPassTrim && !finalSeqs.empty()){
 					std::lock_guard<std::mutex> lock(allFinalWriterMut);
 					for (const auto & contigsKmerRead : finalSeqs) {
 						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
@@ -2986,6 +3353,10 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegions(cons
 						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
 							allPartialWriter.write(contigsKmerRead);
 						}
+					}
+					for(auto & reg : regInfo){
+						reg->infoCalled_ = false;
+						reg->uniqHaps_ = 0;
 					}
 				}
 			} catch (std::exception & e) {
@@ -3533,7 +3904,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 							outputWriter.openWrite(contigsKmerRead);
 						}
 					}
-					if(allPassTrim){
+					if(allPassTrim && !finalSeqs.empty()){
 						std::lock_guard<std::mutex> lock(allFinalWriterMut);
 						for (const auto & contigsKmerRead : finalSeqs) {
 							if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
@@ -3550,6 +3921,10 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 							if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
 								allPartialWriter.write(contigsKmerRead);
 							}
+						}
+						for(auto & reg : regInfo){
+							reg->infoCalled_ = false;
+							reg->uniqHaps_ = 0;
 						}
 					}
 				}
@@ -3838,7 +4213,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 							outputWriter.openWrite(contigsKmerRead);
 						}
 					}
-					if(allPassTrim){
+					if(allPassTrim && !finalSeqs.empty()){
 						std::lock_guard<std::mutex> lock(metav_allFinalWriterMut);
 						for (const auto & contigsKmerRead : finalSeqs) {
 							if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
@@ -3855,6 +4230,10 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 							if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
 								metav_allPartialWriter.write(contigsKmerRead);
 							}
+						}
+						for(auto & reg : regInfo){
+							reg->infoCalled_ = false;
+							reg->uniqHaps_ = 0;
 						}
 					}
 				}
@@ -4317,7 +4696,7 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegions(const
 						outputWriter.openWrite(contigsKmerRead);
 					}
 				}
-				if(allPassTrim){
+				if(allPassTrim && !finalSeqs.empty()){
 					std::lock_guard<std::mutex> lock(allFinalWriterMut);
 					for (const auto & contigsKmerRead : finalSeqs) {
 						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
@@ -4334,6 +4713,10 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegions(const
 						if (len(contigsKmerRead->seqBase_) >= minFinalLength) {
 							allPartialWriter.write(contigsKmerRead);
 						}
+					}
+					for(auto & reg : regInfo){
+						reg->infoCalled_ = false;
+						reg->uniqHaps_ = 0;
 					}
 				}
 			} catch (std::exception & e) {

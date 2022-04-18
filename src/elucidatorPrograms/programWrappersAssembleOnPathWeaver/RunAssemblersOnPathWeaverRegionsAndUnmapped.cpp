@@ -82,8 +82,11 @@ public:
 		regInfo_->totalFinalReads_ = regInfo_->totalReads_;
 		inputRegions_ = gatherRegions(inputPars_.bedFile_.string(), "", false);
 		sortGRegionsByStart(inputRegions_);
-
+		pw_finalPassDir_ = njh::files::make_path(inputPars_.pwOutputDir_, njh::pasteAsStr(inputPars_.sample_, "-finalPass"));
 		finalPassDir_ = njh::files::make_path(inputPars_.outputDir_, inputPars_.sample_ + "-finalPass");
+		filtStiched_pairedR1Fnp_ = njh::files::make_path(pw_finalPassDir_, "filteredExtractedPairs_R1.fastq");
+		filtStiched_pairedR2Fnp_ = njh::files::make_path(pw_finalPassDir_, "filteredExtractedPairs_R2.fastq");
+		filtStiched_singlesFnp_ =  njh::files::make_path(pw_finalPassDir_, "filteredSingles.fastq");
 		outputFnp_ = njh::files::make_path(finalPassDir_, "output.fasta");
 		outputAboveCutOffFnp_ = njh::files::make_path(finalPassDir_, "output_aboveCutOff.fasta");
 		njh::files::makeDir(njh::files::MkdirPar(finalPassDir_));
@@ -98,9 +101,17 @@ public:
 	bfs::path pairedR1Fnp_;
 	bfs::path pairedR2Fnp_;
 	bfs::path singlesFnp_;
+
+	//the filtered stitched reads
+	bfs::path filtStiched_pairedR1Fnp_;
+	bfs::path filtStiched_pairedR2Fnp_;
+	bfs::path filtStiched_singlesFnp_;
+
 	uint32_t pairedReads_{0};
 	uint32_t singleReads_{0};
 	double medianReadLen_{1};
+	bfs::path pw_finalPassDir_;
+
 	bfs::path finalPassDir_;
 	bfs::path outputFnp_;
 	bfs::path outputAboveCutOffFnp_;
@@ -160,7 +171,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnma
 			if(exists(utility.pairedR1Fnp_)){
 				if(!exists(utility.pairedR2Fnp_)){
 					std::stringstream ss;
-					ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but cound't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
+					ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but couldn't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
 					throw std::runtime_error{ss.str()};
 				}
 				bfs::path pairedR1_app = njh::files::make_path(regionOutputDir, "appended_extracted_R1.fastq");
@@ -355,6 +366,216 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnma
 	return 0;
 }
 //
+int programWrappersAssembleOnPathWeaverRunner::runFermiLiteOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands) {
+
+	seqSetUp setUp(inputCommands);
+	setUp.processDebug();
+	setUp.processVerbose();
+	OtherAssemblersUtility::InputPars inPars;
+	inPars.programName_ = "fermi-lite";
+	inPars.extraProgramOptions_ = "";
+	inPars.setPars(setUp);
+
+	setUp.finishSetUp(std::cout);
+	setUp.startARunLog(setUp.pars_.directoryName_);
+	njh::sys::requireExternalProgramThrow("fml-asm");
+	OtherAssemblersUtility utility(inPars);
+	auto outputAboveCutOffSeqOpts = SeqIOOptions::genFastaOut(utility.outputAboveCutOffFnp_);
+	SeqOutput outputAboveCutOffWriter(outputAboveCutOffSeqOpts);
+	outputAboveCutOffWriter.openOut();
+
+	std::string exceptionMess;
+
+	auto regionOutputDir = njh::files::make_path(setUp.pars_.directoryName_, utility.inputPars_.regionUid_, utility.inputPars_.sample_);
+	njh::files::makeDirP(njh::files::MkdirPar{regionOutputDir});
+
+	try {
+		if(!exists(utility.filtStiched_pairedR1Fnp_) && !exists(utility.filtStiched_singlesFnp_)){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", couldn't find " << utility.filtStiched_pairedR1Fnp_ << " or " << utility.filtStiched_singlesFnp_ << ", need to have at least one of them" << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+
+		//concatenate into 1 file
+		std::vector<bfs::path> filesToCollapse;
+		if(bfs::exists(utility.filtStiched_pairedR1Fnp_)){
+			filesToCollapse.emplace_back(utility.filtStiched_pairedR1Fnp_);
+			filesToCollapse.emplace_back(utility.filtStiched_pairedR2Fnp_);
+		}
+		if(bfs::exists(utility.filtStiched_singlesFnp_)){
+			filesToCollapse.emplace_back(utility.filtStiched_singlesFnp_);
+		}
+		auto inputFnp = njh::files::make_path(regionOutputDir, "input.fastq.gz");
+		auto outputFnp = njh::files::make_path(regionOutputDir, "raw_output.fastq");
+		concatenateFiles(filesToCollapse, OutOptions(inputFnp));
+
+		std::stringstream raw_fermiLiteCmdStream;
+		raw_fermiLiteCmdStream << "cd " << regionOutputDir;
+		raw_fermiLiteCmdStream << " && fml-asm ";
+
+		raw_fermiLiteCmdStream  << " -t " << utility.inputPars_.numThreads_
+														<< " " << utility.inputPars_.extraProgramOptions_
+														<< " input.fastq.gz "
+														<< " > " << "raw_output.fastq";
+		std::string raw_fermiLiteCmd = raw_fermiLiteCmdStream.str();
+		std::stringstream fermiLiteCmdStream;
+		fermiLiteCmdStream << raw_fermiLiteCmd << " 2> fermiLiteRunLog_" << njh::getCurrentDate() << ".txt";
+		const auto& fermiLiteFullOutputDir = regionOutputDir;
+
+		auto fermiLiteRunOutput = njh::sys::run({fermiLiteCmdStream.str()});
+
+		OutOptions fermiLiteRunOutputLogOpts(njh::files::make_path(fermiLiteFullOutputDir, "fermiLiteRunOutput.json"));
+		OutputStream fermiLiteRunOutputLogOut(fermiLiteRunOutputLogOpts);
+		fermiLiteRunOutputLogOut << njh::json::toJson(fermiLiteRunOutput) << std::endl;
+
+		auto contigsFnp = njh::files::make_path(fermiLiteFullOutputDir, "raw_output.fastq");
+
+		auto contigsSeqIoOpts = SeqIOOptions::genFastqIn(contigsFnp);
+//				contigsSeqIoOpts.includeWhiteSpaceInName_ = false;
+		contigsSeqIoOpts.lowerCaseBases_ = "upper";
+		SeqInput contigsReader(contigsSeqIoOpts);
+		auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
+		std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+		contigsKmerReads.reserve(contigsSeqs.size());
+		for (const auto & seq : contigsSeqs) {
+			contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
+		}
+		allSetKmers(contigsKmerReads, utility.inputPars_.reOrientingKmerLength_, true);
+
+		RefSeqsWithKmers refSeqs(utility.refFnp_, utility.inputPars_.reOrientingKmerLength_);
+		readVec::reorientSeqs(contigsKmerReads, refSeqs.refKmerReads_);
+		//sort by sequence length;
+		njh::sort(contigsKmerReads, [](const std::shared_ptr<seqWithKmerInfo> & seq1, const std::shared_ptr<seqWithKmerInfo> & seq2){
+			return len(seq1->seqBase_) > len(seq2->seqBase_);
+		});
+
+		OutOptions contigInfoOpts(njh::files::make_path(fermiLiteFullOutputDir, "contigs_outputInfo.tab.txt"));
+		OutputStream contigInfoOut(contigInfoOpts);
+		contigInfoOut << "name\tlength\tcoverage" << std::endl;
+
+
+		for( auto & contigsKmerRead : contigsKmerReads){
+			auto assembleInfo = FermiLiteNameParse(contigsKmerRead->seqBase_.name_);
+			contigsKmerRead->seqBase_.name_ = assembleInfo.modFullname_; //get rid of the \t characters in the name
+			//assembleInfo.coverage_ = (assembleInfo.coverage_ * utility.medianReadLen_)/assembleInfo.len_;
+			contigInfoOut << contigsKmerRead->seqBase_.name_
+										<< "\t" << len(contigsKmerRead->seqBase_)
+										<< "\t" << assembleInfo.coverage_ << std::endl;
+		}
+		auto reOrientedContigsFnp = njh::files::make_path(fermiLiteFullOutputDir, "reOriented_contigs.fasta");
+
+		std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs = trimToFinalSeqs(contigsKmerReads, refSeqs);
+		std::unordered_map<std::string, uint32_t> finalSeqCounts;
+		for(const auto & seq : finalSeqs){
+			++finalSeqCounts[seq->seqBase_.name_];
+		}
+
+		double totalCoverage = 0;
+		for(auto & seq : finalSeqs){
+			auto assembleInfo = FermiLiteNameParse(seq->seqBase_.name_);
+			assembleInfo.coverage_ = (assembleInfo.coverage_ * utility.medianReadLen_)/len(seq->seqBase_);
+			totalCoverage += assembleInfo.coverage_;
+		}
+
+		for(auto & seq : contigsKmerReads){
+			auto assembleInfo = FermiLiteNameParse(seq->seqBase_.name_);
+			assembleInfo.coverage_ = (assembleInfo.coverage_ * utility.medianReadLen_)/len(seq->seqBase_);
+			MetaDataInName seqMeta;
+			seqMeta.addMeta("length", len(seq->seqBase_));
+			seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
+			seqMeta.addMeta("regionUID", utility.inputPars_.regionUid_);
+			seqMeta.addMeta("sample", utility.inputPars_.sample_);
+			seqMeta.resetMetaInName(seq->seqBase_.name_);
+			seq->seqBase_.cnt_ = (assembleInfo.coverage_/totalCoverage) * (utility.totalCount());
+			seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
+		}
+		SeqOutput::write(contigsKmerReads, SeqIOOptions::genFastaOut(reOrientedContigsFnp));
+		SeqOutput::write(contigsKmerReads, SeqIOOptions::genFastaOut(utility.outputFnp_));
+
+		std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
+		for(auto & seq : finalSeqs){
+			auto assembleInfo = FermiLiteNameParse(seq->seqBase_.name_);
+			assembleInfo.coverage_ = (assembleInfo.coverage_ * utility.medianReadLen_)/len(seq->seqBase_);
+			MetaDataInName seqMeta;
+			seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
+			seqMeta.addMeta("estimatedPerBaseCoverage", assembleInfo.coverage_);
+			seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
+			seqMeta.addMeta("regionUID", utility.inputPars_.regionUid_);
+			seqMeta.addMeta("sample", utility.inputPars_.sample_);
+			if(finalSeqCounts[seq->seqBase_.name_] > 1){
+				seqMeta.addMeta("seqTrimmedCount", finalSeqCountsWritten[seq->seqBase_.name_]);
+				++finalSeqCountsWritten[seq->seqBase_.name_];
+			}
+			seqMeta.resetMetaInName(seq->seqBase_.name_);
+			seq->seqBase_.cnt_ = (assembleInfo.coverage_/totalCoverage) * (utility.totalCount());
+			seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
+		}
+
+
+		OutOptions trimmedContigInfoOpts(njh::files::make_path(fermiLiteFullOutputDir, "trimmed_reOriented_contigs_outputInfo.tab.txt"));
+		OutputStream trimmedContigInfoOut(trimmedContigInfoOpts);
+		trimmedContigInfoOut << "name\tlength\tcoverage" << std::endl;
+		auto trimmedReOrientedContigsFnp = njh::files::make_path(fermiLiteFullOutputDir, "trimmed_reOriented_contigs.fasta");
+		SeqOutput outputTrimmedWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp));
+		auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(fermiLiteFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
+		SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
+
+		uint32_t belowCutOff = 0;
+		uint32_t aboveCutOff = 0;
+		bool allPassTrim = true;
+		for (const auto & contigsKmerRead : finalSeqs) {
+			if (len(contigsKmerRead->seqBase_) < utility.inputPars_.minFinalLength_) {
+				++belowCutOff;
+				belowCutOffOutputWriter.openWrite(contigsKmerRead);
+				contigsKmerRead->seqBase_.on_ = false;
+			} else {
+				MetaDataInName seqMeta(contigsKmerRead->seqBase_.name_);
+				trimmedContigInfoOut << contigsKmerRead->seqBase_.name_
+														 << "\t" << len(contigsKmerRead->seqBase_)
+														 << "\t" << seqMeta.getMeta("estimatedPerBaseCoverage")
+														 << std::endl;
+				if(!contigsKmerRead->seqBase_.on_){
+					allPassTrim = false;
+				}else{
+					++aboveCutOff;
+				}
+				outputAboveCutOffWriter.openWrite(contigsKmerRead);
+				outputTrimmedWriter.openWrite(contigsKmerRead);
+			}
+		}
+		if(allPassTrim){
+			utility.regInfo_->infoCalled_ = true;
+			utility.regInfo_->uniqHaps_ = aboveCutOff;
+		}else{
+			utility.regInfo_->infoCalled_ = false;
+			utility.regInfo_->uniqHaps_ = 0;
+		}
+	} catch (std::exception & e) {
+		exceptionMess = e.what();
+		utility.regInfo_->infoCalled_ = false;
+		utility.regInfo_->uniqHaps_ = 0;
+	}
+
+
+	outputAboveCutOffWriter.closeOut();
+	OutputStream basicInfo(njh::files::make_path(utility.finalPassDir_, "basicInfoPerRegion.tab.txt"));
+
+	basicInfo << "name\tsuccess\tuniqHaps\treadTotal\treadTotalUsed\ttotalPairedReads";
+	basicInfo << "\tsample";
+	basicInfo << "\n";
+	basicInfo << utility.inputPars_.regionUid_;
+	basicInfo << "\t" << njh::boolToStr(utility.regInfo_->infoCalled_)
+						<< "\t" << utility.regInfo_->uniqHaps_
+						<< "\t" << utility.regInfo_->totalReads_
+						<< "\t" << utility.regInfo_->totalFinalReads_
+						<< "\t" << utility.regInfo_->totalPairedReads_
+						<< "\t" << utility.inputPars_.sample_;
+
+	OutputStream exceptionsOut(njh::files::make_path(utility.finalPassDir_, "exceptionsMessages.tab.txt"));
+	exceptionsOut << "regionUID\tmessage" << std::endl;
+	exceptionsOut << utility.inputPars_.regionUid_ << "\t" << exceptionMess << std::endl;
+	return 0;
+}
 
 
 int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands) {
@@ -395,7 +616,7 @@ int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnPathWeaverRegionsAn
 		if(exists(utility.pairedR1Fnp_)){
 			if(!exists(utility.pairedR2Fnp_)){
 				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but cound't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
+				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but couldn't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
 				throw std::runtime_error{ss.str()};
 			}else{
 				raw_unicyclerCmdStream << " -1 " << njh::files::normalize(utility.pairedR1Fnp_) << " -2 " << njh::files::normalize(utility.pairedR2Fnp_) << " ";
@@ -630,7 +851,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegionsAndUn
 		if(exists(utility.pairedR1Fnp_)){
 			if(!exists(utility.pairedR2Fnp_)){
 				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but cound't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
+				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but couldn't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
 				throw std::runtime_error{ss.str()};
 			}else{
 				spadesCmdStream << " -1 " << njh::files::normalize(utility.pairedR1Fnp_) << " -2 " << njh::files::normalize(utility.pairedR2Fnp_) << " ";
@@ -1329,7 +1550,7 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegionsAndU
 		if(exists(utility.pairedR1Fnp_)){
 			if(!exists(utility.pairedR2Fnp_)){
 				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but cound't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
+				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but couldn't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
 				throw std::runtime_error{ss.str()};
 			}else{
 				TrinityCmdStream << " --left " << njh::files::normalize(utility.pairedR1Fnp_) << " --right " << njh::files::normalize(utility.pairedR2Fnp_) << " ";
@@ -1538,7 +1759,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegionsAndU
 		if(exists(utility.pairedR1Fnp_)){
 			if(!exists(utility.pairedR2Fnp_)){
 				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but cound't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
+				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but couldn't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
 				throw std::runtime_error{ss.str()};
 			}else{
 				megahitCmdStream << " -1 " << njh::files::normalize(utility.pairedR1Fnp_) << " -2 " << njh::files::normalize(utility.pairedR2Fnp_) << " ";
@@ -1745,7 +1966,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegionsAndUn
 		if(exists(utility.pairedR1Fnp_)){
 			if(!exists(utility.pairedR2Fnp_)){
 				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but cound't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
+				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but couldn't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
 				throw std::runtime_error{ss.str()};
 			}else{
 				savageCmdStream << " -p1 " << utility.pairedR1Fnp_.filename().replace_extension("") << " -p2 " << utility.pairedR2Fnp_.filename().replace_extension("") << " ";
@@ -1993,7 +2214,7 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegionsAndUnm
 		if (!exists(utility.pairedR2Fnp_)) {
 			std::stringstream ss;
 			ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_
-				 << " but cound't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
+				 << " but couldn't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
 			throw std::runtime_error { ss.str() };
 		} else {
 			PriceTICmdStream
@@ -2285,7 +2506,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 		if (exists(utility.pairedR1Fnp_)) {
 			if (!exists(utility.pairedR2Fnp_)) {
 				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but cound't find it's mate file: "
+				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but couldn't find it's mate file: "
 					 << utility.pairedR2Fnp_ << "\n";
 				throw std::runtime_error{ss.str()};
 			} else {

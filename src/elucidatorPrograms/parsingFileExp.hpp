@@ -41,11 +41,18 @@ class parsingFileExpRunner : public njh::progutils::ProgramRunner {
 
 	static int getAttributeLevelsBioSampleSetNCBIJson(const njh::progutils::CmdArgs & inputCommands);
 	static int parseBlastpHitsTab(const njh::progutils::CmdArgs & inputCommands);
+	static int BlastpHitsTabToBed(const njh::progutils::CmdArgs & inputCommands);
 
 	static int parseSTOCKHOLM(const njh::progutils::CmdArgs & inputCommands);
 	static int parseSTOCKHOLMToFasta(const njh::progutils::CmdArgs & inputCommands);
 
 	static int parsehmmerDomainHitTab(const njh::progutils::CmdArgs & inputCommands);
+
+
+	static int quickCountFasta(const njh::progutils::CmdArgs & inputCommands);
+	static int quickCountFastq(const njh::progutils::CmdArgs & inputCommands);
+
+	static int quickCountDirectory(const njh::progutils::CmdArgs & inputCommands);
 
 };
 } /* namespace njhseq */

@@ -184,7 +184,25 @@ inline ExtractCountsRaw rawWriteExtractReadsFromBamOnlyMapped(const bfs::path &b
 }
 
 
+struct FermiLiteNameParse{
 
+	explicit FermiLiteNameParse(std::string fullname):fullname_(std::move(fullname)){
+		std::smatch match;
+		if(!std::regex_match(fullname_, match, fermiLiteNamePat_)){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error in processing " << fullname_ << " for basic assembly info" << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		shortName_ = match[1];
+		coverage_ =  njh::StrToNumConverter::stoToNum<uint32_t>(match[2]);
+		modFullname_ = njh::pasteAsStr(match[1], " ", match[2], " ", match[3], " ", match[4]);
+	}
+	std::string fullname_;
+	std::string modFullname_;
+	double coverage_{0};
+	std::string shortName_;
+	std::regex fermiLiteNamePat_ = std::regex(R"((\d+:\d+)\s+(\d+)\s+([\d\.;,]+)\s+([\d\.;,]+)(.*))");
+};
 
 struct DefaultAssembleNameInfo{
 

@@ -41,9 +41,13 @@ parsingFileExpRunner::parsingFileExpRunner()
 					 addFunc("parseSTOCKHOLM", parseSTOCKHOLM, false),
 					 addFunc("parseSTOCKHOLMToFasta", parseSTOCKHOLMToFasta, false),
 					 addFunc("parsehmmerDomainHitTab", parsehmmerDomainHitTab, false),
+					 addFunc("quickCountFastq", quickCountFastq, false),
+					 addFunc("quickCountFasta", quickCountFasta, false),
+					 addFunc("quickCountDirectory", quickCountDirectory, false),
+					 addFunc("BlastpHitsTabToBed", BlastpHitsTabToBed, false),
            },
           "parsingFileExp") {}
-//
+//,
 
 class BioSampleSetNCBIJsonParse {
 public:
@@ -228,8 +232,6 @@ int parsingFileExpRunner::getAttributeLevelsBioSampleSetNCBIJson(const njh::prog
 }
 
 int parsingFileExpRunner::parseBlastpHitsTab(const njh::progutils::CmdArgs & inputCommands) {
-	bfs::path jsonFile = "";
-	bfs::path hitFnp = "";
 	IoOptions ioOpts;
 	ioOpts.out_.outExtention_ = ".json";
 	seqSetUp setUp(inputCommands);
@@ -249,6 +251,113 @@ int parsingFileExpRunner::parseBlastpHitsTab(const njh::progutils::CmdArgs & inp
 
 	return 0;
 }
+
+int parsingFileExpRunner::BlastpHitsTabToBed(const njh::progutils::CmdArgs & inputCommands) {
+	IoOptions ioOpts;
+	ioOpts.out_.outExtention_ = ".bed";
+	seqSetUp setUp(inputCommands);
+	setUp.processDebug();
+	setUp.processVerbose();
+	setUp.processWritingOptions(ioOpts.out_);
+	setUp.setOption(ioOpts.in_.inFilename_, "--hitFnp", "output from blastp filename", true);
+	setUp.finishSetUp(std::cout);
+
+	BioDataFileIO<BLASTHitTab> reader(ioOpts);
+	reader.openIn();
+	reader.openOut();
+	BLASTHitTab hit;
+	while(reader.readNextRecord(hit)){
+		(*reader.out_) << hit.toJson() << std::endl;
+	}
+
+	return 0;
+}
+
+
+class QuickSeqFileCounter {
+public:
+	QuickSeqFileCounter() = default;
+
+
+	static uint32_t quickCountFasta(const InOptions & inputOpts){
+		if(inputOpts.inExists()){
+			InputStream  in(inputOpts);
+			return quickCountFasta(in);
+		}
+		return 0;
+	}
+
+	static uint32_t quickCountFasta(InputStream & in){
+		uint32_t count = 0;
+		std::string line;
+		while(njh::files::crossPlatGetline(in, line)){
+			if('>' == line.front()){
+				++count;
+			}
+		}
+		return count;
+	}
+
+	static uint32_t quickCountFastq(const InOptions & inputOpts){
+		if(inputOpts.inExists()){
+			InputStream  in(inputOpts);
+			return quickCountFastq(in);
+		}
+		return 0;
+	}
+
+	static uint32_t quickCountFastq(InputStream & in){
+		std::string line;
+		uint32_t lineCount = 0;
+		while(njh::files::crossPlatGetline(in, line)){
+			++lineCount;
+		}
+		return lineCount/4;
+	}
+
+};
+
+
+int parsingFileExpRunner::quickCountFastq(const njh::progutils::CmdArgs & inputCommands) {
+	IoOptions ioOpts;
+	seqSetUp setUp(inputCommands);
+	setUp.processDebug();
+	setUp.processVerbose();
+	setUp.processWritingOptions(ioOpts.out_);
+	setUp.setOption(ioOpts.in_.inFilename_, "--fastq", "fastq file", true);
+	setUp.finishSetUp(std::cout);
+	std::cout << QuickSeqFileCounter::quickCountFastq(ioOpts.in_) << std::endl;
+	return 0;
+}
+
+
+int parsingFileExpRunner::quickCountFasta(const njh::progutils::CmdArgs & inputCommands) {
+	IoOptions ioOpts;
+	seqSetUp setUp(inputCommands);
+	setUp.processDebug();
+	setUp.processVerbose();
+	setUp.processWritingOptions(ioOpts.out_);
+	setUp.setOption(ioOpts.in_.inFilename_, "--fasta", "fasta file", true);
+	setUp.finishSetUp(std::cout);
+	std::cout << QuickSeqFileCounter::quickCountFasta(ioOpts.in_) << std::endl;
+	return 0;
+}
+
+int parsingFileExpRunner::quickCountDirectory(const njh::progutils::CmdArgs & inputCommands) {
+	OutOptions outOpts;
+	bfs::path dirName;
+	seqSetUp setUp(inputCommands);
+	setUp.processDebug();
+	setUp.processVerbose();
+	setUp.processWritingOptions(outOpts);
+	setUp.setOption(dirName, "--dirName", "Directory to count all fastas and/or fastqs", true);
+	setUp.finishSetUp(std::cout);
+
+
+	return 0;
+}
+
+
 
 
 } /* namespace njhseq */

@@ -29,6 +29,7 @@ class programWrappersAssembleOnPathWeaverRunner : public njh::progutils::Program
 	static int runRayOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int runIDBAUDOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int runMIRAOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
+	static int runFermiLiteOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 
 
 	static int runUnicyclerOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
@@ -41,6 +42,7 @@ class programWrappersAssembleOnPathWeaverRunner : public njh::progutils::Program
 	static int runRayOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
 	static int runIDBAUDOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
 	static int runMIRAOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
+	static int runFermiLiteOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
 
 
 };
