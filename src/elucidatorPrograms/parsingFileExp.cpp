@@ -404,7 +404,7 @@ int parsingFileExpRunner::quickCountDirectory(const njh::progutils::CmdArgs & in
 			}
 			if("unknown" != guessFormat){
 				std::lock_guard<std::mutex> lock(outMut);
-				out << f.string() << "\t" << guessFormat << "\t" << fileCountingFuncs.at(guessFormat)(f) << std::endl;
+				out << f.filename().string() << "\t" << guessFormat << "\t" << fileCountingFuncs.at(guessFormat)(f) << std::endl;
 			} else if(setUp.pars_.verbose_){
 				std::cerr << "Unknown file type for " << f << std::endl;
 			}
