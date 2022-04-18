@@ -362,16 +362,18 @@ int parsingFileExpRunner::quickCountFasta(const njh::progutils::CmdArgs & inputC
 int parsingFileExpRunner::quickCountDirectory(const njh::progutils::CmdArgs & inputCommands) {
 	OutOptions outOpts;
 	bfs::path dirName;
+	uint32_t numThreads = 1;
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
 	setUp.processVerbose();
 	setUp.processWritingOptions(outOpts);
+	setUp.setOption(numThreads, "--numThreads", "number of threads to use");
 	setUp.setOption(dirName, "--dirName", "Directory to count all fastas and/or fastqs", true);
 	setUp.finishSetUp(std::cout);
 
-	std::unordered_map<std::string, std::set<std::string>> fileExtensions;
-	fileExtensions["fastq"] = std::set<std::string>{".fq", ".fq.gz", ".fastq", ".fastq.gz", ".fnq", ".fnq.gz"};
-	fileExtensions["fasta"] = std::set<std::string>{".fa", ".fa.gz", ".fasta", ".fasta.gz", ".fna", ".fna.gz"};
+	std::unordered_map<std::string, std::set<std::string>> fileExtensionLookUps;
+	fileExtensionLookUps["fastq"] = std::set<std::string>{".fq", ".fq.gz", ".fastq", ".fastq.gz", ".fnq", ".fnq.gz"};
+	fileExtensionLookUps["fasta"] = std::set<std::string>{".fa", ".fa.gz", ".fasta", ".fasta.gz", ".fna", ".fna.gz"};
 
 	std::unordered_map<std::string, std::function<uint32_t(const bfs::path & fnp)>> fileCountingFuncs;
 	fileCountingFuncs.emplace("fasta", [](const bfs::path & fnp){
@@ -385,22 +387,30 @@ int parsingFileExpRunner::quickCountDirectory(const njh::progutils::CmdArgs & in
 	out << "file\tguessedFormat\tcount" << std::endl;
 
 	auto allFiles = njh::files::filesInFolder(dirName);
-	for(const auto & f : allFiles){
-		std::string guessFormat = "unknown";
-		for(const auto & fileExtens : fileExtensions){
-			for(const auto & ext : fileExtens.second){
-				if(njh::endsWith(f.string(), ext))	{
-					guessFormat = fileExtens.first;
-					break;
+	njh::sort(allFiles);
+	njh::concurrent::LockableQueue<bfs::path> pathsQueue(allFiles);
+	std::mutex outMut;
+	std::function<void()> countFiles = [&fileExtensionLookUps,&pathsQueue,&outMut,&out,&setUp,&fileCountingFuncs](){
+		bfs::path f;
+		while(pathsQueue.getVal(f)){
+			std::string guessFormat = "unknown";
+			for(const auto & fileExtens : fileExtensionLookUps){
+				for(const auto & ext : fileExtens.second){
+					if(njh::endsWith(f.string(), ext))	{
+						guessFormat = fileExtens.first;
+						break;
+					}
 				}
 			}
+			if("unknown" != guessFormat){
+				std::lock_guard<std::mutex> lock(outMut);
+				out << f.string() << "\t" << guessFormat << "\t" << fileCountingFuncs.at(guessFormat)(f) << std::endl;
+			} else if(setUp.pars_.verbose_){
+				std::cerr << "Unknown file type for " << f << std::endl;
+			}
 		}
-		if("unknown" != guessFormat){
-			out << f.string() << "\t" << guessFormat << "\t" << fileCountingFuncs.at(guessFormat)(f) << std::endl;
-		} else if(setUp.pars_.verbose_){
-			std::cerr << "Unknown file type for " << f << std::endl;
-		}
-	}
+	};
+	njh::concurrent::runVoidFunctionThreaded(countFiles, numThreads);
 	return 0;
 }
 
