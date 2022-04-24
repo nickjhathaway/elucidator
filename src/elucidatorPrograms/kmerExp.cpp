@@ -91,6 +91,7 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("countingUniqKmersFromSetsInUnmappedAlns", countingUniqKmersFromSetsInUnmappedAlns, false),
 					 addFunc("chromVsChromUniqueComp", chromVsChromUniqueComp, false),
 					 addFunc("getKmerDetailedKmerDistAgainstRef", getKmerDetailedKmerDistAgainstRef, false),
+					 addFunc("findingKmerEnrichment", findingKmerEnrichment, false),
 					 //
            },
           "kmerExp") {}

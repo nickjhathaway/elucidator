@@ -29,6 +29,8 @@
 #include "elucidator/objects/counters/DNABaseCounter.hpp"
 #include <njhseq/PopulationGenetics/PopGenCalcs.hpp>
 
+#include <boost/math/distributions.hpp>
+
 namespace njhseq {
 
 
@@ -40,6 +42,9 @@ statsExpRunner::statsExpRunner()
 					 addFunc("stats_pnorm", stats_pnorm, false),
 					 addFunc("stats_pbeta", stats_pbeta, false),
 					 addFunc("boost_normal_dist_example", boost_normal_dist_example, false),
+					 addFunc("fisher_exact", fisher_exact, false),
+					 addFunc("fisher_exact_test", fisher_exact_test, false),
+					 addFunc("fisher_exact_tableInput", fisher_exact_tableInput, false),
 					 //
            },
           "statsExp") {}
@@ -164,6 +169,759 @@ int statsExpRunner::stats_pbeta(
 	std::cout << "val: " << val << ", cdf:" << boost::math::cdf(betadist,val) << std::endl;
 
 	return 0;
+}
+
+
+
+int statsExpRunner::fisher_exact_test(
+				const njh::progutils::CmdArgs & inputCommands) {
+
+	seqSetUp setUp(inputCommands);
+
+
+	setUp.finishSetUp(std::cout);
+
+
+	//int a = atoi(argv[1]), b = atoi(argv[2]), c = atoi(argv[3]), d = atoi(argv[4]);
+
+	//int32_t a = 45, b =12, c = 18, d = 39;
+	//     [,1] [,2]
+	// [1,] TP   FN
+	// [2,] FP   TN
+
+
+	int32_t TP = 45, FP =12, FN = 18, TN = 39;
+	int32_t k = TP + FN;
+	int32_t m = TP + FP;
+	int32_t total = TP + FP + FN + TN;
+	int32_t n = FN + TN;
+	int32_t lo = std::max(0, k - n);
+	int32_t hi = std::min(k, m);
+	//x <- x[1L, 1L]
+	int32_t x = TP;
+	std::vector<int32_t> support(hi + 1 - lo);
+	njh::iota(support, lo);
+	//m, k, total
+	boost::math::hypergeometric_distribution<double> hg_dist(m, k, total);
+	std::vector<double> logdc;
+	logdc.reserve(support.size())	;
+	for(const auto val : support){
+		logdc.emplace_back(log(boost::math::pdf(hg_dist, val)));
+		std::cout << "val: " << val << ", pdf: " << boost::math::pdf(hg_dist, val) << ", pdflog: " << log(boost::math::pdf(hg_dist, val)) << std::endl;
+	}
+	std::cout << "exp(1): " << exp(1) << std::endl;
+	auto dnhyper = [&logdc,&support](double ncp){
+		std::vector<double> ret(logdc.size());
+		for(const auto idx : iter::range(logdc.size())){
+			ret[idx] = logdc[idx] + log(ncp) * support[idx];
+		}
+		auto maxret = vectorMaximum(ret);
+		for(const auto idx : iter::range(logdc.size())){
+			ret[idx] = exp(ret[idx] - maxret);
+		}
+		auto sumret = vectorSum(ret);
+		for(const auto idx : iter::range(logdc.size())){
+			ret[idx] = ret[idx]/sumret;
+		}
+		return ret;
+	};
+	auto test_dnhyper = dnhyper(1);
+	std::cout << "test_dnhyper: "  << std::endl;
+	for(const auto idx : iter::range(test_dnhyper.size())){
+		std::cout << test_dnhyper[idx] << std::endl;
+	}
+
+	auto mnhyper = [&lo,&hi,&dnhyper,&support](double ncp){
+		if (ncp == 0){
+			return static_cast<double>(lo);
+		}
+		if (ncp == std::numeric_limits<double>::infinity()){
+			return static_cast<double>(hi);
+		}
+		double sum = 0;
+		auto dnhyper_res = dnhyper(ncp);
+		for(const auto idx : iter::range(support.size())){
+			sum += dnhyper_res[idx] * support[idx];
+		}
+		return sum;
+	};
+
+
+	auto pnhyper = [&lo,&hi,&dnhyper,&support,&hg_dist,&x](double q, double ncp =1, bool upperTail = false)  {
+		if (ncp == 1) {
+			if(upperTail){
+				//1 - phyper(..., lower.tail = TRUE) is the same as phyper(..., lower.tail = FALSE)
+				return 1 - boost::math::cdf(hg_dist, x -1);
+			} else {
+				return boost::math::cdf(hg_dist, x);
+			}
+		}
+		if (ncp == 0) {
+			if(upperTail){
+				return q <= lo ? 1. : 0.;
+			}else{
+				return q >= lo ? 1. : 0.;
+			}
+		}
+		if (ncp == std::numeric_limits<double>::infinity()){
+			if(upperTail){
+				return q <= hi ? 1. : 0.;
+			}else{
+				return q >= hi ? 1. : 0.;
+			}
+		}
+		double sum = 0;
+		auto dnhyper_res = dnhyper(ncp);
+		if(upperTail){
+			for(const auto idx : iter::range(support.size())){
+				if(support[idx] >= q){
+					sum += dnhyper_res[idx];
+				}
+			}
+		}else{
+			for(const auto idx : iter::range(support.size())){
+				if(support[idx] <= q){
+					sum += dnhyper_res[idx];
+				}
+			}
+		}
+		return sum;
+	};
+
+	auto pnhyper_twotailed = [&lo,&hi,&dnhyper,&support,&x](const double test_odds)  {
+		if (test_odds == 0){
+			return x == lo ? 1. : 0.;
+		} else if (test_odds == std::numeric_limits<double>::infinity()){
+			return x == hi ? 1. : 0.;
+		} else {
+			double relErr = 1 + 1e-07;
+			auto dnhyper_res = dnhyper(test_odds);
+			double sum = 0;
+			double testAgainst = dnhyper_res[x - lo] * relErr;
+//			std::cout << "x - lo + 1: " << x - lo + 1 << std::endl;
+//			std::cout << "x - lo: " << x - lo<< std::endl;
+//			std::cout << "dnhyper_res[x - lo]: " << dnhyper_res[x - lo] << std::endl;
+//			std::cout << "testAgainst: " << testAgainst  << std::endl;
+//			std::cout << "relErr: " << relErr << std::endl;
+			for(const auto idx : iter::range(support.size())){
+//				std::cout << "dnhyper_res[" << idx << "]: " << dnhyper_res[idx] << ", " << njh::colorBool(dnhyper_res[idx] <= testAgainst)<< std::endl;
+				if(dnhyper_res[idx] <= testAgainst){
+					sum += dnhyper_res[idx];
+				}
+			}
+			return sum;
+		}
+	};
+	auto mle = [&lo,&hi,&mnhyper](const double x) {
+		if (x == lo) {
+			return 0.0;
+		}
+		if (x == hi){
+			return std::numeric_limits<double>::infinity();
+		}
+	boost::uintmax_t max_iter=500; // Set max iterations.
+
+	boost::math::tools::eps_tolerance<double> tol(30); //Set the eps tolerance.
+
+//
+
+
+
+		double mu = mnhyper(1);
+		if (mu > x) {
+			auto funcToRoot = [&mnhyper,&x](double input){
+				return mnhyper(input) - x;
+			};
+			auto r1 = boost::math::tools::toms748_solve(funcToRoot, 0.0, 1.0, tol, max_iter); // use the toms solve algorithm.
+//			std::cout << r1.first << std::endl;
+//			std::cout << r1.second << std::endl;
+			return r1.first;
+			//uniroot(function(t) mnhyper(t) - x, c(0, 1))$root
+		} else if (mu < x) {
+			auto funcToRoot = [&mnhyper,&x](double input){
+				return mnhyper(1/input) - x;
+			};
+			auto r1 = boost::math::tools::toms748_solve(funcToRoot, std::numeric_limits<double>::epsilon(), 1.0, tol, max_iter); // use the toms solve algorithm.
+//			std::cout << r1.first << std::endl;
+//			std::cout << r1.second << std::endl;
+//			std::cout << 1/static_cast<double>(r1.first) << std::endl;
+//			std::cout << 1/static_cast<double>(r1.second) << std::endl;
+			return 1/r1.first;
+			//1 / uniroot(function(t) mnhyper(1 / t) - x, c(.Machine$double.eps, 1))$root
+		}
+		return 1.0;
+	};
+
+	auto upperConf = [&pnhyper,&hi](const double x, const double alpha){
+		if (x == hi) {
+			return std::numeric_limits<double>::infinity();
+		}
+		boost::uintmax_t max_iter=500; // Set max iterations.
+
+		boost::math::tools::eps_tolerance<double> tol(30); //Set the eps tolerance.
+
+		double p = pnhyper(x, 1);
+		if (p < alpha) {
+			auto funcToRoot = [&pnhyper,&x,&alpha](double t){
+				return pnhyper(x, t) - alpha;
+			};
+			auto r1 = boost::math::tools::toms748_solve(funcToRoot, 0.0, 1.0, tol, max_iter); // use the toms solve algorithm.
+//			std::cout << r1.first << std::endl;
+//			std::cout << r1.second << std::endl;
+			return r1.first;
+			//uniroot(function(t) pnhyper(x, t) - alpha, c(0, 1))$root
+		} else if (p > alpha) {
+			auto funcToRoot = [&pnhyper,&x,&alpha](double t){
+				return pnhyper(x, 1/t) - alpha;
+			};
+			auto r1 = boost::math::tools::toms748_solve(funcToRoot, std::numeric_limits<double>::epsilon(), 1.0, tol, max_iter); // use the toms solve algorithm.
+//			std::cout << r1.first << std::endl;
+//			std::cout << r1.second << std::endl;
+			return 1/r1.first;
+			//1 / uniroot(function(t) pnhyper(x, 1 / t) - alpha, c(.Machine$double.eps, 1))$root
+		} else{
+			return 1.0;
+		}
+	};
+
+	auto lowerConf = [&pnhyper,&lo](const double x, const double alpha){
+		if (x == lo) {
+			return std::numeric_limits<double>::infinity();
+		}
+		boost::uintmax_t max_iter=500; // Set max iterations.
+
+		boost::math::tools::eps_tolerance<double> tol(30); //Set the eps tolerance.
+
+		double p = pnhyper(x, 1, true);
+//		std::cout << "p: " << p << std::endl;
+		if (p > alpha) {
+			auto funcToRoot = [&pnhyper,&x,&alpha](double t){
+				return pnhyper(x, t, true) - alpha;
+			};
+			auto r1 = boost::math::tools::toms748_solve(funcToRoot, 0.0, 1.0, tol, max_iter); // use the toms solve algorithm.
+//			std::cout << r1.first << std::endl;
+//			std::cout << r1.second << std::endl;
+			return r1.first;
+			//uniroot(function(t) pnhyper(x, t) - alpha, c(0, 1))$root
+		} else if (p < alpha) {
+			auto funcToRoot = [&pnhyper,&x,&alpha](double t){
+				return pnhyper(x, 1/t, true) - alpha;
+			};
+			auto r1 = boost::math::tools::toms748_solve(funcToRoot, std::numeric_limits<double>::epsilon(), 1.0, tol, max_iter); // use the toms solve algorithm.
+//			std::cout << r1.first << std::endl;
+//			std::cout << r1.second << std::endl;
+			return 1/r1.first;
+			//1 / uniroot(function(t) pnhyper(x, 1 / t) - alpha, c(.Machine$double.eps, 1))$root
+		} else{
+			return 1.0;
+		}
+	};
+//	ncp.U <- function(x, alpha) {
+//		if (x == hi)
+//			return(Inf)
+//		p <- pnhyper(x, 1)
+//		if (p < alpha)
+//			uniroot(function(t) pnhyper(x, t) - alpha,
+//						c(0, 1))$root
+//		else if (p > alpha)
+//			1/uniroot(function(t) pnhyper(x, 1/t) - alpha,
+//						c(.Machine$double.eps, 1))$root
+//		else 1
+//	}
+//	ncp.L <- function(x, alpha) {
+//		if (x == lo)
+//			return(0)
+//		p <- pnhyper(x, 1, upper.tail = TRUE)
+//		if (p > alpha)
+//			uniroot(function(t) pnhyper(x, t, upper.tail = TRUE) -
+//													alpha, c(0, 1))$root
+//		else if (p < alpha)
+//			1/uniroot(function(t) pnhyper(x, 1/t, upper.tail = TRUE) -
+//														alpha, c(.Machine$double.eps, 1))$root
+//		else 1
+//	}
+
+//	mle <- function(x) {
+//		if (x == lo)
+//			return(0)
+//		if (x == hi)
+//			return(Inf)
+//										mu <- mnhyper(1)
+//		if (mu > x)
+//			uniroot(function(t) mnhyper(t) - x, c(0, 1))$root
+//		else if (mu < x)
+//			1/uniroot(function(t) mnhyper(1/t) - x, c(.Machine$double.eps,
+//						1))$root
+//		else 1
+//	}
+
+	double confLevel = 0.95;
+	std::cout << "test_mnhyper: "  << mnhyper(1) << std::endl;
+
+	std::cout << "test_pnhyper less: "  << pnhyper(45, 1, false) << std::endl;
+	std::cout << "test_pnhyper greater: "  << pnhyper(45, 1, true) << std::endl;
+
+	std::cout << "pnhyper_twotailed: " << pnhyper_twotailed(1) << std::endl;
+	std::cout << "std::numeric_limits<double>::epsilon(): " << std::numeric_limits<double>::epsilon() << std::endl;
+	std::cout << "mle_test: " << mle(x) << std::endl;
+
+	std::cout << "lowerConf(45, 1 - confLevel)" << lowerConf(45, 1 - confLevel) << std::endl;
+	std::cout << "upperConf(45, 1 - confLevel): " <<  upperConf(45, 1 - confLevel) << std::endl;
+
+	std::cout << "lowerConf(45, (1 - confLevel)/2): " << lowerConf(45, (1 - confLevel)/2) << std::endl;
+	std::cout << "upperConf(45, (1 - confLevel)/2): " << upperConf(45, (1 - confLevel)/2) << std::endl;
+
+
+//	std::cout << "boost::math::pdf(hg_dist, x): " << boost::math::pdf(hg_dist, x) << std::endl;
+//	std::cout << "1 - boost::math::pdf(hg_dist, x): " << 1 - boost::math::pdf(hg_dist, x) << std::endl;
+//
+//	std::cout << "boost::math::pdf(hg_dist, x - 1): " << boost::math::pdf(hg_dist, x - 1) << std::endl;
+//	std::cout << "1 - boost::math::pdf(hg_dist, x - 1): " << 1 - boost::math::pdf(hg_dist, x - 1) << std::endl;
+//
+//	std::cout << "boost::math::cdf(hg_dist, x): " << boost::math::cdf(hg_dist, x) << std::endl;
+//	std::cout << "1 - boost::math::cdf(hg_dist, x): " << 1 - boost::math::cdf(hg_dist, x) << std::endl;
+//
+//	std::cout << "boost::math::cdf(hg_dist, x - 1): " << boost::math::cdf(hg_dist, x - 1) << std::endl;
+//	std::cout << "1 - boost::math::cdf(hg_dist, x - 1): " << 1 - boost::math::cdf(hg_dist, x - 1) << std::endl;
+
+//	dnhyper <- function(ncp) {
+//		d <- logdc + log(ncp) * support
+//		d <- exp(d - max(d))
+//		d/sum(d)
+//	}
+//	mnhyper <- function(ncp) {
+//		if (ncp == 0)
+//			return(lo)
+//		if (ncp == Inf)
+//			return(hi)
+//		sum(support * dnhyper(ncp))
+//	}
+//	pnhyper <- function(q, ncp = 1, upper.tail = FALSE) {
+//		if (ncp == 1) {
+//			return(if (upper.tail) phyper(x - 1, m, n, k,
+//																		lower.tail = FALSE) else phyper(x, m, n, k))
+//		}
+//		if (ncp == 0) {
+//			return(as.numeric(if (upper.tail) q <= lo else q >=
+//																										 lo))
+//		}
+//		if (ncp == Inf) {
+//			return(as.numeric(if (upper.tail) q <= hi else q >=
+//																										 hi))
+//		}
+//		sum(dnhyper(ncp)[if (upper.tail) support >= q else support <=
+//																											 q])
+//	}
+//	mle <- function(x) {
+//		if (x == lo)
+//			return(0)
+//		if (x == hi)
+//			return(Inf)
+//										mu <- mnhyper(1)
+//		if (mu > x)
+//			uniroot(function(t) mnhyper(t) - x, c(0, 1))$root
+//		else if (mu < x)
+//			1/uniroot(function(t) mnhyper(1/t) - x, c(.Machine$double.eps,
+//						1))$root
+//		else 1
+//	}
+
+
+//	boost::uintmax_t max_iter=500; // Set max iterations.
+//
+//	boost::math::tools::eps_tolerance<double> tol(30); //Set the eps tolerance.
+//
+//	Result r1 = boost::math::tools::toms748_solve(myBinom95, 0, 1, tol, max_iter); // use the toms solve algorithm.
+
+/*	dnhyper <- function(ncp) {
+		d <- logdc + log(ncp) * support
+		d <- exp(d - max(d))
+		d/sum(d)
+	}*/
+
+
+/*
+	int n = a + b + c + d;
+	double* logFacs = new double[n+1]; // *** dynamically allocate memory logFacs[0..n] ***
+	initLogFacs(logFacs, n); // *** initialize logFacs array ***
+	double logpCutoff = logHypergeometricProb(logFacs,a,b,c,d); // *** logFacs added
+	double pFraction = 0;
+	for(int x=0; x <= n; ++x) {
+		if ( a+b-x >= 0 && a+c-x >= 0 && d-a+x >=0 ) {
+			double l = logHypergeometricProb(logFacs,x,a+b-x,a+c-x,d-a+x);
+			if ( l <= logpCutoff ) pFraction += exp(l - logpCutoff);
+		}
+	}
+	double logpValue = logpCutoff + log(pFraction);
+	std::cout << "Two-sided log10-p-value is " << logpValue/log(10.) << std::endl;
+	std::cout << "Two-sided p-value is " << exp(logpValue) << std::endl;
+	delete [] logFacs;
+
+*/
+
+
+	return 0;
+
+
+}
+
+
+
+
+class FisherExactFor2x2{
+public:
+
+	struct FisherExactFor2x2Result{
+
+		double oddsRatio_ {std::numeric_limits<double>::max()};
+		double pValue_ {std::numeric_limits<double>::max()};
+		double lowerConfInterval_ {std::numeric_limits<double>::max()};
+		double upperConfInterval_ {std::numeric_limits<double>::max()};
+
+	};
+
+	struct FisherExactFor2x2Input{
+		enum class Tail{
+			TWOTAILED,
+			GREATER,
+			LESSER
+		};
+		double confInterval{0.95};/**< should be in (0,1) */
+
+		//contingency table
+		//     [,1] [,2]
+		// [1,] TP   FN
+		// [2,] FP   TN
+
+		//     [,1] [,2]
+		// [1,] a    b
+		// [2,] c    d
+
+		uint32_t TP{0};
+		uint32_t FN{0};
+		uint32_t FP{0};
+		uint32_t TN{0};
+
+		[[nodiscard]] uint32_t total() const {
+			return  TP + FP + FN + TN;
+		}
+
+
+
+		Tail pvalTail{Tail::TWOTAILED};
+
+	};
+
+	static FisherExactFor2x2Result runFisherExactOn2x2(const FisherExactFor2x2Input & inPars){
+		//implementation based on R implement of 2x2 fisher exact
+		uint32_t k = inPars.TP + inPars.FN;
+		uint32_t m = inPars.TP + inPars.FP;
+		uint32_t n = inPars.FN + inPars.TN;
+		uint32_t total = inPars.total();
+		uint32_t lo = n > k ? 0U : k - n; //std::max(0, k - n);
+		uint32_t hi = std::min(k, m);
+
+		std::vector<uint32_t> support(hi + 1 - lo);
+		njh::iota(support, lo);
+		//m, k, total
+		boost::math::hypergeometric_distribution<double> hg_dist(m, k, total);
+		std::vector<double> logdc;
+		logdc.reserve(support.size())	;
+		for(const auto val : support){
+			logdc.emplace_back(log(boost::math::pdf(hg_dist, val)));
+		}
+		auto dnhyper = [&logdc,&support](double ncp){
+			std::vector<double> ret(logdc.size());
+			for(const auto idx : iter::range(logdc.size())){
+				ret[idx] = logdc[idx] + log(ncp) * support[idx];
+			}
+			auto maxret = vectorMaximum(ret);
+			for(const auto idx : iter::range(logdc.size())){
+				ret[idx] = exp(ret[idx] - maxret);
+			}
+			auto sumret = vectorSum(ret);
+			for(const auto idx : iter::range(logdc.size())){
+				ret[idx] = ret[idx]/sumret;
+			}
+			return ret;
+		};
+//		auto test_dnhyper = dnhyper(1);
+//		std::cout << "test_dnhyper: "  << std::endl;
+//		for(const auto idx : iter::range(test_dnhyper.size())){
+//			std::cout << test_dnhyper[idx] << std::endl;
+//		}
+
+		auto mnhyper = [&lo,&hi,&dnhyper,&support](double ncp){
+			if (ncp == 0){
+				return static_cast<double>(lo);
+			}
+			if (ncp == std::numeric_limits<double>::infinity()){
+				return static_cast<double>(hi);
+			}
+			double sum = 0;
+			auto dnhyper_res = dnhyper(ncp);
+			for(const auto idx : iter::range(support.size())){
+				sum += dnhyper_res[idx] * support[idx];
+			}
+			return sum;
+		};
+
+
+		auto pnhyper = [&lo,&hi,&dnhyper,&support,&hg_dist,&inPars](double q, double ncp =1, bool upperTail = false)  {
+			if (ncp == 1) {
+				if(upperTail){
+					//1 - phyper(..., lower.tail = TRUE) is the same as phyper(..., lower.tail = FALSE)
+					return 1 - boost::math::cdf(hg_dist, inPars.TP - 1);//will fail if TP == 0
+				} else {
+					return boost::math::cdf(hg_dist, inPars.TP);
+				}
+			}
+			if (ncp == 0) {
+				if(upperTail){
+					return q <= lo ? 1. : 0.;
+				}else{
+					return q >= lo ? 1. : 0.;
+				}
+			}
+			if (ncp == std::numeric_limits<double>::infinity()){
+				if(upperTail){
+					return q <= hi ? 1. : 0.;
+				}else{
+					return q >= hi ? 1. : 0.;
+				}
+			}
+			double sum = 0;
+			auto dnhyper_res = dnhyper(ncp);
+			if(upperTail){
+				for(const auto idx : iter::range(support.size())){
+					if(support[idx] >= q){
+						sum += dnhyper_res[idx];
+					}
+				}
+			}else{
+				for(const auto idx : iter::range(support.size())){
+					if(support[idx] <= q){
+						sum += dnhyper_res[idx];
+					}
+				}
+			}
+			return sum;
+		};
+
+		auto pnhyper_twotailed = [&lo,&hi,&dnhyper,&support,&inPars](const double test_odds)  {
+			if (test_odds == 0){
+				return inPars.TP == lo ? 1. : 0.;
+			} else if (test_odds == std::numeric_limits<double>::infinity()){
+				return inPars.TP == hi ? 1. : 0.;
+			} else {
+				double relErr = 1 + 1e-07;
+				auto dnhyper_res = dnhyper(test_odds);
+				double sum = 0;
+				double testAgainst = dnhyper_res[inPars.TP - lo] * relErr;
+				for(const auto idx : iter::range(support.size())){
+					if(dnhyper_res[idx] <= testAgainst){
+						sum += dnhyper_res[idx];
+					}
+				}
+				return sum;
+			}
+		};
+		auto mle = [&lo,&hi,&mnhyper](const double x) {
+			if (x == lo) {
+				return 0.0;
+			}
+			if (x == hi){
+				return std::numeric_limits<double>::infinity();
+			}
+			boost::uintmax_t max_iter=500; // Set max iterations.
+
+			boost::math::tools::eps_tolerance<double> tol(30); //Set the eps tolerance.
+
+//
+
+
+
+			double mu = mnhyper(1);
+			if (mu > x) {
+				auto funcToRoot = [&mnhyper,&x](double input){
+					return mnhyper(input) - x;
+				};
+				auto r1 = boost::math::tools::toms748_solve(funcToRoot, 0.0, 1.0, tol, max_iter); // use the toms solve algorithm.
+				return r1.first;
+				//uniroot(function(t) mnhyper(t) - x, c(0, 1))$root
+			} else if (mu < x) {
+				auto funcToRoot = [&mnhyper,&x](double input){
+					return mnhyper(1/input) - x;
+				};
+				auto r1 = boost::math::tools::toms748_solve(funcToRoot, std::numeric_limits<double>::epsilon(), 1.0, tol, max_iter); // use the toms solve algorithm.
+				return 1/r1.first;
+				//1 / uniroot(function(t) mnhyper(1 / t) - x, c(.Machine$double.eps, 1))$root
+			}
+			return 1.0;
+		};
+
+		auto upperConf = [&pnhyper,&hi](const double x, const double alpha){
+			if (x == hi) {
+				return std::numeric_limits<double>::infinity();
+			}
+			boost::uintmax_t max_iter=500; // Set max iterations.
+
+			boost::math::tools::eps_tolerance<double> tol(30); //Set the eps tolerance.
+
+			double p = pnhyper(x, 1);
+			if (p < alpha) {
+				auto funcToRoot = [&pnhyper,&x,&alpha](double t){
+					return pnhyper(x, t) - alpha;
+				};
+				auto r1 = boost::math::tools::toms748_solve(funcToRoot, 0.0, 1.0, tol, max_iter); // use the toms solve algorithm.
+				return r1.first;
+				//uniroot(function(t) pnhyper(x, t) - alpha, c(0, 1))$root
+			} else if (p > alpha) {
+				auto funcToRoot = [&pnhyper,&x,&alpha](double t){
+					return pnhyper(x, 1/t) - alpha;
+				};
+				auto r1 = boost::math::tools::toms748_solve(funcToRoot, std::numeric_limits<double>::epsilon(), 1.0, tol, max_iter); // use the toms solve algorithm.
+				return 1/r1.first;
+				//1 / uniroot(function(t) pnhyper(x, 1 / t) - alpha, c(.Machine$double.eps, 1))$root
+			} else{
+				return 1.0;
+			}
+		};
+
+		auto lowerConf = [&pnhyper,&lo](const double x, const double alpha){
+			if (x == lo) {
+				return std::numeric_limits<double>::infinity();
+			}
+			boost::uintmax_t max_iter=500; // Set max iterations.
+
+			boost::math::tools::eps_tolerance<double> tol(30); //Set the eps tolerance.
+
+			double p = pnhyper(x, 1, true);
+			if (p > alpha) {
+				auto funcToRoot = [&pnhyper,&x,&alpha](double t){
+					return pnhyper(x, t, true) - alpha;
+				};
+				auto r1 = boost::math::tools::toms748_solve(funcToRoot, 0.0, 1.0, tol, max_iter); // use the toms solve algorithm.
+				return r1.first;
+				//uniroot(function(t) pnhyper(x, t) - alpha, c(0, 1))$root
+			} else if (p < alpha) {
+				auto funcToRoot = [&pnhyper,&x,&alpha](double t){
+					return pnhyper(x, 1/t, true) - alpha;
+				};
+				auto r1 = boost::math::tools::toms748_solve(funcToRoot, std::numeric_limits<double>::epsilon(), 1.0, tol, max_iter); // use the toms solve algorithm.
+				return 1/r1.first;
+				//1 / uniroot(function(t) pnhyper(x, 1 / t) - alpha, c(.Machine$double.eps, 1))$root
+			} else{
+				return 1.0;
+			}
+		};
+
+		FisherExactFor2x2Result ret;
+		//odds
+		ret.oddsRatio_ = mle(inPars.TP);
+
+		//p-value and confidence interval
+		switch (inPars.pvalTail) {
+			case FisherExactFor2x2Input::Tail::TWOTAILED  :
+				ret.lowerConfInterval_ = lowerConf(inPars.TP, (1 - inPars.confInterval)/2);
+				ret.upperConfInterval_ = upperConf(inPars.TP, (1 - inPars.confInterval)/2);
+				ret.pValue_ = pnhyper_twotailed(1);
+				break; //optional
+			case FisherExactFor2x2Input::Tail::LESSER  :
+				ret.lowerConfInterval_ = 0;
+				ret.upperConfInterval_ = upperConf(inPars.TP, 1 - inPars.confInterval);
+				ret.pValue_ = pnhyper(inPars.TP, 1, false);
+				break; //optional
+			case FisherExactFor2x2Input::Tail::GREATER  :
+				ret.lowerConfInterval_ = lowerConf(inPars.TP, 1 - inPars.confInterval);
+				ret.upperConfInterval_ = 0;
+				ret.pValue_ = pnhyper(inPars.TP, 1, true);
+				break; //optional
+		}
+
+		return ret;
+	}
+
+	static std::vector<int32_t> genSupportVec(int32_t hi, int32_t lo){
+		std::vector<int32_t> support(hi + 1 - lo);
+		njh::iota(support, lo);
+		return support;
+	}
+};
+
+int statsExpRunner::fisher_exact(
+				const njh::progutils::CmdArgs & inputCommands) {
+	//     [,1] [,2]
+	// [1,] TP   FN
+	// [2,] FP   TN
+
+	FisherExactFor2x2::FisherExactFor2x2Input input;
+	input.TP = 45;
+	input.FP = 12;
+	input.FN = 18;
+	input.TN = 39;
+	input.confInterval = 0.95;
+	seqSetUp setUp(inputCommands);
+
+	setUp.setOption(input.TP, "--truePositives,--TP", "Number of true positives");
+	setUp.setOption(input.FP, "--falsePositives,--FP", "Number of false positives");
+	setUp.setOption(input.FN, "--falseNegatives,--FN", "Number of false negatives");
+	setUp.setOption(input.TN, "--trueNegatives,--TN", "Number of true negatives");
+	setUp.setOption(input.confInterval, "--confInterval", "Confidence interval");
+
+	setUp.finishSetUp(std::cout);
+
+	auto res = FisherExactFor2x2::runFisherExactOn2x2(input);
+	std::cout << "odds ratio: " << res.oddsRatio_ << std::endl;
+	std::cout << "lower " << roundDecPlaces(100*input.confInterval, 2)<< "% confidence: " << res.lowerConfInterval_ << std::endl;
+	std::cout << "upper " << roundDecPlaces(100*input.confInterval, 2)<< "% confidence: " << res.upperConfInterval_ << std::endl;
+	std::cout << "p-value: " << res.pValue_ << std::endl;
+
+	return 0;
+
+
+}
+
+int statsExpRunner::fisher_exact_tableInput(
+				const njh::progutils::CmdArgs & inputCommands) {
+	//     [,1] [,2]
+	// [1,] TP   FN
+	// [2,] FP   TN
+
+
+
+	bfs::path inputTable;
+	OutOptions outOpts(bfs::path(""), ".tsv");
+	seqSetUp setUp(inputCommands);
+
+	setUp.setOption(inputTable, "--inputTable", "inputTable, needs 5 columns; ID,TP, FP, FN, TN", true);
+	setUp.processWritingOptions(outOpts);
+
+	setUp.finishSetUp(std::cout);
+
+	table input(inputTable, "\t", true);
+	input.checkForColumnsThrow(VecStr{"ID", "TP", "FP", "FN", "TN"}, __PRETTY_FUNCTION__ );
+
+	OutputStream out(outOpts);
+	out << "ID\toddsRatio\tlowerConf\tupperConf\tp-value" << std::endl;
+	for(const auto & row : input){
+		FisherExactFor2x2::FisherExactFor2x2Input fisherInput;
+		fisherInput.TP = njh::StrToNumConverter::stoToNum<uint32_t>(row[input.getColPos("TP")]);
+		fisherInput.FP = njh::StrToNumConverter::stoToNum<uint32_t>(row[input.getColPos("FP")]);
+		fisherInput.FN = njh::StrToNumConverter::stoToNum<uint32_t>(row[input.getColPos("FN")]);
+		fisherInput.TN = njh::StrToNumConverter::stoToNum<uint32_t>(row[input.getColPos("TN")]);
+		auto res = FisherExactFor2x2::runFisherExactOn2x2(fisherInput);
+		out << row[input.getColPos("ID")]
+				<< "\t" << res.oddsRatio_
+				<< "\t" << res.lowerConfInterval_
+				<< "\t" << res.upperConfInterval_
+				<< "\t" << res.pValue_ << std::endl;
+	}
+
+
+	return 0;
+
+
 }
 
 

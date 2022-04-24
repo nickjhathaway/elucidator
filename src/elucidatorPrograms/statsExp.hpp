@@ -41,6 +41,9 @@ class statsExpRunner : public njh::progutils::ProgramRunner {
 	static int stats_pbeta(const njh::progutils::CmdArgs & inputCommands);
 	static int stats_pnorm(const njh::progutils::CmdArgs & inputCommands);
 
+	static int fisher_exact_test(const njh::progutils::CmdArgs & inputCommands);
+	static int fisher_exact(const njh::progutils::CmdArgs & inputCommands);
+	static int fisher_exact_tableInput(const njh::progutils::CmdArgs & inputCommands);
 
 };
 
