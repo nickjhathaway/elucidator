@@ -29,6 +29,16 @@ public:
 	 * @return an uint64_t with the hash for the input str
 	 */
 	[[nodiscard]] uint64_t hash(const std::string & str) const;
+
+	/**
+ * @brief hash up to the first 19 characters of string, hash can only do 19 characters, no check on len is done but only up to the first 19 characters are hashed no matter the input size
+ * @param str the string to hash
+ * @param start position within the string
+ * @param size hash from position to this many characters
+ * @return an uint64_t with the hash for the input str of size size from position start
+ */
+	[[nodiscard]] uint64_t hash(const std::string & str, uint32_t start, uint32_t size) const;
+
 	/**
 	 * @brief reverse a the hash to the original string
 	 * @param hash the hash to reverse
@@ -42,6 +52,15 @@ public:
 	 * @return a uint64_t hash representing the reverse complement of the input str
 	 */
 	[[nodiscard]] uint64_t revCompHash(const std::string & str) const;
+
+	/**
+ * @brief create a hash at the same time as reverse complementing, this way the original string doesn't need to be reverse complement
+ * @param str a kmer that will be reverse complemented and hashed
+ * @param start position within the string
+ * @param size hash from position to this many characters
+ * @return a uint64_t hash representing the reverse complement of the input str
+ */
+	[[nodiscard]] uint64_t revCompHash(const std::string & str, uint32_t start, uint32_t size) const;
 
 	/**
 	 * @brief reverse a hash and reverse complement

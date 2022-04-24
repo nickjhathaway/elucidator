@@ -52,6 +52,21 @@ uint64_t SimpleKmerHash::hash(const std::string & str) const{
 	return njh::StrToNumConverter::stoToNum<uint64_t>(convert);
 }
 
+uint64_t SimpleKmerHash::hash(const std::string & str, uint32_t start, uint32_t size) const{
+	std::string convert;
+
+//	std::cout << "start + size: " << start + size << std::endl;
+//	std::cout << "str.size(): " << str.size()  << std::endl;
+	for(size_t pos = start; pos < std::min<size_t>(start + size, str.size()); ++pos){
+		convert.push_back(hasher_[str[pos]]);
+	}
+//	std::cout << "convert: " << convert << std::endl;
+	return njh::StrToNumConverter::stoToNum<uint64_t>(convert);
+}
+
+
+
+
 std::string SimpleKmerHash::reverseHash(uint64_t hash) const {
 	std::string hashStr = estd::to_string(hash);
 	std::string back;
@@ -62,10 +77,21 @@ std::string SimpleKmerHash::reverseHash(uint64_t hash) const {
 	return back;
 }
 
+
+
 uint64_t SimpleKmerHash::revCompHash(const std::string & str) const{
 	std::string convert;
 	//go over backwards to reverse complement
 	for(size_t pos = std::min<size_t>(20, str.size()); pos >0 ; --pos){
+		convert.push_back(revCompHasher_[str[pos - 1]]);
+	}
+	return njh::StrToNumConverter::stoToNum<uint64_t>(convert);
+}
+
+uint64_t SimpleKmerHash::revCompHash(const std::string & str, uint32_t start, uint32_t size) const{
+	std::string convert;
+	//go over backwards to reverse complement
+	for(size_t pos = std::min<size_t>(start + size, str.size()); pos >start ; --pos){
 		convert.push_back(revCompHasher_[str[pos - 1]]);
 	}
 	return njh::StrToNumConverter::stoToNum<uint64_t>(convert);
