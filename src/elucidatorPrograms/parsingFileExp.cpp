@@ -46,6 +46,7 @@ parsingFileExpRunner::parsingFileExpRunner()
 					 addFunc("quickCountDirectory", quickCountDirectory, false),
 					 addFunc("BlastpHitsTabToBed", BlastpHitsTabToBed, false),
 					 addFunc("parsePrimerFastaToPrimerTxt", parsePrimerFastaToPrimerTxt, false),
+					 addFunc("parseNucmerResultsToBed", parseNucmerResultsToBed, false),
            },
           "parsingFileExp") {}
 //,
@@ -488,7 +489,109 @@ int parsingFileExpRunner::parsePrimerFastaToPrimerTxt(const njh::progutils::CmdA
 }
 
 
+class NucmerShowCoordsRecord{
+public:
 
+	explicit NucmerShowCoordsRecord(const std::string & line){
+		auto toks = tokenizeString(line, "\t");
 
+		if(toks.size() < 13){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "should be at least 13 toks, " << toks.size() << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		refStart_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[0]);
+		refEnd_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[1]);
+		queryStart_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[2]);
+		queryEnd_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[3]);
+		refHitLen_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[4]);
+		queryHitLen_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[5]);
+		perId_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[6]);
+		refFullLen_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[7]);
+		queryFullLen_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[8]);
+		refLenCov_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[9]);
+		queryLenCov_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[10]);
+		refName_ = toks[11];
+		queryName_ = toks[12];
+
+	}
+	//13 toks
+	//show-coords -T -l  -c -H out.delta
+	//[S1]	[E1]	[S2]	[E2]	[LEN 1]	[LEN 2]	[% IDY]	[LEN R]	[LEN Q]	[COV R]	[COV Q]	[TAGS]
+	// positions are 1 based
+	//0 ref start
+	//1 ref end
+	//2 query start
+	//3 query end
+	//4 ref hit len
+	//5 query hit len
+	//6 identity
+	//7 full ref length
+	//8 full query length
+	//9 ref coverage percentage
+	//10 query coverage percentage
+	//11 reference name
+	//12 query name
+
+	uint32_t refStart_{std::numeric_limits<uint32_t>::max()};
+	uint32_t refEnd_{std::numeric_limits<uint32_t>::max()};
+	uint32_t queryStart_{std::numeric_limits<uint32_t>::max()};
+	uint32_t queryEnd_{std::numeric_limits<uint32_t>::max()};
+	uint32_t refHitLen_{std::numeric_limits<uint32_t>::max()};
+	uint32_t queryHitLen_{std::numeric_limits<uint32_t>::max()};
+	double perId_{std::numeric_limits<double>::max()};
+	uint32_t refFullLen_{std::numeric_limits<uint32_t>::max()};
+	uint32_t queryFullLen_{std::numeric_limits<uint32_t>::max()};
+	double refLenCov_{std::numeric_limits<double>::max()};
+	double queryLenCov_{std::numeric_limits<double>::max()};
+	std::string refName_;
+	std::string queryName_;
+
+	[[nodiscard]] bool reverseStrand() const{
+		return refEnd_ < refStart_;
+	}
+	[[nodiscard]] Bed6RecordCore genBed6() const{
+		MetaDataInName meta;
+		meta.addMeta("perID", perId_);
+		meta.addMeta("refLenCov", refLenCov_);
+		meta.addMeta("queryLenCov", queryLenCov_);
+		meta.addMeta("queryStart", queryStart_);
+		meta.addMeta("queryEnd", queryEnd_);
+
+		Bed6RecordCore ret(refName_,
+											 reverseStrand() ? refEnd_ -1 : refStart_ -1,
+											 reverseStrand() ? refStart_ : refEnd_,
+											 queryName_,
+											 uAbsdiff(refStart_, refEnd_) + 1,
+											 reverseStrand() ? '-' : '+');
+		ret.extraFields_.emplace_back(meta.createMetaName());
+		return ret;
+	}
+
+};
+
+int parsingFileExpRunner::parseNucmerResultsToBed(const njh::progutils::CmdArgs & inputCommands) {
+	bool renameWithHitCount = false;
+
+	IoOptions ioOpts;
+	ioOpts.out_.outExtention_ = ".bed";
+	seqSetUp setUp(inputCommands);
+	setUp.processDebug();
+	setUp.processVerbose();
+	setUp.processWritingOptions(ioOpts.out_);
+	setUp.setOption(ioOpts.in_.inFilename_, "--coordsOutput", "output from show-coords filename", true);
+	setUp.setOption(renameWithHitCount, "--renameWithHitCount", "rename With Hit Count");
+
+	setUp.finishSetUp(std::cout);
+
+	InputStream  in(ioOpts.in_);
+	OutputStream out(ioOpts.out_);
+	std::string line;
+	while(njh::files::crossPlatGetline(in, line)){
+		NucmerShowCoordsRecord record(line);
+		out << record.genBed6().toDelimStrWithExtra() << std::endl;
+	}
+	return 0;
+}
 
 } /* namespace njhseq */

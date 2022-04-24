@@ -202,11 +202,11 @@ int bamExpRunner::isBamSorted(
 
 
 
-
 int bamExpRunner::determineRegion(
 		const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path genomeFnp = "";
-	std::string name = "";
+	std::string name;
+	bool keepIntermediateFiles = false;
 	bool individual = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -221,7 +221,8 @@ int bamExpRunner::determineRegion(
 				"Name to give the determined region");
 	setUp.setOption(individual, "--individual",
 					"Report a region for each input sequence rather than just the best overall regions for all seqs");
-
+	setUp.setOption(keepIntermediateFiles, "--keepIntermediateFiles",
+									"keep Intermediate Files");
 	setUp.finishSetUp(std::cout);
 	auto genomeName = bfs::basename(genomeFnp);
 	if (std::string::npos != genomeName.rfind(".")) {
@@ -255,16 +256,20 @@ int bamExpRunner::determineRegion(
 		}
 	}else{
 		auto determinedRegions = genomeMapper.getRegionsFromBams(bamFnps);
-		auto region = determinedRegions.at(genomeName).front();
-		if("" != name){
-			region.uid_ = name;
+		if(!determinedRegions.at(genomeName).empty()){
+			auto region = determinedRegions.at(genomeName).front();
+			if("" != name){
+				region.uid_ = name;
+			}
+			//write out all the regions determined
+			out << region.genBedRecordCore().toDelimStr() << std::endl;
 		}
-		//write out all the regions determined
-		out << region.genBedRecordCore().toDelimStr() << std::endl;
 	}
-	for(const auto & bamFnp : bamFnps){
-		bfs::remove(bamFnp.second);
-		bfs::remove(bamFnp.second.string() + ".bai");
+	if(!keepIntermediateFiles){
+		for(const auto & bamFnp : bamFnps){
+			bfs::remove(bamFnp.second);
+			bfs::remove(bamFnp.second.string() + ".bai");
+		}
 	}
 	return 0;
 }
@@ -275,6 +280,8 @@ int bamExpRunner::determineRegionLastz(
 	std::string name = "";
 	bool individual = false;
 	BioCmdsUtils::LastZPars lzPars;
+	bool keepIntermediateFiles = false;
+
 
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -291,7 +298,8 @@ int bamExpRunner::determineRegionLastz(
 				"Name to give the determined region");
 	setUp.setOption(individual, "--individual",
 					"Report a region for each input sequence rather than just the best overall regions for all seqs");
-
+	setUp.setOption(keepIntermediateFiles, "--keepIntermediateFiles",
+									"keep Intermediate Files");
 	setUp.finishSetUp(std::cout);
 
 	njh::files::checkExistenceThrow(genomeFnp, __PRETTY_FUNCTION__);
@@ -370,19 +378,24 @@ int bamExpRunner::determineRegionLastz(
 		}
 	} else {
 		auto determinedRegions = genomeMapper.getRegionsFromBams(bamFnps);
-		auto region = determinedRegions.at(genomeName).front();
-		if("" != name){
-			region.uid_ = name;
+		if(!determinedRegions.at(genomeName).empty()){
+			auto region = determinedRegions.at(genomeName).front();
+			if("" != name){
+				region.uid_ = name;
+			}
+			//write out all the regions determined
+			out << region.genBedRecordCore().toDelimStr() << std::endl;
 		}
-		//write out all the regions determined
-		out << region.genBedRecordCore().toDelimStr() << std::endl;
 	}
 
 
-	for(const auto & bamFnp : bamFnps){
-		bfs::remove(bamFnp.second);
-		bfs::remove(bamFnp.second.string() + ".bai");
-		bfs::remove(tempSeqOpts.out_.outName());
+
+	if(!keepIntermediateFiles){
+		for(const auto & bamFnp : bamFnps){
+			bfs::remove(bamFnp.second);
+			bfs::remove(bamFnp.second.string() + ".bai");
+			bfs::remove(tempSeqOpts.out_.outName());
+		}
 	}
 	return 0;
 }

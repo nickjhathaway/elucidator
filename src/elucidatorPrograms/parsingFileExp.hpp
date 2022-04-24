@@ -57,6 +57,8 @@ class parsingFileExpRunner : public njh::progutils::ProgramRunner {
 
 	static int quickCountDirectory(const njh::progutils::CmdArgs & inputCommands);
 
+	static int parseNucmerResultsToBed(const njh::progutils::CmdArgs & inputCommands);
+
 };
 } /* namespace njhseq */
 

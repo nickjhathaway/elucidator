@@ -64,7 +64,7 @@ int kmerExpRunner::getKmerDetailedKmerDistAgainstRef(const njh::progutils::CmdAr
 			kmerInfo kInfo(seq.seq_, kmerLength, false);
 			for(const auto pos : iter::range(refSeqs.size())){
 				const auto & refSeq = refSeqs[pos];
-				auto dist = refSeq->kInfo_.compareKmersDetailed(kInfo);
+				auto dist = kInfo.compareKmersDetailed(refSeq->kInfo_);
 				{
 					std::lock_guard<std::mutex> lock(outMut);
 					out << seq.name_

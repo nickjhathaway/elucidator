@@ -13,14 +13,14 @@ namespace njhseq {
 
 
 SimpleKmerHash::SimpleKmerHash(){
-	hasher_ = std::vector<char>(255, '5');
+	hasher_ = std::vector<char>(255, '5'); //by defaulting to 5 everything but A, C, G, T will be turned into an N
 	hasher_['A'] = '1';
 	hasher_['C'] = '2';
 	hasher_['G'] = '3';
 	hasher_['T'] = '4';
 	hasher_['N'] = '5';
 
-	revCompHasher_ = std::vector<char>(255, '5');
+	revCompHasher_ = std::vector<char>(255, '5'); //by defaulting to 5 everything but A, C, G, T will be turned into an N
 	revCompHasher_['A'] = '4';//T
 	revCompHasher_['C'] = '3';//G
 	revCompHasher_['G'] = '2';//C
@@ -66,7 +66,6 @@ uint64_t SimpleKmerHash::revCompHash(const std::string & str) const{
 	std::string convert;
 	//go over backwards to reverse complement
 	for(size_t pos = std::min<size_t>(20, str.size()); pos >0 ; --pos){
-
 		convert.push_back(revCompHasher_[str[pos - 1]]);
 	}
 	return njh::StrToNumConverter::stoToNum<uint64_t>(convert);
