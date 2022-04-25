@@ -15,6 +15,8 @@ int kmerExpRunner::findingKmerEnrichment(const njh::progutils::CmdArgs & inputCo
 	uint32_t kmerLength = 19;
 	uint32_t numThreads = 1;
 	uint32_t minGroupSize = 1;
+
+	double pvalueToReportCutOff = 0.20;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -24,6 +26,7 @@ int kmerExpRunner::findingKmerEnrichment(const njh::progutils::CmdArgs & inputCo
 	setUp.setOption(kmerLength, "--kmerLength", "kmer Length");
 	setUp.setOption(inputFiles, "--inputFiles", "input files", true);
 	setUp.setOption(sampleMetaFnp, "--sampleMetaFnp", "Sample Meta Fnp to find enrichment of", true);
+	setUp.setOption(pvalueToReportCutOff, "--pvalueToReportCutOff", "pvalueToReportCutOff");
 
 	setUp.processDirectoryOutputName("findingKmerEnrichment_TODAY", true);
 	setUp.finishSetUp(std::cout);
@@ -148,18 +151,20 @@ int kmerExpRunner::findingKmerEnrichment(const njh::progutils::CmdArgs & inputCo
 //				std::cout << "lower " << roundDecPlaces(100*fisherInput.confInterval, 2)<< "% confidence: " << res.lowerConfInterval_ << std::endl;
 //				std::cout << "upper " << roundDecPlaces(100*fisherInput.confInterval, 2)<< "% confidence: " << res.upperConfInterval_ << std::endl;
 //				std::cout << "p-value: " << res.pValue_ << std::endl; 	TP	FP	FN	TN
-					fisherTestsOut << kmers.first
-												 << "\t" << group
-												 << "\t" << indexToGroup[0]
-												 << "\t" << res.oddsRatio_
-												 << "\t" << res.lowerConfInterval_
-												 << "\t" << res.upperConfInterval_
-												 << "\t" << res.pValue_
-												 << "\t" << fisherInput.TP
-												 << "\t" << fisherInput.FP
-												 << "\t" << fisherInput.FN
-												 << "\t" << fisherInput.TN
-												 << std::endl;
+					if(res.pValue_ <= pvalueToReportCutOff){
+						fisherTestsOut << kmers.first
+													 << "\t" << group
+													 << "\t" << indexToGroup[0]
+													 << "\t" << res.oddsRatio_
+													 << "\t" << res.lowerConfInterval_
+													 << "\t" << res.upperConfInterval_
+													 << "\t" << res.pValue_
+													 << "\t" << fisherInput.TP
+													 << "\t" << fisherInput.FP
+													 << "\t" << fisherInput.FN
+													 << "\t" << fisherInput.TN
+													 << std::endl;
+					}
 				}
 			}
 		}
