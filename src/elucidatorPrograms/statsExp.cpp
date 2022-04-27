@@ -607,31 +607,44 @@ int statsExpRunner::fisher_exact_tableInput(
 	// [1,] TP   FN
 	// [2,] FP   TN
 
-
-
+	bool addOneToAll = false;
+	VecStr IDColumnNames{ "ID"};
 	bfs::path inputTable;
 	OutOptions outOpts(bfs::path(""), ".tsv");
 	seqSetUp setUp(inputCommands);
+	setUp.setOption(addOneToAll, "--addOneToAll", "add One To All");
 
-	setUp.setOption(inputTable, "--inputTable", "inputTable, needs 5 columns; ID,TP, FP, FN, TN", true);
+	setUp.setOption(IDColumnNames, "--IDColumnNames", "ID Column Names");
+	setUp.setOption(inputTable, "--inputTable", "inputTable, needs 5 columns; IDColumnName,TP, FP, FN, TN", true);
 	setUp.processWritingOptions(outOpts);
 
 	setUp.finishSetUp(std::cout);
 
 	table input(inputTable, "\t", true);
-	input.checkForColumnsThrow(VecStr{"ID", "TP", "FP", "FN", "TN"}, __PRETTY_FUNCTION__ );
+	input.checkForColumnsThrow(VecStr{"TP", "FP", "FN", "TN"}, __PRETTY_FUNCTION__ );
+	input.checkForColumnsThrow(IDColumnNames, __PRETTY_FUNCTION__ );
+
 
 	OutputStream out(outOpts);
-	out << "ID\toddsRatio\tlowerConf\tupperConf\tp-value" << std::endl;
+	out << njh::conToStr(IDColumnNames, "\t") << "\t"<< "oddsRatio\tlowerConf\tupperConf\tp-value" << std::endl;
 	for(const auto & row : input){
 		PopGenCalculator::FisherExactFor2x2::FisherExactFor2x2Input fisherInput;
 		fisherInput.TP = njh::StrToNumConverter::stoToNum<uint32_t>(row[input.getColPos("TP")]);
 		fisherInput.FP = njh::StrToNumConverter::stoToNum<uint32_t>(row[input.getColPos("FP")]);
 		fisherInput.FN = njh::StrToNumConverter::stoToNum<uint32_t>(row[input.getColPos("FN")]);
 		fisherInput.TN = njh::StrToNumConverter::stoToNum<uint32_t>(row[input.getColPos("TN")]);
+		if(addOneToAll){
+			++fisherInput.TP;
+			++fisherInput.FP;
+			++fisherInput.FN;
+			++fisherInput.TN;
+		}
 		auto res = PopGenCalculator::FisherExactFor2x2::runFisherExactOn2x2(fisherInput);
-		out << row[input.getColPos("ID")]
-				<< "\t" << res.oddsRatio_
+		for(const auto & colname : IDColumnNames){
+			out << row[input.getColPos(colname)] << "\t";
+		}
+		out
+				 << res.oddsRatio_
 				<< "\t" << res.lowerConfInterval_
 				<< "\t" << res.upperConfInterval_
 				<< "\t" << res.pValue_ << std::endl;

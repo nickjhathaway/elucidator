@@ -92,6 +92,7 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("chromVsChromUniqueComp", chromVsChromUniqueComp, false),
 					 addFunc("getKmerDetailedKmerDistAgainstRef", getKmerDetailedKmerDistAgainstRef, false),
 					 addFunc("findingKmerEnrichment", findingKmerEnrichment, false),
+					 addFunc("simpleHashKmer", simpleHashKmer, false),
 					 //
            },
           "kmerExp") {}

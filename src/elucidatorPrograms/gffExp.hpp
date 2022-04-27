@@ -81,6 +81,7 @@ class gffExpRunner : public njh::progutils::ProgramRunner {
 	static int aaPositionsToBed(const njh::progutils::CmdArgs & inputCommands);
 
 	static int appendGff(const njh::progutils::CmdArgs & inputCommands);
+	static int combineGffs(const njh::progutils::CmdArgs & inputCommands);
 
 	static int revCompGff(const njh::progutils::CmdArgs & inputCommands);
 

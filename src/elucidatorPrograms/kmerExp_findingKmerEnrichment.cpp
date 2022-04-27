@@ -9,20 +9,53 @@
 
 namespace njhseq {
 
+
+
+int kmerExpRunner::simpleHashKmer(const njh::progutils::CmdArgs & inputCommands) {
+	std::string kmer;
+	bool reverse = false;
+	bool revComp = false;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(kmer, "--kmer", "kmer", true);
+	setUp.setOption(reverse, "--reverse", "reverse the hash");
+	setUp.setOption(revComp, "--revComp", "reverse complement");
+
+	setUp.finishSetUp(std::cout);
+
+	SimpleKmerHash khasher;
+	if(reverse){
+		if(revComp){
+			std::cout << khasher.revCompReverseHash(njh::StrToNumConverter::stoToNum<uint64_t>(kmer)) << std::endl;
+		}else{
+			std::cout << khasher.reverseHash(njh::StrToNumConverter::stoToNum<uint64_t>(kmer)) << std::endl;
+		}
+	}else{
+		if(revComp){
+			std::cout << khasher.hash(kmer) << std::endl;
+		}else{
+			std::cout << khasher.revCompHash(kmer) << std::endl;
+		}
+	}
+
+	return 0;
+}
+
 int kmerExpRunner::findingKmerEnrichment(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path sampleMetaFnp;
 	std::vector<bfs::path> inputFiles;
 	uint32_t kmerLength = 19;
 	uint32_t numThreads = 1;
 	uint32_t minGroupSize = 1;
-
+	bool doNotAddOneToAll = false;
 	double pvalueToReportCutOff = 0.20;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.setOption(numThreads, "--numThreads", "number Threads");
 	setUp.setOption(minGroupSize, "--minGroupSize", "minGroupSize");
-
+	setUp.setOption(doNotAddOneToAll, "--doNotAddOneToAll", "Do not add One To All counts");
 	setUp.setOption(kmerLength, "--kmerLength", "kmer Length");
 	setUp.setOption(inputFiles, "--inputFiles", "input files", true);
 	setUp.setOption(sampleMetaFnp, "--sampleMetaFnp", "Sample Meta Fnp to find enrichment of", true);
@@ -45,8 +78,8 @@ int kmerExpRunner::findingKmerEnrichment(const njh::progutils::CmdArgs & inputCo
 	std::set<std::string> groupsWith2Levels;
 	for(const auto & group : meta.groupData_){
 		uint32_t count = 0;
-		for(const auto & group : group.second->subGroupsLevels_){
-			if("NA" != group){
+		for(const auto & subGroupsLevel : group.second->subGroupsLevels_){
+			if("NA" != subGroupsLevel){
 				++count;
 			}
 		}
@@ -55,7 +88,9 @@ int kmerExpRunner::findingKmerEnrichment(const njh::progutils::CmdArgs & inputCo
 		}
 	}
 
-	std::cout << "groupsWith2Levels: " << njh::conToStr(groupsWith2Levels, ",") << std::endl;
+	if(setUp.pars_.verbose_){
+		std::cout << "groupsWith2Levels: " << njh::conToStr(groupsWith2Levels, ",") << std::endl;
+	}
 	std::unordered_map<uint64_t, std::unordered_set<std::string>> kmersSamples;
 	std::mutex kmersSampleMut;
 
@@ -90,6 +125,7 @@ int kmerExpRunner::findingKmerEnrichment(const njh::progutils::CmdArgs & inputCo
 		}
 	};
 
+
 	njh::concurrent::runVoidFunctionThreaded(count, numThreads);
 
 	OutputStream outCounts(njh::files::make_path(setUp.pars_.directoryName_, "counts.tab.txt.gz"));
@@ -114,7 +150,10 @@ int kmerExpRunner::findingKmerEnrichment(const njh::progutils::CmdArgs & inputCo
 						}
 					}
 				}
-				std::vector<std::vector<uint32_t>> counts(2, std::vector<uint32_t>(2, 0));
+
+				uint32_t baseCounts = doNotAddOneToAll ? 0: 1;
+
+				std::vector<std::vector<uint32_t>> counts(2, std::vector<uint32_t>(2, baseCounts));
 //				std::cout << "counts: " << std::endl;
 //				for(const auto & count : counts){
 //					printVector(count, " ", std::cout);

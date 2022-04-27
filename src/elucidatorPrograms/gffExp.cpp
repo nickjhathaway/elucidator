@@ -70,6 +70,7 @@ gffExpRunner::gffExpRunner()
 					 addFunc("gffTranscriptIDForGeneIDs", gffTranscriptIDForGeneIDs, false),
 					 addFunc("gffRenameChroms", gffRenameChroms, false),
 					 addFunc("gffToBedByID", gffToBedByID, false),
+					 addFunc("combineGffs", combineGffs, false),
            },//
           "gffExp") {}
 class AmionoAcidPositionInfo {
@@ -1641,6 +1642,82 @@ int gffExpRunner::bedGetIntersectingGenesInGff(const njh::progutils::CmdArgs & i
 	return 0;
 }
 
+
+template <typename BEDREC>
+Json::Value intersectBedLocsWtihGffRecordsTesting(
+				std::vector<BEDREC> & beds,
+				const intersectBedLocsWtihGffRecordsPars & pars){
+	Json::Value ret;
+	for (auto & inputRegion : beds) {
+		getRef(inputRegion).extraFields_.emplace_back("");
+	}
+	std::unordered_map<std::string, std::vector<uint32_t>> bedsByChrome;
+
+	BioDataFileIO<GFFCore> reader { IoOptions(InOptions(pars.gffFnp_)) };
+	reader.openIn();
+	uint32_t count = 0;
+	std::string line = "";
+	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
+	for (const auto bPos : iter::range(beds.size())) {
+		bedsByChrome[getRef(beds[bPos]).chrom_].emplace_back(bPos);
+	}
+	std::cout << njh::conToStr(njh::getVecOfMapKeys(bedsByChrome)) << std::endl;
+
+	while (nullptr != gRecord) {
+		if (pars.selectFeatures_.empty() || njh::in(gRecord->type_, pars.selectFeatures_)) {
+			auto gRegion = GenomicRegion(*gRecord);
+			std::cout << gRegion.chrom_ << std::endl;
+			if(njh::in(gRegion.chrom_, bedsByChrome)){
+				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+			}
+//			for (auto & inputRegionPos : bedsByChrome[gRegion.chrom_]) {
+//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//				if (GenomicRegion(getRef(beds[inputRegionPos])).overlaps(gRegion)) {
+//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//					if("" != getRef(beds[inputRegionPos]).extraFields_.back()){
+//						getRef(beds[inputRegionPos]).extraFields_.back().append(",");
+//					}
+//					getRef(beds[inputRegionPos]).extraFields_.back().append("[");
+//					getRef(beds[inputRegionPos]).extraFields_.back().append(
+//									"ID=" + gRecord->getAttr("ID") + ";");
+//					if(pars.selectFeatures_.empty() || 1 != pars.selectFeatures_.size()){
+//						getRef(beds[inputRegionPos]).extraFields_.back().append("feature=" + gRecord->type_ + ";");
+//					}
+//					if (!ret.isMember(gRecord->getAttr("ID"))) {
+//						ret[gRecord->getAttr("ID")] = gRecord->toJson();
+//					}
+//					for (const auto & attr : pars.extraAttributes_) {
+//						if (gRecord->hasAttr(attr)) {
+//							getRef(beds[inputRegionPos]).extraFields_.back().append(
+//											attr + "=" + gRecord->getAttr(attr) + ";");
+//						} else {
+//							getRef(beds[inputRegionPos]).extraFields_.back().append(
+//											attr + "=" + "NA" + ";");
+//						}
+//					}
+//					getRef(beds[inputRegionPos]).extraFields_.back().append("]");
+//				}
+//			}
+		}
+		bool end = false;
+		while ('#' == reader.inFile_->peek()) {
+			if (njh::files::nextLineBeginsWith(*reader.inFile_, "##FASTA")) {
+				end = true;
+				break;
+			}
+			njh::files::crossPlatGetline(*reader.inFile_, line);
+		}
+		if (end) {
+			break;
+		}
+		gRecord = reader.readNextRecord();
+		++count;
+	}
+	return ret;
+}
+
+
+
 int gffExpRunner::bedGetIntersectingRecordsInGff(const njh::progutils::CmdArgs & inputCommands){
 	intersectBedLocsWtihGffRecordsPars pars;
 	OutOptions outOpts(bfs::path("out"));
@@ -1670,7 +1747,7 @@ int gffExpRunner::bedGetIntersectingRecordsInGff(const njh::progutils::CmdArgs &
 	outOptsJson.outExtention_ = ".json";
 	outOptsJson.transferOverwriteOpts(outOpts);
 	OutputStream outJsonOut(outOptsJson);
-	Json::Value outJson = intersectBedLocsWtihGffRecords(beds, pars);
+	Json::Value outJson = intersectBedLocsWtihGffRecordsTesting(beds, pars);
 	for(const auto & bed : beds){
 		out << bed->toDelimStrWithExtra() << std::endl;
 	}

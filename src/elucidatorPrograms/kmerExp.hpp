@@ -122,6 +122,7 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 
 
 	static int findingKmerEnrichment(const njh::progutils::CmdArgs & inputCommands);
+	static int simpleHashKmer(const njh::progutils::CmdArgs & inputCommands);
 
 };
 } /* namespace njhseq */
