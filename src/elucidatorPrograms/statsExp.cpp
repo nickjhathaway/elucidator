@@ -606,13 +606,14 @@ int statsExpRunner::fisher_exact_tableInput(
 	//     [,1] [,2]
 	// [1,] TP   FN
 	// [2,] FP   TN
-
+	double maxPvalue = 1;
 	bool addOneToAll = false;
 	VecStr IDColumnNames{ "ID"};
 	bfs::path inputTable;
 	OutOptions outOpts(bfs::path(""), ".tsv");
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(addOneToAll, "--addOneToAll", "add One To All");
+	setUp.setOption(maxPvalue, "--maxPvalue", "max P-value");
 
 	setUp.setOption(IDColumnNames, "--IDColumnNames", "ID Column Names");
 	setUp.setOption(inputTable, "--inputTable", "inputTable, needs 5 columns; IDColumnName,TP, FP, FN, TN", true);
@@ -640,14 +641,16 @@ int statsExpRunner::fisher_exact_tableInput(
 			++fisherInput.TN;
 		}
 		auto res = PopGenCalculator::FisherExactFor2x2::runFisherExactOn2x2(fisherInput);
-		for(const auto & colname : IDColumnNames){
-			out << row[input.getColPos(colname)] << "\t";
+		if(res.pValue_ <= maxPvalue){
+			for(const auto & colname : IDColumnNames){
+				out << row[input.getColPos(colname)] << "\t";
+			}
+			out
+							<< res.oddsRatio_
+							<< "\t" << res.lowerConfInterval_
+							<< "\t" << res.upperConfInterval_
+							<< "\t" << res.pValue_ << std::endl;
 		}
-		out
-				 << res.oddsRatio_
-				<< "\t" << res.lowerConfInterval_
-				<< "\t" << res.upperConfInterval_
-				<< "\t" << res.pValue_ << std::endl;
 	}
 
 
