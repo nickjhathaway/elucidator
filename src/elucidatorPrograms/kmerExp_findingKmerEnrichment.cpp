@@ -12,30 +12,34 @@ namespace njhseq {
 
 
 int kmerExpRunner::simpleHashKmer(const njh::progutils::CmdArgs & inputCommands) {
-	std::string kmer;
+	VecStr kmers;
 	bool reverse = false;
 	bool revComp = false;
+	OutOptions  outOpts(bfs::path(""));
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
-	setUp.setOption(kmer, "--kmer", "kmer", true);
+	setUp.setOption(kmers, "--kmer,--kmers", "kmer", true);
 	setUp.setOption(reverse, "--reverse", "reverse the hash");
 	setUp.setOption(revComp, "--revComp", "reverse complement");
-
+	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 
+	OutputStream out(outOpts);
 	SimpleKmerHash khasher;
-	if(reverse){
-		if(revComp){
-			std::cout << khasher.revCompReverseHash(njh::StrToNumConverter::stoToNum<uint64_t>(kmer)) << std::endl;
-		}else{
-			std::cout << khasher.reverseHash(njh::StrToNumConverter::stoToNum<uint64_t>(kmer)) << std::endl;
-		}
-	}else{
-		if(revComp){
-			std::cout << khasher.hash(kmer) << std::endl;
-		}else{
-			std::cout << khasher.revCompHash(kmer) << std::endl;
+	for (const auto &kmer: kmers) {
+		if (reverse) {
+			if (revComp) {
+				out << khasher.revCompReverseHash(njh::StrToNumConverter::stoToNum<uint64_t>(kmer)) << std::endl;
+			} else {
+				out << khasher.reverseHash(njh::StrToNumConverter::stoToNum<uint64_t>(kmer)) << std::endl;
+			}
+		} else {
+			if (revComp) {
+				out << khasher.hash(kmer) << std::endl;
+			} else {
+				out << khasher.revCompHash(kmer) << std::endl;
+			}
 		}
 	}
 

@@ -28,6 +28,7 @@
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/objects/counters/DNABaseCounter.hpp"
 #include <njhseq/PopulationGenetics/PopGenCalcs.hpp>
+#include <njhseq/objects/dataContainers/tables/TableReader.hpp>
 
 #include <boost/math/distributions.hpp>
 
@@ -607,6 +608,7 @@ int statsExpRunner::fisher_exact_tableInput(
 	// [1,] TP   FN
 	// [2,] FP   TN
 	double maxPvalue = 1;
+	double minLowerConfInterval = 0;
 	bool addOneToAll = false;
 	VecStr IDColumnNames{ "ID"};
 	bfs::path inputTable;
@@ -614,26 +616,28 @@ int statsExpRunner::fisher_exact_tableInput(
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(addOneToAll, "--addOneToAll", "add One To All");
 	setUp.setOption(maxPvalue, "--maxPvalue", "max P-value");
+	setUp.setOption(minLowerConfInterval, "--minLowerConfInterval", "min Lower Conf Interval");
 
 	setUp.setOption(IDColumnNames, "--IDColumnNames", "ID Column Names");
 	setUp.setOption(inputTable, "--inputTable", "inputTable, needs 5 columns; IDColumnName,TP, FP, FN, TN", true);
 	setUp.processWritingOptions(outOpts);
 
 	setUp.finishSetUp(std::cout);
+	TableReader tabReader(TableIOOpts::genTabFileIn(inputTable));
 
-	table input(inputTable, "\t", true);
-	input.checkForColumnsThrow(VecStr{"TP", "FP", "FN", "TN"}, __PRETTY_FUNCTION__ );
-	input.checkForColumnsThrow(IDColumnNames, __PRETTY_FUNCTION__ );
+	tabReader.header_.checkForColumnsThrow(VecStr{"TP", "FP", "FN", "TN"}, __PRETTY_FUNCTION__ );
+	tabReader.header_.checkForColumnsThrow(IDColumnNames, __PRETTY_FUNCTION__ );
 
 
 	OutputStream out(outOpts);
 	out << njh::conToStr(IDColumnNames, "\t") << "\t"<< "oddsRatio\tlowerConf\tupperConf\tp-value" << std::endl;
-	for(const auto & row : input){
+	VecStr row;
+	while(tabReader.getNextRow(row)){
 		PopGenCalculator::FisherExactFor2x2::FisherExactFor2x2Input fisherInput;
-		fisherInput.TP = njh::StrToNumConverter::stoToNum<uint32_t>(row[input.getColPos("TP")]);
-		fisherInput.FP = njh::StrToNumConverter::stoToNum<uint32_t>(row[input.getColPos("FP")]);
-		fisherInput.FN = njh::StrToNumConverter::stoToNum<uint32_t>(row[input.getColPos("FN")]);
-		fisherInput.TN = njh::StrToNumConverter::stoToNum<uint32_t>(row[input.getColPos("TN")]);
+		fisherInput.TP = njh::StrToNumConverter::stoToNum<uint32_t>(row[tabReader.header_.getColPos("TP")]);
+		fisherInput.FP = njh::StrToNumConverter::stoToNum<uint32_t>(row[tabReader.header_.getColPos("FP")]);
+		fisherInput.FN = njh::StrToNumConverter::stoToNum<uint32_t>(row[tabReader.header_.getColPos("FN")]);
+		fisherInput.TN = njh::StrToNumConverter::stoToNum<uint32_t>(row[tabReader.header_.getColPos("TN")]);
 		if(addOneToAll){
 			++fisherInput.TP;
 			++fisherInput.FP;
@@ -641,9 +645,9 @@ int statsExpRunner::fisher_exact_tableInput(
 			++fisherInput.TN;
 		}
 		auto res = PopGenCalculator::FisherExactFor2x2::runFisherExactOn2x2(fisherInput);
-		if(res.pValue_ <= maxPvalue){
+		if(res.pValue_ <= maxPvalue && res.lowerConfInterval_ >= minLowerConfInterval){
 			for(const auto & colname : IDColumnNames){
-				out << row[input.getColPos(colname)] << "\t";
+				out << row[tabReader.header_.getColPos(colname)] << "\t";
 			}
 			out
 							<< res.oddsRatio_
