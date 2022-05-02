@@ -1205,13 +1205,16 @@ int gffExpRunner::gffToBedByAttribute(const njh::progutils::CmdArgs & inputComma
 	OutOptions outOpts(bfs::path("out"));
 	outOpts.outExtention_ = ".bed";
 	std::string attribute = "";
-	std::string attributeLevel = "";
+    VecStr attributeLevels;
+    VecStr features;
+
 
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(inputFile, "--gff", "Input gff file", true);
 	setUp.setOption(attribute, "--attribute", "attribute to check of gff to extract", true);
-	setUp.setOption(attributeLevel, "--attributeLevel", "attribute level to match in attribute of gff to extract", true);
-	setUp.processWritingOptions(outOpts);
+	setUp.setOption(attributeLevels, "--attributeLevel,--attributeLevels", "attribute level to match in attribute of gff to extract", true);
+    setUp.setOption(features, "--features,--feature", "Only extract records of that match this feature or features");
+    setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
@@ -1230,10 +1233,12 @@ int gffExpRunner::gffToBedByAttribute(const njh::progutils::CmdArgs & inputComma
 
 	Json::Value outJson;
 	while (nullptr != gRecord) {
-		if(gRecord->hasAttr(attribute) && gRecord->getAttr(attribute) == attributeLevel){
-			outJson[gRecord->getAttr("ID")] = gRecord->toJson();
-			outFile << GenomicRegion(*gRecord).genBedRecordCore().toDelimStr() << std::endl;
-		}
+        if(features.empty() || njh::in(gRecord->type_,features)){
+            if(gRecord->hasAttr(attribute) &&  njh::in(gRecord->getAttr(attribute), attributeLevels)){
+                outJson[gRecord->getAttr("ID")] = gRecord->toJson();
+                outFile << GenomicRegion(*gRecord).genBedRecordCore().toDelimStr() << std::endl;
+            }
+        }
 		bool end = false;
 		while ('#' == reader.inFile_->peek()) {
 			if (njh::files::nextLineBeginsWith(*reader.inFile_, "##FASTA")) {
@@ -1251,7 +1256,6 @@ int gffExpRunner::gffToBedByAttribute(const njh::progutils::CmdArgs & inputComma
 	outJsonFile << outJson << std::endl;
 	return 0;
 }
-
 
 
 int gffExpRunner::gffToBedByChrom(const njh::progutils::CmdArgs & inputCommands){
