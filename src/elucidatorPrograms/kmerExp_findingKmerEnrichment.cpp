@@ -95,13 +95,23 @@ int kmerExpRunner::findingKmerEnrichment(const njh::progutils::CmdArgs & inputCo
 	if(setUp.pars_.verbose_){
 		std::cout << "groupsWith2Levels: " << njh::conToStr(groupsWith2Levels, ",") << std::endl;
 	}
-	std::unordered_map<uint64_t, std::unordered_set<std::string>> kmersSamples;
+  std::unordered_map<std::string, uint32_t> sampleToKey;
+  std::unordered_map<uint32_t, std::string> keyToSample;
+  {
+    uint32_t sampleCount = 0;
+    for(const auto & samp : allSamples){
+      sampleToKey[samp] = sampleCount;
+      keyToSample[sampleCount] = samp;
+      ++sampleCount;
+    }
+  }
+	std::unordered_map<uint64_t, std::unordered_set<uint32_t>> kmersSamples;
 	std::mutex kmersSampleMut;
 
 	njh::concurrent::LockableQueue<bfs::path> inputFilesQueue(inputFiles);
 
-	std::function<void()> count = [&inputFilesQueue,&kmersSamples,&kmersSampleMut,&kmerLength](){
-		std::unordered_map<uint64_t, std::unordered_set<std::string>> currentThread_kmersSamples;
+	std::function<void()> count = [&inputFilesQueue,&kmersSamples,&kmersSampleMut,&kmerLength,&sampleToKey,&numThreads](){
+		std::unordered_map<uint64_t, std::unordered_set<uint32_t>> currentThread_kmersSamples;
 
 		seqInfo seq;
 		SimpleKmerHash khasher;
@@ -116,17 +126,19 @@ int kmerExpRunner::findingKmerEnrichment(const njh::progutils::CmdArgs & inputCo
 			}
 			while(reader.readNextRead(seq)){
 				for (const auto pos : iter::range(seq.seq_.size() + 1 - kmerLength)) {
-					currentThread_kmersSamples[khasher.hash(seq.seq_, pos, kmerLength)].emplace(sample);
-					currentThread_kmersSamples[khasher.revCompHash(seq.seq_, pos, kmerLength)].emplace(sample);
+					currentThread_kmersSamples[khasher.hash(seq.seq_, pos, kmerLength)].emplace(sampleToKey[sample]);
+					currentThread_kmersSamples[khasher.revCompHash(seq.seq_, pos, kmerLength)].emplace(sampleToKey[sample]);
 				}
 			}
 		}
-		{
+		if(numThreads > 1){
 			std::lock_guard<std::mutex> lock(kmersSampleMut);
 			for(const auto & kmers : currentThread_kmersSamples){
 				kmersSamples[kmers.first].insert(kmers.second.begin(), kmers.second.end())	;
 			}
-		}
+		}else{
+      kmersSamples = currentThread_kmersSamples;
+    }
 	};
 
 
@@ -163,10 +175,10 @@ int kmerExpRunner::findingKmerEnrichment(const njh::progutils::CmdArgs & inputCo
 //					printVector(count, " ", std::cout);
 //				}
 				for(const auto & samp : kmers.second){
-					++counts[0][groupIndex[meta.groupData_.at(group)->getGroupForSample(samp)]];
+					++counts[0][groupIndex[meta.groupData_.at(group)->getGroupForSample(keyToSample[samp])]];
 				}
 				for(const auto & samp : allSamples){
-					if(!njh::in(samp, kmers.second)){
+					if(!njh::in(sampleToKey[samp], kmers.second)){
 						++counts[1][groupIndex[meta.groupData_.at(group)->getGroupForSample(samp)]];
 					}
 				}
