@@ -8,6 +8,9 @@
 #include "elucidator/objects/seqObjects/seqKmers.h"
 #include <njhseq/IO/SeqIO.h>
 #include <njhseq/concurrency/PairwisePairFactory.hpp>
+
+#include <boost/math/statistics/t_test.hpp>
+
 namespace njhseq {
 
 
@@ -283,8 +286,9 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 			}
 			distGraph.assignNoiseNodesAGroup();
 		}
+    std::vector<double> differentInitialGroupDists;
 
-		double lowestCentroidDistInitial = std::numeric_limits<double>::max();
+    double lowestCentroidDistInitial = std::numeric_limits<double>::max();
 		std::vector<std::vector<double>> centroidDistances;
 		for(const auto pos : iter::range(distGraph.numberOfGroups_)) {
 			centroidDistances.emplace_back(std::vector<double>(pos + 1));
@@ -348,6 +352,7 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 						uint32_t distRow = std::max(group1Node,  group2Node);
 						uint32_t distCol = std::min(group1Node,  group2Node);
 						double squareDist = std::pow(dist[distRow][distCol], 2.0);
+            differentInitialGroupDists.emplace_back(dist[distRow][distCol]);
 						sumOfSquaresAll += squareDist;
 					}
 				}
@@ -357,6 +362,40 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 					lowestCentroidDistInitial = distBetweenCentroids;
 				}
 			}
+      {
+        double differentInitialGroupDists_mean = vectorMean(differentInitialGroupDists);
+        double differentInitialGroupDists_sd = vectorStandardDeviationPop(differentInitialGroupDists);
+        boost::math::normal_distribution diffDistr(differentInitialGroupDists_mean, differentInitialGroupDists_sd);
+        OutOptions tTestsOutOpts(njh::files::make_path(hdbsDir, "initialGroupsTTests.tab.txt"));
+        OutputStream tTestsOut(tTestsOutOpts);
+        tTestsOut << "group\tgroupSize\tt-statistic\tp-value\tdiffMean\tdiffSD\tgroupMean\tgroupSD" << std::endl;
+        for(const auto & group : groups){
+          uint32_t groupSize = groupNodes[group].size();
+          if(groupSize > 1){
+            std::vector<double> sameGroupDist;
+            PairwisePairFactory group_pFac(groupSize);
+            PairwisePairFactory::PairwisePair group_pair;
+            while(group_pFac.setNextPair(group_pair)){
+
+              uint32_t node1 = groupNodes[group][group_pair.col_];
+              uint32_t node2 = groupNodes[group][group_pair.row_];
+              uint32_t distRow = std::max(node1,  node2);
+              uint32_t distCol = std::min(node1,  node2);
+              sameGroupDist.emplace_back(dist[distRow][distCol]);
+
+            }
+
+            auto [t, p] = boost::math::statistics::two_sample_t_test(differentInitialGroupDists, sameGroupDist);
+            tTestsOut << group << "\t" << groupSize << "\t" << t << "\t" << p
+                << "\t" << differentInitialGroupDists_mean << "\t" << differentInitialGroupDists_sd
+                << "\t" << vectorMean(sameGroupDist) << "\t" <<  vectorStandardDeviationSamp(sameGroupDist) << std::endl;
+          } else {
+            tTestsOut << group << "\t" << groupSize << "\t" << "NA" << "\t" << "NA"
+                << "\t" << differentInitialGroupDists_mean << "\t" << differentInitialGroupDists_sd
+                << "\t" << "NA" << "\t" << "NA"<< std::endl;
+          }
+        }
+      }
 			//
 			{
 				OutOptions initialGroupsOutOpts(njh::files::make_path(hdbsDir, "initialGroupNames.tab.txt"));
@@ -454,6 +493,7 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 				uint32_t modifiedGroup = *groupsToCollapse.begin();
 				njh::concurrent::LockableQueue<uint32_t> groupsQueue(groups);
 				uint32_t otherGroup = std::numeric_limits<uint32_t>::max();
+        std::vector<double> allCurrentDists;
 				while(groupsQueue.getVal(otherGroup)){
 					if(!njh::in(otherGroup, groupsToCollapse)){
 						uint32_t group1 = modifiedGroup;
@@ -473,6 +513,7 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 								uint32_t distRow = std::max(node1,  node2);
 								uint32_t distCol = std::min(node1,  node2);
 								double squareDist = std::pow(dist[distRow][distCol], 2.0);
+                allCurrentDists.emplace_back(dist[distRow][distCol]);
 								sumOfSquaresGroup1 += squareDist;
 								sumOfSquaresAll += squareDist;
 							}
@@ -487,6 +528,7 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 								uint32_t distRow = std::max(node1,  node2);
 								uint32_t distCol = std::min(node1,  node2);
 								double squareDist = std::pow(dist[distRow][distCol], 2.0);
+                allCurrentDists.emplace_back(dist[distRow][distCol]);
 								sumOfSquaresGroup2 += squareDist;
 								sumOfSquaresAll += squareDist;
 							}
@@ -497,6 +539,7 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 								uint32_t distRow = std::max(group1Node,  group2Node);
 								uint32_t distCol = std::min(group1Node,  group2Node);
 								double squareDist = std::pow(dist[distRow][distCol], 2.0);
+                allCurrentDists.emplace_back(dist[distRow][distCol]);
 								sumOfSquaresAll += squareDist;
 							}
 						}
@@ -504,7 +547,28 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 						centroidDistances[std::max(group1,  group2)][std::min(group1,  group2)] = distBetweenCentroids;
 					}
 				}
+        {
+          auto [t, p] = boost::math::statistics::two_sample_t_test(differentInitialGroupDists, allCurrentDists);
+          if(setUp.pars_.verbose_){
+            auto diffDists_mean = vectorMean(differentInitialGroupDists);
+            auto diffDists_sd = vectorStandardDeviationSamp(differentInitialGroupDists);
+            boost::math::normal_distribution diffDistr(diffDists_mean, diffDists_sd);
+            auto allCurrentDists_mean = vectorMean(allCurrentDists);
+            auto allCurrentDists_sd = vectorStandardDeviationSamp(allCurrentDists);
+            boost::math::normal_distribution currentDistr(allCurrentDists_mean, allCurrentDists_sd);
+
+            std::cout << "differentInitialGroupDists.size(): " << differentInitialGroupDists.size() << std::endl;
+            std::cout << "allCurrentDists.size(): " << allCurrentDists.size() << std::endl;
+
+            std::cout << "\t" << vectorMean(differentInitialGroupDists) << "\t" <<  vectorStandardDeviationSamp(differentInitialGroupDists) << std::endl
+                    << "\t" << vectorMean(allCurrentDists) << "\t" <<  vectorStandardDeviationSamp(allCurrentDists) << std::endl;
+            std::cout << "t-statistic: " << t << ", p-value: " << p << ": " << njh::colorBool(p < 0.01) << std::endl;
+            std::cout << "in different overlap: " << cdf(diffDistr,allCurrentDists_mean + allCurrentDists_sd*2) << ": " << njh::colorBool(cdf(diffDistr,allCurrentDists_mean + allCurrentDists_sd*2) < 0.01) << std::endl;
+            std::cout << "in current overlap  : " << 1 - cdf(currentDistr, diffDists_mean - 2 * diffDists_sd) << std::endl;
+          }
+        }
 			}
+
 			hdbsRunInfoOut << runCount << "\t" << numberOfNonSingletClusters << "\t" << distGraph.numberOfGroups_ << "\t" << lowestCentroidDist << std::endl;
 		}
 		//final centroid
