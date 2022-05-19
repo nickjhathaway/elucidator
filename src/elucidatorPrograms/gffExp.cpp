@@ -140,7 +140,7 @@ int gffExpRunner::aaPositionsToBed(const njh::progutils::CmdArgs & inputCommands
 	bfs::path twoBitFnp = "";
 	bool zeroBased = false;
 	bool collapsePerId = false;
-	std::string addMetaField = "";
+	std::string addMetaField;
 	OutOptions outOpts(bfs::path(""), ".bed");
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -316,7 +316,7 @@ int gffExpRunner::gffGetNumOfTranscriptsForGenes(const njh::progutils::CmdArgs &
 	OutputStream out(outOpts);
 	out << "GeneID\tTranscripts" << std::endl;
 	uint32_t count = 0;
-	std::string line = "";
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 
 	std::set<std::string> parents;
@@ -371,7 +371,7 @@ int gffExpRunner::removeFastaFromGffFile(const njh::progutils::CmdArgs & inputCo
 	BioDataFileIO<GFFCore> reader{(IoOptions(InOptions(inputFile)))};
 	reader.openIn();
 	uint32_t count = 0;
-	std::string line = "";
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	std::ofstream outFile;
 	outOpts.openFile(outFile);

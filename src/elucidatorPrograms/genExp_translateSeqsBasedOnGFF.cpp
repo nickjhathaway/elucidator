@@ -40,6 +40,7 @@ namespace njhseq {
 int genExpRunner::translateSeqsBasedOnGFF(const njh::progutils::CmdArgs & inputCommands){
 
   TranslatorByAlignment::RunPars variantCallerRunPars;
+	variantCallerRunPars.occurrenceCutOff = 0;
 	TranslatorByAlignment::TranslatorByAlignmentPars transPars;
 
 	seqSetUp setUp(inputCommands);
@@ -64,7 +65,14 @@ int genExpRunner::translateSeqsBasedOnGFF(const njh::progutils::CmdArgs & inputC
 	for(const auto & seq : input ){
 		auto seqCount = std::ceil(seq.cnt_);
 		for(const auto count : iter::range(seqCount)){
-			counts[seq.name_].emplace(njh::pasteAsStr("samp.", ongoingCount + count));
+			std::string sample = njh::pasteAsStr("samp.", ongoingCount + count);
+			if(MetaDataInName::nameHasMetaData(seq.name_)){
+				MetaDataInName seqMeta(seq.name_);
+				if(seqMeta.containsMeta("sample")){
+					sample = seqMeta.getMeta("sample");
+				}
+			}
+			counts[seq.name_].emplace(sample);
 		}
 		ongoingCount += seqCount;
 	}
@@ -114,6 +122,13 @@ int genExpRunner::translateSeqsBasedOnGFF(const njh::progutils::CmdArgs & inputC
 			}
 		}
 	}
+
+	OutputStream variantCalls(njh::files::make_path(setUp.pars_.directoryName_, "varCalls.vcf"));
+
+	for(const auto & seqVar : results.seqVariants_){
+		seqVar.second.writeVCF(variantCalls);
+	}
+
 	return 0;
 }
 

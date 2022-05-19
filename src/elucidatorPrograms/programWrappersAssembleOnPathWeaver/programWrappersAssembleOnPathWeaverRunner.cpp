@@ -882,10 +882,15 @@ int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnPathWeaverRegions(c
 				bfs::path pairedR2 = njh::files::make_path(regionOutputDir, "extracted_R2.fastq");
 				bfs::path singles =  njh::files::make_path(regionOutputDir, "extracted.fastq");
 				uint64_t totalReads = readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_;
+				uint32_t minRegionSize = std::numeric_limits<uint32_t>::max();
+
 				for(auto & reg : regInfo){
 					reg->totalPairedReads_ = readCounts.pairedReads_;
 					reg->totalReads_ = totalReads;
 					reg->totalFinalReads_ = totalReads;
+					if(reg->region_.getLen() < minRegionSize){
+						minRegionSize = reg->region_.getLen();
+					}
 				}
 
 
@@ -914,6 +919,10 @@ int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnPathWeaverRegions(c
 					raw_unicyclerCmdStream  << " -t " << unicyclerNumThreads
 													 << " " << extraUnicyclerOptions
 													 << " -o " << unicyclerOutDir;
+					if(minRegionSize < 1000){
+						uint32_t minComponentSize = static_cast<uint32_t>(std::max(minRegionSize * .10, 1.0));
+						raw_unicyclerCmdStream << "--min_fasta_length " << minComponentSize << " --min_component_size " << minComponentSize << " --min_dead_end_size " << minComponentSize << " ";
+					}
 					std::string raw_unicyclerCmd = raw_unicyclerCmdStream.str();
 					std::stringstream unicyclerCmdStream;
 					unicyclerCmdStream << raw_unicyclerCmd << " > unicyclerRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
