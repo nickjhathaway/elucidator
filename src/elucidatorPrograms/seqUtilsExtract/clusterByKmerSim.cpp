@@ -8,7 +8,7 @@
 #include "elucidator/objects/seqObjects/seqKmers.h"
 #include <njhseq/IO/SeqIO.h>
 #include <njhseq/concurrency/PairwisePairFactory.hpp>
-
+#undef BOOST_HAS_THREADS
 #include <boost/math/statistics/t_test.hpp>
 
 namespace njhseq {
