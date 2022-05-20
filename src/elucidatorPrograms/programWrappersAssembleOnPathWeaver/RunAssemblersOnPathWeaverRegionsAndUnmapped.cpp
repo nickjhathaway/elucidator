@@ -635,10 +635,10 @@ int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnPathWeaverRegionsAn
 
 		raw_unicyclerCmdStream  << " -t " << utility.inputPars_.numThreads_
 														<< " " << utility.inputPars_.extraProgramOptions_
-														<< " -o " << unicyclerOutDir;
+														<< " -o " << unicyclerOutDir << " ";
 		if(minRegionSize < 1000){
 			uint32_t minComponentSize = static_cast<uint32_t>(std::max(minRegionSize * .10, 1.0));
-			raw_unicyclerCmdStream << "--min_fasta_length " << minComponentSize << " --min_component_size " << minComponentSize << " --min_dead_end_size " << minComponentSize << " ";
+			raw_unicyclerCmdStream << " --min_fasta_length " << minComponentSize << " --min_component_size " << minComponentSize << " --min_dead_end_size " << minComponentSize << " ";
 		}
 		std::string raw_unicyclerCmd = raw_unicyclerCmdStream.str();
 		std::stringstream unicyclerCmdStream;

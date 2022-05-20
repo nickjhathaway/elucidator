@@ -57,7 +57,7 @@ inline std::vector<std::shared_ptr<seqWithKmerInfo>> trimToFinalSeqs(const std::
 	aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0), substituteMatrix(2,-2), false);
 	std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs;
 	for(const auto & seq : contigsKmerReads){
-		auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs.refSeqs_, refSeqs.revComp_refSeqs_, refSeqs.refSeqsKmerInfos_, refSeqs.revComp_refSeqsKInfos_, alignerObj, false);
+		auto trimmed = readVecTrimmer::trimSeqToRefByGlobalAlnBestNoOverlapIncludeRevComp(seq, refSeqs.refSeqs_, refSeqs.revComp_refSeqs_, refSeqs.refSeqsKmerInfos_, refSeqs.revComp_refSeqsKInfos_, alignerObj, true);
 		for(auto & trimmedSeq : trimmed){
 			bool found = false;
 			for(const auto & finalSeq : finalSeqs){

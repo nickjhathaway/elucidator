@@ -36,9 +36,9 @@ int kmerExpRunner::simpleHashKmer(const njh::progutils::CmdArgs & inputCommands)
 			}
 		} else {
 			if (revComp) {
-				out << khasher.hash(kmer) << std::endl;
-			} else {
 				out << khasher.revCompHash(kmer) << std::endl;
+			} else {
+				out << khasher.hash(kmer) << std::endl;
 			}
 		}
 	}
