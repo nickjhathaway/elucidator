@@ -1933,6 +1933,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegionsAndU
 }
 
 
+
 int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path haploconductPath = "/home/hathawan/sourceCodes/savage/HaploConduct/haploconduct";
 	bfs::path savageOutDir = "savageOut";
@@ -2088,6 +2089,256 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegionsAndUn
 		auto trimmedReOrientedContigsFnp = njh::files::make_path(savageFullOutputDir, "trimmed_reOriented_contigs.fasta");
 		SeqOutput outputTrimmedWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp));
 		auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(savageFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
+		SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
+
+		uint32_t belowCutOff = 0;
+		uint32_t aboveCutOff = 0;
+		bool allPassTrim = true;
+		for (const auto & contigsKmerRead : finalSeqs) {
+			if (len(contigsKmerRead->seqBase_) < utility.inputPars_.minFinalLength_) {
+				++belowCutOff;
+				belowCutOffOutputWriter.openWrite(contigsKmerRead);
+				contigsKmerRead->seqBase_.on_ = false;
+			} else {
+				MetaDataInName seqMeta(contigsKmerRead->seqBase_.name_);
+				trimmedContigInfoOut << contigsKmerRead->seqBase_.name_
+														 << "\t" << len(contigsKmerRead->seqBase_)
+														 << "\t" << seqMeta.getMeta("estimatedPerBaseCoverage")
+														 << std::endl;
+				if(!contigsKmerRead->seqBase_.on_){
+					allPassTrim = false;
+				}else{
+					++aboveCutOff;
+				}
+				outputAboveCutOffWriter.openWrite(contigsKmerRead);
+				outputTrimmedWriter.openWrite(contigsKmerRead);
+			}
+		}
+		if(allPassTrim){
+			utility.regInfo_->infoCalled_ = true;
+			utility.regInfo_->uniqHaps_ = aboveCutOff;
+		}else{
+			utility.regInfo_->infoCalled_ = false;
+			utility.regInfo_->uniqHaps_ = 0;
+		}
+	} catch (std::exception & e) {
+		exceptionMess = e.what();
+		utility.regInfo_->infoCalled_ = false;
+		utility.regInfo_->uniqHaps_ = 0;
+	}
+
+	outputAboveCutOffWriter.closeOut();
+	OutputStream basicInfo(njh::files::make_path(utility.finalPassDir_, "basicInfoPerRegion.tab.txt"));
+
+	basicInfo << "name\tsuccess\tuniqHaps\treadTotal\treadTotalUsed\ttotalPairedReads";
+	basicInfo << "\tsample";
+	basicInfo << "\n";
+	basicInfo << utility.inputPars_.regionUid_;
+	basicInfo << "\t" << njh::boolToStr(utility.regInfo_->infoCalled_)
+						<< "\t" << utility.regInfo_->uniqHaps_
+						<< "\t" << utility.regInfo_->totalReads_
+						<< "\t" << utility.regInfo_->totalFinalReads_
+						<< "\t" << utility.regInfo_->totalPairedReads_
+						<< "\t" << utility.inputPars_.sample_;
+
+	OutputStream exceptionsOut(njh::files::make_path(utility.finalPassDir_, "exceptionsMessages.tab.txt"));
+	exceptionsOut << "regionUID\tmessage" << std::endl;
+	exceptionsOut << utility.inputPars_.regionUid_ << "\t" << exceptionMess << std::endl;
+
+	return 0;
+}
+int programWrappersAssembleOnPathWeaverRunner::runPolyteOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path haploconductPath = "/home/hathawan/sourceCodes/savage/HaploConduct/haploconduct";
+	uint32_t hardInsertSizeCutOff = 10000;
+	uint32_t mapQualityCutOff = 20;
+
+	seqSetUp setUp(inputCommands);
+	setUp.processDebug();
+	setUp.processVerbose();
+	OtherAssemblersUtility::InputPars inPars;
+	inPars.programName_ = "polyte";
+	inPars.setPars(setUp);
+
+	setUp.setOption(haploconductPath, "--haploconductPath", "haploconductPath", true);
+
+
+	setUp.finishSetUp(std::cout);
+	setUp.startARunLog(setUp.pars_.directoryName_);
+	//njh::sys::requireExternalProgramThrow("polyte");
+	OtherAssemblersUtility utility(inPars);
+	auto outputAboveCutOffSeqOpts = SeqIOOptions::genFastaOut(utility.outputAboveCutOffFnp_);
+	SeqOutput outputAboveCutOffWriter(outputAboveCutOffSeqOpts);
+	outputAboveCutOffWriter.openOut();
+
+	bfs::path extractBam = njh::files::make_path(utility.inputPars_.pwOutputDir_, "originalExtractionFiles", "extracted.bam");
+
+	uint32_t insertSize = 0;
+	double insertSizeSD = 0;
+	{
+		BamTools::BamReader bReader;
+		bReader.Open(extractBam.string());
+		//checkBamOpenThrow(bReader, extractionBam);
+		std::vector<uint32_t> currentInsertSizes;
+		BamTools::BamAlignment aln;
+
+		while (bReader.GetNextAlignmentCore(aln)) {
+			//skip alignments that don't start in this region
+			//this way if regions are close to each other it will avoid counting twice
+			if (aln.IsMapped() &&
+					aln.IsMateMapped() &&
+					aln.IsPrimaryAlignment() &&
+					aln.IsReverseStrand() != aln.IsMateReverseStrand()) {
+				if (aln.RefID == aln.MateRefID) {
+					if(std::abs(aln.InsertSize) > hardInsertSizeCutOff || aln.MapQuality < mapQualityCutOff){
+						continue;
+					}
+					currentInsertSizes.emplace_back(std::abs(aln.InsertSize));
+				}
+			}
+		}
+		insertSize = vectorMedianRef(currentInsertSizes);
+		insertSizeSD = vectorStandardDeviationPop(currentInsertSizes);
+	}
+	double possibleAvgCoverage = 0;
+	{
+		auto perBaseCovFnp = njh::files::make_path(utility.inputPars_.pwOutputDir_, "extractionStats/perBaseCoveragePerRegion.bed");
+		table perBaseCovTab(perBaseCovFnp, "\t", true);
+		std::vector<double> covs =vecStrToVecNum<double>(perBaseCovTab.getColumn("perBaseCoverage"));
+		possibleAvgCoverage = vectorMean(covs);
+	}
+	std::string exceptionMess;
+
+	auto regionOutputDir = njh::files::make_path(setUp.pars_.directoryName_, utility.inputPars_.regionUid_, utility.inputPars_.sample_);
+	njh::files::makeDirP(njh::files::MkdirPar{regionOutputDir});
+
+	try {
+		if(!exists(utility.pairedR1Fnp_) && !exists(utility.singlesFnp_)){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", couldn't find " << utility.pairedR1Fnp_ << " or " << utility.singlesFnp_ << ", need to have at least one of them" << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		std::stringstream polyteCmdStream;
+		polyteCmdStream << "cd " << regionOutputDir << " && " << haploconductPath << " polyte ";
+		if(bfs::exists(utility.pairedR1Fnp_)){
+			concatenateFiles({utility.pairedR1Fnp_}, njh::files::make_path(regionOutputDir, utility.pairedR1Fnp_.filename().replace_extension("")));
+			concatenateFiles({utility.pairedR2Fnp_}, njh::files::make_path(regionOutputDir, utility.pairedR2Fnp_.filename().replace_extension("")));
+		}
+		if(bfs::exists(utility.singlesFnp_)){
+			concatenateFiles({utility.singlesFnp_}, njh::files::make_path(regionOutputDir, utility.singlesFnp_.filename().replace_extension("")));
+		}
+		if(exists(utility.pairedR1Fnp_)){
+			if(!exists(utility.pairedR2Fnp_)){
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", found: " << utility.pairedR1Fnp_ << " but couldn't find it's mate file: " << utility.pairedR2Fnp_ << "\n";
+				throw std::runtime_error{ss.str()};
+			}else{
+				polyteCmdStream << " -p1 " << utility.pairedR1Fnp_.filename().replace_extension("") << " -p2 " << utility.pairedR2Fnp_.filename().replace_extension("") << " ";
+			}
+		}
+		if(exists(utility.singlesFnp_)){
+			polyteCmdStream << " -s  " << utility.singlesFnp_.filename().replace_extension("");
+		}
+		polyteCmdStream  << " -t " << utility.inputPars_.numThreads_
+										 << " --split 1 "
+										 << " " << utility.inputPars_.extraProgramOptions_
+						         << "--hap_cov " << possibleAvgCoverage << " --insert_size " << insertSize << "  --stddev " << insertSizeSD
+										 << " > polyteRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
+
+		// ~/sourceCodes/polyte/HaploConduct/haploconduct  -p1 extracted_R1.fastq -p2 extracted_R2.fastq -s extracted.fastq -t 10 --split 1
+
+
+		auto polyteFullOutputDir = njh::files::make_path(regionOutputDir);
+
+		auto polyteRunOutput = njh::sys::run({polyteCmdStream.str()});
+
+		BioCmdsUtils::checkRunOutThrow(polyteRunOutput, __PRETTY_FUNCTION__);
+
+		OutOptions polyteRunOutputLogOpts(njh::files::make_path(polyteFullOutputDir, "polyteRunOutput.json"));
+		OutputStream polyteRunOutputLogOut(polyteRunOutputLogOpts);
+		polyteRunOutputLogOut << njh::json::toJson(polyteRunOutput) << std::endl;
+
+		auto contigsFnp = njh::files::make_path(polyteFullOutputDir, "contigs.fasta");
+
+		auto contigsSeqIoOpts = SeqIOOptions::genFastaIn(contigsFnp);
+//				contigsSeqIoOpts.includeWhiteSpaceInName_ = false;
+		contigsSeqIoOpts.lowerCaseBases_ = "upper";
+		SeqInput contigsReader(contigsSeqIoOpts);
+		auto contigsSeqs = contigsReader.readAllReads<seqInfo>();
+		std::vector<std::shared_ptr<seqWithKmerInfo>> contigsKmerReads;
+		contigsKmerReads.reserve(contigsSeqs.size());
+		for (const auto & seq : contigsSeqs) {
+			contigsKmerReads.emplace_back(std::make_shared<seqWithKmerInfo>(seq));
+		}
+		allSetKmers(contigsKmerReads, utility.inputPars_.reOrientingKmerLength_, true);
+
+		RefSeqsWithKmers refSeqs(utility.refFnp_, utility.inputPars_.reOrientingKmerLength_);
+		readVec::reorientSeqs(contigsKmerReads, refSeqs.refKmerReads_);
+		//sort by sequence length;
+		njh::sort(contigsKmerReads, [](const std::shared_ptr<seqWithKmerInfo> & seq1, const std::shared_ptr<seqWithKmerInfo> & seq2){
+			return len(seq1->seqBase_) > len(seq2->seqBase_);
+		});
+
+		OutOptions contigInfoOpts(njh::files::make_path(polyteFullOutputDir, "contigs_outputInfo.tab.txt"));
+		OutputStream contigInfoOut(contigInfoOpts);
+		contigInfoOut << "name\tlength" << std::endl;
+
+		for(const auto & contigsKmerRead : contigsKmerReads){
+			//auto assembleInfo = DefaultAssembleNameInfo(contigsKmerRead->seqBase_.name_, true);
+			contigInfoOut << contigsKmerRead->seqBase_.name_
+										<< "\t" << len(contigsKmerRead->seqBase_) << std::endl;
+		}
+		auto reOrientedContigsFnp = njh::files::make_path(polyteFullOutputDir, "reOriented_contigs.fasta");
+
+		std::vector<std::shared_ptr<seqWithKmerInfo>> finalSeqs = trimToFinalSeqs(contigsKmerReads, refSeqs);
+		std::unordered_map<std::string, uint32_t> finalSeqCounts;
+		for(const auto & seq : finalSeqs){
+			++finalSeqCounts[seq->seqBase_.name_];
+		}
+
+		auto totalCoverage = static_cast<double>(finalSeqs.size());
+
+		for(auto & seq : contigsKmerReads){
+			//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_);
+			MetaDataInName seqMeta;
+			seqMeta.addMeta("length", len(seq->seqBase_));
+			seqMeta.addMeta("estimatedPerBaseCoverage", 10);
+			seqMeta.addMeta("regionUID", utility.inputPars_.regionUid_);
+			seqMeta.addMeta("sample", utility.inputPars_.sample_);
+			seqMeta.resetMetaInName(seq->seqBase_.name_);
+			seq->seqBase_.cnt_ = (1/totalCoverage) * (utility.totalCount());
+			seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
+		}
+		SeqOutput::write(contigsKmerReads, SeqIOOptions::genFastaOut(reOrientedContigsFnp));
+		SeqOutput::write(contigsKmerReads, SeqIOOptions::genFastaOut(utility.outputFnp_));
+
+		std::unordered_map<std::string, uint32_t> finalSeqCountsWritten;
+
+
+
+		for(auto & seq : finalSeqs){
+			//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
+			MetaDataInName seqMeta;
+			seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
+			seqMeta.addMeta("estimatedPerBaseCoverage", 10);
+			seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
+			seqMeta.addMeta("regionUID", utility.inputPars_.regionUid_);
+			seqMeta.addMeta("sample", utility.inputPars_.sample_);
+			if(finalSeqCounts[seq->seqBase_.name_] > 1){
+				seqMeta.addMeta("seqTrimmedCount", finalSeqCountsWritten[seq->seqBase_.name_]);
+				++finalSeqCountsWritten[seq->seqBase_.name_];
+			}
+			seqMeta.resetMetaInName(seq->seqBase_.name_);
+			seq->seqBase_.cnt_ = (1/totalCoverage) * (utility.totalCount());
+			seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
+		}
+
+
+		OutOptions trimmedContigInfoOpts(njh::files::make_path(polyteFullOutputDir, "trimmed_reOriented_contigs_outputInfo.tab.txt"));
+		OutputStream trimmedContigInfoOut(trimmedContigInfoOpts);
+		trimmedContigInfoOut << "name\tlength\tcoverage" << std::endl;
+		auto trimmedReOrientedContigsFnp = njh::files::make_path(polyteFullOutputDir, "trimmed_reOriented_contigs.fasta");
+		SeqOutput outputTrimmedWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp));
+		auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(polyteFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
 		SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
 
 		uint32_t belowCutOff = 0;

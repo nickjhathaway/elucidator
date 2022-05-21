@@ -23,6 +23,7 @@ class programWrappersAssembleOnPathWeaverRunner : public njh::progutils::Program
 	static int runSpadesOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int runMegahitOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int runSavageOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
+	static int runPolyteOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int runVelvetOptimizerAndMetaVelvetOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int runPRICEOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int runTrinityOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
@@ -36,6 +37,7 @@ class programWrappersAssembleOnPathWeaverRunner : public njh::progutils::Program
 	static int runSpadesOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
 	static int runMegahitOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
 	static int runSavageOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
+	static int runPolyteOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
 	static int runVelvetOptimizerAndMetaVelvetOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
 	static int runPRICEOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
 	static int runTrinityOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
