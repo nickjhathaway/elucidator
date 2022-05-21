@@ -2239,7 +2239,6 @@ int programWrappersAssembleOnPathWeaverRunner::runPolyteOnPathWeaverRegionsAndUn
 			polyteCmdStream << " -s  " << utility.singlesFnp_.filename().replace_extension("");
 		}
 		polyteCmdStream  << " -t " << utility.inputPars_.numThreads_
-										 << " --split 1 "
 										 << " " << utility.inputPars_.extraProgramOptions_
 						         << "--hap_cov " << possibleAvgCoverage << " --insert_size " << insertSize << "  --stddev " << insertSizeSD
 										 << " > polyteRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
