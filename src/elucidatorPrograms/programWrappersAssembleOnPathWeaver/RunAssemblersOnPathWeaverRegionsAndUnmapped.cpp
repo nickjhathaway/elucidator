@@ -2240,7 +2240,7 @@ int programWrappersAssembleOnPathWeaverRunner::runPolyteOnPathWeaverRegionsAndUn
 		}
 		polyteCmdStream  << " -t " << utility.inputPars_.numThreads_
 										 << " " << utility.inputPars_.extraProgramOptions_
-						         << "--hap_cov " << possibleAvgCoverage << " --insert_size " << insertSize << "  --stddev " << insertSizeSD
+						         << " --hap_cov " << possibleAvgCoverage << " --insert_size " << insertSize << "  --stddev " << insertSizeSD
 										 << " > polyteRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
 
 		// ~/sourceCodes/polyte/HaploConduct/haploconduct  -p1 extracted_R1.fastq -p2 extracted_R2.fastq -s extracted.fastq -t 10 --split 1

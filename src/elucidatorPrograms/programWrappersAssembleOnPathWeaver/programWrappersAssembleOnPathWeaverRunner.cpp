@@ -3601,7 +3601,7 @@ int programWrappersAssembleOnPathWeaverRunner::runPolyteOnPathWeaverRegions(cons
 					polyteCmdStream << " -s  " << singles.filename();
 				}
 				polyteCmdStream  << " -t " << polyteNumThreads
-				 								 << "--hap_cov " << njh::mapAt(coverageForRegion, regionUid) << " --insert_size " << insertSize << "  --stddev " << insertSizeSD
+				 								 << " --hap_cov " << njh::mapAt(coverageForRegion, regionUid) << " --insert_size " << insertSize << "  --stddev " << insertSizeSD
 												 << " " << extraSavageOptions
 												 << " > polyteRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
 
