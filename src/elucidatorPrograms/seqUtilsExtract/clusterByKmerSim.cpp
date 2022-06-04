@@ -8,6 +8,8 @@
 #include "elucidator/objects/seqObjects/seqKmers.h"
 #include <njhseq/IO/SeqIO.h>
 #include <njhseq/concurrency/PairwisePairFactory.hpp>
+#include <njhseq/concurrency/AllByAllPairFactory.hpp>
+
 #undef BOOST_HAS_THREADS
 #include <boost/math/statistics/t_test.hpp>
 
@@ -493,7 +495,7 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 				uint32_t modifiedGroup = *groupsToCollapse.begin();
 				njh::concurrent::LockableQueue<uint32_t> groupsQueue(groups);
 				uint32_t otherGroup = std::numeric_limits<uint32_t>::max();
-        std::vector<double> allCurrentDists;
+        //std::vector<double> allCurrentDists;
 				while(groupsQueue.getVal(otherGroup)){
 					if(!njh::in(otherGroup, groupsToCollapse)){
 						uint32_t group1 = modifiedGroup;
@@ -503,70 +505,92 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 						double sumOfSquaresAll = 0;
 						double sumOfSquaresGroup1 = 0;
 						double sumOfSquaresGroup2 = 0;
+
+						std::mutex sumsMut;
 						//group 1
 						if(group1Size > 1){
 							PairwisePairFactory group1_pFac(group1Size);
-							PairwisePairFactory::PairwisePair group1_pair;
-							while(group1_pFac.setNextPair(group1_pair)){
-								uint32_t node1 = groupNodes[group1][group1_pair.col_];
-								uint32_t node2 = groupNodes[group1][group1_pair.row_];
-								uint32_t distRow = std::max(node1,  node2);
-								uint32_t distCol = std::min(node1,  node2);
-								double squareDist = std::pow(dist[distRow][distCol], 2.0);
-                allCurrentDists.emplace_back(dist[distRow][distCol]);
-								sumOfSquaresGroup1 += squareDist;
-								sumOfSquaresAll += squareDist;
-							}
+							std::function<void()> computeSumsOfSqaures = [&group1_pFac,&sumsMut,&sumOfSquaresGroup1,&sumOfSquaresAll,&group1,&dist,&groupNodes](){
+								PairwisePairFactory::PairwisePair group1_pair;
+								while(group1_pFac.setNextPair(group1_pair)){
+									uint32_t node1 = groupNodes[group1][group1_pair.col_];
+									uint32_t node2 = groupNodes[group1][group1_pair.row_];
+									uint32_t distRow = std::max(node1,  node2);
+									uint32_t distCol = std::min(node1,  node2);
+									double squareDist = std::pow(dist[distRow][distCol], 2.0);
+									//allCurrentDists.emplace_back(dist[distRow][distCol]);
+									{
+										std::lock_guard<std::mutex> lock(sumsMut);
+										sumOfSquaresGroup1 += squareDist;
+										sumOfSquaresAll += squareDist;
+									}
+								}
+							};
+							njh::concurrent::runVoidFunctionThreaded(computeSumsOfSqaures, numThreads);
 						}
 						//group 2
 						if(group2Size > 1){
 							PairwisePairFactory group2_pFac(group2Size);
-							PairwisePairFactory::PairwisePair group2_pair;
-							while(group2_pFac.setNextPair(group2_pair)){
-								uint32_t node1 = groupNodes[group2][group2_pair.col_];
-								uint32_t node2 = groupNodes[group2][group2_pair.row_];
-								uint32_t distRow = std::max(node1,  node2);
-								uint32_t distCol = std::min(node1,  node2);
-								double squareDist = std::pow(dist[distRow][distCol], 2.0);
-                allCurrentDists.emplace_back(dist[distRow][distCol]);
-								sumOfSquaresGroup2 += squareDist;
-								sumOfSquaresAll += squareDist;
-							}
+							std::function<void()> computeSumsOfSqaures = [&group2_pFac,&sumsMut,&sumOfSquaresGroup2,&sumOfSquaresAll,&group2,&dist,&groupNodes](){
+								PairwisePairFactory::PairwisePair group2_pair;
+								while(group2_pFac.setNextPair(group2_pair)){
+									uint32_t node1 = groupNodes[group2][group2_pair.col_];
+									uint32_t node2 = groupNodes[group2][group2_pair.row_];
+									uint32_t distRow = std::max(node1,  node2);
+									uint32_t distCol = std::min(node1,  node2);
+									double squareDist = std::pow(dist[distRow][distCol], 2.0);
+									//allCurrentDists.emplace_back(dist[distRow][distCol]);
+									{
+										std::lock_guard<std::mutex> lock(sumsMut);
+										sumOfSquaresGroup2 += squareDist;
+										sumOfSquaresAll += squareDist;
+									}
+								}
+							};
+							njh::concurrent::runVoidFunctionThreaded(computeSumsOfSqaures, numThreads);
 						}
 						//between group
-						for(const auto & group1Node : groupNodes[group1]){
-							for(const auto & group2Node : groupNodes[group2]){
+						AllByAllPairFactory allFac(groupNodes[group1].size(), groupNodes[group2].size());
+						std::function<void()> computeSumsOfSqaures = [&allFac,&sumsMut,&sumOfSquaresAll,&dist,&groupNodes,&group1,&group2](){
+							AllByAllPairFactory::AllByAllPair allPair;
+							while(allFac.setNextPair(allPair)){
+								auto group1Node = groupNodes[group1][allPair.row_];
+								auto group2Node = groupNodes[group2][allPair.col_];
 								uint32_t distRow = std::max(group1Node,  group2Node);
 								uint32_t distCol = std::min(group1Node,  group2Node);
 								double squareDist = std::pow(dist[distRow][distCol], 2.0);
-                allCurrentDists.emplace_back(dist[distRow][distCol]);
-								sumOfSquaresAll += squareDist;
+								//allCurrentDists.emplace_back(dist[distRow][distCol]);
+								{
+									std::lock_guard<std::mutex> lock(sumsMut);
+									sumOfSquaresAll += squareDist;
+								}
 							}
-						}
+						};
+						njh::concurrent::runVoidFunctionThreaded(computeSumsOfSqaures, numThreads);
 						double distBetweenCentroids = (sumOfSquaresAll - (group1Size + group2Size) * (sumOfSquaresGroup1 / group1Size + sumOfSquaresGroup2 / group2Size)) / (group1Size * group2Size);
 						centroidDistances[std::max(group1,  group2)][std::min(group1,  group2)] = distBetweenCentroids;
 					}
 				}
-        {
-          auto [t, p] = boost::math::statistics::two_sample_t_test(differentInitialGroupDists, allCurrentDists);
-          if(setUp.pars_.verbose_){
-            auto diffDists_mean = vectorMean(differentInitialGroupDists);
-            auto diffDists_sd = vectorStandardDeviationSamp(differentInitialGroupDists);
-            boost::math::normal_distribution diffDistr(diffDists_mean, diffDists_sd);
-            auto allCurrentDists_mean = vectorMean(allCurrentDists);
-            auto allCurrentDists_sd = vectorStandardDeviationSamp(allCurrentDists);
-            boost::math::normal_distribution currentDistr(allCurrentDists_mean, allCurrentDists_sd);
-
-            std::cout << "differentInitialGroupDists.size(): " << differentInitialGroupDists.size() << std::endl;
-            std::cout << "allCurrentDists.size(): " << allCurrentDists.size() << std::endl;
-
-            std::cout << "\t" << vectorMean(differentInitialGroupDists) << "\t" <<  vectorStandardDeviationSamp(differentInitialGroupDists) << std::endl
-                    << "\t" << vectorMean(allCurrentDists) << "\t" <<  vectorStandardDeviationSamp(allCurrentDists) << std::endl;
-            std::cout << "t-statistic: " << t << ", p-value: " << p << ": " << njh::colorBool(p < 0.01) << std::endl;
-            std::cout << "in different overlap: " << cdf(diffDistr,allCurrentDists_mean + allCurrentDists_sd*2) << ": " << njh::colorBool(cdf(diffDistr,allCurrentDists_mean + allCurrentDists_sd*2) < 0.01) << std::endl;
-            std::cout << "in current overlap  : " << 1 - cdf(currentDistr, diffDists_mean - 2 * diffDists_sd) << std::endl;
-          }
-        }
+//        {
+//          auto [t, p] = boost::math::statistics::two_sample_t_test(differentInitialGroupDists, allCurrentDists);
+//          if(setUp.pars_.verbose_){
+//            auto diffDists_mean = vectorMean(differentInitialGroupDists);
+//            auto diffDists_sd = vectorStandardDeviationSamp(differentInitialGroupDists);
+//            boost::math::normal_distribution diffDistr(diffDists_mean, diffDists_sd);
+//            auto allCurrentDists_mean = vectorMean(allCurrentDists);
+//            auto allCurrentDists_sd = vectorStandardDeviationSamp(allCurrentDists);
+//            boost::math::normal_distribution currentDistr(allCurrentDists_mean, allCurrentDists_sd);
+//
+//            std::cout << "differentInitialGroupDists.size(): " << differentInitialGroupDists.size() << std::endl;
+//            std::cout << "allCurrentDists.size(): " << allCurrentDists.size() << std::endl;
+//
+//            std::cout << "\t" << vectorMean(differentInitialGroupDists) << "\t" <<  vectorStandardDeviationSamp(differentInitialGroupDists) << std::endl
+//                    << "\t" << vectorMean(allCurrentDists) << "\t" <<  vectorStandardDeviationSamp(allCurrentDists) << std::endl;
+//            std::cout << "t-statistic: " << t << ", p-value: " << p << ": " << njh::colorBool(p < 0.01) << std::endl;
+//            std::cout << "in different overlap: " << cdf(diffDistr,allCurrentDists_mean + allCurrentDists_sd*2) << ": " << njh::colorBool(cdf(diffDistr,allCurrentDists_mean + allCurrentDists_sd*2) < 0.01) << std::endl;
+//            std::cout << "in current overlap  : " << 1 - cdf(currentDistr, diffDists_mean - 2 * diffDists_sd) << std::endl;
+//          }
+//        }
 			}
 
 			hdbsRunInfoOut << runCount << "\t" << numberOfNonSingletClusters << "\t" << distGraph.numberOfGroups_ << "\t" << lowestCentroidDist << std::endl;
