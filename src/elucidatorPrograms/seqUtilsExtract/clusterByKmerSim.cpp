@@ -512,7 +512,7 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 							PairwisePairFactory group1_pFac(group1Size);
 							std::function<void()> computeSumsOfSqaures = [&group1_pFac,&sumsMut,&sumOfSquaresGroup1,&sumOfSquaresAll,&group1,&dist,&groupNodes](){
 								PairwisePairFactory::PairwisePairVec group1_pair_vec;
-								while(group1_pFac.setNextPairs(group1_pair_vec, 30)){
+								while(group1_pFac.setNextPairs(group1_pair_vec, 200)){
 									double current_sumOfSquaresAll = 0;
 									for(const auto & group1_pair : group1_pair_vec.pairs_){
 										uint32_t node1 = groupNodes[group1][group1_pair.col_];
@@ -537,7 +537,7 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 							PairwisePairFactory group2_pFac(group2Size);
 							std::function<void()> computeSumsOfSqaures = [&group2_pFac,&sumsMut,&sumOfSquaresGroup2,&sumOfSquaresAll,&group2,&dist,&groupNodes](){
 								PairwisePairFactory::PairwisePairVec group2_pair_vec;
-								while(group2_pFac.setNextPairs(group2_pair_vec, 30)){
+								while(group2_pFac.setNextPairs(group2_pair_vec, 200)){
 									double current_sumOfSquaresAll = 0;
 									for(const auto & group2_pair : group2_pair_vec.pairs_){
 										uint32_t node1 = groupNodes[group2][group2_pair.col_];
@@ -561,7 +561,7 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 						AllByAllPairFactory allFac(groupNodes[group1].size(), groupNodes[group2].size());
 						std::function<void()> computeSumsOfSqaures = [&allFac,&sumsMut,&sumOfSquaresAll,&dist,&groupNodes,&group1,&group2](){
 							AllByAllPairFactory::AllByAllPairVec allPairVec;
-							while(allFac.setNextPairs(allPairVec, 30)){
+							while(allFac.setNextPairs(allPairVec, 200)){
 								double current_sumOfSquaresAll = 0;
 								for(const auto & allPair : allPairVec.pairs_){
 									auto group1Node = groupNodes[group1][allPair.row_];
