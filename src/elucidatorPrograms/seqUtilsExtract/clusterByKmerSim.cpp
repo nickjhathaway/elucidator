@@ -511,18 +511,22 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 						if(group1Size > 1){
 							PairwisePairFactory group1_pFac(group1Size);
 							std::function<void()> computeSumsOfSqaures = [&group1_pFac,&sumsMut,&sumOfSquaresGroup1,&sumOfSquaresAll,&group1,&dist,&groupNodes](){
-								PairwisePairFactory::PairwisePair group1_pair;
-								while(group1_pFac.setNextPair(group1_pair)){
-									uint32_t node1 = groupNodes[group1][group1_pair.col_];
-									uint32_t node2 = groupNodes[group1][group1_pair.row_];
-									uint32_t distRow = std::max(node1,  node2);
-									uint32_t distCol = std::min(node1,  node2);
-									double squareDist = std::pow(dist[distRow][distCol], 2.0);
+								PairwisePairFactory::PairwisePairVec group1_pair_vec;
+								while(group1_pFac.setNextPairs(group1_pair_vec, 30)){
+									double current_sumOfSquaresAll = 0;
+									for(const auto & group1_pair : group1_pair_vec.pairs_){
+										uint32_t node1 = groupNodes[group1][group1_pair.col_];
+										uint32_t node2 = groupNodes[group1][group1_pair.row_];
+										uint32_t distRow = std::max(node1,  node2);
+										uint32_t distCol = std::min(node1,  node2);
+										double squareDist = std::pow(dist[distRow][distCol], 2.0);
+										current_sumOfSquaresAll += squareDist;
+									}
 									//allCurrentDists.emplace_back(dist[distRow][distCol]);
 									{
 										std::lock_guard<std::mutex> lock(sumsMut);
-										sumOfSquaresGroup1 += squareDist;
-										sumOfSquaresAll += squareDist;
+										sumOfSquaresGroup1 += current_sumOfSquaresAll;
+										sumOfSquaresAll += current_sumOfSquaresAll;
 									}
 								}
 							};
@@ -532,18 +536,22 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 						if(group2Size > 1){
 							PairwisePairFactory group2_pFac(group2Size);
 							std::function<void()> computeSumsOfSqaures = [&group2_pFac,&sumsMut,&sumOfSquaresGroup2,&sumOfSquaresAll,&group2,&dist,&groupNodes](){
-								PairwisePairFactory::PairwisePair group2_pair;
-								while(group2_pFac.setNextPair(group2_pair)){
-									uint32_t node1 = groupNodes[group2][group2_pair.col_];
-									uint32_t node2 = groupNodes[group2][group2_pair.row_];
-									uint32_t distRow = std::max(node1,  node2);
-									uint32_t distCol = std::min(node1,  node2);
-									double squareDist = std::pow(dist[distRow][distCol], 2.0);
+								PairwisePairFactory::PairwisePairVec group2_pair_vec;
+								while(group2_pFac.setNextPairs(group2_pair_vec, 30)){
+									double current_sumOfSquaresAll = 0;
+									for(const auto & group2_pair : group2_pair_vec.pairs_){
+										uint32_t node1 = groupNodes[group2][group2_pair.col_];
+										uint32_t node2 = groupNodes[group2][group2_pair.row_];
+										uint32_t distRow = std::max(node1,  node2);
+										uint32_t distCol = std::min(node1,  node2);
+										double squareDist = std::pow(dist[distRow][distCol], 2.0);
+										current_sumOfSquaresAll += squareDist;
+									}
 									//allCurrentDists.emplace_back(dist[distRow][distCol]);
 									{
 										std::lock_guard<std::mutex> lock(sumsMut);
-										sumOfSquaresGroup2 += squareDist;
-										sumOfSquaresAll += squareDist;
+										sumOfSquaresGroup2 += current_sumOfSquaresAll;
+										sumOfSquaresAll += current_sumOfSquaresAll;
 									}
 								}
 							};
@@ -552,17 +560,21 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 						//between group
 						AllByAllPairFactory allFac(groupNodes[group1].size(), groupNodes[group2].size());
 						std::function<void()> computeSumsOfSqaures = [&allFac,&sumsMut,&sumOfSquaresAll,&dist,&groupNodes,&group1,&group2](){
-							AllByAllPairFactory::AllByAllPair allPair;
-							while(allFac.setNextPair(allPair)){
-								auto group1Node = groupNodes[group1][allPair.row_];
-								auto group2Node = groupNodes[group2][allPair.col_];
-								uint32_t distRow = std::max(group1Node,  group2Node);
-								uint32_t distCol = std::min(group1Node,  group2Node);
-								double squareDist = std::pow(dist[distRow][distCol], 2.0);
+							AllByAllPairFactory::AllByAllPairVec allPairVec;
+							while(allFac.setNextPairs(allPairVec, 30)){
+								double current_sumOfSquaresAll = 0;
+								for(const auto & allPair : allPairVec.pairs_){
+									auto group1Node = groupNodes[group1][allPair.row_];
+									auto group2Node = groupNodes[group2][allPair.col_];
+									uint32_t distRow = std::max(group1Node,  group2Node);
+									uint32_t distCol = std::min(group1Node,  group2Node);
+									double squareDist = std::pow(dist[distRow][distCol], 2.0);
+									current_sumOfSquaresAll += squareDist;
+								}
 								//allCurrentDists.emplace_back(dist[distRow][distCol]);
 								{
 									std::lock_guard<std::mutex> lock(sumsMut);
-									sumOfSquaresAll += squareDist;
+									sumOfSquaresAll += current_sumOfSquaresAll;
 								}
 							}
 						};
