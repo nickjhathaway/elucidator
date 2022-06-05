@@ -807,7 +807,7 @@ int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnPathWeaverRegionsAn
 						<< "\t" << utility.regInfo_->totalReads_
 						<< "\t" << utility.regInfo_->totalFinalReads_
 						<< "\t" << utility.regInfo_->totalPairedReads_
-						<< "\t" << utility.inputPars_.sample_;
+						<< "\t" << utility.inputPars_.sample_ << std::endl;
 
 	OutputStream exceptionsOut(njh::files::make_path(utility.finalPassDir_, "exceptionsMessages.tab.txt"));
 	exceptionsOut << "regionUID\tmessage" << std::endl;
@@ -1021,7 +1021,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegionsAndUn
 						<< "\t" << utility.regInfo_->totalReads_
 						<< "\t" << utility.regInfo_->totalFinalReads_
 						<< "\t" << utility.regInfo_->totalPairedReads_
-						<< "\t" << utility.inputPars_.sample_;
+						<< "\t" << utility.inputPars_.sample_ << std::endl;
 
 	OutputStream exceptionsOut(njh::files::make_path(utility.finalPassDir_, "exceptionsMessages.tab.txt"));
 	exceptionsOut << "regionUID\tmessage" << std::endl;
@@ -1273,7 +1273,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegionsAndUnmap
 						<< "\t" << utility.regInfo_->totalReads_
 						<< "\t" << utility.regInfo_->totalFinalReads_
 						<< "\t" << utility.regInfo_->totalPairedReads_
-						<< "\t" << utility.inputPars_.sample_;
+						<< "\t" << utility.inputPars_.sample_ << std::endl;
 
 	OutputStream exceptionsOut(njh::files::make_path(utility.finalPassDir_, "exceptionsMessages.tab.txt"));
 	exceptionsOut << "regionUID\tmessage" << std::endl;
@@ -1513,7 +1513,7 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegionsAndUn
 						<< "\t" << utility.regInfo_->totalReads_
 						<< "\t" << utility.regInfo_->totalFinalReads_
 						<< "\t" << utility.regInfo_->totalPairedReads_
-						<< "\t" << utility.inputPars_.sample_;
+						<< "\t" << utility.inputPars_.sample_ << std::endl;
 
 	OutputStream exceptionsOut(njh::files::make_path(utility.finalPassDir_, "exceptionsMessages.tab.txt"));
 	exceptionsOut << "regionUID\tmessage" << std::endl;
@@ -1721,7 +1721,7 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegionsAndU
 						<< "\t" << utility.regInfo_->totalReads_
 						<< "\t" << utility.regInfo_->totalFinalReads_
 						<< "\t" << utility.regInfo_->totalPairedReads_
-						<< "\t" << utility.inputPars_.sample_;
+						<< "\t" << utility.inputPars_.sample_ << std::endl;
 
 	OutputStream exceptionsOut(njh::files::make_path(utility.finalPassDir_, "exceptionsMessages.tab.txt"));
 	exceptionsOut << "regionUID\tmessage" << std::endl;
@@ -1924,7 +1924,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegionsAndU
 						<< "\t" << utility.regInfo_->totalReads_
 						<< "\t" << utility.regInfo_->totalFinalReads_
 						<< "\t" << utility.regInfo_->totalPairedReads_
-						<< "\t" << utility.inputPars_.sample_;
+						<< "\t" << utility.inputPars_.sample_ << std::endl;
 
 	OutputStream exceptionsOut(njh::files::make_path(utility.finalPassDir_, "exceptionsMessages.tab.txt"));
 	exceptionsOut << "regionUID\tmessage" << std::endl;
@@ -2139,7 +2139,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegionsAndUn
 						<< "\t" << utility.regInfo_->totalReads_
 						<< "\t" << utility.regInfo_->totalFinalReads_
 						<< "\t" << utility.regInfo_->totalPairedReads_
-						<< "\t" << utility.inputPars_.sample_;
+						<< "\t" << utility.inputPars_.sample_ << std::endl;
 
 	OutputStream exceptionsOut(njh::files::make_path(utility.finalPassDir_, "exceptionsMessages.tab.txt"));
 	exceptionsOut << "regionUID\tmessage" << std::endl;
@@ -2388,7 +2388,7 @@ int programWrappersAssembleOnPathWeaverRunner::runPolyteOnPathWeaverRegionsAndUn
 						<< "\t" << utility.regInfo_->totalReads_
 						<< "\t" << utility.regInfo_->totalFinalReads_
 						<< "\t" << utility.regInfo_->totalPairedReads_
-						<< "\t" << utility.inputPars_.sample_;
+						<< "\t" << utility.inputPars_.sample_ << std::endl;
 
 	OutputStream exceptionsOut(njh::files::make_path(utility.finalPassDir_, "exceptionsMessages.tab.txt"));
 	exceptionsOut << "regionUID\tmessage" << std::endl;
@@ -2648,7 +2648,7 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegionsAndUnm
 						<< "\t" << utility.regInfo_->totalReads_
 						<< "\t" << utility.regInfo_->totalFinalReads_
 						<< "\t" << utility.regInfo_->totalPairedReads_
-						<< "\t" << utility.inputPars_.sample_;
+						<< "\t" << utility.inputPars_.sample_ << std::endl;
 
 	OutputStream exceptionsOut(njh::files::make_path(utility.finalPassDir_, "exceptionsMessages.tab.txt"));
 	exceptionsOut << "regionUID\tmessage" << std::endl;
@@ -3038,7 +3038,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 							<< "\t" << utility.regInfo_->totalReads_
 							<< "\t" << utility.regInfo_->totalFinalReads_
 							<< "\t" << utility.regInfo_->totalPairedReads_
-							<< "\t" << utility.inputPars_.sample_;
+							<< "\t" << utility.inputPars_.sample_ << std::endl;
 
 		OutputStream exceptionsOut(njh::files::make_path(utility.finalPassDir_, "exceptionsMessages.tab.txt"));
 		exceptionsOut << "regionUID\tmessage" << std::endl;
