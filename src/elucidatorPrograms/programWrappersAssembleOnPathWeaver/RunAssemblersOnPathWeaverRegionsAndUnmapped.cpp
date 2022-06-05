@@ -1178,10 +1178,10 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegionsAndUnmap
 			seqMeta.addMeta("sample", utility.inputPars_.sample_);
 
 
-			std::cout << "utility.totalCount(): " << utility.totalCount() << std::endl;
-			std::cout << "totalCoverage: " << totalCoverage << std::endl;
-			std::cout << "kmerCoverage[seq->seqBase_.name_]: " << kmerCoverage[seq->seqBase_.name_] << std::endl;
-			std::cout << "kmerCoverage[seq->seqBase_.name_]/totalCoverage: " << kmerCoverage[seq->seqBase_.name_]/totalCoverage << std::endl;
+//			std::cout << "utility.totalCount(): " << utility.totalCount() << std::endl;
+//			std::cout << "totalCoverage: " << totalCoverage << std::endl;
+//			std::cout << "kmerCoverage[seq->seqBase_.name_]: " << kmerCoverage[seq->seqBase_.name_] << std::endl;
+//			std::cout << "kmerCoverage[seq->seqBase_.name_]/totalCoverage: " << kmerCoverage[seq->seqBase_.name_]/totalCoverage << std::endl;
 			seq->seqBase_.cnt_ = (kmerCoverage[seq->seqBase_.name_]/totalCoverage) * (utility.totalCount());
 			std::string oldName = seq->seqBase_.name_;
 			seqMeta.resetMetaInName(seq->seqBase_.name_);
