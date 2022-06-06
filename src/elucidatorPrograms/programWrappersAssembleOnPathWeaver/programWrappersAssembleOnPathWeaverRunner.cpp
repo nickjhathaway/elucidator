@@ -4076,7 +4076,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 				std::string vOptCmdPreCovCutOff = vOptCmdStream.str();
 				vOptCmdStream
 											<< " -m " << coverageCutOff
-											<< " > VelvetOptimzerRunLog_" << njh::getCurrentDate() << ".txt 2>&1";
+											<< " > VelvetOptimzerRunLog_" << njh::getCurrentDate() << ".txt 2>&1 ";
 				if(exists(vOptFullOutputDir)){
 					if(overWriteDir){
 						njh::files::rmDirForce(vOptFullOutputDir);
@@ -4421,13 +4421,16 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 				bfs::path velvetOutputDir = njh::files::make_path(VelvetOptimiserOutDir, "MetaVelvetOutDir", velvetOutputDirStr);
 
 				std::stringstream velvethCmd;
-				velvethCmd << "cd " << vOptFullOutputDir << "/../ && velveth " << velvetOutputDir << " " << velvethArgs.substr(velvethArgs.find(' '));
+				velvethCmd << "cd " << vOptFullOutputDir << "/../ && velveth " << velvetOutputDir << " " << velvethArgs.substr(velvethArgs.find(' '))
+								<< " > VelvetOptimzer_velveth_RunLog_" << njh::getCurrentDate() << ".txt 2>&1 ";
 
 				std::stringstream velvetgCmd;
-				velvetgCmd << "cd " << vOptFullOutputDir << "/../ && velvetg " << velvetOutputDir << " " << velvetgArgs.substr(velvetgArgs.find(' '));
+				velvetgCmd << "cd " << vOptFullOutputDir << "/../ && velvetg " << velvetOutputDir << " " << velvetgArgs.substr(velvetgArgs.find(' '))
+								<< " > VelvetOptimzer_velvetg_RunLog_" << njh::getCurrentDate() << ".txt 2>&1 ";
 
 				std::stringstream metavelvetgCmd;
-				metavelvetgCmd << "cd " << vOptFullOutputDir << "/../ && meta-velvetg " << velvetOutputDir;
+				metavelvetgCmd << "cd " << vOptFullOutputDir << "/../ && meta-velvetg " << velvetOutputDir
+								<< " > VelvetOptimzer_meta-velvetg_RunLog_" << njh::getCurrentDate() << ".txt 2>&1 ";
 
 				auto velvethCmdOutut = njh::sys::run(VecStr{velvethCmd.str()});
 				BioCmdsUtils::checkRunOutThrow(velvethCmdOutut, __PRETTY_FUNCTION__);
