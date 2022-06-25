@@ -1346,7 +1346,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 
 
 	{
-		std::unordered_map<std::string, std::vector<std::string>> interceptedIDs;
+		std::unordered_map<std::string, std::set<std::string>> interceptedIDs;
 		OutputStream allBestRegionsBedOut(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr("bestRegions_", "all", ".bed")));
 		for(auto & best : bestRegionsByGenome){
 			OutOptions bestRegionsBedOpts(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr("bestRegions_", best.first, ".bed")));
@@ -1359,7 +1359,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 					if(!region.extraFields_.empty() && MetaDataInName::nameHasMetaData(region.extraFields_[0])){
 						auto regionMeta = MetaDataInName(region.extraFields_[0]);
 						if(regionMeta.containsMeta("ID")){
-							interceptedIDs[best.first].emplace_back(regionMeta.getMeta("ID"));
+							interceptedIDs[best.first].emplace(regionMeta.getMeta("ID"));
 						}
 					}
 				}
