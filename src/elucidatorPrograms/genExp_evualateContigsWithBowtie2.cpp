@@ -1346,6 +1346,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 
 
 	{
+		std::unordered_map<std::string, std::vector<std::string>> interceptedIDs;
 		OutputStream allBestRegionsBedOut(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr("bestRegions_", "all", ".bed")));
 		for(auto & best : bestRegionsByGenome){
 			OutOptions bestRegionsBedOpts(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr("bestRegions_", best.first, ".bed")));
@@ -1354,12 +1355,24 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 				intersectBedLocsWtihGffRecordsPars gffPars = gMapper.pars_.gffIntersectPars_;
 				gffPars.gffFnp_ = gMapper.genomes_.at(best.first)->gffFnp_;
 				intersectBedLocsWtihGffRecords(best.second, gffPars);
+				for(const auto & region : best.second){
+					if(!region.extraFields_.empty() && MetaDataInName::nameHasMetaData(region.extraFields_[0])){
+						auto regionMeta = MetaDataInName(region.extraFields_[0]);
+						if(regionMeta.containsMeta("ID")){
+							interceptedIDs[best.first].emplace_back(regionMeta.getMeta("ID"));
+						}
+					}
+				}
 			}
 			BedUtility::coordSort(best.second);
 			for(const auto & reg : best.second){
 				bestRegionsBedOut << reg.toDelimStrWithExtra() << std::endl;
 				allBestRegionsBedOut << reg.toDelimStrWithExtra() << std::endl;
 			}
+		}
+		for(const auto & genomeIDs : interceptedIDs){
+			OutputStream interceptedIDsOut(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr("bestRegions_", genomeIDs.first, "_IDs.txt")));
+			interceptedIDsOut << njh::conToStr(genomeIDs, "\n") << std::endl;
 		}
 	}
 
