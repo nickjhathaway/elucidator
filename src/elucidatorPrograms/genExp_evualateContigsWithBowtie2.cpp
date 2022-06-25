@@ -981,7 +981,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 			for(const auto & leng : allContigsReadLengths){
 				contigGenomeSum += leng;
 				++contigGenomeCount;
-				if(contigGenomeSum > 0.5* allContigsSum	){
+				if(contigGenomeSum > 0.5* sumTotalRequired	){
 					ng50 = contigGenomeSum;
 					lg50 = contigGenomeCount;
 					break;
