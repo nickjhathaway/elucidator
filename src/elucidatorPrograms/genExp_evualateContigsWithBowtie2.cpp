@@ -1372,7 +1372,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 		}
 		for(const auto & genomeIDs : interceptedIDs){
 			OutputStream interceptedIDsOut(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr("bestRegions_", genomeIDs.first, "_IDs.txt")));
-			interceptedIDsOut << njh::conToStr(genomeIDs, "\n") << std::endl;
+			interceptedIDsOut << njh::conToStr(genomeIDs.second, "\n") << std::endl;
 		}
 	}
 
