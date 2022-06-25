@@ -1463,7 +1463,9 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 					<< "\t" << "ContigsMatchingNotExpectedCnt"
 					<< "\t" << "ContigsMatchingNotExpectedFrac"
 					<< "\t" << "TotalContigs"
-
+					<< "\t" << "TotalBases"
+					<< "\t" << "TotalRequiredContigs"
+					<< "\t" << "TotalRequiredBases"
 					<< "\t" << "n50"
 					<< "\t" << "l50"
 					<< "\t" << "ng50"
@@ -1477,6 +1479,9 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 					<< "\t" << notMatchingContigs.size()
 					<< "\t" << notMatchingContigs.size()/static_cast<double>(readNumber)
 					<< "\t" << readNumber
+					<< "\t" << vectorSum(allContigsReadLengths)
+					<< "\t" << requiredRegions.size()
+					<< "\t" << sumTotalRequired
 					<< "\t" << n50
 					<< "\t" << l50
 					<< "\t" << ng50
