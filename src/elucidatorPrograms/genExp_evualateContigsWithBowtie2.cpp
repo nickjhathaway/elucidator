@@ -855,6 +855,11 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	}
 
 
+	double sumTotalRequired = 0;
+	for(const auto & region : requiredRegions){
+		sumTotalRequired += region.getLen();
+	}
+
 	std::vector<seqInfo> requiredRegionsSeqs;
 	for(const auto  & region : requiredRegions){
 		TwoBit::TwoBitFile treader(gMapper.genomes_.at(chromosomeToGenome[region.chrom_])->fnpTwoBit_);
@@ -922,6 +927,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	auto tempSeqBowtie2Opts = SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "tempForBowtie2_" + bfs::basename(setUp.pars_.ioOptions_.firstName_) ));
 	auto tempSeqLastzOpts = SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "tempForLastz_" + bfs::basename(setUp.pars_.ioOptions_.firstName_) ));
 
+	std::vector<uint32_t> allContigsReadLengths;
 	{
 		seqInfo seq;
 		SeqInput reader(setUp.pars_.ioOptions_);
@@ -933,6 +939,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 		uint32_t count = 0;
 
 		while(reader.readNextRead(seq)){
+			allContigsReadLengths.emplace_back(len(seq));
 			nameToPositionKey[seq.name_] = count;
 			readLengths[seq.name_] = len(seq);
 			nameKey[estd::to_string(count)] = seq.name_;
@@ -943,6 +950,43 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 				tempForLastzWriter.openWrite(seq);
 			}
 			++count;
+		}
+	}
+	njh::sort(allContigsReadLengths, [](uint32_t len1, uint32_t len2){
+		return len1 > len2;
+	});
+	//calculating assembly stats
+	uint32_t l50 = 0;
+	uint32_t n50 = 0;
+	uint32_t lg50 = 0;
+	uint32_t ng50 = 0;
+	{
+		auto allContigsSum = vectorSum(allContigsReadLengths);
+		{
+			uint32_t contigSum = 0;
+			uint32_t contigCount = 0;
+			for(const auto & leng : allContigsReadLengths){
+				contigSum += leng;
+				++contigCount;
+				if(contigSum > 0.5* allContigsSum	){
+					n50 = contigSum;
+					l50 = contigCount;
+					break;
+				}
+			}
+		}
+		{
+			uint32_t contigGenomeSum = 0;
+			uint32_t contigGenomeCount = 0;
+			for(const auto & leng : allContigsReadLengths){
+				contigGenomeSum += leng;
+				++contigGenomeCount;
+				if(contigGenomeSum > 0.5* allContigsSum	){
+					ng50 = contigGenomeSum;
+					lg50 = contigGenomeCount;
+					break;
+				}
+			}
 		}
 	}
 	auto tempInBowtie2Opts = SeqIOOptions::genFastaIn(tempSeqBowtie2Opts.out_.outName());
@@ -1418,7 +1462,13 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 					<< "\t" << "ContigsMatchingExpectedFrac"
 					<< "\t" << "ContigsMatchingNotExpectedCnt"
 					<< "\t" << "ContigsMatchingNotExpectedFrac"
-					<< "\t" << "TotalContigs" << std::endl;
+					<< "\t" << "TotalContigs"
+
+					<< "\t" << "n50"
+					<< "\t" << "l50"
+					<< "\t" << "ng50"
+					<< "\t" << "lg50"
+					<< std::endl;
 			matchInfo << program
 					<< "\t" << sample
 					<< "\t" << target
@@ -1427,6 +1477,10 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 					<< "\t" << notMatchingContigs.size()
 					<< "\t" << notMatchingContigs.size()/static_cast<double>(readNumber)
 					<< "\t" << readNumber
+					<< "\t" << n50
+					<< "\t" << l50
+					<< "\t" << ng50
+					<< "\t" << lg50
 					<< std::endl;
 
 		}
