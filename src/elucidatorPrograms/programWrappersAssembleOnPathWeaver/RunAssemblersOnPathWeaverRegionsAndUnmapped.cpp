@@ -1197,7 +1197,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegionsAndUnmap
 			//auto assembleInfo = DefaultAssembleNameInfo(seq->seqBase_.name_, true);
 			MetaDataInName seqMeta;
 			seqMeta.addMeta("trimmedLength", len(seq->seqBase_));
-			seqMeta.addMeta("estimatedPerBaseCoverage", kmerCoverage[seq->seqBase_.name_]);
+			seqMeta.addMeta("estimatedPerBaseCoverage", kmerCoverage[MetaDataInName::removeMetaDataInNameRet(seq->seqBase_.name_)]);
 			seqMeta.addMeta("trimStatus", seq->seqBase_.on_);
 			seqMeta.addMeta("regionUID", utility.inputPars_.regionUid_);
 			seqMeta.addMeta("sample", utility.inputPars_.sample_);
@@ -1213,7 +1213,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegionsAndUnmap
 			seq->seqBase_.cnt_ = (kmerCoverage[seq->seqBase_.name_]/totalCoverage) * (utility.totalCount());
 			std::string oldName = seq->seqBase_.name_;
 			seqMeta.resetMetaInName(seq->seqBase_.name_);
-			kmerCoverage[seq->seqBase_.name_] = kmerCoverage[oldName];
+			kmerCoverage[seq->seqBase_.name_] = kmerCoverage[MetaDataInName::removeMetaDataInNameRet(seq->seqBase_.name_)];
 			seq->seqBase_.name_ += njh::pasteAsStr("_t", seq->seqBase_.cnt_);
 		}
 
