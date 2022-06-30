@@ -1210,7 +1210,7 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegionsAndUnmap
 //					std::cout << "totalCoverage: " << totalCoverage << std::endl;
 //					std::cout << "reads: " << readCounts.pairedReads_ + readCounts.unpaiedReads_ + readCounts.orphans_ << std::endl;
 
-			seq->seqBase_.cnt_ = (kmerCoverage[seq->seqBase_.name_]/totalCoverage) * (utility.totalCount());
+			seq->seqBase_.cnt_ = (kmerCoverage[MetaDataInName::removeMetaDataInNameRet(seq->seqBase_.name_)]/totalCoverage) * (utility.totalCount());
 			std::string oldName = seq->seqBase_.name_;
 			seqMeta.resetMetaInName(seq->seqBase_.name_);
 			kmerCoverage[seq->seqBase_.name_] = kmerCoverage[MetaDataInName::removeMetaDataInNameRet(seq->seqBase_.name_)];
