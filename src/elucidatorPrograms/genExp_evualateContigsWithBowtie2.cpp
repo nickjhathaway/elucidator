@@ -678,7 +678,158 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 	return 0;
 }
 
+std::string DisplayResultsRMD = R"(---
+title: "Displaying Results of Eval Against Expected"
+author: "Nicholas Hathaway"
+output:
+html_document:
+highlight: textmate
+				theme: flatly
+				code_folding: hide
+				toc: yes
+				toc_float: yes
+				fig_width: 12
+fig_height : 8
+---
 
+
+```{r setup, echo=FALSE, message=FALSE}
+require(knitr)
+require(DT)
+require(tidyverse)
+require(plotly)
+require(heatmaply)
+#turn off messages and warnings and make it so output isn't prefixed by anything,
+#default is to put "##" in front of all output for some reason
+#also set tidy to true so code is wrapped properly
+opts_chunk$set(message=FALSE, warning=FALSE, comment = "", cache = F)
+options(width = 200)
+`%!in%` <- Negate(`%in%`)
+
+myFormula= x~y
+library(ggpmisc)
+`%!in%` <- Negate(`%in%`)
+
+sofonias_theme = theme_bw() +
+								 theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank() )+
+								 theme(axis.line.x = element_line(color="black", size = 0.3),axis.line.y =
+												 element_line(color="black", size = 0.3))+
+								 theme(text=element_text(size=12, family="Helvetica"))+
+								 theme(axis.text.y = element_text(size=12))+
+								 theme(axis.text.x = element_text(size=12)) +
+								 theme(legend.position = "bottom") +
+								 theme(plot.title = element_text(hjust = 0.5))
+
+sofonias_theme_xRotate = sofonias_theme +
+												 theme(axis.text.x = element_text(size=12, angle = -90, vjust = 0.5, hjust = 0))
+```
+<style type="text/css">
+						div.main-container {
+										max-width: 1800px;
+										margin-left: auto;
+										margin-right: auto;
+						}
+						</style>
+
+## Expected Regions
+
+```{r}
+expectedRegions = readr::read_tsv("expectedRegionsInputInfo/expectedRegions.bed", col_names = F)
+colnames(expectedRegions)[1:6] = c("chrom", "start", "end", "name", "length", "strand")
+DT::datatable(
+				expectedRegions,
+				extensions = 'Buttons',
+				options = list(dom = 'Bfrtip',
+											 buttons = c('csv'))
+)
+```
+
+## Summary of results
+
+### Number Matching expected
+
+```{r}
+contigsMatchingExpectedInfo = readr::read_tsv("contigsMatchingExpectedInfo.tab.txt")
+DT::datatable(
+				contigsMatchingExpectedInfo,
+				extensions = 'Buttons',
+				options = list(dom = 'Bfrtip',
+											 buttons = c('csv'))
+)
+```
+
+### Coverage of expected
+
+```{r}
+covInfo = readr::read_tsv("coveragedInfo.tab.txt")
+DT::datatable(
+				covInfo,
+				extensions = 'Buttons',
+				options = list(dom = 'Bfrtip',
+											 buttons = c('csv'))
+)
+```
+
+```{r}
+allNotCoveredRegions = readr::read_tsv("allNotCoveredRegions.bed", col_names = F)
+DT::datatable(
+				allNotCoveredRegions,
+				extensions = 'Buttons',
+				options = list(dom = 'Bfrtip',
+											 buttons = c('csv'))
+)
+```
+
+### Comp to expected
+```{r}
+refComparisonInfo = readr::read_tsv("refComparisonInfo.tab.txt")
+DT::datatable(
+				refComparisonInfo,
+				extensions = 'Buttons',
+				options = list(dom = 'Bfrtip',
+											 buttons = c('csv'))
+)
+```
+
+## Plotting by groupped regions
+
+```{r}
+groupedRegions = readr::read_tsv("groupedRegions.bed", col_names = F)
+expectedRegions = expectedRegions %>%
+rename(desp = X7) %>%
+mutate(X7 = name)
+
+allNotCoveredRegions = allNotCoveredRegions %>%
+mutate(X7 = gsub(":.*", "", X4))
+
+refComparisonInfo_errorFree = refComparisonInfo %>%
+filter(totalErrors == 0)
+
+groupedRegions = groupedRegions %>%
+mutate(errorFree = X8 %in% refComparisonInfo_errorFree$ReadId)
+
+ggplot(groupedRegions) +
+geom_rect(aes(xmin = X2, xmax = X3,
+							ymin = X9, ymax = X9+ 1,
+							fill = errorFree),
+				color = "black") +
+geom_rect(aes(xmin = start, xmax = end,
+							ymin = -0.5, ymax = 0),
+				data = expectedRegions,
+				fill = "red",
+				color = "black") +
+geom_rect(
+				aes(xmin = X2, xmax = X3,
+						ymin = -1, ymax = -0.5),
+				data = allNotCoveredRegions,
+				fill = "blue",
+				color = "black"
+) +
+sofonias_theme_xRotate +
+scale_fill_manual(values = c("TRUE" = "#0AB45A", "FALSE" = "#AA0A3C")) +
+facet_wrap(~X7, scales = "free")
+
+```)";
 
 
 int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs & inputCommands){
@@ -1751,6 +1902,10 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 		}
 	}
 
+	{
+		OutputStream displayResultsRMDOut(njh::files::make_path(setUp.pars_.directoryName_, "displayResults.Rmd"));
+		displayResultsRMDOut << DisplayResultsRMD << std::endl;
+	}
 	return 0;
 }
 
