@@ -1259,7 +1259,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 
 	uint32_t readNumber = 0;
 	std::unordered_map<std::string, std::vector<Bed6RecordCore>> bestRegionsByGenome;
-	std::unordered_map<std::string, std::string> regionNameToInputName;
+	//std::unordered_map<std::string, std::string> regionNameToInputName;
 
 	auto allAlnResultsKeys = getVectorOfMapKeys(allAlnResults);
 	njh::sort(allAlnResultsKeys, [&nameToPositionKey](const std::string & name1, const std::string & name2){
@@ -1283,11 +1283,11 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 					bestResults.clear();
 					bestResults.emplace_back(res);
 					regionNameToGenome[res->gRegion_.genBedRecordCore().toDelimStrWithExtra()] = genomeRes.first;
-					regionNameToInputName[res->gRegion_.genBedRecordCore().genUIDFromCoordsWithStrand()] = res->bAln_.Name;
+					//regionNameToInputName[res->gRegion_.genBedRecordCore().genUIDFromCoordsWithStrand()] = res->bAln_.Name;
 				}else if(res->comp_.alnScore_  == bestScore){
 					bestResults.emplace_back(res);
 					regionNameToGenome[res->gRegion_.genBedRecordCore().toDelimStrWithExtra()] = genomeRes.first;
-					regionNameToInputName[res->gRegion_.genBedRecordCore().genUIDFromCoordsWithStrand()] = res->bAln_.Name;
+					//regionNameToInputName[res->gRegion_.genBedRecordCore().genUIDFromCoordsWithStrand()] = res->bAln_.Name;
 				}
 			}
 		}
@@ -1708,17 +1708,45 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 
 	uint32_t distanceWithin = 100;
 	for(const auto & expectedRegion : requiredRegions){
-		std::vector<Bed6RecordCore> associatedRegions;
-		for(const auto & best : bestRegionsByGenome){
-			for(const auto & region : best.second){
-				if(region.getDistanceBetween(expectedRegion.genBed3RecordCore()) < distanceWithin){
-					associatedRegions.emplace_back(region);
+		std::vector<std::shared_ptr<AlignmentResults>> associatedRegions;
+		for(const auto & best : bestAlnResults){
+			for(const auto & byRegion : best.second){
+				for(const auto & alnRes : byRegion.second){
+					if(alnRes->gRegion_.genBedRecordCore().getDistanceBetween(expectedRegion.genBed3RecordCore()) < distanceWithin){
+						associatedRegions.emplace_back(alnRes);
+					}
 				}
 			}
 		}
+		njh::sort(associatedRegions, [](const std::shared_ptr<AlignmentResults> & aln1, const std::shared_ptr<AlignmentResults> & aln2){
+			const auto & reg1 = aln1->gRegion_;
+			const auto & reg2 = aln2->gRegion_;
+			if(reg1.chrom_ == reg2.chrom_){
+				if(reg1.start_ == reg2.start_) {
+					return reg1.end_ < reg2.end_;
+				} else {
+					return reg1.start_ < reg2.start_;
+				}
+			}else{
+				return reg1.chrom_ < reg2.chrom_;
+			}
+		});
 		uint32_t count = 0;
-		for(const auto & region : associatedRegions){
-			groupedRegionsOut << region.toDelimStr() << "\t" << expectedRegion.uid_ << "\t" << regionNameToInputName[region.genUIDFromCoordsWithStrand()] << "\t" << count << std::endl;
+		for(const auto & results : associatedRegions){
+			std::string appName;
+			MetaDataInName rangeMeta;
+			if('H' == results->bAln_.CigarData.front().Type ){
+				rangeMeta.addMeta("start",results->bAln_.CigarData.front().Length);
+			}
+			if('H' == results->bAln_.CigarData.back().Type ){
+				rangeMeta.addMeta("end", readLengths[results->bAln_.Name] - results->bAln_.CigarData.back().Length);
+			}
+			if(!rangeMeta.meta_.empty()){
+				appName = rangeMeta.createMetaName();
+			}
+			auto region = results->gRegion_.genBedRecordCore();
+			auto outName = njh::pasteAsStr(results->bAln_.Name, appName);
+			groupedRegionsOut << region.toDelimStr() << "\t" << expectedRegion.uid_ << "\t" << outName << "\t" << count << std::endl;
 			++count;
 		}
 	}
