@@ -682,14 +682,14 @@ std::string DisplayResultsRMD = R"(---
 title: "Displaying Results of Eval Against Expected"
 author: "Nicholas Hathaway"
 output:
-html_document:
-highlight: textmate
-				theme: flatly
-				code_folding: hide
-				toc: yes
-				toc_float: yes
-				fig_width: 12
-fig_height : 8
+ html_document:
+   highlight: textmate
+   theme: flatly
+   code_folding: hide
+   toc: yes
+   toc_float: yes
+   fig_width: 12
+   fig_height: 8
 ---
 
 
