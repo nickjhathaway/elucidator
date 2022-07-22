@@ -1276,7 +1276,7 @@ ggplot(varRegionCoded_seqIDCount %>%
 
 
 int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs & inputCommands){
-	uint32_t minimumKlen = 13;
+	uint32_t minimumKlen = 15;
 	
 	ContigsCompareGraphDev::correctSeqsByGraphPars graphCorrectingPars;
 	bfs::path refBedFnp;
