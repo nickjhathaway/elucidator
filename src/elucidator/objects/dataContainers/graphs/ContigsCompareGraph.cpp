@@ -1530,6 +1530,7 @@ std::vector<seqInfo> ContigsCompareGraphDev::correctSeqsByGraph(const std::vecto
 	std::vector<seqInfo> correctedSeqs = seqs;
 	for(const auto & seq : seqs){
 		bool printInfo = pars.debug;
+//		printInfo = seq.name_ == "FP0028-C.0[IsFieldSample=TRUE;PopUID=Pf3D7_11_v3-1984716-1984901.22;collection_date=NA;collection_year=2014;country=Mauritania;p_name=Pf3D7_11_v3-1984716-1984901;readCount=197;region=West Africa;sample=FP0028-C;secondaryRegion=AFRICA;site=Kobeni]_f1";
 		std::vector<SubSeqment> subPositions;
 		for(uint32_t pos = 0; pos < len(seq) + 1 - pars.klen; ++pos){
 			std::string subK = seq.seq_.substr(pos, pars.klen);
@@ -1582,6 +1583,9 @@ std::vector<seqInfo> ContigsCompareGraphDev::correctSeqsByGraph(const std::vecto
 				uint32_t replaceStart = subPosition.pos_;
 				uint32_t replaceLen = subPosition.size_;
 				if("" != head){
+					if(printInfo){
+						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+					}
 					--replaceStart;
 					++replaceLen;
 					for(const auto & tailEdge : compGraph.nodes_[compGraph.nodePositions_[head]]->tailEdges_){
@@ -1591,6 +1595,9 @@ std::vector<seqInfo> ContigsCompareGraphDev::correctSeqsByGraph(const std::vecto
 					}
 				}
 				if("" != tail){
+					if(printInfo){
+						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+					}
 					++replaceLen;
 					for(const auto & headEdge :compGraph.nodes_[compGraph.nodePositions_[tail]]->headEdges_){
 						for(const auto & con : headEdge->connectorInfos_){
@@ -1599,15 +1606,22 @@ std::vector<seqInfo> ContigsCompareGraphDev::correctSeqsByGraph(const std::vecto
 					}
 				}
 				if("" == head){
+					if(printInfo){
+						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+					}
 					for(const auto & tailPosition : tailPositions){
 						headPositions[tailPosition.first] = 0;
 					}
 				}
 				if("" == tail){
+					if(printInfo){
+						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+					}
 					for(const auto & headPosition : headPositions){
 						tailPositions[headPosition.first] = len(seqs[seqnameToPosition[headPosition.first]]);
 					}
 				}
+
 				std::unordered_map<std::string, uint32_t> subSeqCounts;
 				for(const auto & headPosition : headPositions){
 					if(headPosition.first == seq.name_){

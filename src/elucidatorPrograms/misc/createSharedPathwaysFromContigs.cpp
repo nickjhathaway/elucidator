@@ -1276,13 +1276,8 @@ ggplot(varRegionCoded_seqIDCount %>%
 
 
 int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs & inputCommands){
-	uint32_t minimumKlen = 12;
-
-
-//	uint32_t lowFreqCutOff = 3;
-//	bool doNotCollapseLowFreqNodes = false;
-	//	uint32_t kmerOccurenceCutOff = 0;
-	//	uint32_t correctionOccurenceCutOff = 2;
+	uint32_t minimumKlen = 13;
+	
 	ContigsCompareGraphDev::correctSeqsByGraphPars graphCorrectingPars;
 	bfs::path refBedFnp;
 	std::string refBedName;
@@ -1476,7 +1471,12 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 		seqs = correctedSeqs;
 
 		if(lenFilter){
-			seqs = ContigsCompareGraphDev::correctSeqsByGraph(seqs, graphCorrectingPars);
+			seqs = ContigsCompareGraphDev::filterSeqsOnLen(seqs,
+																										 graphCorrectingPars,
+																										 lenFiltMultiplier,
+																										 SeqIOOptions::genFastaOut(
+																														 njh::files::make_path(setUp.pars_.directoryName_,
+																																									 "lenFilteredSeqs.fasta.gz")));
 		}
 		graphCorrectingPars.klen = ContigsCompareGraphDev::findMinNonredundantKmer(minimumKlen, seqs, __PRETTY_FUNCTION__);
 		{
