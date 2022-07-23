@@ -550,7 +550,7 @@ std::multimap<int, std::vector<int>, std::greater<int>> trimCycleScore(
     int parentMass, int leaderBoardNumber, int& currentLeader) {
   std::multimap<int, std::vector<int>, std::greater<int>> ans;
   int pos = 0;
-  int lastScore;
+  int lastScore = nextCycle.begin()->first;
   for (const auto& cycle : nextCycle) {
     if (pos == 0) {
       lastScore = cycle.first;
