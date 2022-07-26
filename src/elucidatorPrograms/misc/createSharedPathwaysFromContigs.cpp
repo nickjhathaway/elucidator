@@ -1351,7 +1351,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 
 	auto conservedRegionInfoDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{"subRegionInfo"});
 	auto subsegmentInfoDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{"subsegmentInfo"});
-
+	GenomicRegion refSeqLoc;
 	if (!refSeq.name_.empty() && refBedFnp.empty()) {
 		auto refName = bfs::path(bfs::basename(genomeFnp)).replace_extension("").string();
 		refSeq.name_ = refName;
@@ -1394,6 +1394,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 		refSeqMeta.addMeta("site", "LabIsolate", true);
 		refSeqMeta.addMeta("IsFieldSample", false, true);
 		refSeqMeta.resetMetaInName(refSeq.name_);
+		refSeqLoc = refRegion;
 	}
 	std::vector<seqInfo> seqs = ContigsCompareGraphDev::readInSeqs(setUp.pars_.ioOptions_, refSeq, refSeqName);
 
@@ -1434,7 +1435,9 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	}
 
 	auto refSeqOutFnp = njh::files::make_path(setUp.pars_.directoryName_, "refSeq.fasta");
-	GenomicRegion refSeqLoc = determineRefSeqLocation(refSeq, refSeqOutFnp, genomeFnp);
+	if (refBedFnp.empty()){
+		refSeqLoc = determineRefSeqLocation(refSeq, refSeqOutFnp, genomeFnp);
+	}
 	{
 		//open out file
 		OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "refSeq.bed"));
