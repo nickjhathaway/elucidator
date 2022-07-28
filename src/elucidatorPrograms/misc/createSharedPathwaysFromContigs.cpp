@@ -1735,7 +1735,9 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 			{
 				OutputStream refLocsOut(njh::files::make_path(conservedRegionInfoDir, njh::pasteAsStr(nodes.first, "_ref_sharedLocs.bed")));
 				for(auto loc : processedNodes.nameToSubSegPositions_raw.at(refSeq.name_)){
-					loc.name_ = processedNodes.subseqToIDKey[loc.name_];
+					std::string newName = processedNodes.subseqToIDKey[loc.name_];
+					newName = njh::pasteAsStr(refSeqLoc.createUidFromCoordsStrand(), "__", newName);
+					loc.name_ = newName;
 					refLocsOut << loc.toDelimStrWithExtra() << std::endl;
 				}
 			}
@@ -1745,6 +1747,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 				for(auto loc : processedNodes.nameToSubSegPositions_raw.at(refSeq.name_)){
 					modSubSegmentToCorrectedRef(loc);
 					std::string newName = processedNodes.subseqToIDKey[loc.name_];
+					newName = njh::pasteAsStr(refSeqLoc.createUidFromCoordsStrand(), "__", newName);
 					loc = refSeqLoc.genBedRecordCore().adjustSubRegionToRelativePosition(loc);
 					loc.name_ = newName;
 					refLocsOut << loc.toDelimStrWithExtra() << std::endl;
