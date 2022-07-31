@@ -13,6 +13,8 @@
 #include <njhseq/objects/BioDataObject.h>
 
 #include "elucidator/objects/BioDataObject.h"
+
+#include <utility>
 #include "elucidator/BioRecordsUtils/BedUtility.hpp"
 #include "elucidator/objects/counters/DNABaseCounter.hpp"
 
@@ -21,6 +23,118 @@ namespace njhseq {
 
 
 
+int bedExpRunner::bedGetOverlappinCoverageBetweenPanels(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path intersectWithBeds;
+	bool doNotAdjustForSinglePosIntersection = false;
+	OutOptions outOpts(bfs::path(""), ".tab.txt");
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.setOption(doNotAdjustForSinglePosIntersection, "--doNotAdjustForSinglePosIntersection", "do Not Adjust For Single Pos Intersection");
+	setUp.setOption(intersectWithBeds, "--intersectWithBeds", "A table with bed files from previous panels to intersect with,two columns 1)panel,2)bed", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	OutputStream out(outOpts);
+	// read in beds to intercept with
+	table otherBedsTab(intersectWithBeds, "\t", true);
+	otherBedsTab.checkForColumnsThrow(VecStr{"panel", "bed"}, __PRETTY_FUNCTION__);
+	std::map<std::string, bfs::path> bedsByPanel;
+	uint32_t panelPos = otherBedsTab.getColPos("panel");
+	uint32_t bedColPos = otherBedsTab.getColPos("bed");
+	std::unordered_map<std::string, std::string> panelByBeds;
+	for(const auto & row : otherBedsTab){
+		auto panel = row[panelPos];
+		auto bed = row[bedColPos];
+		if(njh::in(panel, bedsByPanel)){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "already have panel: " << panel<< "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		if(njh::in(bed, panelByBeds)){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "already have bed file: " << bed << " for panel: " << panelByBeds[bed] << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		bedsByPanel[panel] = bed;
+		panelByBeds[bed] = panel;
+		if(!bfs::exists(bed)){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << bed << " doesn't exist" << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+	}
+	std::vector<std::string> panelNames = getVectorOfMapKeys(bedsByPanel);
+	njh::sort(panelNames);
+
+	out << "#chrom\tstart\tend\tname\tlen\tstrand";
+	out << "\t" << "panel";
+	out << "\t" << njh::conToStr(panelNames, "\t") << std::endl;
+
+	for(const auto & currentPanel : panelNames){
+
+		auto currenntPanelBed = bedsByPanel[currentPanel];
+		auto regions = getBeds(currenntPanelBed);
+
+		struct RegionWithOtherRegionsCoverage{
+			explicit RegionWithOtherRegionsCoverage(Bed6RecordCore region): region_(std::move(region)){
+
+			}
+			Bed6RecordCore region_;
+			std::vector<Bed6RecordCore> overlappingRegions_;
+
+			[[nodiscard]] uint32_t getNumberOfBasesCovered() const {
+				uint32_t ret = 0;
+				std::unordered_map<uint32_t, uint32_t> coveragePerPosition;
+				for(const auto pos : iter::range(region_.chromStart_, region_.chromEnd_)){
+					coveragePerPosition[pos] = 0;
+				}
+				for(const auto & overlap : overlappingRegions_){
+					for(const auto pos : iter::range(std::max(overlap.chromStart_, region_.chromStart_), std::min(overlap.chromEnd_, region_.chromEnd_))){
+						coveragePerPosition[pos] += 1;
+					}
+				}
+				for(const auto & cov : coveragePerPosition){
+					if(cov.second > 0){
+						++ret;
+					}
+				}
+				return ret;
+			}
+			double getFractionCovered() const{
+				return static_cast<double>(getNumberOfBasesCovered())/region_.length();
+			}
+			uint32_t getNumOfOverlaps() const{
+				return overlappingRegions_.size();
+			}
+		};
+		std::unordered_map<std::string, std::vector<RegionWithOtherRegionsCoverage>> overlappingRegionsPerPanel;
+
+		for(const auto & bedByPanel : bedsByPanel){
+			auto panelRegions = getBeds(bedByPanel.second);
+			for(const auto bedPos : iter::range(regions.size())){
+				overlappingRegionsPerPanel[bedByPanel.first].emplace_back(*regions[bedPos]);
+			}
+			for(const auto bedPos : iter::range(regions.size())){
+				const auto & bed = regions[bedPos];
+				for(const auto & panelBed : panelRegions){
+					if(bed->overlaps(*panelBed, 1)){
+						overlappingRegionsPerPanel[bedByPanel.first][bedPos].overlappingRegions_.emplace_back(*panelBed);
+					}
+				}
+			}
+		}
+
+		for(const auto bedPos : iter::range(regions.size())){
+			out << regions[bedPos]->toDelimStr();
+			out << "\t" << currentPanel;
+			for(const auto & panel : panelNames){
+				out << "\t" << overlappingRegionsPerPanel[panel][bedPos].getFractionCovered();
+			}
+			out << std::endl;
+		}
+	}
+	return 0;
+}
 
 int bedExpRunner::bedGetOverlappinBetweenPanels(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path intersectWithBeds;
@@ -124,7 +238,6 @@ int bedExpRunner::bedGetOverlappinBetweenPanels(const njh::progutils::CmdArgs & 
 
 	return 0;
 }
-
 
 int bedExpRunner::bedGetOverlappingRegionsFromPanels(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile;

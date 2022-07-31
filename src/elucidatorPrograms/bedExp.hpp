@@ -75,6 +75,7 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	static int getDegreeOfOverlappingBedRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int bedGetOverlappingRegionsFromPanels(const njh::progutils::CmdArgs & inputCommands);
 	static int bedGetOverlappinBetweenPanels(const njh::progutils::CmdArgs & inputCommands);
+	static int bedGetOverlappinCoverageBetweenPanels(const njh::progutils::CmdArgs & inputCommands);
 
 
 	//combing bed files

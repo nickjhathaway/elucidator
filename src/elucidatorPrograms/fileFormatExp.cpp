@@ -279,12 +279,14 @@ int fileFormatExpRunner::parsePf3kEmblFilesToGff3(const njh::progutils::CmdArgs 
 				if(njh::beginsWith(line, "FH   Key             Location/Qualifiers")){
 					if(!njh::files::crossPlatGetline(in, line)){
 						std::stringstream ss;
-						ss << __PRETTY_FUNCTION__ << ", there should be a blank line following the beginning of the feature table" << "\n";
+						ss << __LINE__ << " " << __PRETTY_FUNCTION__ << ", there should be a blank line following the beginning of the feature table" << "\n";
+						ss << "not:  " << line << std::endl;
 						throw std::runtime_error{ss.str()};
 					}
-					if("FH" != line){
+					if("FH" != njh::removeAllWhitespace(line)){
 						std::stringstream ss;
-						ss << __PRETTY_FUNCTION__ << ", there should be a blank line following the beginning of the feature table" << "\n";
+						ss << __LINE__ << " "  << __PRETTY_FUNCTION__ << ", there should be a blank line following the beginning of the feature table" << "\n";
+						ss << "not:  " << "!" << line << "!" << std::endl;
 						throw std::runtime_error{ss.str()};
 					}
 					VecStr currentFeature;
