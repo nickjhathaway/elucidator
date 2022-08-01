@@ -59,6 +59,9 @@ class parsingFileExpRunner : public njh::progutils::ProgramRunner {
 
 	static int parseNucmerResultsToBed(const njh::progutils::CmdArgs & inputCommands);
 
+	static int parseMashTriangleResults(const njh::progutils::CmdArgs & inputCommands);
+
+
 };
 } /* namespace njhseq */
 

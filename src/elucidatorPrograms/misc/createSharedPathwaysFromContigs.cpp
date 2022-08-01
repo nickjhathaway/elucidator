@@ -1848,6 +1848,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 				//middle
 				if(processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() > 1){
 //					std::cout << "processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size(): " << processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() << std::endl;
+//					std::cout << "processedNodes.nameToSubSegPositions_raw.at(refSeq.name_).size(): " << processedNodes.nameToSubSegPositions_raw.at(refSeq.name_).size() << std::endl;
 					for(auto pos : iter::range(processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() - 1)){
 //						std::cout << "pos: " << pos << std::endl;
 						auto varName = njh::pasteAsStr("var.", njh::leftPadNumStr<uint32_t>(varCount, totalVar));

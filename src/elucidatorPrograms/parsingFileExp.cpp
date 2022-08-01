@@ -47,6 +47,7 @@ parsingFileExpRunner::parsingFileExpRunner()
 					 addFunc("BlastpHitsTabToBed", BlastpHitsTabToBed, false),
 					 addFunc("parsePrimerFastaToPrimerTxt", parsePrimerFastaToPrimerTxt, false),
 					 addFunc("parseNucmerResultsToBed", parseNucmerResultsToBed, false),
+					 addFunc("parseMashTriangleResults", parseMashTriangleResults, false),
            },
           "parsingFileExp") {}
 //,
