@@ -278,6 +278,7 @@ int seqUtilsModRunner::reOrientReads(
 	seqSetUp setUp(inputCommands);
 	setUp.processDefaultReader(true);
 	bool reOrientToBestWinner  = false;
+	uint32_t numThreads = 1;
 	if (setUp.pars_.ioOptions_.out_.outFilename_ == "out") {
 		setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(
 				setUp.pars_.ioOptions_.firstName_, "reOriented_");
@@ -285,6 +286,7 @@ int seqUtilsModRunner::reOrientReads(
 	setUp.setOption(setUp.pars_.colOpts_.kmerOpts_.kLength_, "-k,--kLength",
 			"kLength");
 	setUp.setOption(reOrientToBestWinner, "---reOrientToBestWinner", "re-orient To Best Winner");
+	setUp.setOption(numThreads, "---numThreads", "numThreads");
 
 	setUp.processRefFilename(false);
 	setUp.processSeq(false);
@@ -301,47 +303,57 @@ int seqUtilsModRunner::reOrientReads(
 		SeqIO reader(setUp.pars_.ioOptions_);
 		reader.openIn();
 		reader.openOut();
-		seqInfo seq;
-		while (reader.readNextRead(seq)) {
-			auto seqKmer = std::make_unique<seqWithKmerInfo>(seq);
-			seqKmer->setKmers(setUp.pars_.colOpts_.kmerOpts_.kLength_, true);
-			uint32_t forwardWinners = 0;
-			uint32_t revWinners = 0;
-			if(reOrientToBestWinner){
-				uint32_t best = 0;
-				for (const auto & refSeq : refKmerReads) {
-					auto forDist = refSeq->compareKmers(*seqKmer);
-					auto revDist = refSeq->compareKmersRevComp(*seqKmer);
-					if (forDist.first < revDist.first) {
-						if(revDist.first > best){
-							best = revDist.first;
-							revWinners = 1;
-							forwardWinners = 0;
+
+		std::mutex outMut;
+		std::function<void()> reOrient = [&reader,&outMut,&setUp,&reOrientToBestWinner,&refKmerReads](){
+			seqInfo seq;
+			while (reader.in_.readNextReadLock(seq)) {
+				auto seqKmer = std::make_unique<seqWithKmerInfo>(seq);
+				seqKmer->setKmers(setUp.pars_.colOpts_.kmerOpts_.kLength_, true);
+				uint32_t forwardWinners = 0;
+				uint32_t revWinners = 0;
+				if(reOrientToBestWinner){
+					uint32_t best = 0;
+					for (const auto & refSeq : refKmerReads) {
+						auto forDist = refSeq->compareKmers(*seqKmer);
+						auto revDist = refSeq->compareKmersRevComp(*seqKmer);
+						if (forDist.first < revDist.first) {
+							if(revDist.first > best){
+								best = revDist.first;
+								revWinners = 1;
+								forwardWinners = 0;
+							}
+						} else {
+							if(forDist.first > best){
+								best = forDist.first;
+								revWinners = 0;
+								forwardWinners = 1;
+							}
 						}
-					} else {
-						if(forDist.first > best){
-							best = forDist.first;
-							revWinners = 0;
-							forwardWinners = 1;
+					}
+				}else{
+					for (const auto & refSeq : refKmerReads) {
+						auto forDist = refSeq->compareKmers(*seqKmer);
+						auto revDist = refSeq->compareKmersRevComp(*seqKmer);
+						if (forDist.first < revDist.first) {
+							++revWinners;
+						} else {
+							++forwardWinners;
 						}
 					}
 				}
-			}else{
-				for (const auto & refSeq : refKmerReads) {
-					auto forDist = refSeq->compareKmers(*seqKmer);
-					auto revDist = refSeq->compareKmersRevComp(*seqKmer);
-					if (forDist.first < revDist.first) {
-						++revWinners;
-					} else {
-						++forwardWinners;
-					}
+				if (revWinners > forwardWinners) {
+					seq.reverseComplementRead(true, true);
+				}
+				{
+					std::lock_guard<std::mutex> lock(outMut);
+					reader.write(seq);
 				}
 			}
-			if (revWinners > forwardWinners) {
-				seq.reverseComplementRead(true, true);
-			}
-			reader.write(seq);
-		}
+		};
+
+		njh::concurrent::runVoidFunctionThreaded(reOrient, numThreads);
+
 	} else {
 		seqInfo compareInfo;
 		if ("" != setUp.pars_.seq_) {
