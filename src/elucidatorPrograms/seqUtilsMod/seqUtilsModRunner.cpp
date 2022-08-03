@@ -277,12 +277,15 @@ int seqUtilsModRunner::reOrientReads(
 		const njh::progutils::CmdArgs & inputCommands) {
 	seqSetUp setUp(inputCommands);
 	setUp.processDefaultReader(true);
+	bool reOrientToBestWinner  = false;
 	if (setUp.pars_.ioOptions_.out_.outFilename_ == "out") {
 		setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(
 				setUp.pars_.ioOptions_.firstName_, "reOriented_");
 	}
 	setUp.setOption(setUp.pars_.colOpts_.kmerOpts_.kLength_, "-k,--kLength",
 			"kLength");
+	setUp.setOption(reOrientToBestWinner, "---reOrientToBestWinner", "re-orient To Best Winner");
+
 	setUp.processRefFilename(false);
 	setUp.processSeq(false);
 	setUp.finishSetUp(std::cout);
@@ -304,13 +307,34 @@ int seqUtilsModRunner::reOrientReads(
 			seqKmer->setKmers(setUp.pars_.colOpts_.kmerOpts_.kLength_, true);
 			uint32_t forwardWinners = 0;
 			uint32_t revWinners = 0;
-			for (const auto & refSeq : refKmerReads) {
-				auto forDist = refSeq->compareKmers(*seqKmer);
-				auto revDist = refSeq->compareKmersRevComp(*seqKmer);
-				if (forDist.first < revDist.first) {
-					++revWinners;
-				} else {
-					++forwardWinners;
+			if(reOrientToBestWinner){
+				uint32_t best = 0;
+				for (const auto & refSeq : refKmerReads) {
+					auto forDist = refSeq->compareKmers(*seqKmer);
+					auto revDist = refSeq->compareKmersRevComp(*seqKmer);
+					if (forDist.first < revDist.first) {
+						if(revDist.first > best){
+							best = revDist.first;
+							revWinners = 1;
+							forwardWinners = 0;
+						}
+					} else {
+						if(forDist.first > best){
+							best = forDist.first;
+							revWinners = 0;
+							forwardWinners = 1;
+						}
+					}
+				}
+			}else{
+				for (const auto & refSeq : refKmerReads) {
+					auto forDist = refSeq->compareKmers(*seqKmer);
+					auto revDist = refSeq->compareKmersRevComp(*seqKmer);
+					if (forDist.first < revDist.first) {
+						++revWinners;
+					} else {
+						++forwardWinners;
+					}
 				}
 			}
 			if (revWinners > forwardWinners) {
