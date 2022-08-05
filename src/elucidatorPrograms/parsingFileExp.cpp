@@ -569,8 +569,10 @@ public:
 //		meta.addMeta("queryEnd", queryEnd_);
 
 		Bed6RecordCore ret(refName_,
-											 reverseStrand() ? refEnd_ -1 : refStart_ -1,
-											 reverseStrand() ? refStart_ : refEnd_,
+											 refStart_ -1 ,
+											 refEnd_ ,
+//											 reverseStrand() ? refEnd_ -1 : refStart_ -1,
+//											 reverseStrand() ? refStart_ : refEnd_,
 											 queryName_,
 											 uAbsdiff(refStart_, refEnd_) + 1,
 											 reverseStrand() ? '-' : '+');
