@@ -507,11 +507,11 @@ public:
 		queryEnd_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[3]);
 		refHitLen_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[4]);
 		queryHitLen_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[5]);
-		perId_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[6]);
+		perId_ = njh::StrToNumConverter::stoToNum<double>(toks[6]);
 		refFullLen_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[7]);
 		queryFullLen_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[8]);
-		refLenCov_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[9]);
-		queryLenCov_ = njh::StrToNumConverter::stoToNum<uint32_t>(toks[10]);
+		refLenCov_ = njh::StrToNumConverter::stoToNum<double>(toks[9]);
+		queryLenCov_ = njh::StrToNumConverter::stoToNum<double>(toks[10]);
 		refName_ = toks[11];
 		queryName_ = toks[12];
 
@@ -549,15 +549,24 @@ public:
 	std::string queryName_;
 
 	[[nodiscard]] bool reverseStrand() const{
-		return refEnd_ < refStart_;
+		return queryEnd_ < queryStart_;
 	}
 	[[nodiscard]] Bed6RecordCore genBed6() const{
 		MetaDataInName meta;
 		meta.addMeta("perID", perId_);
 		meta.addMeta("refLenCov", refLenCov_);
 		meta.addMeta("queryLenCov", queryLenCov_);
+		uint32_t actualStart = reverseStrand() ? queryEnd_ : queryStart_;
+		--actualStart;
+		uint32_t actualEnd = reverseStrand() ? queryStart_ : queryEnd_;
+		meta.addMeta("actualStart", actualStart);
+		meta.addMeta("actualEnd", actualEnd);
+
 		meta.addMeta("queryStart", queryStart_);
 		meta.addMeta("queryEnd", queryEnd_);
+
+//		meta.addMeta("queryStart", queryStart_);
+//		meta.addMeta("queryEnd", queryEnd_);
 
 		Bed6RecordCore ret(refName_,
 											 reverseStrand() ? refEnd_ -1 : refStart_ -1,
