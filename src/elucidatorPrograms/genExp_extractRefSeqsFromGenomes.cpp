@@ -351,7 +351,7 @@ int genExpRunner::extractRefSeqsFromGenomes(
 							SeqOutput separatedWriter(separatedSeqFileOpts);
 							separatedWriter.openOut();
 							for(const auto & refSeq : refSeqs){
-								auto toks = tokenizeString(refSeq.name_, "::");//unfortuantley there's not a better way to separate so hopefully the ref genomes don't have - in their names
+								auto toks = tokenizeString(refSeq.name_, "::");//unfortunately there's not a better way to separate so hopefully the ref genomes don't have :: in their names
 								for(const auto & tok : toks){
 									separatedWriter.write(seqInfo{tok, refSeq.seq_});
 								}
@@ -365,10 +365,19 @@ int genExpRunner::extractRefSeqsFromGenomes(
 						bfs::copy_file(extractionCountsFnp,
 																njh::files::make_path(bedsDir , "extractionCounts.tab.txt" ));
 						for(const auto & genome : getVectorOfMapKeys(gMapper->genomes_)) {
-							auto gRegionPath = njh::files::make_path(refAlignsDir, genome + "_regions.bed" );
-							if(bfs::exists(gRegionPath)) {
-								bfs::rename(gRegionPath,
-										njh::files::make_path(bedsDir , genome + "_region.bed" ));
+							{
+								auto gRegionPath = njh::files::make_path(refAlignsDir, genome + "_regions.bed" );
+								if(bfs::exists(gRegionPath)) {
+									bfs::rename(gRegionPath,
+															njh::files::make_path(bedsDir , genome + "_region.bed" ));
+								}
+							}
+							{
+								auto gRegionPath = njh::files::make_path(refAlignsDir, genome + "_bestRegion.bed" );
+								if(bfs::exists(gRegionPath)) {
+									bfs::rename(gRegionPath,
+															njh::files::make_path(bedsDir , genome + "_bestRegion.bed" ));
+								}
 							}
 						}
 						if(!keepRefAlignments){

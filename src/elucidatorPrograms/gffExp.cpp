@@ -603,8 +603,11 @@ int gffExpRunner::gffFeatureCount(const njh::progutils::CmdArgs & inputCommands)
 
 int gffExpRunner::gffDescriptionsCount(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path inputFile;
+	VecStr selectFeatures;
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(inputFile, "--gff", "Input gff file", true);
+	setUp.setOption(selectFeatures, "--selectFeatures", "Gff Features to consider");
+
 	setUp.finishSetUp(std::cout);
 
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
@@ -614,10 +617,12 @@ int gffExpRunner::gffDescriptionsCount(const njh::progutils::CmdArgs & inputComm
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	std::unordered_map<std::string, uint32_t> descriptionCounts;
 	while (nullptr != gRecord) {
-		if(gRecord->hasAttr("description")){
-			++descriptionCounts[gRecord->getAttr("description")];
-		}else{
-			++descriptionCounts["none"];
+		if (selectFeatures.empty() || njh::in(gRecord->type_, selectFeatures)) {
+			if(gRecord->hasAttr("description")){
+				++descriptionCounts[gRecord->getAttr("description")];
+			}else{
+				++descriptionCounts["none"];
+			}
 		}
 		bool end = false;
 		while ('#' == reader.inFile_->peek()) {
