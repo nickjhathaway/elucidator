@@ -75,11 +75,108 @@ seqUtilsTrimRunner::seqUtilsTrimRunner()
 			addFunc("trimEdgesForLowEntropy", trimEdgesForLowEntropy, false),
 			addFunc("leftTrimToMeanAlignSite", leftTrimToMeanAlignSite, false),
 			addFunc("trimToRefWithGlobalAlignmentNonOverlappingRegions", trimToRefWithGlobalAlignmentNonOverlappingRegions, false),
+			addFunc("removeBestSubSeq", removeBestSubSeq, false),
 },
                     "seqUtilsTrim") {}
 //
 
+int seqUtilsTrimRunner::removeBestSubSeq(const njh::progutils::CmdArgs & inputCommands) {
+	/**@todo add marking for positioning info*/
+	/**@todo add checking for multiple refs, only test on 1 input seq*/
+	seqUtilsTrimSetUp setUp(inputCommands);
+	FullTrimReadsPars pars;
+	setUp.processRefFilename(true);
+	setUp.processIoOptions();
+	setUp.pars_.gapRight_ = "0,0";
+	setUp.pars_.gapLeft_ = "0,0";
+	setUp.pars_.gapInfo_ = gapScoringParameters(5,1,0,0,0,0);
+	setUp.processAlignerDefualts();
+	setUp.pars_.scoring_ = substituteMatrix::createDegenScoreMatrix(setUp.pars_.generalMatch_, setUp.pars_.generalMismatch_);
+	setUp.finishSetUp(std::cout);
 
+	SeqIO reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	reader.openOut();
+	seqInfo seq;
+	uint64_t maxLen = 0;
+	{
+		SeqIO readerForLen(setUp.pars_.ioOptions_);
+		readerForLen.openIn();
+		while(readerForLen.readNextRead(seq)){
+			readVec::getMaxLength(seq, maxLen);
+		}
+	}
+	auto refSeqs = SeqInput::getSeqVec<seqInfo>(setUp.pars_.refIoOptions_, maxLen);
+
+	aligner alignObj(maxLen, setUp.pars_.gapInfo_, setUp.pars_.scoring_);
+//	OutOptions testAlnsOpts(bfs::path("test.fasta"));
+//	testAlnsOpts.overWriteFile_ = true;
+//	OutputStream  testAlns(testAlnsOpts);
+	while(reader.readNextRead(seq)){
+		double bestScore = 0;
+		uint32_t bestSeqPos = 0;
+		if(refSeqs.size() >1){
+			for(const auto & refSeqPos : iter::range(0UL,refSeqs.size())){
+				const auto refSeq = refSeqs[refSeqPos];
+				alignObj.alignCacheGlobal(seq, refSeq);
+				alignObj.profilePrimerAlignment(seq, refSeq);
+				if(alignObj.comp_.alnScore_ > bestScore){
+					bestScore = alignObj.comp_.alnScore_;
+					bestSeqPos = refSeqPos;
+				}
+			}
+		}
+		const auto refSeq = refSeqs[bestSeqPos];
+		alignObj.alignCacheGlobal(seq, refSeq);
+		alignObj.profilePrimerAlignment(seq, refSeq);
+//		alignObj.alignObjectA_.seqBase_.outPutSeq(testAlns);
+//		alignObj.alignObjectB_.seqBase_.outPutSeq(testAlns);
+
+		uint32_t alnAStart = alignObj.alignObjectA_.seqBase_.seq_.find_first_not_of('-');
+		uint32_t alnBStart = alignObj.alignObjectB_.seqBase_.seq_.find_first_not_of('-');
+
+		uint32_t alnAEnd = alignObj.alignObjectA_.seqBase_.seq_.find_last_not_of('-');
+		uint32_t alnBEnd = alignObj.alignObjectB_.seqBase_.seq_.find_last_not_of('-');
+
+		if(alnBStart < alnAStart && alnBEnd > alnAEnd){
+			//a is completely within B 
+			
+		} else if(alnBStart == alnAStart && alnBEnd == alnAEnd){
+			//complete match, no trim, write 
+			reader.write(seq);
+		} else if(alnBStart > alnAStart && alnBEnd < alnAEnd){
+			//ideal
+			//find B real start
+			auto bRealStart = alignObj.getSeqPosForAlnAPos(alnBStart);
+			auto front = seq.getSubRead(0, bRealStart);
+			//find B real end
+			auto bRealEnd = alignObj.getSeqPosForAlnAPos(alnBEnd) + 1;
+			auto end = seq.getSubRead(bRealEnd);
+			front.append(end);
+			reader.write(front);
+		}else if(alnBStart <= alnAStart && alnBEnd < alnAEnd){
+			//front overlap, just take back
+			//find B real end
+			auto bRealEnd = alignObj.getSeqPosForAlnAPos(alnBEnd) + 1;
+			auto end = seq.getSubRead(bRealEnd);
+			reader.write(end);
+		}else if(alnBStart > alnAStart && alnBEnd >= alnAEnd){
+			//back overlap, just take front
+			//find B real start
+			auto bRealStart = alignObj.getSeqPosForAlnAPos(alnBStart);
+			auto front = seq.getSubRead(0, bRealStart);
+			reader.write(front);
+		}else{
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "didn't handle a situation" << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+	}
+
+
+	return 0;
+}
+//
 
 int seqUtilsTrimRunner::trimWithSlidingQualityAvgWindow(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t windowStep = 1;

@@ -687,6 +687,68 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 }
 
 
+
+int kmerExpRunner::findKmersInSets(const njh::progutils::CmdArgs & inputCommands){
+	KmerGatherer::KmerGathererPars countPars;
+	std::vector<bfs::path> seqSetFnps;
+	uint32_t minOccurrences = 1;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(seqSetFnps, "--seqSetFnps", "seqSetFnps", true);
+	setUp.setOption(minOccurrences, "--minOccurrences", "minOccurrences");
+
+	countPars.setOptions(setUp);
+	setUp.processReadInNames(true);
+
+	setUp.processDirectoryOutputName(true);
+	setUp.finishSetUp(std::cout);
+	setUp.startARunLog(setUp.pars_.directoryName_);
+
+	KmerGatherer kGather(countPars);
+	std::unordered_map<std::string, std::unordered_map<std::string, uint32_t>> allCounts;
+	setUp.rLog_.setCurrentLapName("initial");
+	for(const auto & seqSetFnp : seqSetFnps){
+		std::string genomeFnp1Base = bfs::basename(njh::files::removeExtension(seqSetFnp));
+		setUp.rLog_.logCurrentTime("genome1_counting-" + genomeFnp1Base);
+		allCounts[genomeFnp1Base] = kGather.countGenomeKmers(seqSetFnp);
+	}
+
+	seqInfo seq;
+	SeqInput reader(setUp.pars_.ioOptions_);
+	reader.openIn()	;
+	OutputStream kmerClassifierOut(njh::files::make_path(setUp.pars_.directoryName_, "seqsKmerClassified.tab.txt.gz"));
+	kmerClassifierOut << "name\tpos\tkmer\tfoundIn" << std::endl;
+	while(reader.readNextRead(seq)){
+
+		if(len(seq) >= countPars.kmerLength_){
+			for(auto pos = 0; pos < (len(seq) + 1 - countPars.kmerLength_); ++pos){
+				auto currentK = seq.seq_.substr(pos, countPars.kmerLength_);
+				std::set<std::string> setsFounds;
+				for( auto & seqSet : allCounts){
+					if(njh::in(currentK, seqSet.second) && seqSet.second[currentK] >= minOccurrences){
+						setsFounds.emplace(seqSet.first);
+					}
+				}
+				kmerClassifierOut << seq.name_
+				<< "\t" << pos
+				<< "\t" << currentK
+				<< "\t";
+				if(setsFounds.empty()){
+					kmerClassifierOut << "none";
+				}else{
+					kmerClassifierOut << njh::conToStr(setsFounds, ",");
+				}
+				kmerClassifierOut << std::endl;
+			}
+		}
+	}
+
+	setUp.rLog_.logCurrentTime("end");
+
+	return 0;
+}
+
 int kmerExpRunner::findUniqKmersBetweenSeqSets(const njh::progutils::CmdArgs & inputCommands){
 	KmerGatherer::KmerGathererPars countPars;
 	bfs::path genomeFnp1 = "";
@@ -696,8 +758,8 @@ int kmerExpRunner::findUniqKmersBetweenSeqSets(const njh::progutils::CmdArgs & i
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
-	setUp.setOption(genomeFnp1, "--genomeFnp1", "genomeFnp1", true);
-	setUp.setOption(genomeFnp2, "--genomeFnp2", "genomeFnp2", true);
+	setUp.setOption(genomeFnp1, "--genomeFnp1,--seqSetFnp1", "genomeFnp1", true);
+	setUp.setOption(genomeFnp2, "--genomeFnp2,--seqSetFnp2", "genomeFnp2", true);
 	countPars.setOptions(setUp);
 	setUp.setOption(writeOutAllCounts, "--writeOutAllCounts", "writeOutAllCounts");
 	std::string genomeFnp1Base = bfs::basename(njh::files::removeExtension(genomeFnp1));
@@ -736,7 +798,7 @@ int kmerExpRunner::findUniqKmersBetweenSeqSets(const njh::progutils::CmdArgs & i
 	std::function<bool(char)> charCheck = [&countPars](char base){
 		return njh::in(base, countPars.allowableCharacters_);
 	};
-	setUp.rLog_.logCurrentTime("genome1_unique_deterination-" + genomeFnp1Base);
+	setUp.rLog_.logCurrentTime("genome1_unique_determination-" + genomeFnp1Base);
 
 	OutputStream genome1UniqueCountsOut(njh::files::make_path(setUp.pars_.directoryName_, genomeFnp1Base + "_uniqueKmers_counts.tab.txt.gz"));
 	for(const auto & count : genome1Counts){
@@ -744,7 +806,7 @@ int kmerExpRunner::findUniqKmersBetweenSeqSets(const njh::progutils::CmdArgs & i
 			genome1UniqueCountsOut << count.first << "\t" << count.second << "\n";
 		}
 	}
-	setUp.rLog_.logCurrentTime("genome2_unique_deterination-" + genomeFnp2Base);
+	setUp.rLog_.logCurrentTime("genome2_unique_determination-" + genomeFnp2Base);
 	OutputStream genome2UniqueCountsOut(njh::files::make_path(setUp.pars_.directoryName_, genomeFnp2Base + "_uniqueKmers_counts.tab.txt.gz"));
 	for(const auto & count : genome2Counts){
 		if(std::all_of(count.first.begin(), count.first.end(), charCheck) && !njh::in(count.first, genome1Counts) ){

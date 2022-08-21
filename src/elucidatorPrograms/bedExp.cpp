@@ -44,6 +44,7 @@ bedExpRunner::bedExpRunner()
           {
 					 addFunc("getFastaWithBed", getFastaWithBed, false),
 					 addFunc("getSeqFromTwoBit", getSeqFromTwoBit, false),
+					 addFunc("mergeOverlappingRegionsSameName", mergeOverlappingRegionsSameName, false),
 
 
 					 addFunc("splitBedFile", splitBedFile, false),

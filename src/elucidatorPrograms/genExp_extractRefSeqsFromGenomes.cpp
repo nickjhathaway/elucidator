@@ -468,6 +468,8 @@ int genExpRunner::extractExpectedRefSeqsFromGenomes(
   setUp.setOption(descriptions, "--descriptions", "Descriptions of genes to add to expected sequences", true);
   setUp.setOption(gffExtraAttributesStr, "--gffExtraAttributes", "Extra attributes to add to genome that has an accompany gff");
 	setUp.setOption(extractPars.keepBestOnly, "--keepBestOnly", "Keep best hits only");
+	setUp.setOption(extractPars.byScore, "--keepBestOnlyByScore", "Determine Best by alignment score instead of percent identity");
+
 	setUp.setOption(keepRefAlignments, "--keepRefAlignments", "Keep Ref Alignments");
 
 	setUp.setOption(bedFile, "--bed", "Bed file, first entry is used", true);

@@ -114,6 +114,8 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	static int bedCoordSort(const njh::progutils::CmdArgs & inputCommands);
 	static int reorientBasedOnSingleReadsOrientationCounts(const njh::progutils::CmdArgs & inputCommands);
 
+	static int mergeOverlappingRegionsSameName(const njh::progutils::CmdArgs & inputCommands);
+
 	//creating multiple bed files from one bed file
 	static int splitBedFile(const njh::progutils::CmdArgs & inputCommands);
 	static int separateOutRecordsInBedFile(const njh::progutils::CmdArgs & inputCommands);

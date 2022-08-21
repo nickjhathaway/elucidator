@@ -96,7 +96,10 @@ class seqUtilsTrimRunner : public njh::progutils::ProgramRunner {
 	static int leftTrimToMeanAlignSite(const njh::progutils::CmdArgs & inputCommands);
 
 
-  //
+	static int removeBestSubSeq(const njh::progutils::CmdArgs & inputCommands);
+
+
+	//
   //
 };
 } // namespace njhseq
