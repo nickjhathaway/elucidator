@@ -144,6 +144,8 @@ int bamExpRunner::BamGetSpanningReadsForRegionLongReads(
 	setUp.processReadInNames(VecStr{"--bam"});
 	setUp.processDirectoryOutputName(true);
 	setUp.setOption(numThreads, "--numThreads", "Number Threads");
+	setUp.setOption(rename, "--rename", "rename to region UID");
+
 	setUp.setOption(trimToRegion, "--trimToRegion", "Trim To Region");
 	setUp.setOption(minWindowSize, "--minWindowSize", "min Window Size");
 
