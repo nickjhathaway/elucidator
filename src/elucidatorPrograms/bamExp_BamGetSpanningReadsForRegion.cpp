@@ -172,7 +172,21 @@ int bamExpRunner::BamGetSpanningReadsForRegionLongReads(
 	}
 	std::map<std::string, uint32_t> spanningReadCounts;
 	std::map<std::string, uint32_t> totalReadCounts;
-	std::vector<std::pair<std::string, std::string>> nameKey;
+
+	BamTools::RefVector globalRefData;
+	{
+		auto currentBReader = bamPool.popReader();
+		globalRefData = currentBReader->GetReferenceData();
+	}
+
+	struct RenamedExtract{
+		RenamedExtract(const BamTools::BamAlignment & bAln, std::string newName): bAln_(bAln), newName_(std::move(newName)){
+
+		}
+		BamTools::BamAlignment bAln_;
+		std::string newName_;
+	};
+	std::vector<RenamedExtract> nameKey;
 
 	std::mutex spanRCountsMut;
 
@@ -194,7 +208,7 @@ int bamExpRunner::BamGetSpanningReadsForRegionLongReads(
 		BamTools::BamAlignment bAln;
 		std::unordered_map<std::string, uint32_t> currentSpanningReadCounts;
 		std::unordered_map<std::string, uint32_t> currentTotalReadCounts;
-		std::vector<std::pair<std::string, std::string>> currentNameKey;
+		std::vector<RenamedExtract> currentNameKey;
 		std::string regionName;
 		while(regionNamesQueue.getVal(regionName)){
 			for(const auto & currentRegion : regionsByUID.at(regionName)){
@@ -266,7 +280,7 @@ int bamExpRunner::BamGetSpanningReadsForRegionLongReads(
 								if(rename){
 									std::string newName =  njh::pasteAsStr(regionName, ".", currentSpanningReadCounts[regionName]);
 
-									currentNameKey.emplace_back(std::make_pair(outSeq.name_, newName));
+									currentNameKey.emplace_back(RenamedExtract(bAln, newName));
 									outSeq.name_ = newName;
 								}
 								seqIOOutCache.add(currentRegion.uid_, outSeq);
@@ -280,7 +294,7 @@ int bamExpRunner::BamGetSpanningReadsForRegionLongReads(
 								}
 								if(rename){
 									std::string newName =  njh::pasteAsStr(regionName, ".", currentSpanningReadCounts[regionName]);
-									currentNameKey.emplace_back(std::make_pair(querySeq.name_, newName));
+									currentNameKey.emplace_back(RenamedExtract(bAln, newName));
 									querySeq.name_ = newName;
 								}
 								seqIOOutCache.add(currentRegion.uid_, querySeq);
@@ -320,12 +334,12 @@ int bamExpRunner::BamGetSpanningReadsForRegionLongReads(
 	}
 	if(rename){
 		OutputStream nameKeyOut(njh::files::make_path(setUp.pars_.directoryName_, "nameKey.tab.txt"));
-		njh::sort(nameKey, [](const std::pair<std::string, std::string> & p1, const std::pair<std::string, std::string> & p2){
-			return p1.first < p2.first;
+		njh::sort(nameKey, [](const RenamedExtract & p1, const RenamedExtract & p2){
+			return p1.bAln_.Name < p2.bAln_.Name;
 		});
-		nameKeyOut << "oldName\tnewName" << std::endl;
+		nameKeyOut << "#chrom\tstart\tend\toldName\tlength\tstrand\tnewName" << std::endl;
 		for(const auto & name : nameKey){
-			nameKeyOut << name.first << "\t" << name.second << std::endl;
+			nameKeyOut << GenomicRegion(name.bAln_, globalRefData).genBedRecordCore().toDelimStr() << "\t" << name.newName_<< std::endl;
 		}
 	}
 	return 0;
