@@ -908,7 +908,8 @@ void simpleCollapseQueryCov(std::vector<cluster> & consensusReads, aligner & ali
 	}
 }
 
-void simpleCollapse(std::vector<cluster> & consensusReads, aligner & alignerObj,
+void simpleCollapse(std::vector<cluster> & consensusReads,
+										aligner & alignerObj,
 		const comparison & passableErrors) {
 	if(consensusReads.size() <=1){
 		return;
@@ -981,15 +982,23 @@ void simpleCollapse(std::vector<cluster> & consensusReads, aligner & alignerObj,
 				continue;
 			}
 			bool print = false;
-			if("AS2-S0-Sub0-mip0MID7G8-5ng-rep1.fastq.07_t1308.3" == consensusReads[secondPos].seqBase_.name_ && "AS2-S0-Sub0-mip0MID7G8-5ng-rep1.fastq.08_t41.3333" == consensusReads[firstPos].seqBase_.name_){
-				print = true;
-			}
+//			bool print = true;
+//			if("AS2-S0-Sub0-mip0MID7G8-5ng-rep1.fastq.07_t1308.3" == consensusReads[secondPos].seqBase_.name_ && "AS2-S0-Sub0-mip0MID7G8-5ng-rep1.fastq.08_t41.3333" == consensusReads[firstPos].seqBase_.name_){
+//				print = true;
+//			}
 			if(print){
 				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+				std::cout << "" << consensusReads[firstPos].seqBase_.name_ << " vs " << consensusReads[secondPos].seqBase_.name_ << std::endl;
+				std::cout << "kdistCutOff: " << kdistCutOff << std::endl;
 				std::cout << kinfos[firstPos].compareKmers(kinfos[secondPos]).second << std::endl;
 			}
 			if(kinfos[firstPos].compareKmers(kinfos[secondPos]).second < kdistCutOff){
 				continue;
+			}
+			if(print){
+				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+				std::cout << "" << consensusReads[firstPos].seqBase_.name_ << " vs " << consensusReads[secondPos].seqBase_.name_ << std::endl;
+				std::cout << "passed cut off of: " << kdistCutOff  << std::endl;
 			}
 			alignerObj.alignCacheGlobal(consensusReads[secondPos], consensusReads[firstPos]);
 			alignerObj.profileAlignment(consensusReads[secondPos],
