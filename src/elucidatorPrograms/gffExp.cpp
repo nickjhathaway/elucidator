@@ -1086,10 +1086,13 @@ int gffExpRunner::gffToBedByFeature(
 	outOpts.outExtention_ = ".bed";
 	VecStr features{};
 	VecStr skipSeqIds{};
+	VecStr extraAttributes;
+
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(inputFile, "--gff", "Input gff file", true);
 	setUp.setOption(features, "--features", "features of gff to extract", true);
 	setUp.setOption(skipSeqIds, "--skipSeqIds", "seq ids (chromosomes) to skip");
+	setUp.setOption(extraAttributes, "--extraAttributes", "Extra Attributes to output");
 
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
@@ -1114,9 +1117,19 @@ int gffExpRunner::gffToBedByFeature(
 			if (njh::in(gRecord->type_, features)) {
 				outJson[gRecord->getAttr("ID")] = gRecord->toJson();
 				auto bedOut = GenomicRegion(*gRecord).genBedRecordCore();
-				std::string extraField = njh::pasteAsStr("[", "id=", gRecord->getAttr("ID"), ";");
+				std::string extraField = njh::pasteAsStr("[", "ID=", gRecord->getAttr("ID"), ";");
+				extraField.append("feature=" + gRecord->type_ + ";");
 				if(gRecord->hasAttr("description")){
 					extraField = njh::pasteAsStr(extraField, "description=", gRecord->getAttr("description"), ";");
+				}
+				if(!extraAttributes.empty()){
+					for(const auto & attr : extraAttributes){
+						if(gRecord->hasAttr(attr)){
+							extraField.append(attr + "=" + gRecord->getAttr(attr) + ";");
+						}else{
+							extraField.append(attr + "=" + "NA" + ";");
+						}
+					}
 				}
 				extraField += "]";
 				bedOut.extraFields_.emplace_back(extraField);

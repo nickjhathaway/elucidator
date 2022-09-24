@@ -58,6 +58,7 @@ class parsingFileExpRunner : public njh::progutils::ProgramRunner {
 	static int quickCountDirectory(const njh::progutils::CmdArgs & inputCommands);
 
 	static int parseNucmerResultsToBed(const njh::progutils::CmdArgs & inputCommands);
+	static int parseMummberResultsToBed(const njh::progutils::CmdArgs & inputCommands);
 
 	static int parseMashTriangleResults(const njh::progutils::CmdArgs & inputCommands);
 
