@@ -2454,7 +2454,10 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegions(con
 				TrinityRunOutputLogOut << njh::json::toJson(TrinityRunOutput) << std::endl;
 
 				auto contigsFnp = njh::files::make_path(TrinityFullOutputDir, "Trinity.fasta");
-
+        auto tmpContigsFnp = njh::files::make_path(regionOutputDir, TrinityOutDir.string() + "." + "Trinity.fasta");
+        if(bfs::exists(tmpContigsFnp) && !bfs::exists(contigsFnp)){
+          bfs::copy_file(tmpContigsFnp, contigsFnp);
+        }
 				auto contigsSeqIoOpts = SeqIOOptions::genFastaIn(contigsFnp);
 				contigsSeqIoOpts.includeWhiteSpaceInName_ = false;
 				contigsSeqIoOpts.lowerCaseBases_ = "upper";
