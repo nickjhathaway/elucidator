@@ -46,6 +46,7 @@ int programWrapperRunner::runHmmsearch(const njh::progutils::CmdArgs & inputComm
 	std::string defaultParameters = "--nonull2 --incT 10 --incdomT 10 -T 10 --domT 10";
 	bfs::path hmmModel;
 	uint32_t hmmStartFilter = 25;
+	uint32_t targetStartFilter = std::numeric_limits<uint32_t>::max();
 
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -54,6 +55,7 @@ int programWrapperRunner::runHmmsearch(const njh::progutils::CmdArgs & inputComm
 	setUp.setOption(defaultParameters, "--defaultParameters", "The default parameters given to hmmsearch");
 	setUp.setOption(hmmModel, "--hmmModel", "hmm model database, created by hmmbuild", true);
 	setUp.setOption(hmmStartFilter, "--hmmStartFilter", "Filter partial hmms domain hits if they start or end this far into the model");
+	setUp.setOption(targetStartFilter, "--targetStartFilter", "Filter partial hmms domain hits if they start or end this far into the target");
 
 	setUp.processDirectoryOutputName(true);
 	setUp.finishSetUp(std::cout);
@@ -133,8 +135,11 @@ int programWrapperRunner::runHmmsearch(const njh::progutils::CmdArgs & inputComm
 
 		while(reader.readNextRecord(domain)){
 			out << domain.toDelimStr() << std::endl;
-			if(!(domain.envFrom_ > hmmStartFilter && domain.hmmFrom_ > hmmStartFilter ) &&
-					!(domain.targetLen_ - domain.envTo_ + 1 > hmmStartFilter && domain.queryLen_ - domain.hmmTo_ - 1> hmmStartFilter)){
+			bool passHmmStart = domain.hmmFrom_ < hmmStartFilter;
+			bool passHmmEnd = (domain.queryLen_ - domain.hmmTo_ - 1) < hmmStartFilter;
+			bool passTargetStart = domain.envFrom_ < hmmStartFilter;
+			bool passTargetEnd = domain.targetLen_ - domain.envTo_ + 1 < hmmStartFilter;
+			if(passHmmStart && passHmmEnd && passTargetStart && passTargetEnd) {
 				outFilt << domain.toDelimStr() << std::endl;
 			}
 			++count;
