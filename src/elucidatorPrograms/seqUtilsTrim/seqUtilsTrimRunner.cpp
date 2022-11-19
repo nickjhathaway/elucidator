@@ -76,9 +76,11 @@ seqUtilsTrimRunner::seqUtilsTrimRunner()
 			addFunc("leftTrimToMeanAlignSite", leftTrimToMeanAlignSite, false),
 			addFunc("trimToRefWithGlobalAlignmentNonOverlappingRegions", trimToRefWithGlobalAlignmentNonOverlappingRegions, false),
 			addFunc("removeBestSubSeq", removeBestSubSeq, false),
+			addFunc("trimBetweenHmmViaHmmsearch", trimBetweenHmmViaHmmsearch, false),
+			addFunc("trimBetweenHmmViaNhmmscan", trimBetweenHmmViaNhmmscan, false)
 },
                     "seqUtilsTrim") {}
-//
+//,
 
 int seqUtilsTrimRunner::removeBestSubSeq(const njh::progutils::CmdArgs & inputCommands) {
 	/**@todo add marking for positioning info*/

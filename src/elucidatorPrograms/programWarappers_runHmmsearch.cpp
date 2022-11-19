@@ -28,12 +28,9 @@
 
 #include "programWrappers.hpp"
 #include <njhseq/IO/SeqIO/SeqIO.hpp>
-#include <njhseq/readVectorManipulation/readVectorHelpers/readVecTrimmer.hpp>
-#include <njhseq/system/Muscler.hpp>
 #include <njhseq/objects/BioDataObject/BioDataFileIO.hpp>
 #include <njhseq/objects/BioDataObject/BedRecordCore.hpp>
 #include <njhseq/objects/BioDataObject/BioRecordsUtils/BedUtility.hpp>
-
 #include <njhseq/objects/BioDataObject/BioRecordsUtils/HmmerUtility.hpp>
 
 
@@ -135,10 +132,10 @@ int programWrapperRunner::runHmmsearch(const njh::progutils::CmdArgs & inputComm
 
 		while(reader.readNextRecord(domain)){
 			out << domain.toDelimStr() << std::endl;
-			bool passHmmStart = domain.hmmFrom_ < hmmStartFilter;
-			bool passHmmEnd = (domain.queryLen_ - domain.hmmTo_ - 1) < hmmStartFilter;
-			bool passTargetStart = domain.envFrom_ < hmmStartFilter;
-			bool passTargetEnd = domain.targetLen_ - domain.envTo_ + 1 < hmmStartFilter;
+			bool passHmmStart = domain.zeroBasedHmmFrom() <= hmmStartFilter;
+			bool passHmmEnd = (domain.queryLen_ - domain.hmmTo_) <= hmmStartFilter;
+			bool passTargetStart = domain.env0BasedPlusStrandStart() <= targetStartFilter;
+			bool passTargetEnd = domain.targetLen_ - domain.envTo_ <= targetStartFilter;
 			if(passHmmStart && passHmmEnd && passTargetStart && passTargetEnd) {
 				outFilt << domain.toDelimStr() << std::endl;
 			}
@@ -199,6 +196,7 @@ int programWrapperRunner::runHmmsearch(const njh::progutils::CmdArgs & inputComm
 			auto bedNewName = njh::pasteAsStr(domForReg.queryName_, ".", domForReg.domainId_);
 			outFiltNonOverlap << domForReg.toDelimStr() << "\t" << bedNewName<< std::endl;
 			region.name_ = bedNewName;
+			region.chrom_ = seqKey[njh::StrToNumConverter::stoToNum<uint32_t>(region.chrom_)];
 			bedRegionsOut << region.toDelimStrWithExtra() << std::endl;
 			domainsPerSeq[domForReg.targetName_].emplace_back(domForReg);
 			++domainCountsPerSeq[njh::StrToNumConverter::stoToNum<uint32_t>(domForReg.targetName_)][domForReg.queryName_];
@@ -217,14 +215,18 @@ int programWrapperRunner::runHmmsearch(const njh::progutils::CmdArgs & inputComm
 		while(reader.readNextRead(seq)){
 			if(njh::in(seq.name_, domainsPerSeq)){
 				for(const auto & domain : domainsPerSeq[seq.name_]){
-
-					Bed6RecordCore region(domain.targetName_, domain.envFrom_ -1, domain.envTo_,njh::pasteAsStr(domain.queryName_, ".", domain.domainId_) , domain.domain_c_evalue_, '+');
+					Bed6RecordCore region(domain.targetName_, domain.env0BasedPlusStrandStart(), domain.envTo_,njh::pasteAsStr(domain.queryName_, ".", domain.domainId_) , domain.domain_c_evalue_, '+');
 					auto subSeq = seq.getSubRead(region.chromStart_, region.length());
+					auto oldName = seqKey[njh::StrToNumConverter::stoToNum<uint32_t>(subSeq.name_)];
 					MetaDataInName meta;
-					meta.addMeta("hmmFrom", domain.hmmFrom_ - 1, true);
+					if(MetaDataInName::nameHasMetaData(oldName)){
+						meta = MetaDataInName(oldName);
+					}
+					subSeq.name_ = oldName;
+					meta.addMeta("hmmFrom", domain.zeroBasedHmmFrom(), true);
 					meta.addMeta("hmmTo", domain.hmmTo_, true);
 
-					meta.addMeta("trimStart", domain.envFrom_ - 1, true);
+					meta.addMeta("trimStart", domain.env0BasedPlusStrandStart(), true);
 					meta.addMeta("trimEnd", domain.envTo_, true);
 
 					meta.addMeta("queryName", domain.queryName_, true);
@@ -248,10 +250,10 @@ int programWrapperRunner::runHmmsearch(const njh::progutils::CmdArgs & inputComm
 		for(const auto & name : domainCountsPerSeq){
 			for(const auto & count : name.second){
 				domainHitsCouintsOut
-				<< name.first
-				<< "\t" << seqKey[name.first]
-						<< "\t" << count.first
-						<< "\t" << count.second << std::endl;
+								<< name.first
+								<< "\t" << seqKey[name.first]
+								<< "\t" << count.first
+								<< "\t" << count.second << std::endl;
 			}
 		}
 	}

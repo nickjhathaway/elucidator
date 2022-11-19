@@ -99,6 +99,9 @@ class seqUtilsTrimRunner : public njh::progutils::ProgramRunner {
 	static int removeBestSubSeq(const njh::progutils::CmdArgs & inputCommands);
 
 
+	static int trimBetweenHmmViaHmmsearch(const njh::progutils::CmdArgs & inputCommands);
+	static int trimBetweenHmmViaNhmmscan(const njh::progutils::CmdArgs & inputCommands);
+
 	//
   //
 };
