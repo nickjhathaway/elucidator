@@ -83,6 +83,7 @@ bedExpRunner::bedExpRunner()
 					 addFunc("bedGetRegionsEncompassingOthers", bedGetRegionsEncompassingOthers, false),
 					 addFunc("bedGetOverlappinBetweenPanels", bedGetOverlappinBetweenPanels, false),
 					 addFunc("bedGetOverlappinCoverageBetweenPanels", bedGetOverlappinCoverageBetweenPanels, false),
+					 addFunc("bedGetOverlappinPositionsBetweenPanels", bedGetOverlappinPositionsBetweenPanels, false),
 //
 
 					 addFunc("getLongestHomopolymerLengthInRegion", getLongestHomopolymerLengthInRegion, false),
