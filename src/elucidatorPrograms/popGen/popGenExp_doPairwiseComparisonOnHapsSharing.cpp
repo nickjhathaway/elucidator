@@ -39,15 +39,15 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 
 	setUp.timer_.setLapName("initial");
 	setUp.timer_.startNewLap("encode haplotypes");
-	HapsEncodedMatrix haps(pars);
-	if("" != metaFnp){
-		haps.addMeta(metaFnp);
-		if(!metaFieldsToCalcPopDiffs.empty()){
-			haps.meta_->checkForFieldsThrow(metaFieldsToCalcPopDiffs);
-		}
-	}else if(!metaFieldsToCalcPopDiffs.empty()){
-		haps.addMetaWithInputTab(njh::vecToSet(metaFieldsToCalcPopDiffs));
-	}
+  HapsEncodedMatrix haps(pars);
+  if ("" != metaFnp) {
+    haps.addMeta(metaFnp);
+    if (!metaFieldsToCalcPopDiffs.empty()) {
+      haps.meta_->checkForFieldsThrow(metaFieldsToCalcPopDiffs);
+    }
+  } else if (!metaFieldsToCalcPopDiffs.empty()) {
+    haps.addMetaWithInputTab(njh::vecToSet(metaFieldsToCalcPopDiffs));
+  }
 	setUp.timer_.startNewLap("get hap probabilities");
 	haps.calcHapProbs();
 	setUp.timer_.startNewLap("writing sample info");
