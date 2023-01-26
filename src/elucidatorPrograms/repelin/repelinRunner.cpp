@@ -697,10 +697,14 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
 
   njh::sys::requireExternalProgramThrow("trf");
 
-  GenomicRegion gRegion;
+  GenomicRegion singleInputRegion;
+  std::unordered_map<std::string, GenomicRegion> multipleInputRegions;
   if("" != genomicLocation){
   	auto regions = bedPtrsToGenomicRegs(getBeds(genomicLocation));
-  	gRegion = regions.front();//just use the very first region
+    for(const auto & reg : regions){
+      multipleInputRegions[reg.uid_] = reg;
+    }
+  	singleInputRegion = regions.front();//just use the very first region
   }
 
 	{
@@ -783,12 +787,16 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
 			record->setSeqName(currentSeqName);
 			outFile << GenomicRegion(*record).genBedRecordCore().toDelimStr() << std::endl;
 			if(outGenomicLocationOut){
+        auto & currentgRegion = singleInputRegion;
+        if(multipleInputRegions.size() > 1){
+          currentgRegion = njh::mapAt(multipleInputRegions, currentSeqName);
+        }
 				auto relativeToTemplateLoc = GenomicRegion(*record).genBedRecordCore();
 				auto outRegion = relativeToTemplateLoc;
-				outRegion.chrom_ = gRegion.chrom_;
-				outRegion.strand_ = (gRegion.reverseSrand_ ? '-' : '+');
-				outRegion.chromStart_ = gRegion.getRelativePositionFromStartStrandAware(relativeToTemplateLoc.chromStart_);
-				outRegion.chromEnd_ = gRegion.getRelativePositionFromStartStrandAware(relativeToTemplateLoc.chromEnd_);
+				outRegion.chrom_ = currentgRegion.chrom_;
+				outRegion.strand_ = (currentgRegion.reverseSrand_ ? '-' : '+');
+        outRegion.chromStart_ = currentgRegion.getRelativePositionFromStartStrandAware(relativeToTemplateLoc.chromStart_);
+				outRegion.chromEnd_ = currentgRegion.getRelativePositionFromStartStrandAware(relativeToTemplateLoc.chromEnd_);
 				*outGenomicLocationOut << outRegion.toDelimStrWithExtra() << std::endl;
 			}
 		}
@@ -844,18 +852,27 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
 		if("" != genomicLocation){
 			combinedGenomicOut = std::make_unique<OutputStream>((njh::files::make_path(setUp.pars_.directoryName_, "genomic_combined.bed")));
 		}
+    std::regex rgx("-[0-9]+-[0-9]+__.*?(?=__|$)");
+
 		for(const auto & reg : combinedRepeats){
 			combinedOut << reg.toDelimStr() << std::endl;
+
 			if("" != genomicLocation){
+        auto & currentgRegion = singleInputRegion;
+        if(multipleInputRegions.size() > 1){
+          std::string currentSeqName = std::regex_replace(reg.name_, rgx, "");
+          currentgRegion = njh::mapAt(multipleInputRegions, currentSeqName);
+        }
+
 				auto outRegion = reg;
-				outRegion.chrom_ = gRegion.chrom_;
-				outRegion.strand_ = (gRegion.reverseSrand_ ? '-' : '+');
-				if(gRegion.reverseSrand_){
-					outRegion.chromStart_ = gRegion.getRelativePositionFromStartStrandAware(reg.chromEnd_) + 1;
-					outRegion.chromEnd_ = gRegion.getRelativePositionFromStartStrandAware(reg.chromStart_) + 1;
+				outRegion.chrom_ = currentgRegion.chrom_;
+				outRegion.strand_ = (currentgRegion.reverseSrand_ ? '-' : '+');
+				if(currentgRegion.reverseSrand_){
+					outRegion.chromStart_ = currentgRegion.getRelativePositionFromStartStrandAware(reg.chromEnd_) + 1;
+					outRegion.chromEnd_ = currentgRegion.getRelativePositionFromStartStrandAware(reg.chromStart_) + 1;
 				}else{
-					outRegion.chromStart_ = gRegion.getRelativePositionFromStartStrandAware(reg.chromStart_);
-					outRegion.chromEnd_ = gRegion.getRelativePositionFromStartStrandAware(reg.chromEnd_);
+					outRegion.chromStart_ = currentgRegion.getRelativePositionFromStartStrandAware(reg.chromStart_);
+					outRegion.chromEnd_ = currentgRegion.getRelativePositionFromStartStrandAware(reg.chromEnd_);
 				}
 				*combinedGenomicOut << outRegion.toDelimStrWithExtra() << std::endl;
 			}
