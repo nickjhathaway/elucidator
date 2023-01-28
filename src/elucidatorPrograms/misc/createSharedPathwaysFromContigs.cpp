@@ -1507,7 +1507,15 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 		std::vector<seqInfo> filtredSeq;
 		filtredSeq.reserve(seqs.size());
 		for(const auto & collapsedSeq : iter::enumerate(uniqReadsForFilter.seqs_)){
-			if(collapsedSeq.second->cnt_ >= uniqueHapCountCutOff || njh::in(refCorrectedInfo.name_, uniqReadsForFilter.names_[collapsedSeq.index])){
+/*
+			std::cout << collapsedSeq.second->name_ << std::endl;
+			std::cout << collapsedSeq.second->cnt_ << std::endl;
+			std::cout << "collapsedSeq.second->cnt_ > uniqueHapCountCutOff: " << njh::colorBool(collapsedSeq.second->cnt_ > uniqueHapCountCutOff) << std::endl;
+			std::cout << "njh::in(refCorrectedInfo.name_, uniqReadsForFilter.names_[collapsedSeq.index]): " << njh::colorBool(njh::in(refCorrectedInfo.name_, uniqReadsForFilter.names_[collapsedSeq.index])) << std::endl;
+			std::cout << "collapsedSeq.second->cnt_ > uniqueHapCountCutOff || njh::in(refCorrectedInfo.name_, uniqReadsForFilter.names_[collapsedSeq.index]): " << njh::colorBool(collapsedSeq.second->cnt_ > uniqueHapCountCutOff || njh::in(refCorrectedInfo.name_, uniqReadsForFilter.names_[collapsedSeq.index])) << std::endl  << std::endl;
+*/
+
+			if(collapsedSeq.second->cnt_ > uniqueHapCountCutOff || njh::in(refCorrectedInfo.name_, uniqReadsForFilter.names_[collapsedSeq.index])){
 				njh::addConToVec(filteredSeqNames, uniqReadsForFilter.names_[collapsedSeq.index]);
 			}
 		}
@@ -1516,6 +1524,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 				filtredSeq.emplace_back(seq);
 			}
 		}
+
 		seqs = filtredSeq;
 
 		if(graphCorrectingPars.correctionOccurenceCutOff > 0){
