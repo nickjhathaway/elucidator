@@ -1293,6 +1293,8 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	double kSimCutOff =  0.40;
 	double lenFiltMultiplier = 0.91;
 
+	uint32_t uniqueHapCountCutOff = 0;
+
 	uint32_t numThreads = 1;
 
 	TranslatorByAlignment::RunPars variantCallerRunPars;
@@ -1310,6 +1312,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 
 	bool refNameRequired = setUp.processSeq(refSeq, "--refSeq", "Reference seq", false);
 	setUp.setOption(numThreads, "--numThreads", "num Threads");
+	setUp.setOption(uniqueHapCountCutOff, "--uniqueHapCountCutOff", "unique Hap Count Cut Off");
 
 	setUp.setOption(kSimFilter, "--kSimFilter", "filter input sequences on kSimFilter for artifacts");
 	setUp.setOption(kLenForFilter, "--kLenForFilter", "filter kLenForFilter for artifacts");
@@ -1464,7 +1467,12 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 		subRegionComboPars.includeFromSubRegionSize = graphCorrectingPars.klen;
 	}
 	seqInfo refCorrectedInfo = refSeq;
+
 	if(graphCorrectingPars.correctionOccurenceCutOff > 0){
+		std::string prefix = "";
+		if(uniqueHapCountCutOff > 0){
+			prefix = "priorToFreqFilt_";
+		}
 		auto correctedSeqs = ContigsCompareGraphDev::correctSeqsByGraph(seqs, graphCorrectingPars);
 		for(const auto & cseq : correctedSeqs){
 			if(cseq.name_ == refSeq.name_){
@@ -1472,7 +1480,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 				break;
 			}
 		}
-		SeqOutput::write(correctedSeqs, SeqIOOptions::genFastaOutGz(njh::files::make_path(setUp.pars_.directoryName_, "correctedSeqs")));
+		SeqOutput::write(correctedSeqs, SeqIOOptions::genFastaOutGz(njh::files::make_path(setUp.pars_.directoryName_, prefix + "correctedSeqs")));
 		seqs = correctedSeqs;
 
 		if(lenFilter){
@@ -1481,15 +1489,62 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 																										 lenFiltMultiplier,
 																										 SeqIOOptions::genFastaOut(
 																														 njh::files::make_path(setUp.pars_.directoryName_,
-																																									 "lenFilteredSeqs.fasta.gz")));
+																																									 prefix +"lenFilteredSeqs.fasta.gz")));
 		}
 		graphCorrectingPars.klen = ContigsCompareGraphDev::findMinNonredundantKmer(minimumKlen, seqs, __PRETTY_FUNCTION__);
 		{
-			OutputStream klenOut(njh::files::make_path(setUp.pars_.directoryName_, "nonRedundantKlenAfterCorrection.txt"));
+			OutputStream klenOut(njh::files::make_path(setUp.pars_.directoryName_, prefix + "nonRedundantKlenAfterCorrection.txt"));
 			klenOut << graphCorrectingPars.klen << std::endl;
 		}
 		if(std::numeric_limits<uint32_t>::max() == subRegionComboPars.includeFromSubRegionSize){
 			subRegionComboPars.includeFromSubRegionSize = graphCorrectingPars.klen;
+		}
+	}
+
+	if(uniqueHapCountCutOff > 0){
+		auto uniqReadsForFilter = CollapsedHaps::collapseReads(seqs);
+		std::vector<std::string> filteredSeqNames;
+		std::vector<seqInfo> filtredSeq;
+		filtredSeq.reserve(seqs.size());
+		for(const auto & collapsedSeq : iter::enumerate(uniqReadsForFilter.seqs_)){
+			if(collapsedSeq.second->cnt_ >= uniqueHapCountCutOff || njh::in(refCorrectedInfo.name_, uniqReadsForFilter.names_[collapsedSeq.index])){
+				njh::addConToVec(filteredSeqNames, uniqReadsForFilter.names_[collapsedSeq.index]);
+			}
+		}
+		for(const auto & seq : seqs){
+			if(njh::in(seq.name_, filteredSeqNames)){
+				filtredSeq.emplace_back(seq);
+			}
+		}
+		seqs = filtredSeq;
+
+		if(graphCorrectingPars.correctionOccurenceCutOff > 0){
+			auto correctedSeqs = ContigsCompareGraphDev::correctSeqsByGraph(seqs, graphCorrectingPars);
+			for(const auto & cseq : correctedSeqs){
+				if(cseq.name_ == refSeq.name_){
+					refCorrectedInfo = cseq;
+					break;
+				}
+			}
+			SeqOutput::write(correctedSeqs, SeqIOOptions::genFastaOutGz(njh::files::make_path(setUp.pars_.directoryName_, "correctedSeqs")));
+			seqs = correctedSeqs;
+
+			if(lenFilter){
+				seqs = ContigsCompareGraphDev::filterSeqsOnLen(seqs,
+																											 graphCorrectingPars,
+																											 lenFiltMultiplier,
+																											 SeqIOOptions::genFastaOut(
+																															 njh::files::make_path(setUp.pars_.directoryName_,
+																																										 "lenFilteredSeqs.fasta.gz")));
+			}
+			graphCorrectingPars.klen = ContigsCompareGraphDev::findMinNonredundantKmer(minimumKlen, seqs, __PRETTY_FUNCTION__);
+			{
+				OutputStream klenOut(njh::files::make_path(setUp.pars_.directoryName_, "nonRedundantKlenAfterCorrection.txt"));
+				klenOut << graphCorrectingPars.klen << std::endl;
+			}
+			if(std::numeric_limits<uint32_t>::max() == subRegionComboPars.includeFromSubRegionSize){
+				subRegionComboPars.includeFromSubRegionSize = graphCorrectingPars.klen;
+			}
 		}
 	}
 
