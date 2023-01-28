@@ -1886,6 +1886,10 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					varName = njh::pasteAsStr(refSeqLoc.createUidFromCoordsStrand(), "__", varName);
 					uint32_t start = 0;
 					uint32_t end = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).front().chromStart_;
+//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//					std::cout << "start: " << start << std::endl;
+//					std::cout << "end: " << end << std::endl;
+
 					createSubRegion(start, end, varName, variableRegionsRelative, variableRegionsGenomic);
 					//adjust to expanded
 					//start -= klen_minus1;
@@ -1893,11 +1897,16 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					createSubRegion(start, end, varName, variableRegionsRelativeExpaned, variableRegionsGenomicExpaned);
 					subRegionsRefSeqsLoc[varName] = variableRegionsGenomicExpaned.back();
 					++varCount;
+//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
 					//getting diversity
 					std::vector<seqInfo> subSeqs;
 					for(const auto & endRegion : processedNodes.subSeqToNameToPos[processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).front().name_]){
 						uint32_t start = 0;
 						uint32_t end = endRegion.second.chromStart_ + klen_minus1;
+//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//						std::cout << "start: " << start << std::endl;
+//						std::cout << "end: " << end << std::endl;
+
 						auto subSeq = seqs[seqKey[endRegion.first]].getSubRead(start, end);
 						if(subSeq.name_ == refSeqName){
 							subRegionsRefSeqs[varName] = subSeq;
@@ -1905,6 +1914,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 						variableRegions[subSeq.name_][varName] = subSeq.seq_;
 						renameSeq(subSeq, start, end, varName);
 						subSeqs.emplace_back(subSeq);
+//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
 					}
 					subRegionsSeqs[varName] = subSeqs;
 				}
@@ -1920,6 +1930,11 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 //						std::cout << varName << std::endl;
 						uint32_t start = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_)[pos].chromEnd_;
 						uint32_t end = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_)[pos + 1].chromStart_;
+//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//						std::cout << "start: " << start << std::endl;
+//						std::cout << "end: " << end << std::endl;
+
+
 						if(end <= start){
 							std::stringstream ss;
 							ss << __PRETTY_FUNCTION__ << ", error " << "end: " << end << " is less than start: " << start << " for " << refSeqName << "\n";
@@ -1955,6 +1970,20 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 //							std::cout << "seqs[seqKey[frontRegion.first]].name_: " << seqs[seqKey[frontRegion.first]].name_ << std::endl;
 							uint32_t start = frontRegion.second.chromEnd_ - klen_minus1;
 							uint32_t end = endRegion.chromStart_ + klen_minus1;
+
+//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//							std::cout << "pos: " << pos << std::endl;
+//							std::cout << "processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size(): " << processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() << std::endl;
+//							std::cout << "processedNodes.nameToSubSegPositions_filt.at(refSeq.name_)[pos].name_: " << processedNodes.nameToSubSegPositions_filt.at(refSeq.name_)[pos].name_ << std::endl;
+//							std::cout << "klen_minus1: " << klen_minus1 << std::endl;
+//							std::cout << "frontRegion: " << std::endl;
+//							std::cout << frontRegion.second.toDelimStrWithExtra() << std::endl;
+//							std::cout << "endRegion: " << std::endl;
+//							std::cout << endRegion.toDelimStrWithExtra() << std::endl;
+//
+//							std::cout << "start: " << start << std::endl;
+//							std::cout << "end: " << end << std::endl;
+
 							if(end <= start){
 								std::stringstream ss;
 								ss << __PRETTY_FUNCTION__ << ", error " << "end: " << end << " is less than start: " << start << " for " << seqs[seqKey[frontRegion.first]].name_ << "\n";
@@ -1965,6 +1994,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 								ss << __PRETTY_FUNCTION__ << ", error " << "end: " << end << " is past the end of the seq len: " << seqs[seqKey[frontRegion.first]].seq_.size() << "\n";
 								throw std::runtime_error{ss.str()};
 							}
+//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //							std::cout << "start: " << start << std::endl;
 //							std::cout << "end: " << end << std::endl;
 
@@ -1986,6 +2016,11 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					varName = njh::pasteAsStr(refSeqLoc.createUidFromCoordsStrand(), "__", varName);
 					uint32_t start = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).back().chromEnd_;
 					uint32_t end = len(refCorrectedInfo);
+
+//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//					std::cout << "start: " << start << std::endl;
+//					std::cout << "end: " << end << std::endl;
+
 					createSubRegion(start, end, varName, variableRegionsRelative, variableRegionsGenomic);
 					//adjust to expanded
 					start -= klen_minus1;
@@ -1993,6 +2028,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					createSubRegion(start, end, varName, variableRegionsRelativeExpaned, variableRegionsGenomicExpaned);
 					subRegionsRefSeqsLoc[varName] = variableRegionsGenomicExpaned.back();
 					++varCount;
+//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
 
 					//getting diversity
 					std::vector<seqInfo> subSeqs;

@@ -1203,6 +1203,9 @@ bool ContigsCompareGraphDev::collapseLowFreqNodes(const comparison & allowableEr
 				//fix downstream positions if needed
 				if (!node1->tailless() && node1->k_.size() != node2->k_.size()) {
 					int32_t sizeDifference = static_cast<int32_t>(node1->k_.size()) - static_cast<int32_t>(node2->k_.size());
+//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//					std::cout << "groupCount: " << groupCount << std::endl;
+//					std::cout << "sizeDifference: " << sizeDifference << std::endl;
 					//get the size difference and add this to the positions downstream
 					std::deque<std::shared_ptr<node>> nodesToMod;
 					auto node2TailEdge = node2->getFirstOnTailEdge();
@@ -1236,24 +1239,45 @@ bool ContigsCompareGraphDev::collapseLowFreqNodes(const comparison & allowableEr
 								if(njh::in(con.readName_, node2->inReadNamesIdx_)){
 //									std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //									std::cout << "name: " << con.readName_ << std::endl;
+//									std::cout << "nodesToMod.size(): " << nodesToMod.size() << std::endl;
+//									std::cout << "nextNode->visitCount_: " << nextNode->visitCount_ << std::endl;
 //									std::cout << "\tcon.headPos_: " << con.headPos_ << std::endl;
 //									std::cout << "\tcon.tailPos_: " << con.tailPos_ << std::endl;
 									con.tailPos_ += sizeDifference;
 									con.headPos_ += sizeDifference;
 //									std::cout << "\tcon.headPos_: " << con.headPos_ << std::endl;
 //									std::cout << "\tcon.tailPos_: " << con.tailPos_ << std::endl << std::endl;
+//									std::cout << __FILE__ << " " << __LINE__ << std::endl;
 								}
 							}
 						}
-
+//						std::cout << "nextNode->tailEdges_.size(): " << nextNode->tailEdges_.size() << std::endl;
 						//add next to mod
 						for(const auto & tail : nextNode->tailEdges_){
 							auto nextToMod = tail->tail_.lock();
+							//check if the tail contains any of the modified seqs;
+							bool containsRead = false;
 							if(nextToMod->visitCount_ == 0){
+								for(const auto & con : tail->connectorInfos_){
+									if(njh::in(con.readName_, node2->inReadNamesIdx_)){
+										containsRead = true;
+										break;
+									}
+								}
+							}
+							//if the next modified node has a connector from the modified node and hasn't been visited yet, spread to here
+							if(containsRead && nextToMod->visitCount_ == 0){
+								nextToMod->visitCount_ += 1;
 								nodesToMod.emplace_back(nextToMod);
 							}
 						}
+//						std::cout << njh::bashCT::blue << std::endl;
+//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//						std::cout << njh::bashCT::reset << std::endl;
 					}
+//					std::cout << njh::bashCT::red << std::endl;
+//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//					std::cout << njh::bashCT::reset << std::endl;
 
 //					std::deque<uint32_t> toSpread;
 //					toSpread.emplace_back(pos);
@@ -1310,6 +1334,8 @@ bool ContigsCompareGraphDev::collapseLowFreqNodes(const comparison & allowableEr
 		resetNodeVisitCounts();
 		return true;
 	}
+//	std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//	exit(1);
 	return false;
 }
 
@@ -1825,6 +1851,7 @@ std::vector<seqInfo> ContigsCompareGraphDev::readInSeqs(const SeqIOOptions & inO
 
 ContigsCompareGraphDev::processConservedNodesVecRes ContigsCompareGraphDev::processConservedNodesVec(const std::vector<std::shared_ptr<node>> & nodes){
 	processConservedNodesVecRes ret;
+//	std::string testSample = "PF0860-C.0[IsFieldSample=TRUE;PopUID=Pf3D7_11_v3-1920483-1921173-for.058;collection_date=NA;collection_year=2013;country=Ghana;p_name=Pf3D7_11_v3-1920483-1921173-for;readCount=729;region=West Africa;sample=PF0860-C;secondaryRegion=AFRICA;site=Navrongo]_f0.5";
 	if(1 == nodes.size()){
 		for(const auto & name : nodes.front()->inReadNamesIdx_){
 			ret.nameToSubSegments[name].emplace_back(nodes.front()->k_, 0);
@@ -1834,18 +1861,20 @@ ContigsCompareGraphDev::processConservedNodesVecRes ContigsCompareGraphDev::proc
 			std::unordered_map<std::string, uint32_t> nodePositionPerSeq;
 			for(const auto & h : n->headEdges_){
 				for(const auto & con : h->connectorInfos_){
-//					if(con.readName_ == "ERR4045391.1[PopUID=oppA.27;p_name=oppA;readCount=2569;sample=ERR4045391]_f0.5"){
+//					if(con.readName_ == testSample){
 //						std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //						std::cout << "con.tailPos_: " << con.tailPos_ << std::endl;
+//						std::cout << "n->k_" << std::endl;
 //					}
 					nodePositionPerSeq[con.readName_] = con.tailPos_;
 				}
 			}
 			for(const auto & t : n->tailEdges_){
 				for(const auto & con : t->connectorInfos_){
-//					if(con.readName_ == "ERR4045391.1[PopUID=oppA.27;p_name=oppA;readCount=2569;sample=ERR4045391]_f0.5"){
+//					if(con.readName_ == testSample){
 //						std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //						std::cout << "con.headPos_: " << con.headPos_ << std::endl;
+//						std::cout << "n->k_" << std::endl;
 //						std::cout << "n->k_.size(): " << n->k_.size() << std::endl;
 //						std::cout << "n->kLen_: " << n->kLen_ << std::endl;
 //						std::cout << "(n->k_.size() - n->kLen_): " << (n->k_.size() - n->kLen_) << std::endl;
@@ -1910,14 +1939,24 @@ ContigsCompareGraphDev::processConservedNodesVecRes ContigsCompareGraphDev::proc
 	njh::sort(conservedSeqs, [&startingPositionsAvg](const std::string & seq1, const std::string & seq2){
 		return startingPositionsAvg[seq1] < startingPositionsAvg[seq2];
 	});
+
+
 	for(auto & subSeqs : ret.nameToSubSegments){
 		for(const auto & sub : subSeqs.second){
+
 			auto outRegion = sub.genBed6Region(subSeqs.first);
 			ret.nameToSubSegPositions_raw[subSeqs.first].emplace_back(outRegion);
 			ret.subSeqToNameToPos[sub.subSeq_].emplace(subSeqs.first, outRegion);
-			//std::cout << "\t" << sub.pos_ << ": " << sub.subSeq_ << std::endl;
-			//sharedLocsOut << outRegion.toDelimStr()<< std::endl;
+//			if(testSample == subSeqs.first){
+//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//				std::cout << "subSeqs.first: " << subSeqs.first << std::endl;
+//				std::cout << "\t" << sub.pos_ << ": " << sub.subSeq_ << std::endl;
+//				std::cout << outRegion.toDelimStr()<< std::endl;
+//			}
 		}
+//		if(testSample == subSeqs.first){
+////			exit(1);
+//		}
 	}
 
 	for (auto &subPositions : ret.nameToSubSegPositions_raw) {
