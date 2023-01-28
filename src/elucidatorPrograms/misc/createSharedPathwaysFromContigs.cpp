@@ -1727,9 +1727,16 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 
 		auto uniqCorrectedSeqs = CollapsedHaps::collapseReads(seqs);
 		//auto identifier = njh::pasteAsStr(refSeqLoc.createUidFromCoordsStrand(), "__", subSeqs.first);
-		uniqCorrectedSeqs.renameBaseOnFreq(refSeqLoc.createUidFromCoordsStrand());
-
-		SeqOutput::write(uniqCorrectedSeqs.seqs_, SeqIOOptions::genFastaOutGz(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs.fasta.gz")));
+		auto renamedRetInfo = uniqCorrectedSeqs.renameBaseOnFreq(refSeqLoc.createUidFromCoordsStrand());
+		{
+			auto keys = getVectorOfMapKeys(renamedRetInfo.newNameToPos_);
+			njh::sort(keys);
+			SeqOutput uniqueSeqsWriter(SeqIOOptions::genFastaOutGz(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs.fasta.gz")));
+			uniqueSeqsWriter.openOut();
+			for(const auto & key : keys) {
+				uniqueSeqsWriter.write(uniqCorrectedSeqs.seqs_[renamedRetInfo.newNameToPos_[key]]);
+			}
+		}
 		uniqCorrectedSeqs.writeNames(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs_names.tab.txt.gz")));
 		uniqCorrectedSeqs.writeOutMetaFields(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs_meta.tab.txt.gz")));
 		uniqCorrectedSeqs.writeLabIsolateNames(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs_labIsolateNames.tab.txt.gz")));
