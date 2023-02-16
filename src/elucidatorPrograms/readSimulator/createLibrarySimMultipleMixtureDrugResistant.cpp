@@ -105,6 +105,9 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 		if(njh::in(std::string("COI"), metaLevels ) ){
 			removeElement<std::string>(metaLevels, "COI");
 		}
+    if(njh::in(std::string("startingTemplate"), metaLevels ) ){
+      removeElement<std::string>(metaLevels, "startingTemplate");
+    }
 	}else{
 		removeElement<std::string>(metaLevels, "number");
 	}
@@ -287,8 +290,10 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 		hapRGenerator.emplace(hap.first, njh::randObjectGen<std::string, double>(hap.second.first, hap.second.second));
 	}
 	struct TimePoint {
-		uint32_t time_;
-		std::unordered_map<std::string, double> hapFracs_;
+		uint32_t time_{std::numeric_limits<uint32_t>::max()};
+    uint32_t startingTemplate_{std::numeric_limits<uint32_t>::max()};
+    std::unordered_map<std::string, double> hapFracs_;
+
 		Json::Value toJson() const{
 			Json::Value ret;
 			ret["class"] = njh::json::toJson(njh::getTypeName(*this));
@@ -306,6 +311,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 		std::vector<TimePoint> timePoints_;
 		bool replicate_{false};
 		uint32_t initalCOI_{1};
+    uint32_t initialStartingTemplate_{std::numeric_limits<uint32_t>::max()};
 		Json::Value toJson() const{
 			Json::Value ret;
 			ret["class"] = njh::json::toJson(njh::getTypeName(*this));
@@ -314,6 +320,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 			ret["timePoints_"] = njh::json::toJson(timePoints_);
 			ret["replicate_"] = njh::json::toJson(replicate_);
 			ret["initalCOI_"] = njh::json::toJson(initalCOI_);
+      ret["initialStartingTemplate_"] = njh::json::toJson(initialStartingTemplate_);
 			return ret;
 		}
 	};
@@ -334,14 +341,14 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	//
 	if(rawPatientSetupFile){
 		uint32_t patientCount = 1;
-		bool hasNameCol = false;
-		if(njh::in<std::string>("name", patientSetupTable.columnNames_)){
-			hasNameCol = true;
-		}
-		bool hasReplicateCol = false;
-		if(njh::in<std::string>("replicate", patientSetupTable.columnNames_)){
-			hasReplicateCol = true;
-		}
+		bool hasNameCol = njh::in<std::string>("name", patientSetupTable.columnNames_);
+		bool hasReplicateCol = njh::in<std::string>("replicate", patientSetupTable.columnNames_);
+    bool hasStartingTemplateCol = njh::in<std::string>("startingTemplate", patientSetupTable.columnNames_);
+
+    if(hasStartingTemplateCol){
+      pcrNumbers.startingTemplateAmounts_ = {2048};
+    }
+
 		std::set<std::string> alreadyAddedNames;
 		for(const auto & row : patientSetupTable){
 			MetaDataInName meta;
@@ -376,6 +383,9 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 								== njh::strToLowerRet(
 										row[patientSetupTable.getColPos("replicate")] ) ;
 			}
+      if(hasStartingTemplateCol){
+        currentPatient.initialStartingTemplate_ = njh::StrToNumConverter::stoToNum<uint32_t>(row[patientSetupTable.getColPos("startingTemplate")]);
+      }
 			patientSetUpPars.emplace_back(currentPatient);
 			++patientCount;
 		}
@@ -546,9 +556,11 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 			for (const auto & startingTemplateAmount : pcrNumbers.startingTemplateAmounts_){
 				for (const auto & finalReadAmount : pcrNumbers.finalReadAmount_){
 					uint32_t numRuns = patient.replicate_ ? 2 : 1;
-
-
-					uint32_t startingTemplateAmountForSamp = startingTemplateAmount;
+          uint32_t expectedStartingTemplateAmount = startingTemplateAmount;
+          if(std::numeric_limits<uint32_t>::max() != patient.initialStartingTemplate_){
+            expectedStartingTemplateAmount = patient.initialStartingTemplate_;
+          }
+					uint32_t startingTemplateAmountForSamp = expectedStartingTemplateAmount;
 					if(std::numeric_limits<double>::max() != twoSdFrac){
 						double startingTemplateAmountForSampNew = 0;
 						std::normal_distribution<double> ndist(startingTemplateAmountForSamp, (startingTemplateAmountForSamp * twoSdFrac)/2);
@@ -559,10 +571,10 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 				    while(startingTemplateAmountForSampNew <= 1){
 				    	startingTemplateAmountForSampNew = std::round(ndist(rgen));
 				    }
-				    startingTemplateAmountForSamp = startingTemplateAmountForSampNew;
+				    startingTemplateAmountForSamp = static_cast<uint32_t>(startingTemplateAmountForSampNew);
 					}
 					currentSamp.addExpRun(
-							genStartingTempNameSection(startingTemplateAmount)
+							genStartingTempNameSection(expectedStartingTemplateAmount)
 									+ genFinalReadNameSection(finalReadAmount),
 							ControlPopulation::SeqSampledAmounts { finalReadAmount,
 						startingTemplateAmountForSamp }, numRuns);
@@ -776,8 +788,13 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	table metaTable(metaHeader);
 	for(const auto & patient : patientSetUpPars){
 		for(const auto & tp : patient.timePoints_){
-			for (const auto & startingTemplateAmount : pcrNumbers.startingTemplateAmounts_){
+			for (const auto & iterStartingTemplateAmount : pcrNumbers.startingTemplateAmounts_){
 				for (const auto & finalReadAmount : pcrNumbers.finalReadAmount_){
+          uint32_t startingTemplateAmount = iterStartingTemplateAmount;
+          if(std::numeric_limits<uint32_t>::max() != patient.initialStartingTemplate_){
+            startingTemplateAmount = patient.initialStartingTemplate_;
+          }
+
 					MetaDataInName sampMeta = patient.meta_;
 					std::string outputSampName = patient.name_
 							+ genTimePointNameSection(tp.time_)
