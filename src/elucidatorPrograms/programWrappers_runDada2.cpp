@@ -21,6 +21,9 @@ void genDada2RScriptSingleSamplePaired(std::ostream & out,
 		const std::string & filePat,
 		const std::string & outName
 		){
+  /**@todo fix for chimera filtering 2023-02-17
+   *
+   */
   out << "#!/usr/bin/env Rscript" << std::endl;
   out << "suppressMessages(library(dada2)); #packageVersion(\"dada2\")" << std::endl;
   out << "" << std::endl;
@@ -184,10 +187,17 @@ void genDada2RScript(std::ostream & out,
   out << "  if(length(filtFs) > 1){" << std::endl;
   out << "    names(dereps) <- sample_names" << std::endl;
   out << "  }" << std::endl;
+  out << "  nonLearnedError = inflateErr(tperr1,3);" << std::endl;
+  out << "  errs = nonLearnedError" << std::endl;
+  out << "  #learn error if at least 5 samples otherwise use non-learned error " << std::endl;
+  out << "  if(length(filtFs) > 5){" << std::endl;
+  out << "    errSingles <- learnErrors(filtFs, multithread=FALSE)" << std::endl;
+  out << "    errs = errSingles;" << std::endl;
+  out << "  }" << std::endl;
   out << "  if(on454){" << std::endl;
-  out << "    dadaFsBoth <- dada(dereps, err=inflateErr(tperr1,3), selfConsist = TRUE, HOMOPOLYMER_GAP_PENALTY=-1, BAND_SIZE=32, OMEGA_A = " << pars.omega_a << ", MAX_CONSIST = "<< pars.maxConsist << ")" << std::endl;
+  out << "    dadaFsBoth <- dada(dereps, err=errs, selfConsist = TRUE, HOMOPOLYMER_GAP_PENALTY=-1, BAND_SIZE=32, OMEGA_A = 1e-40, MAX_CONSIST = 10)" << std::endl;
   out << "  }else{" << std::endl;
-  out << "    dadaFsBoth <- dada(dereps, err=inflateErr(tperr1,3), selfConsist = TRUE, OMEGA_A = " << pars.omega_a << ", MAX_CONSIST = "<< pars.maxConsist << ")" << std::endl;
+  out << "    dadaFsBoth <- dada(dereps, err=errs, selfConsist = TRUE, OMEGA_A = 1e-40, MAX_CONSIST = 10)" << std::endl;
   out << "  }" << std::endl;
   out << "  return(dadaFsBoth)" << std::endl;
   out << "}" << std::endl;
@@ -201,11 +211,16 @@ void genDada2RScript(std::ostream & out,
   out << "output = runDada(path,  outputdir, filePat, trimLeft, trimRight, on454)" << std::endl;
   out << "if (checkBimeras) {" << std::endl;
   out << "  seqtab.all <- makeSequenceTable(output)" << std::endl;
-  out << "  bim <- isBimeraDenovo(seqtab.all, verbose=" << njh::strToUpperRet(njh::boolToStr(pars.verbose)) << ")" << std::endl;
+  out << "  bim <- isBimeraDenovo(seqtab.all, verbose=FALSE)" << std::endl;
+  out << "  seqtab.nochim <- removeBimeraDenovo(seqtab.all, method=\"consensus\", multithread=FALSE, verbose=FALSE)" << std::endl;
   out << "  if(class(output)[1] == \"list\"){" << std::endl;
   out << "    for (samp in names(output)){" << std::endl;
   out << "      currentSampHaps = seqtab.all[rownames(seqtab.all) == samp, ]" << std::endl;
-  out << "      currentBimHaps = bim[(1:length(currentSampHaps))[currentSampHaps > 0]]" << std::endl;
+  out << "      currentSampHapsNoChim = seqtab.nochim[rownames(seqtab.nochim) == samp, ]" << std::endl;
+  out << "      #currentBimHaps = bim[(1:length(currentSampHaps))[currentSampHaps > 0]]" << std::endl;
+  out << "      currentBimHapsNames = unique(c(names(currentSampHaps)[currentSampHaps > 0]), names(currentSampHapsNoChim)[currentSampHapsNoChim > 0])" << std::endl;
+  out << "      currentBimHaps = !(currentBimHapsNames %in% names(currentSampHapsNoChim)[currentSampHapsNoChim > 0])" << std::endl;
+  out << "      names(currentBimHaps) = currentBimHapsNames" << std::endl;
   out << "      writeFastqFromDada(output[[samp]], paste0(outputdir, \"dada2_\", samp, \".fastq\"), currentBimHaps)" << std::endl;
   out << "    }" << std::endl;
   out << "  }else{" << std::endl;
@@ -213,7 +228,11 @@ void genDada2RScript(std::ostream & out,
   out << "    fastqs <- fns[grepl(filePat, fns)]" << std::endl;
   out << "    sample_names <- sapply(strsplit(fastqs, \".\",fixed = T), `[`, 1)" << std::endl;
   out << "    currentSampHaps = seqtab.all[1, ]" << std::endl;
-  out << "    currentBimHaps = bim[(1:length(currentSampHaps))[currentSampHaps > 0]]" << std::endl;
+  out << "    currentSampHapsNoChim = seqtab.nochim[1, ]" << std::endl;
+  out << "    #currentBimHaps = bim[(1:length(currentSampHaps))[currentSampHaps > 0]]" << std::endl;
+  out << "    currentBimHapsNames = unique(c(names(currentSampHaps)[currentSampHaps > 0]), names(currentSampHapsNoChim)[currentSampHapsNoChim > 0])" << std::endl;
+  out << "    currentBimHaps = !(currentBimHapsNames %in% names(currentSampHapsNoChim)[currentSampHapsNoChim > 0])" << std::endl;
+  out << "    names(currentBimHaps) = currentBimHapsNames" << std::endl;
   out << "    writeFastqFromDada(output, paste0(outputdir, \"dada2_\", sample_names[1], \".fastq\"), currentBimHaps)" << std::endl;
   out << "  }" << std::endl;
   out << "" << std::endl;
