@@ -215,10 +215,10 @@ int seqUtilsExtractRunner::countIlluminaAaptors(const njh::progutils::CmdArgs & 
 
   outPass << "seqName\tdirection\tfwd5_3_score\tfwd5_3_bar\trev3_5_score\trev3_5_bar\trev5_3_score\trev5_3_bar\tfwd3_5_score\tfwd3_5_bar" << std::endl;
 
-  SeqOutput writer(SeqIOOptions::genFastqOut(njh::files::make_path(setUp.pars_.directoryName_, "processed.fastq")));
-  writer.openOut();
+
 
   std::map<std::string, std::map<std::string, uint32_t>> bestCounts;
+  std::map<std::string, std::map<std::string, uint32_t>> bestBarcodePairsCounts;
 
   uint32_t smallSeq = 0;
   uint32_t largeSeq = 0;
@@ -373,17 +373,29 @@ int seqUtilsExtractRunner::countIlluminaAaptors(const njh::progutils::CmdArgs & 
               << "\t" << fwd3_5_info.comp_.distances_.eventBasedIdentity_
               << "\t" << fwd3_5_info.barcode_
               << std::endl;
+      ++bestBarcodePairsCounts[forwardBar][reverseBar];
       outBest << seq.name_
               << "\t" << direction
               << "\t" << forwardBar
               << "\t" << reverseBar << std::endl;
     }
   }
-  OutputStream outBestCounts(njh::files::make_path(setUp.pars_.directoryName_, "bestDirectionCounts.tab.txt"));
-  outBestCounts << "BestFrontPrimer\tBestBackPrimer\tcount\t" << std::endl;
-  for(const auto & front : bestCounts){
-    for(const auto & back : front.second){
-      outBestCounts << front.first << "\t" << back.first << "\t" << back.second << std::endl;
+  {
+    OutputStream outBestCounts(njh::files::make_path(setUp.pars_.directoryName_, "bestDirectionCounts.tab.txt"));
+    outBestCounts << "BestFrontPrimer\tBestBackPrimer\tcount\t" << std::endl;
+    for(const auto & front : bestCounts){
+      for(const auto & back : front.second){
+        outBestCounts << front.first << "\t" << back.first << "\t" << back.second << std::endl;
+      }
+    }
+  }
+  {
+    OutputStream outBestBarcodePairsCounts(njh::files::make_path(setUp.pars_.directoryName_, "bestBarcodePairsCounts.tab.txt"));
+    outBestBarcodePairsCounts << "BestFrontPrimer\tBestBackPrimer\tcount\t" << std::endl;
+    for(const auto & front : bestBarcodePairsCounts){
+      for(const auto & back : front.second){
+        outBestBarcodePairsCounts << front.first << "\t" << back.first << "\t" << back.second << std::endl;
+      }
     }
   }
 
@@ -412,8 +424,8 @@ int seqUtilsExtractRunner::countIlluminaAaptors(const njh::progutils::CmdArgs & 
     conditionCount << "passRev" << "\t" << passRev << "\t" << passRev/total << std::endl;
     conditionCount << "failedIdentity" << "\t" << totalFailedIdentity << "\t" << totalFailedIdentity/total << std::endl;
     conditionCount << "totalFailedPrimerAln" << "\t" << totalFailedPrimerAln << "\t" << totalFailedPrimerAln/total << std::endl;
-    conditionCount << "smallSeq" << "\t" << smallSeq << "\t" << smallSeq/total << std::endl;
-    conditionCount << "largeSeq" << "\t" << largeSeq << "\t" << largeSeq/total << std::endl;
+    conditionCount << "smallSeq" << "(len <" << minOutputLen << ")" << "\t" << smallSeq << "\t" << smallSeq/total << std::endl;
+    conditionCount << "largeSeq" << "(len >" << maxOuptutLen << ")" << "\t" << largeSeq << "\t" << largeSeq/total << std::endl;
     conditionCount << "mismatchDirections" << "\t" << mismatchDirections << "\t" << mismatchDirections/total << std::endl;
 
   }
@@ -841,8 +853,8 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 		conditionCount << "passRev" << "\t" << passRev << "\t" << passRev/total << std::endl;
 		conditionCount << "failedIdentity" << "\t" << totalFailedIdentity << "\t" << totalFailedIdentity/total << std::endl;
 		conditionCount << "totalFailedPrimerAln" << "\t" << totalFailedPrimerAln << "\t" << totalFailedPrimerAln/total << std::endl;
-		conditionCount << "smallSeq" << "\t" << smallSeq << "\t" << smallSeq/total << std::endl;
-    conditionCount << "largeSeq" << "\t" << largeSeq << "\t" << largeSeq/total << std::endl;
+    conditionCount << "smallSeq" << "(len <" << minOutputLen << ")" << "\t" << smallSeq << "\t" << smallSeq/total << std::endl;
+    conditionCount << "largeSeq" << "(len >" << maxOuptutLen << ")" << "\t" << largeSeq << "\t" << largeSeq/total << std::endl;
 		conditionCount << "mismatchDirections" << "\t" << mismatchDirections << "\t" << mismatchDirections/total << std::endl;
 
 	}
