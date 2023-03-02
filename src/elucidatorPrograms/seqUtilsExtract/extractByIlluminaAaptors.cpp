@@ -23,8 +23,8 @@ struct PrimerAlnInfo{
 			comp_(comp),
 			seqAln_(seqAln),
 			primerAln_(primerAln) {
-		auto firstN = primerAln.seq_.find("N");
-		auto lastN = primerAln.seq_.rfind("N") + 1;
+		auto firstN = primerAln.seq_.find('N');
+		auto lastN = primerAln.seq_.rfind('N') + 1;
 		auto alnBarcode = seqAln.seq_.substr(firstN, lastN - firstN);
 
 		barcode_ = njh::replaceString(alnBarcode, "-", "");
@@ -80,33 +80,33 @@ ProcessedForIlluminaAdaptorRes processSeqForAdaptors(seqInfo & seq,
 	//forward primer start
 
 	if('-' == frontSeqAdaptorInfo.primerAln_.seq_.front()){
-		ret.fprimerStart_ = getRealPosForAlnPos(frontSeqAdaptorInfo.seqAln_.seq_, frontSeqAdaptorInfo.primerAln_.seq_.find_first_not_of("-"));
+		ret.fprimerStart_ = getRealPosForAlnPos(frontSeqAdaptorInfo.seqAln_.seq_, frontSeqAdaptorInfo.primerAln_.seq_.find_first_not_of('-'));
 	}
 	//forward primer barcode start
-	uint32_t firstSeqBase = frontSeqAdaptorInfo.seqAln_.seq_.find_first_not_of("-");
-	uint32_t firstNAlnPos = frontSeqAdaptorInfo.primerAln_.seq_.find("N");
+	uint32_t firstSeqBase = frontSeqAdaptorInfo.seqAln_.seq_.find_first_not_of('-');
+	uint32_t firstNAlnPos = frontSeqAdaptorInfo.primerAln_.seq_.find('N');
 	if(firstNAlnPos > firstSeqBase){
 		ret.fBarPosStart_ = getRealPosForAlnPos(frontSeqAdaptorInfo.seqAln_.seq_, firstNAlnPos);
 		//forward primer barcode end
-		ret.fBarPosEnd_= getRealPosForAlnPos(frontSeqAdaptorInfo.seqAln_.seq_, frontSeqAdaptorInfo.primerAln_.seq_.rfind("N")) + 1;
+		ret.fBarPosEnd_= getRealPosForAlnPos(frontSeqAdaptorInfo.seqAln_.seq_, frontSeqAdaptorInfo.primerAln_.seq_.rfind('N')) + 1;
 		//check the forward primer
 		if('-' != frontSeqAdaptorInfo.seqAln_.seq_.back() && ret.fBarPosStart_ > 4 ){
-			ret.fprimerEnd_= getRealPosForAlnPos(frontSeqAdaptorInfo.seqAln_.seq_, frontSeqAdaptorInfo.primerAln_.seq_.find_last_not_of("-")) + 1;
+			ret.fprimerEnd_= getRealPosForAlnPos(frontSeqAdaptorInfo.seqAln_.seq_, frontSeqAdaptorInfo.primerAln_.seq_.find_last_not_of('-')) + 1;
 			ret.fwdPass_ = true;
 		}
 	}
 
 	//the back primer should be found within the back seq
 	if(backSeqAdaptorInfo.seqAln_.seq_.front() != '-'){
-		uint32_t firstN_AlnPos = backSeqAdaptorInfo.primerAln_.seq_.find("N");
-		uint32_t lastN_AlnPos = backSeqAdaptorInfo.primerAln_.seq_.rfind("N");
-		uint32_t backSeqAlnEnd = backSeqAdaptorInfo.seqAln_.seq_.find_last_not_of("-");
+		uint32_t firstN_AlnPos = backSeqAdaptorInfo.primerAln_.seq_.find('N');
+		uint32_t lastN_AlnPos = backSeqAdaptorInfo.primerAln_.seq_.rfind('N');
+		uint32_t backSeqAlnEnd = backSeqAdaptorInfo.seqAln_.seq_.find_last_not_of('-');
 		if(lastN_AlnPos < backSeqAlnEnd){
 			ret.rprimerEnd_= seq.seq_.size();
 			if(backSeqAdaptorInfo.seqAln_.seq_.back() != '-'){
-				ret.rprimerEnd_= getRealPosForAlnPos(backSeqAdaptorInfo.seqAln_.seq_, backSeqAdaptorInfo.primerAln_.seq_.find_last_not_of("-")) + 1;
+				ret.rprimerEnd_= getRealPosForAlnPos(backSeqAdaptorInfo.seqAln_.seq_, backSeqAdaptorInfo.primerAln_.seq_.find_last_not_of('-')) + 1;
 			}
-			ret.rprimerStart_ = getRealPosForAlnPos(backSeqAdaptorInfo.seqAln_.seq_, backSeqAdaptorInfo.primerAln_.seq_.find_first_not_of("-"));
+			ret.rprimerStart_ = getRealPosForAlnPos(backSeqAdaptorInfo.seqAln_.seq_, backSeqAdaptorInfo.primerAln_.seq_.find_first_not_of('-'));
 			ret.rBarPosStart_ = getRealPosForAlnPos(backSeqAdaptorInfo.seqAln_.seq_, firstN_AlnPos);
 			ret.rBarPosEnd_ = getRealPosForAlnPos(backSeqAdaptorInfo.seqAln_.seq_, lastN_AlnPos) + 1;
 			if( ((seq.seq_.size() - startOfBackSeq) - ret.rBarPosEnd_) > 4){
@@ -294,7 +294,7 @@ int seqUtilsExtractRunner::countIlluminaAaptors(const njh::progutils::CmdArgs & 
     ProcessedForIlluminaAdaptorRes processRes;
     if(reverseScore > forwardScore){
       direction = "rev";
-      forwardBar = seqUtil::reverseComplement(fwd3_5_info.barcode_, "DNA");;
+      forwardBar = seqUtil::reverseComplement(fwd3_5_info.barcode_, "DNA");
       reverseBar = rev5_3_info.barcode_;
       bool failedIdentity = false;
       if(rev5_3_info.comp_.distances_.eventBasedIdentity_ < primerIdentityCutOff){
@@ -638,7 +638,7 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 		ProcessedForIlluminaAdaptorRes processRes;
 		if(reverseScore > forwardScore){
 			direction = "rev";
-			forwardBar = seqUtil::reverseComplement(fwd3_5_info.barcode_, "DNA");;
+			forwardBar = seqUtil::reverseComplement(fwd3_5_info.barcode_, "DNA");
 			reverseBar = rev5_3_info.barcode_;
 			bool failedIdentity = false;
 			if(rev5_3_info.comp_.distances_.eventBasedIdentity_ < primerIdentityCutOff){
