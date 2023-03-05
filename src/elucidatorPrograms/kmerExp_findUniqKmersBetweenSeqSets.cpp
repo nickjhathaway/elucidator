@@ -595,10 +595,12 @@ int kmerExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArg
 	out << "sample\tname\ttotalUniqueKmers";
 	out << "\tset";
 	out << "\ttotalUniqueInSet";
+	out << "\tkmersFoundFromSet";
 	out << "\tfracInSet";
 	out << "\tfracOfSetFound";
 	if(includeRevComp){
-		out << "\tfracInSetRevCom";
+		out << "\tkmersFoundFromSetRevComp";
+		out << "\tfracInSetRevComp";
 		out << "\tfracOfSetFoundRevComp";
 	}
 	out << std::endl;
@@ -714,10 +716,12 @@ int kmerExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArg
 								<< "\t" << hashedInputKmers.size()
 								<< "\t" << setName
 								<< "\t" << uniqueKmersPerSet[setName].size()
+								<< "\t" << foundPerSet[setName]
 								<< "\t" << static_cast<double>(foundPerSet[setName])/static_cast<double>(hashedInputKmers.size())
 								<< "\t" << static_cast<double>(foundPerSet[setName])/static_cast<double>(uniqueKmersPerSet[setName].size());
 						if (includeRevComp) {
-							out << "\t" << static_cast<double>(foundPerSetRevComp[setName])/static_cast<double>(hashedInputKmers.size())
+							out << "\t" << foundPerSetRevComp[setName]
+							 		<< "\t" << static_cast<double>(foundPerSetRevComp[setName])/static_cast<double>(hashedInputKmers.size())
 									<< "\t" << static_cast<double>(foundPerSetRevComp[setName])/static_cast<double>(uniqueKmersPerSet[setName].size());
 						}
 						out << std::endl;
