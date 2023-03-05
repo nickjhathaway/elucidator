@@ -603,6 +603,7 @@ int kmerExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArg
 		out << "\tfracInSetRevComp";
 		out << "\tfracOfSetFoundRevComp";
 	}
+	out << "\twinnerSet\twinnerSetFrac\twinderSetRecComp";
 	out << std::endl;
 
 	if (setUp.pars_.ioOptions_.isPairedIn()) {
@@ -669,6 +670,25 @@ int kmerExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArg
 				}
 				{
 					std::lock_guard<std::mutex> lockGuard(outMut);
+
+					std::string winnerSet = "undetermined";
+					double bestFrac = 0;
+					bool winnerRevComp = false;
+
+					for(const auto & setName  : njh::getVecOfMapKeys(uniqueKmersPerSet)){
+						if(static_cast<double>(foundPerSet[setName])/static_cast<double>(hashedInputKmers.size()) > bestFrac){
+							bestFrac = static_cast<double>(foundPerSet[setName])/static_cast<double>(hashedInputKmers.size());
+							winnerSet = setName;
+						}
+						if (includeRevComp) {
+							if(static_cast<double>(foundPerSetRevComp[setName])/static_cast<double>(hashedInputKmers.size()) > bestFrac){
+								bestFrac = static_cast<double>(foundPerSetRevComp[setName])/static_cast<double>(hashedInputKmers.size());
+								winnerSet = setName;
+								winnerRevComp = true;
+							}
+						}
+					}
+
 					for(const auto & setName  : njh::getVecOfMapKeys(uniqueKmersPerSet)){
 						out << sampleName
 								<< "\t" << pseq.seqBase_.name_
@@ -726,7 +746,6 @@ int kmerExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArg
 						}
 					}
 				}
-
 				if(includeRevComp){
 					for(const auto & hashedKmer : hashedInputKmersRevComp){
 						for(const auto & uniqueKmers : uniqueKmersPerSet){
@@ -738,6 +757,24 @@ int kmerExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArg
 				}
 				{
 					std::lock_guard<std::mutex> lockGuard(outMut);
+
+					std::string winnerSet = "undetermined";
+					double bestFrac = 0;
+					bool winnerRevComp = false;
+
+					for(const auto & setName  : njh::getVecOfMapKeys(uniqueKmersPerSet)){
+						if(static_cast<double>(foundPerSet[setName])/static_cast<double>(hashedInputKmers.size()) > bestFrac){
+							bestFrac = static_cast<double>(foundPerSet[setName])/static_cast<double>(hashedInputKmers.size());
+							winnerSet = setName;
+						}
+						if (includeRevComp) {
+							if(static_cast<double>(foundPerSetRevComp[setName])/static_cast<double>(hashedInputKmers.size()) > bestFrac){
+								bestFrac = static_cast<double>(foundPerSetRevComp[setName])/static_cast<double>(hashedInputKmers.size());
+								winnerSet = setName;
+								winnerRevComp = true;
+							}
+						}
+					}
 					for(const auto & setName  : njh::getVecOfMapKeys(uniqueKmersPerSet)){
 						out << sampleName
 								<< "\t" << seq.name_
@@ -752,6 +789,9 @@ int kmerExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArg
 							 		<< "\t" << static_cast<double>(foundPerSetRevComp[setName])/static_cast<double>(hashedInputKmers.size())
 									<< "\t" << static_cast<double>(foundPerSetRevComp[setName])/static_cast<double>(uniqueKmersPerSet[setName].size());
 						}
+						out << "\t" << winnerSet
+								<< "\t" << bestFrac
+								<< "\t" << njh::boolToStr(winnerRevComp);
 						out << std::endl;
 					}
 				}
