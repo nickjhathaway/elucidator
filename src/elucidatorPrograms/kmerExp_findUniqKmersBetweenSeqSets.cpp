@@ -944,8 +944,10 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 					}
 				}
 				if (winnerRevComp) {
+					++readsPerSetRevCompCurrent[winnerSet];
 					pseq.seqBase_.reverseComplementRead(false, true);
 				} else {
+					++readsPerSetCurrent[winnerSet];
 					pseq.mateSeqBase_.reverseComplementRead(false, true);
 				}
 				seqOut.openWrite(winnerSet, pseq);
@@ -1033,7 +1035,10 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 					}
 				}
 				if(winnerRevComp){
+					++readsPerSetRevCompCurrent[winnerSet];
 					seq.reverseComplementRead(true, true);
+				}else{
+					++readsPerSetCurrent[winnerSet];
 				}
 				seqOut.openWrite(winnerSet, seq);
 			}
