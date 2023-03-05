@@ -1078,6 +1078,18 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 								<< "\t" << static_cast<double>(readsPerSet[setName.first]) / static_cast<double>(totalExtracted)
 								<< std::endl;
 		}
+		{
+			uint64_t totalExtracted = readsPerSet["undetermined"] + readsPerSetRevComp["undetermined"];
+			outCounts << sampleName
+								<< "\t" << totalReads
+								<< "\t" << "undetermined"
+								<< "\t" << totalExtracted
+								<< "\t" << static_cast<double>(totalExtracted) / static_cast<double>(totalReads)
+								<< "\t" << readsPerSet["undetermined"]
+								<< "\t" << static_cast<double>(readsPerSet["undetermined"]) / static_cast<double>(totalExtracted)
+								<< std::endl;
+		}
+
 	} else {
 		outCounts << "sample\ttotalReads\ttarget\tcount\tfrac";
 		outCounts << std::endl;
@@ -1087,6 +1099,14 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 								<< "\t" << setName.first
 								<< "\t" << readsPerSet[setName.first]
 								<< "\t" << static_cast<double>(readsPerSet[setName.first]) / static_cast<double>(totalReads)
+								<< std::endl;
+		}
+		{
+			outCounts << sampleName
+								<< "\t" << totalReads
+								<< "\t" << "undetermined"
+								<< "\t" << readsPerSet["undetermined"]
+								<< "\t" << static_cast<double>(readsPerSet["undetermined"]) / static_cast<double>(totalReads)
 								<< std::endl;
 		}
 	}
