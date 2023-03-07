@@ -23,7 +23,7 @@
     
 #include "seqUtilsInfoRunner.hpp"
 #include "elucidator/simulation.h"
-#include "elucidator/objects/counters/DNABaseCounter.hpp"
+#include <njhseq/objects/counters/DNABaseCounter.hpp>
 #include <njhseq/helpers.h>
 
     

@@ -26,7 +26,7 @@
 //
 
 #include "kmerExp.hpp"
-#include "elucidator/utils/KmerUtils.hpp"
+#include <njhseq/objects/kmer.h>
 #include "elucidator/objects/dataContainers.h"
 #include "elucidator/simulation.h"
 #include "elucidator/objects/seqObjects/seqKmers.h"

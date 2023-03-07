@@ -26,7 +26,7 @@
 
 #include "genExp.hpp"
 #include "elucidator/simulation.h"
-#include "elucidator/utils/KmerUtils.hpp"
+#include <njhseq/objects/kmer/KmerUtils.hpp>
 #include "elucidator/objects/BioDataObject.h"
 #include <njhseq/GenomeUtils.h>
 

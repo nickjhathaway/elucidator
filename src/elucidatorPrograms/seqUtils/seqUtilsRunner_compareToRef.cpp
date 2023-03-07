@@ -29,7 +29,7 @@
 #include "elucidator/objects/seqContainers.h"
 #include "elucidator/BamToolsUtils.h"
 #include "elucidator/objects/seqObjects/seqKmers.h"
-#include "elucidator/utils/KmerUtils.hpp"
+#include <njhseq/objects/kmer/KmerUtils.hpp>
 
 
 

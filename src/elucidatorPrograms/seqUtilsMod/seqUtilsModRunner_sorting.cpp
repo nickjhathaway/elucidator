@@ -9,7 +9,7 @@
 
 
 #include "seqUtilsModRunner.hpp"
-#include "elucidator/objects/counters/DNABaseCounter.hpp"
+#include <njhseq//objects/counters/DNABaseCounter.hpp>
 #include <njhseq/IO/SeqIO/SeqIO.hpp>
 #include <njhseq/objects/seqObjects/seqKmers.h>
 #include <njhseq/readVectorManipulation/readVectorHelpers/readVecSorter.hpp>

@@ -24,7 +24,7 @@
  *      Author: nick
  */
 
-#include "elucidator/objects/counters/DNABaseCounter.hpp"
+#include <njhseq/objects/counters/DNABaseCounter.hpp>
 
 namespace njhseq {
 

@@ -29,7 +29,7 @@
 #include "bedExp.hpp"
 #include <njhseq/objects/BioDataObject.h>
 #include "elucidator/BioRecordsUtils/BedUtility.hpp"
-#include "elucidator/objects/counters/DNABaseCounter.hpp"
+#include <njhseq/objects/counters/DNABaseCounter.hpp>
 #include <njhseq/programUtils/seqSetUp.hpp>
 #include <njhseq/concurrency/pools.h>
 #include <njhseq/BamToolsUtils.h>

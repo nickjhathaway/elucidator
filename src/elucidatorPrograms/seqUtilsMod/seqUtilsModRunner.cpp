@@ -22,7 +22,7 @@
 //
     
 #include "seqUtilsModRunner.hpp"
-#include "elucidator/objects/counters/DNABaseCounter.hpp"
+#include <njhseq/objects/counters/DNABaseCounter.hpp>
 #include <njhseq/IO/SeqIO/SeqIO.hpp>
 #include <njhseq.h>
 

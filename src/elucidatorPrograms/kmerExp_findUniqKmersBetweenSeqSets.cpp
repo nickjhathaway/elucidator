@@ -27,17 +27,15 @@
 //
 
 #include "kmerExp.hpp"
-#include "elucidator/utils/KmerUtils.hpp"
-#include "elucidator/objects/dataContainers.h"
+#include <njhseq/objects/kmer/KmerUtils.hpp>
+#include <njhseq/objects/kmer.h>
+
 #include "elucidator/simulation.h"
 #include "elucidator/objects/seqObjects/seqKmers.h"
 
 #include "elucidator/objects/MiscUtility/GenomeSeqSearch.hpp"
 
 #include <njhseq/objects/dataContainers/tables/TableReader.hpp>
-
-#include "elucidator/objects/kmerUtils.h"
-
 #include <njhseq/IO/SeqIO/MultiSeqOutCache.hpp>
 
 namespace njhseq {
@@ -826,6 +824,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	njh::stopWatch watch;
 	watch.setLapName("initial");
 	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet;
+
 	std::unordered_map<std::string, uint32_t> readsPerSet;
 	std::unordered_map<std::string, uint32_t> readsPerSetRevComp;
 	std::mutex mut;
@@ -833,6 +832,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	watch.startNewLap("reading in unique kmer table");
 	{
 		SimpleKmerHash hasher;
+
 		TableReader uniqKmers(TableIOOpts::genTabFileIn(countTable, false));
 		if(uniqKmers.header_.nCol() < 2){
 			std::stringstream ss;
@@ -857,8 +857,6 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	std::function<void()> readInComp;
 	VecStr names = getVectorOfMapKeys(uniqueKmersPerSet);
 	MultiSeqIO seqOut;
-
-
 
 	if (setUp.pars_.ioOptions_.isPairedIn()) {
 		for(const auto & name : names){
@@ -963,6 +961,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 			}
 		};
 	} else {
+
 		for(const auto & name : names){
 			auto seqOutOpts = SeqIOOptions::genFastqOutGz(njh::files::make_path(setUp.pars_.directoryName_, name) );
 			seqOut.addReader(name, seqOutOpts);

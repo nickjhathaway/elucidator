@@ -9,7 +9,7 @@
 
 
 #include "kmerExp.hpp"
-#include "elucidator/utils/KmerUtils.hpp"
+#include <njhseq/objects/kmer.h>
 #include "elucidator/objects/seqObjects/seqKmers.h"
 
 #include <njhseq/concurrency/AllByAllPairFactory.hpp>

@@ -19,7 +19,7 @@
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-#include "elucidator/objects/counters/DNABaseCounter.hpp"
+
 #include "elucidator/objects/counters/RefCounting.h"
 
 

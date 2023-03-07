@@ -4,7 +4,7 @@
 #include "elucidator/objects/MiscUtility/GenomeSeqSearch.hpp"
 #include "elucidator/objects/BioDataObject.h"
 #include <njhseq/objects/Meta.h>
-#include "elucidator/objects/kmerUtils/SimpleKmerHash.hpp"
+#include <njhseq/objects/kmer/SimpleKmerHash.hpp>
 #include <njhseq/PopulationGenetics/PopGenCalcs.hpp>
 
 namespace njhseq {

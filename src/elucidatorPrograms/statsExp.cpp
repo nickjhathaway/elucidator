@@ -26,7 +26,7 @@
 
 #include "statsExp.hpp"
 #include "elucidator/objects/BioDataObject.h"
-#include "elucidator/objects/counters/DNABaseCounter.hpp"
+#include <njhseq/objects/counters/DNABaseCounter.hpp>
 #include <njhseq/PopulationGenetics/PopGenCalcs.hpp>
 #include <njhseq/objects/dataContainers/tables/TableReader.hpp>
 

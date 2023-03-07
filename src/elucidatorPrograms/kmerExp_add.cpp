@@ -25,10 +25,9 @@
 //
 
 #include "kmerExp.hpp"
-#include "elucidator/utils/KmerUtils.hpp"
-#include "elucidator/objects/dataContainers.h"
-#include "elucidator/simulation.h"
-#include "elucidator/objects/seqObjects/seqKmers.h"
+#include <njhseq/objects/kmer/KmerUtils.hpp>
+
+#include "elucidator/objects/seqObjects/seqKmers/KmerVecUtils.hpp"
 
 #include "elucidator/objects/MiscUtility/GenomeSeqSearch.hpp"
 #include "elucidator/objects/BioDataObject.h"

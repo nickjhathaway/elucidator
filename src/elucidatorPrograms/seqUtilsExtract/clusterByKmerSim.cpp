@@ -4,7 +4,7 @@
 
 #include "seqUtilsExtractRunner.hpp"
 
-#include "elucidator/utils/KmerUtils.hpp"
+#include <njhseq/objects/kmer/KmerUtils.hpp>
 #include "elucidator/objects/seqObjects/seqKmers.h"
 #include <njhseq/IO/SeqIO.h>
 #include <njhseq/concurrency/PairwisePairFactory.hpp>

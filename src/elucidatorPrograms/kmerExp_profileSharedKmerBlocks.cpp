@@ -9,7 +9,8 @@
 
 
 #include "kmerExp.hpp"
-#include "elucidator/utils/KmerUtils.hpp"
+#include <njhseq/objects/kmer/KmerUtils.hpp>
+#include <njhseq/objects/kmer/KmersSharedBlocks.hpp>
 #include "elucidator/objects/seqObjects/seqKmers.h"
 #include <njhseq/IO/SeqIO/SeqIO.hpp>
 

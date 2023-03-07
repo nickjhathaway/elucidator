@@ -28,7 +28,7 @@
 #include "elucidator/BamToolsUtils.h"
 #include "elucidator/objects/seqContainers.h"
 #include "elucidator/objects/BioDataObject.h"
-#include "elucidator/utils/KmerUtils.hpp"
+#include <njhseq/objects/kmer/KmerUtils.hpp>
 #include "elucidator/objects/dataContainers.h"
 
 

@@ -6,7 +6,6 @@
  */
 #include "popGenExp.hpp"
 #include "elucidator/objects/BioDataObject.h"
-#include "elucidator/objects/counters/DNABaseCounter.hpp"
 #include <njhseq/PopulationGenetics.h>
 #include <njhseq/objects/seqContainers/CollapsedHaps.hpp>
 #include <njhseq/concurrency/PairwisePairFactory.hpp>
