@@ -50,6 +50,8 @@ int genExpRunner::translateSeqsBasedOnGFF(const njh::progutils::CmdArgs & inputC
 	setUp.setOption(transPars.useLastz_, "--useLastz", "Use lastz instead of bowtie2 to align sequences to the genome");
 	setUp.setOption(transPars.gffFnp_, "--gffFnp", "GFF", true);
 	setUp.setOption(transPars.lzPars_.genomeFnp, "--genomeFnp", "Genome fasta", true);
+  variantCallerRunPars.lowVariantCutOff = 0;
+  variantCallerRunPars.occurrenceCutOff = 0;
 	setUp.setOption(variantCallerRunPars.realnPars.extendAmount, "--extendAmount", "Amount to extend for re-alignment");
 	setUp.processReadInNames();
 	setUp.processDirectoryOutputName(true);
@@ -58,25 +60,28 @@ int genExpRunner::translateSeqsBasedOnGFF(const njh::progutils::CmdArgs & inputC
 
 	transPars.workingDirtory_ = setUp.pars_.directoryName_;
 	TranslatorByAlignment translator(transPars);
-	SeqInput seqReader(setUp.pars_.ioOptions_);
+  std::unordered_map<std::string, std::unordered_set<std::string>> counts;
+
+  SeqInput seqReader(setUp.pars_.ioOptions_);
 	auto input = seqReader.readAllReads<seqInfo>();
-	std::unordered_map<std::string, std::unordered_set<std::string>> counts;
-	uint32_t ongoingCount = 0;
-	for(const auto & seq : input ){
-		auto seqCount = std::ceil(seq.cnt_);
-		for(const auto count : iter::range(seqCount)){
-			std::string sample = njh::pasteAsStr("samp.", ongoingCount + count);
-			if(MetaDataInName::nameHasMetaData(seq.name_)){
-				MetaDataInName seqMeta(seq.name_);
-				if(seqMeta.containsMeta("sample")){
-					sample = seqMeta.getMeta("sample");
-				}
-			}
-			counts[seq.name_].emplace(sample);
-		}
-		ongoingCount += seqCount;
-	}
-	auto results = translator.run(setUp.pars_.ioOptions_, counts, variantCallerRunPars);
+  {
+    uint32_t ongoingCount = 0;
+    for(const auto & seq : input ){
+      auto seqCount = std::ceil(seq.cnt_);
+      for(const auto count : iter::range(seqCount)){
+        std::string sample = njh::pasteAsStr("samp.", ongoingCount + count);
+        if(MetaDataInName::nameHasMetaData(seq.name_)){
+          MetaDataInName seqMeta(seq.name_);
+          if(seqMeta.containsMeta("sample")){
+            sample = seqMeta.getMeta("sample");
+          }
+        }
+        counts[seq.name_].emplace(sample);
+      }
+      ongoingCount += seqCount;
+    }
+  }
+	auto translatedRes = translator.run(setUp.pars_.ioOptions_, counts, variantCallerRunPars);
 
 	SeqOutput writer(SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "translatedInput.fasta")));
 	SeqOutput writerAln(SeqIOOptions::genFastaOut(njh::files::make_path(setUp.pars_.directoryName_, "aln_translatedInput.fasta")));
@@ -86,8 +91,8 @@ int genExpRunner::translateSeqsBasedOnGFF(const njh::progutils::CmdArgs & inputC
 	outInfo << "seqName\ttranscript\taminoAcidStart\taminoAcidStop" << std::endl;
 	outChangesInfo << "seqName\ttranscript\taaPosition(1-based)\ttype\trefAA\tseqAA\tUID" << std::endl;
 
-	for (const auto & seqName : iter::sorted(getVectorOfMapKeys(results.translations_))) {
-		for (const auto & transcript : results.translations_.at(seqName)) {
+	for (const auto & seqName : iter::sorted(getVectorOfMapKeys(translatedRes.translations_))) {
+		for (const auto & transcript : translatedRes.translations_.at(seqName)) {
 
 			outInfo << seqName
 					<< "\t" << transcript.first
@@ -123,9 +128,35 @@ int genExpRunner::translateSeqsBasedOnGFF(const njh::progutils::CmdArgs & inputC
 		}
 	}
 
+  
+
+  OutputStream popBedLocs(njh::files::make_path(setUp.pars_.directoryName_, "inputSeqs.bed"));
+  translatedRes.writeOutSeqAlnIndvVars(njh::files::make_path(setUp.pars_.directoryName_, "variantsPerSeqAln.tab.txt.gz"));
+  translatedRes.writeSeqLocations(popBedLocs);
+
+  std::unordered_map<std::string, std::set<uint32_t>> knownAAMutsChromPositions;
+
+  OutputStream seqsUnableToBeMappedOut(njh::files::make_path(setUp.pars_.directoryName_, "seqsUnableToBeMapped.txt"));
+  seqsUnableToBeMappedOut << njh::conToStr(translatedRes.seqsUnableToBeMapped_, "\n") << std::endl;
+  OutputStream seqsTranslationFilteredOut(njh::files::make_path(setUp.pars_.directoryName_, "seqsTranslationFiltered.txt"));
+  seqsTranslationFilteredOut << njh::conToStr(translatedRes.seqsTranslationFiltered_, "\n") << std::endl;
+
+//  std::cout << "translatedRes.translations_.size(): " << translatedRes.translations_.size() << std::endl;
+  if(!translatedRes.translations_.empty()) {
+    SeqOutput transwriter(
+        SeqIOOptions::genFastaOutGz(njh::files::make_path(setUp.pars_.directoryName_, "translatedInput.fasta.gz")));
+    auto seqNames = njh::getVecOfMapKeys(translatedRes.translations_);
+    njh::sort(seqNames);
+    for(const auto & seqName : seqNames) {
+      for (const auto &transcript: translatedRes.translations_.at(seqName)) {
+        transwriter.openWrite(transcript.second.translation_);
+      }
+    }
+  }
+
 	OutputStream variantCalls(njh::files::make_path(setUp.pars_.directoryName_, "varCalls.vcf"));
 
-	for(const auto & seqVar : results.seqVariants_){
+	for(const auto & seqVar : translatedRes.seqVariants_){
 		seqVar.second.writeVCF(variantCalls);
 	}
 

@@ -126,15 +126,15 @@ int pacbioExpRunner::simPacbioPerRead(const njh::progutils::CmdArgs & inputComma
 		}
 	}
 
-	std::unordered_map<char, njh::randObjectGen<char, uint32_t>> charGen;
-	charGen.emplace('T', njh::randObjectGen<char, uint32_t>(std::vector<char>{'A', 'C', 'G', 'T'},
-			std::vector<uint32_t>{baseCounting.chars_['A'],baseCounting.chars_['C'],baseCounting.chars_['G'], baseCounting.chars_['T']*5}));
-	charGen.emplace('C', njh::randObjectGen<char, uint32_t>(std::vector<char>{'A', 'C', 'G', 'T'},
-			std::vector<uint32_t>{baseCounting.chars_['A'],baseCounting.chars_['C']*5,baseCounting.chars_['G'], baseCounting.chars_['T']}));
-	charGen.emplace('G', njh::randObjectGen<char, uint32_t>(std::vector<char>{'A', 'C', 'G', 'T'},
-			std::vector<uint32_t>{baseCounting.chars_['A'],baseCounting.chars_['C'],baseCounting.chars_['G']*5, baseCounting.chars_['T']}));
-	charGen.emplace('A', njh::randObjectGen<char, uint32_t>(std::vector<char>{'A', 'C', 'G', 'T'},
-			std::vector<uint32_t>{baseCounting.chars_['A']*5,baseCounting.chars_['C'],baseCounting.chars_['G'], baseCounting.chars_['T']}));
+	std::unordered_map<char, njh::randObjectGen<char, double>> charGen;
+	charGen.emplace('T', njh::randObjectGen<char, double>(std::vector<char>{'A', 'C', 'G', 'T'},
+			std::vector<double>{baseCounting.chars_['A'],baseCounting.chars_['C'],baseCounting.chars_['G'], baseCounting.chars_['T']*5}));
+	charGen.emplace('C', njh::randObjectGen<char, double>(std::vector<char>{'A', 'C', 'G', 'T'},
+			std::vector<double>{baseCounting.chars_['A'],baseCounting.chars_['C']*5,baseCounting.chars_['G'], baseCounting.chars_['T']}));
+	charGen.emplace('G', njh::randObjectGen<char, double>(std::vector<char>{'A', 'C', 'G', 'T'},
+			std::vector<double>{baseCounting.chars_['A'],baseCounting.chars_['C'],baseCounting.chars_['G']*5, baseCounting.chars_['T']}));
+	charGen.emplace('A', njh::randObjectGen<char, double>(std::vector<char>{'A', 'C', 'G', 'T'},
+			std::vector<double>{baseCounting.chars_['A']*5,baseCounting.chars_['C'],baseCounting.chars_['G'], baseCounting.chars_['T']}));
 	//set up insertion size distribution
 	table insertionSizeLikelihoodTab(insertionSizeLikelihoodsFnp.string(), "\t", true);
 	auto insertionSizeSplits = insertionSizeLikelihoodTab.splitTableOnColumn("rounds");

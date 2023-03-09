@@ -56,11 +56,59 @@ seqUtilsRunner::seqUtilsRunner()
 
 
 
+template<typename T>
+cluster getConsensusWithAReCalc(const std::vector<T> & reads, aligner & alignerObj,
+                                const std::string & name){
+  if(reads.empty()){
+    return {};
+  }
+  cluster mainCluster(getSeqBase(*reads.begin()));
+  if(reads.size() > 1){
+    std::vector<cluster> inClusters;
+    for(const auto readPos : iter::range<uint64_t>(1,reads.size())){
+      inClusters.emplace_back(cluster(getSeqBase(reads[readPos])));
+    }
+    for(const auto & clus : inClusters){
+      mainCluster.addRead(clus);
+    }
+  }
 
+//	mainCluster.calculateConsensus(alignerObj, true);
+//	//once a consensus has been built, build again against the built consensus
+//	mainCluster.needToCalculateConsensus_ = true;
+  baseCluster::calculateConsensusPars conPars(true);
+  conPars.convergeAttempts = 20;
+  conPars.convergeConsensus = true;
+  mainCluster.calculateConsensus(alignerObj, conPars);
+  mainCluster.setName(name);
+  return mainCluster;
+}
 
 
 
 int seqUtilsRunner::createConsensus(const njh::progutils::CmdArgs & inputCommands) {
+  seqSetUp setUp(inputCommands);
+  setUp.pars_.colOpts_.alignOpts_.countEndGaps_ = false;
+  setUp.pars_.gapLeft_ = "0,0";
+  setUp.pars_.gapRight_ = "0,0";
+  setUp.pars_.gap_ = "5,1";
+  setUp.pars_.gapInfo_ = gapScoringParameters(5,1,0,0,0,0);
+  setUp.processAlignerDefualts();
+  setUp.processDefaultReader(true);
+  setUp.finishSetUp(std::cout);
+
+
+  auto reads = SeqInput::getSeqVec<seqInfo>(setUp.pars_.ioOptions_);
+  aligner alignerObj = aligner(readVec::getMaxLength(reads) * 2, setUp.pars_.gapInfo_,
+                               substituteMatrix(setUp.pars_.generalMatch_, setUp.pars_.generalMismatch_), KmerMaps(),
+                               setUp.pars_.qScorePars_,setUp.pars_.colOpts_.alignOpts_.countEndGaps_,
+                               setUp.pars_.colOpts_.iTOpts_.weighHomopolyer_);
+  auto output = getConsensusWithAReCalc(reads, alignerObj, bfs::basename(setUp.pars_.ioOptions_.firstName_));
+  output.seqBase_.outPutFastq(std::cout);
+  return 0;
+}
+
+int old_createConsensus(const njh::progutils::CmdArgs & inputCommands) {
 	seqSetUp setUp(inputCommands);
 	setUp.processAlignerDefualts();
 	std::string filename = "";
@@ -70,10 +118,7 @@ int seqUtilsRunner::createConsensus(const njh::progutils::CmdArgs & inputCommand
 	setUp.setOption(random, "-random", "randomSeqs");
 	setUp.setOption(filename, "-file", "filename");
 	setUp.finishSetUp(std::cout);
-	aligner alignerObj = aligner(200, setUp.pars_.gapInfo_,
-			substituteMatrix(setUp.pars_.generalMatch_, setUp.pars_.generalMismatch_), KmerMaps(),
-			setUp.pars_.qScorePars_,setUp.pars_.colOpts_.alignOpts_.countEndGaps_,
-			setUp.pars_.colOpts_.iTOpts_.weighHomopolyer_);
+
 	std::vector<VecStr> randomStrs(runTimes);
 	VecStr strs;
 	if(random){
@@ -107,6 +152,10 @@ int seqUtilsRunner::createConsensus(const njh::progutils::CmdArgs & inputCommand
 		  	mainCluster.addRead(clus);
 		  	mainClusterNew.addRead(clus);
 		  }
+      aligner alignerObj = aligner(readVec::getMaxLength(mainCluster.reads_), setUp.pars_.gapInfo_,
+                                   substituteMatrix(setUp.pars_.generalMatch_, setUp.pars_.generalMismatch_), KmerMaps(),
+                                   setUp.pars_.qScorePars_,setUp.pars_.colOpts_.alignOpts_.countEndGaps_,
+                                   setUp.pars_.colOpts_.iTOpts_.weighHomopolyer_);
 		  mainCluster.calculateConsensus(alignerObj, true);
 		  std::cout << convertBoolToString(mainCluster.seqBase_.seq_ == mainClusterNew.seqBase_.seq_) << std::endl;;
 		  if(mainCluster.seqBase_.seq_ != mainClusterNew.seqBase_.seq_){
@@ -141,7 +190,14 @@ int seqUtilsRunner::createConsensus(const njh::progutils::CmdArgs & inputCommand
 	  for(const auto & clus : inClusters){
 	  	mainCluster.addRead(clus);
 	  }
+    std::cout << __PRETTY_FUNCTION__  << " " << __LINE__ << std::endl;
+    aligner alignerObj = aligner(readVec::getMaxLength(mainCluster.reads_) * 2, setUp.pars_.gapInfo_,
+                                 substituteMatrix(setUp.pars_.generalMatch_, setUp.pars_.generalMismatch_), KmerMaps(),
+                                 setUp.pars_.qScorePars_,setUp.pars_.colOpts_.alignOpts_.countEndGaps_,
+                                 setUp.pars_.colOpts_.iTOpts_.weighHomopolyer_);
+    std::cout << __PRETTY_FUNCTION__  << " " << __LINE__ << std::endl;
 	  mainCluster.calculateConsensus(alignerObj, true);
+    std::cout << __PRETTY_FUNCTION__  << " " << __LINE__ << std::endl;
 	  std::cout << mainCluster.seqBase_.cnt_ << std::endl;
 	  std::cout << mainCluster.seqBase_.seq_ << std::endl;
 	}
