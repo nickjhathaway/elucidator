@@ -33,6 +33,7 @@
 
 
 #include <njhseq/objects/Meta.h>
+#include <njhseq/objects/dataContainers/graphs/ReadCompGraph.hpp>
 
 namespace njhseq {
 

@@ -36,6 +36,7 @@
 #include <njhseq/objects/dataContainers/tables/TableReader.hpp>
 
 #include <TwoBit.h>
+#include <njhseq/objects/dataContainers/graphs/readDistGraph.hpp>
 
 
 

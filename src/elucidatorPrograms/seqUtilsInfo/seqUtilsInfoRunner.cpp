@@ -25,8 +25,10 @@
 #include "elucidator/simulation.h"
 #include <njhseq/objects/counters/DNABaseCounter.hpp>
 #include <njhseq/helpers.h>
+#include <njhseq/objects/dataContainers/graphs/readDistGraph.hpp>
+#include <njhseq/objects/dataContainers/graphs/ReadCompGraph.hpp>
 
-    
+
 namespace njhseq {
 
 seqUtilsInfoRunner::seqUtilsInfoRunner()

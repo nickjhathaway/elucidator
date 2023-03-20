@@ -26,13 +26,14 @@
 
 #include "kmerExp.hpp"
 #include <njhseq/objects/kmer/KmerUtils.hpp>
-
+#include <njhseq/helpers.h>
+#include <njhseq/concurrency/pools/AlignerPool.hpp>
 #include "elucidator/objects/seqObjects/seqKmers/KmerVecUtils.hpp"
 
 #include "elucidator/objects/MiscUtility/GenomeSeqSearch.hpp"
 #include "elucidator/objects/BioDataObject.h"
 
-#include <njhseq/helpers.h>
+
 
 namespace njhseq {
 

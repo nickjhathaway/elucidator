@@ -28,6 +28,7 @@
 
 #include <njhseq/IO/SeqIO/SeqIO.hpp>
 #include <njhseq/objects/seqObjects/seqKmers.h>
+#include <njhseq/objects/dataContainers/graphs/UndirWeightedGraph.hpp>
 
 
 namespace njhseq {
