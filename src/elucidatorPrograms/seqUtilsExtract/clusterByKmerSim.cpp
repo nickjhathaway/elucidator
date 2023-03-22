@@ -8,7 +8,6 @@
 #include "elucidator/objects/seqObjects/seqKmers.h"
 #include <njhseq/IO/SeqIO.h>
 #include <njhseq/concurrency/PairwisePairFactory.hpp>
-#include <njhseq/concurrency/AllByAllPairFactory.hpp>
 
 #undef BOOST_HAS_THREADS
 #include <boost/math/statistics/t_test.hpp>
@@ -93,10 +92,13 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
+
+	setUp.processReadInNames(true);
+  setUp.setOption(numThreads, "--numThreads", "numThreads");
+
+  setUp.setOption(useHDBS, "--useHDBS", "useHDBS");
   hdbScanPars.verbose = setUp.pars_.verbose_;
   hdbScanPars.debug = setUp.pars_.debug_;
-	setUp.processReadInNames(true);
-
 	setUp.setOption(hdbScanPars.HDBSredetermineMaxEps, "--HDBSredetermineMaxEps", "HDBS redetermine Max Eps allowed in initial step based by setting it equal to mean of the non-same-group dist minus 2sd");
 	bool doNotCountZeroNeighbors = false;
 	setUp.setOption(doNotCountZeroNeighbors, "--HDBSdoNotCountZeroNeighbors", "HDBS when doing j-th nearest neighbor do Not Count Zero Neighbors");
@@ -104,11 +106,8 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 	setUp.setOption(hdbScanPars.HDBSmaxInitialEps, "--HDBSmaxInitialEps", "HDBS a hard cut off for max Initial Eps for initial DBSCAN step in H-DBSCAN");
 	setUp.setOption(hdbScanPars.proposedClusters, "--HDBSproposedClusters", "HDBS proposed number of clusters");
 	setUp.setOption(hdbScanPars.HDBSCountSingletGroups, "--HDBSCountSingletGroups", "For HD DBscan count Singlet Groups, by default these are not included in towards the proposed group counts");
-
-	setUp.setOption(numThreads, "--numThreads", "numThreads");
   hdbScanPars.numThreads = numThreads;
 	setUp.setOption(kmerLength, "--kmerLength", "kmer Length");
-	setUp.setOption(useHDBS, "--useHDBS", "useHDBS");
 
 	setUp.setOption(dbPars_.eps_, "--epsilon", "min distance for connecting neighbors");
 	setUp.setOption(dbPars_.minEpNeighbors_, "--minEpNeighbors", "min epsilon neighbors");
