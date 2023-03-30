@@ -25,13 +25,12 @@ namespace njhseq {
 
 int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & inputCommands) {
 
-	/**@todo should add the following 1) average pairwise difference, 2) make into a function, 3) generate connected hap map, 4) unique haps to region count, 5) doing multiple pop fields at once */
 	bfs::path genomeFnp = "";
   TranslatorByAlignment::RunPars variantCallerRunPars;
   CollapsedHaps::GenPopMeasuresPar calcPopMeasuresPars;
 
 
-	std::string identifier = "";
+	std::string identifier;
 	variantCallerRunPars.lowVariantCutOff = 0.005;
 	variantCallerRunPars.occurrenceCutOff = 1;
 
@@ -160,7 +159,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 	}
 	//read in meta if available
 	std::unique_ptr<MultipleGroupMetaData> meta;
-	if("" != metaFnp){
+	if(!metaFnp.empty()){
 		meta = std::make_unique<MultipleGroupMetaData>(metaFnp);
 	}
 

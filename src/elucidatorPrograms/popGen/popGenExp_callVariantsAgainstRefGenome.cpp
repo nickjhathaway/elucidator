@@ -29,9 +29,6 @@ namespace njhseq {
 
 int popGenExpRunner::callVariantsAgainstRefGenome(const njh::progutils::CmdArgs & inputCommands) {
 
-	/**@todo should add the following  2) make into a function, 3) generate connected hap map, 4) unique haps to region count, 5) doing multiple pop fields at once */
-
-
 	bool noDiagAlnPairwiseComps = false;
 	CollapseAndCallVariantsPars pars;
 
