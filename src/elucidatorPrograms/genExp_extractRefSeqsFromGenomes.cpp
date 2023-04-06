@@ -107,26 +107,34 @@ int genExpRunner::bioIndexGenome(const njh::progutils::CmdArgs & inputCommands){
 	}else	if(setUp.pars_.verbose_){
 		std::cerr << "Couldn't find " << "picard" << " skipping picard CreateSequenceDictionary" << std::endl;
 	}
+
+  if(njh::sys::hasSysCommand("makeblastdb")) {
+    programs.emplace_back("makeblastdb");
+  } else {
+    std::cerr << "Couldn't find " << "makeblastdb" << " skipping makeblastdb" << std::endl;
+  }
 	programs.emplace_back("TwoBit");
 
 	njh::concurrent::LockableQueue<std::string> programsQueue(programs);
 
 	std::function<void()> runIndex = [&programsQueue, &setUp, &genomeFnp](){
 	  BioCmdsUtils bioRunner(setUp.pars_.verbose_);
-	  std::string program = "";
-	  while(programsQueue.getVal(program)){
-	  	if("bowtie2" == program){
-	  		bioRunner.RunBowtie2Index(genomeFnp);
-	  	}else if("bwa" == program){
-	  		bioRunner.RunBwaIndex(genomeFnp);
-	  	}else if("samtools" == program){
-	  		bioRunner.RunSamtoolsFastaIndex(genomeFnp);
-	  	}else if("picard" == program){
-	  		bioRunner.RunPicardFastaSeqDict(genomeFnp);
-	  	}else if("TwoBit" == program){
-	  		bioRunner.RunFaToTwoBit(genomeFnp);
-	  	}
-	  }
+	  std::string program;
+    while (programsQueue.getVal(program)) {
+      if ("bowtie2" == program) {
+        bioRunner.RunBowtie2Index(genomeFnp);
+      } else if ("bwa" == program) {
+        bioRunner.RunBwaIndex(genomeFnp);
+      } else if ("samtools" == program) {
+        bioRunner.RunSamtoolsFastaIndex(genomeFnp);
+      } else if ("picard" == program) {
+        bioRunner.RunPicardFastaSeqDict(genomeFnp);
+      } else if ("TwoBit" == program) {
+        bioRunner.RunFaToTwoBit(genomeFnp);
+      } else if ("makeblastdb" == program) {
+        bioRunner.RunMakeblastdb(genomeFnp);
+      }
+    }
 	};
 	njh::concurrent::runVoidFunctionThreaded(runIndex, numThreads);
 
