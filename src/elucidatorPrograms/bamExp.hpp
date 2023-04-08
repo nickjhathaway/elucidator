@@ -56,6 +56,7 @@ class bamExpRunner : public njh::progutils::ProgramRunner {
 
 
 
+  static int getMateMapLocationForRegion(const njh::progutils::CmdArgs & inputCommands);
 
 	static int getMateMapStatus(const njh::progutils::CmdArgs & inputCommands);
 	static int getInsertSizeChanges(const njh::progutils::CmdArgs & inputCommands);

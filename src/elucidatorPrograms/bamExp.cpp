@@ -94,6 +94,7 @@ bamExpRunner::bamExpRunner()
 					 addFunc("bamCov", bamCov, false),
 					 addFunc("BamFilterByChromsToBam", BamFilterByChromsToBam, false),
 					 addFunc("BamGetSpanningReadsForRegionLongReads", BamGetSpanningReadsForRegionLongReads, false),
+           addFunc("getMateMapLocationForRegion", getMateMapLocationForRegion, false),
           },//
 
 				"bamExp") {

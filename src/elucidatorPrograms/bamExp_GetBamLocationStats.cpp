@@ -60,6 +60,7 @@ int bamExpRunner::GetBamLocationStats(const njh::progutils::CmdArgs & inputComma
 		ss << __PRETTY_FUNCTION__ << ", error should have at least 1 record in " << bedFnp << "\n";
 		throw std::runtime_error{ss.str()};
 	}
+
 	GenomicRegion region(record);
 	setBamFileRegionThrow(bReader, region);
 	BamTools::BamAlignment bAln;
