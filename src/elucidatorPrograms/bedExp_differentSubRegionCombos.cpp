@@ -21,6 +21,103 @@ namespace njhseq {
 
 
 
+
+
+int bedExpRunner::createBedRegionFromName(const njh::progutils::CmdArgs & inputCommands) {
+
+  std::string patStr;
+  VecStr names;
+	OutOptions outOpts;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.setOption(names, "--names,--name", "names", true);
+  setUp.setOption(patStr, "--patStr", "Pattern to match name, needs to have 3 sub matches in regex, 1) chrom, 2) start, 3) end, optional 4) can be strand (options +,for,-,rev");
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+  OutputStream out(outOpts);
+
+  if (patStr.empty()) {
+    std::regex firstAttempt{R"((\w+)-(\d+)-(\d+)-(\w+))"};
+    std::regex secondAttempt{R"((\w+)-(\d+)-(\d+))"};
+    for(const auto & name : names){
+      std::smatch matches;
+      if (regex_search(name, matches, firstAttempt)) {
+        std::string chrom = matches[1].str(); // chrom
+        uint32_t start = njh::StrToNumConverter::stoToNum<uint32_t>(matches[2].str()); // start
+        uint32_t end = njh::StrToNumConverter::stoToNum<uint32_t>(matches[3].str()); // end
+        std::string strandInput = matches[4].str(); // strand
+        char strand;
+        if(njh::in(strandInput, VecStr{"for", "+"})){
+          strand = '+';
+        }else if(njh::in(strandInput, VecStr{"rev", "-"})){
+          strand = '-';
+        }else{
+          std::stringstream ss;
+          ss << __PRETTY_FUNCTION__ << ", error " << "unrecognized strand input: " << strandInput << "\n";
+          ss << "can be for, +, rev, or -\n";
+          throw std::runtime_error { ss.str() };
+        }
+        uint32_t len = end - start;
+        out << Bed6RecordCore(chrom, start, end, name, len, strand).toDelimStrWithExtra() << std::endl;
+      } else if (regex_search(name, matches, secondAttempt)) {
+        std::string chrom = matches[1].str(); // chrom
+        uint32_t start = njh::StrToNumConverter::stoToNum<uint32_t>(matches[2].str()); // start
+        uint32_t end = njh::StrToNumConverter::stoToNum<uint32_t>(matches[3].str()); // end
+        char strand = '+';
+        uint32_t len = end - start;
+        out << Bed6RecordCore(chrom, start, end, name, len, strand).toDelimStrWithExtra() << std::endl;
+      }else{
+        std::stringstream ss;
+        ss << __PRETTY_FUNCTION__ << ", error " << "name: " << name << ", didn't match the default record names" << "\n";
+        ss << "patterns search for: " << R"((\w+)-(\d+)-(\d+)-(\w+))" << R"((\w+)-(\d+)-(\d+))" << std::endl;
+        throw std::runtime_error { ss.str() };
+      }
+    }
+  } else {
+    std::regex firstAttempt{patStr};
+    if(firstAttempt.mark_count() != 3 || firstAttempt.mark_count() == 4){
+      std::stringstream ss;
+      ss << __PRETTY_FUNCTION__ << ", error " << "input pattern to search for should be 3 or 4, not: " << firstAttempt.mark_count() << "\n";
+      throw std::runtime_error { ss.str() };
+    }
+    for(const auto & name : names){
+      std::smatch matches;
+      if (regex_search(name, matches, firstAttempt)) {
+        std::string chrom = matches[1].str(); // chrom
+        uint32_t start = njh::StrToNumConverter::stoToNum<uint32_t>(matches[2].str()); // start
+        uint32_t end = njh::StrToNumConverter::stoToNum<uint32_t>(matches[3].str()); // end
+        char strand = '+';
+        if(4 == firstAttempt.mark_count() ){
+          std::string strandInput = matches[4].str(); // strand
+
+          if(njh::in(strandInput, VecStr{"for", "+"})){
+            strand = '+';
+          }else if(njh::in(strandInput, VecStr{"rev", "-"})){
+            strand = '-';
+          }else{
+            std::stringstream ss;
+            ss << __PRETTY_FUNCTION__ << ", error " << "unrecognized strand input: " << strandInput << "\n";
+            ss << "can be for, +, rev, or -\n";
+            throw std::runtime_error { ss.str() };
+          }
+        }
+        uint32_t len = end - start;
+        out << Bed6RecordCore(chrom, start, end, name, len, strand).toDelimStrWithExtra() << std::endl;
+      } else {
+        std::stringstream ss;
+        ss << __PRETTY_FUNCTION__ << ", error " << "name: " << name << ", didn't match the default record names" << "\n";
+        ss << "patterns search for: " << R"((\w+)-(\d+)-(\d+)-(\w+))" << R"((\w+)-(\d+)-(\d+))" << std::endl;
+        throw std::runtime_error { ss.str() };
+      }
+    }
+  }
+
+
+  return 0;
+}
+
 int bedExpRunner::differentSubRegionCombos(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile;
 	bfs::path genomeFnp;

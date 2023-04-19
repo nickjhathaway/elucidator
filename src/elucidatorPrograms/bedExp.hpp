@@ -139,6 +139,7 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	static int fastaToBed(const njh::progutils::CmdArgs & inputCommands);
 	static int differentSubRegionCombos(const njh::progutils::CmdArgs & inputCommands);
 
+  static int createBedRegionFromName(const njh::progutils::CmdArgs & inputCommands);
 };
 } /* namespace njhseq */
 
