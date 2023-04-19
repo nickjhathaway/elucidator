@@ -579,10 +579,11 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path logDir = "";
 	bool force = false;
 	uint32_t numThreads = 1;
-	std::string sampName = "";
+	std::string sampName;
 	bool removeIntermediateFiles = false;
 	bfs::path genomeFnp = "";
-	std::string extraBwaArgs = "";
+	std::string extraBwaArgs;
+	std::string extraSamtoolsSortArgs;
 	bfs::path outputFnp = "";
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -598,6 +599,8 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 	setUp.setOption(force, "--force", "force run even if file already exists");
 	setUp.setOption(outputFnp, "--outputFnp", "output name, will default to sampName.sorted.bam");
 	setUp.setOption(extraBwaArgs, "--extraBwaArgs", "extra bwa arguments");
+	setUp.setOption(extraSamtoolsSortArgs, "--extraSamtoolsSortArgs", "extra samtools sort arguments");
+
 	setUp.setOption(numThreads, "--numThreads", "Number of threads");
 	setUp.setOption(outputDir, "--outputDir", "output directory");
 	setUp.setOption(removeIntermediateFiles, "--removeIntermediateFiles", "remove the intermediate bam files and just keep the ");
@@ -643,7 +646,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 	if(useSambamba){
 		singlesCmd << " | sambamba view -S /dev/stdin -o /dev/stdout -f bam | sambamba sort -t " << numThreads << " -o " << singlesSortedBam << " /dev/stdin";
 	}else{
-		singlesCmd << " | samtools sort -@ " << numThreads << " -o " << singlesSortedBam;
+		singlesCmd << " | samtools sort " << extraSamtoolsSortArgs << " -@ " << numThreads << " -o " << singlesSortedBam;
 	}
 
 	std::stringstream pairedCmd;
@@ -663,7 +666,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 		pairedCmd << " | sambamba view -S /dev/stdin -o /dev/stdout -f bam | sambamba sort -t " << numThreads << " -o " << pairedSortedBam << " /dev/stdin";
 
 	} else {
-		pairedCmd << " | samtools sort -@ " << numThreads << " -o "
+		pairedCmd << " | samtools sort " << extraSamtoolsSortArgs << " -@ " << numThreads << " -o "
 				<< pairedSortedBam;
 	}
 
@@ -747,10 +750,11 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSinglesCombined(const njh:
 	bfs::path trimStub = "";
 	bool force = false;
 	uint32_t numThreads = 1;
-	std::string sampName = "";
+	std::string sampName;
 	bool removeIntermediateFiles = false;
 	bfs::path genomeFnp = "";
-	std::string extraBwaArgs = "";
+	std::string extraBwaArgs;
+	std::string extraSamtoolsSortArgs;
 	bfs::path outputFnp = "";
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -761,6 +765,8 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSinglesCombined(const njh:
 	setUp.setOption(force, "--force", "force run even if file already exists");
 	setUp.setOption(outputFnp, "--outputFnp", "output name, will default to sampName.sorted.bam");
 	setUp.setOption(extraBwaArgs, "--extraBwaArgs", "extra bwa arguments");
+	setUp.setOption(extraSamtoolsSortArgs, "--extraSamtoolsSortArgs", "extra samtools sort arguments");
+
 	setUp.setOption(numThreads, "--numThreads", "Number of threads");
 	setUp.setOption(outputDir, "--outputDir", "output directory");
 	setUp.setOption(removeIntermediateFiles, "--removeIntermediateFiles", "remove the intermediate bam files and just keep the ");
@@ -819,7 +825,7 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSinglesCombined(const njh:
 			<< " "   << genomeFnp
 			<< " "   << inputSingles
 			<< " 2> " << bfs::path(singlesSortedBam.string() + ".bwa.log")
-			<< " | samtools sort -@ " << numThreads << " -o " << singlesSortedBam;
+			<< " | samtools sort " << extraSamtoolsSortArgs << " -@ " << numThreads << " -o " << singlesSortedBam;
 
 	std::stringstream pairedCmd;
 	pairedCmd << "bwa mem  -M -t " << numThreads
@@ -830,7 +836,7 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSinglesCombined(const njh:
 			<< " " << inputPairedFirstMates
 			<< " " << inputPairedSecondMates
 			<< " 2> " << bfs::path(pairedSortedBam.string() + ".bwa.log")
-			<< " | samtools sort -@ " << numThreads << " -o " << pairedSortedBam;
+			<< " | samtools sort " << extraSamtoolsSortArgs << " -@ " << numThreads << " -o " << pairedSortedBam;
 
 
 	std::stringstream bamtoolsMergeAndIndexCmd;
