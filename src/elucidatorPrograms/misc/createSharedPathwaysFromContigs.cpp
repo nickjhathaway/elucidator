@@ -1927,6 +1927,18 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 				}
 //				std::cout << __FILE__ << " " << __LINE__ << std::endl;
 				//middle
+//				std::cout << "processedNodes.nameToSubSegPositions_raw.at(refSeq.name_).size() : " << processedNodes.nameToSubSegPositions_raw.at(refSeq.name_).size() << std::endl;
+//				std::cout << "processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size(): " << processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() << std::endl;
+//
+//				if(processedNodes.nameToSubSegPositions_raw.at(refSeq.name_).size() > 1){
+//					for(auto pos : iter::range(processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() - 1)){
+//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//						std::cout << "rawstart: " << processedNodes.nameToSubSegPositions_raw.at(refSeq.name_)[pos].chromEnd_ << std::endl;
+//						std::cout << "rawend: " << processedNodes.nameToSubSegPositions_raw.at(refSeq.name_)[pos + 1].chromStart_ << std::endl;
+//						std::cout << "rawlen: " << processedNodes.nameToSubSegPositions_raw.at(refSeq.name_)[pos + 1].chromStart_ - processedNodes.nameToSubSegPositions_raw.at(refSeq.name_)[pos].chromEnd_ << std::endl;
+//					}
+//				}
+
 				if(processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() > 1){
 //					std::cout << "processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size(): " << processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() << std::endl;
 //					std::cout << "processedNodes.nameToSubSegPositions_raw.at(refSeq.name_).size(): " << processedNodes.nameToSubSegPositions_raw.at(refSeq.name_).size() << std::endl;
@@ -1940,6 +1952,9 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 //						std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //						std::cout << "start: " << start << std::endl;
 //						std::cout << "end: " << end << std::endl;
+//						std::cout << "len " << end - start << std::endl;
+
+
 
 
 						if(end <= start){
