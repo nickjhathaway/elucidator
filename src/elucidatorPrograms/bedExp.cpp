@@ -112,8 +112,13 @@ bedExpRunner::bedExpRunner()
 					 addFunc("bedGetOverlappingRegionsFromPanels", bedGetOverlappingRegionsFromPanels, false),
 					 addFunc("bedAddRegionsNonCompletelyInOther", bedAddRegionsNonCompletelyInOther, false),
 					 addFunc("bedBinCloseRegions", bedBinCloseRegions, false),
+           addFunc("createBedRegionFromName", createBedRegionFromName, false),
            },//
           "bedExp") {}
+
+
+
+
 
 int bedExpRunner::bedRemoveOveringLappingRegions(const njh::progutils::CmdArgs & inputCommands) {
 
