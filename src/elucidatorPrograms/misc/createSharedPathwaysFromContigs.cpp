@@ -946,17 +946,25 @@ GenomicRegion determineRefSeqLocation(const seqInfo & refSeq,
 
 
 std::string plottingRmdTemplate = R"(---
-title: "Plotting segments"
+title: "Plotting Subsegments"
 author: "Nicholas Hathaway"
-output:
- html_document:
-   highlight: textmate
-   theme: flatly
-   code_folding: hide
-   toc: yes
-   toc_float: yes
-   fig_width: 12
-   fig_height : 8
+format:
+  html:
+    theme: cosmo
+    fig-height: 10
+    fig-width: 15
+    fig-align: center
+    toc: true
+    toc-depth: 4 # default is 3
+    toc-title: Contents
+    number-sections: true
+    anchor-sections: true
+    smooth-scroll: true
+    highlight-style: textmate
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code-link: true
 ---
 
 
@@ -967,7 +975,7 @@ require(tidyverse)
 require(stringr)
 require(dbscan)
 require(ape)
-require(rwantshue) 
+require(rwantshue)
 require(tsne)
 require(ggforce)
 require(GGally)
@@ -978,11 +986,11 @@ require(HaplotypeRainbows)
 require(ggtree)
 #turn off messages and warnings and make it so output isn't prefixed by anything,
 #default is to put "##" in front of all output for some reason
-#also set tidy to true so code is wrapped properly 
+#also set tidy to true so code is wrapped properly
 opts_chunk$set(message=FALSE, warning=FALSE, comment = "", cache = F)
 options(width = 200)
 
-scheme <- iwanthue(seed = 42, force_init = TRUE) 
+scheme <- iwanthue(seed = 42, force_init = TRUE)
 
 myFormula= x~y
 library(ggpmisc)
@@ -990,16 +998,44 @@ library(ggpmisc)
 
 sofonias_theme = theme_bw() +
   theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank() )+
-  theme(axis.line.x = element_line(color="black", size = 0.3),axis.line.y =
-          element_line(color="black", size = 0.3))+
+  theme(axis.line.x = element_line(color="black", linewidth = 0.3),axis.line.y =
+          element_line(color="black", linewidth = 0.3))+
   theme(text=element_text(size=12, family="Helvetica"))+
   theme(axis.text.y = element_text(size=12))+
   theme(axis.text.x = element_text(size=12)) +
-   theme(legend.position = "bottom") + 
+   theme(legend.position = "bottom") +
    theme(plot.title = element_text(hjust = 0.5))
 
-sofonias_theme_xRotate = sofonias_theme + 
-  theme(axis.text.x = element_text(size=12, angle = -90, vjust = 0.5, hjust = 0)) 
+sofonias_theme_xRotate = sofonias_theme +
+  theme(axis.text.x = element_text(size=12, angle = -90, vjust = 0.5, hjust = 0))
+create_dt <- function(x){
+  DT::datatable(x,
+                extensions = 'Buttons',
+                options = list(dom = 'Blfrtip',
+                               buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+                               lengthMenu = list(c(10,25,50,-1),
+                                                 c(10,25,50,"All"))),
+                filter = "top")
+}
+colorPalette_08 = c("#2271B2","#F748A5","#359B73","#F0E442","#D55E00","#3DB7E9","#E69F00","#000000")
+colorPalette_12 = c("#E20134","#FF6E3A","#008DF9","#8400CD","#FFC33B","#9F0162","#009F81","#FF5AAF","#00FCCF","#00C2F9","#FFB2FD","#A40122")
+colorPalette_15 = c("#F60239","#003C86","#EF0096","#9400E6","#009FFA","#008169","#68023F","#00DCB5","#FFCFE2","#FF71FD","#7CFFFA","#6A0213","#008607","#00E307","#FFDC3D")
+
+createColorListFromDf <- function(df, colorPalette = colorPalette_12, iwanthudSeed = rnorm(1) * 100){
+  colorList = list()
+  for (dfColname in colnames(df)) {
+    levels = sort(unique(df[[dfColname]]))
+    scheme <- iwanthue(seed = iwanthudSeed, force_init = TRUE)
+    if (length(levels) <= length(colorPalette_12)) {
+      levelsCols = colorPalette_12[1:length(levels)]
+    } else{
+      levelsCols = scheme$hex(length(levels))
+    }
+    names(levelsCols) = levels
+    colorList[[dfColname]] = levelsCols
+  }
+  return(colorList)
+}
 ```
 <style type="text/css">
 div.main-container {
@@ -1017,11 +1053,11 @@ runOutput = read_lines(runLogs[1])
 cat(runOutput, sep = "\n")
 ```
 
-Takes called haplotypes and analyzes for conserved sequences and variable subblocks. 
+Takes called haplotypes and analyzes for conserved sequences and variable subblocks.
 
-# Plot Graph  
-Big red blocks are conserved between all haplotypes. Node width is depth, node height is length of the subsegments. 
-Block color is heatmap colors of depth. 
+# Plot Graph
+Big red blocks are conserved between all haplotypes. Node width is depth, node height is length of the subsegments.
+Block color is heatmap colors of depth.
 
 ```{r}
 library(Rgraphviz)
@@ -1030,20 +1066,23 @@ plot(graph)
 plot(graph)
 ```
 
-# Variable blocks  
+# Variable blocks
 
+Below is plotted the expected heterozygosity for each sub region with the red block shows the expected heterozygosity for the whole region
 ```{r}
-variableRegionLoc = readr::read_tsv("subRegionInfo/0_ref_variable_genomic.bed", col_names = F) %>% 
+variableRegionLoc = readr::read_tsv("subRegionInfo/0_ref_variable_genomic.bed", col_names = F) %>%
   rename(target = X4)
-variableRegionDiv = readr::read_tsv("subRegionInfo/divMeasuresPerVarRegion.tab.txt", col_names = T) %>% 
-  rename(target = id) %>% 
+variableRegionDiv = readr::read_tsv("subRegionInfo/divMeasuresPerVarRegion.tab.txt", col_names = T) %>%
+  rename(target = id) %>%
   left_join(variableRegionLoc)
-
-refSeqLoc = readr::read_tsv("refSeq.bed", col_names = F)%>% 
+create_dt(variableRegionLoc)
+create_dt(variableRegionDiv)
+refSeqLoc = readr::read_tsv("refSeq.bed", col_names = F)%>%
   rename(target = X4)
-refSeqDiv = readr::read_tsv("divMeasuresFullRegion.tab.txt", col_names = T) %>% 
+refSeqDiv = readr::read_tsv("divMeasuresFullRegion.tab.txt", col_names = T) %>%
   left_join(refSeqLoc)
-
+create_dt(refSeqLoc)
+create_dt(refSeqDiv)
 ggplot() +
   geom_rect(aes(xmin = X2, xmax = X3,
                 ymin = 0, ymax = he),
@@ -1051,13 +1090,13 @@ ggplot() +
             data = refSeqDiv) +
   geom_rect(aes(xmin = X2, xmax = X3,
                 ymin = 0, ymax = he),
-            data = variableRegionDiv) + 
-  sofonias_theme + 
+            data = variableRegionDiv) +
+  sofonias_theme +
   labs(y = "he")
 ```
 
-# TajimaD  
-Each variable block's TajimaD, the grey block is the full region. 
+# TajimaD
+Each variable block's TajimaD, the grey block is the full region.
 
 ```{r}
 ggplot() +
@@ -1066,65 +1105,68 @@ ggplot() +
             fill = "#00000055",
             data = refSeqDiv) +
   geom_rect(aes(xmin = X2, xmax = X3,
-                ymin = 0, ymax = TajimaD, 
+                ymin = 0, ymax = TajimaD,
                 fill = TajimaDPVal < 0.05),
-            data = variableRegionDiv) + 
-  sofonias_theme + scale_fill_manual(values = c("TRUE" = "red", "FALSE" = "blue")) + 
+            data = variableRegionDiv) +
+  sofonias_theme + scale_fill_manual(values = c("TRUE" = "red", "FALSE" = "blue")) +
   labs(y = "TajimaD")
 
 ```
 
 
 ```{r, fig.width=30}
-subsegmentsLocs = readr::read_tsv("subsegmentInfo/refSeqGenomicLocs.bed", col_names = F)%>% 
+subsegmentsLocs = readr::read_tsv("subsegmentInfo/refSeqGenomicLocs.bed", col_names = F)%>%
   rename(target = X4)
-subsegmentsDiv = readr::read_tsv("subsegmentInfo/divMeasuresPerSubRegion.tab.txt", col_names = T) %>% 
-  left_join(subsegmentsLocs) %>% 
+subsegmentsDiv = readr::read_tsv("subsegmentInfo/divMeasuresPerSubRegion.tab.txt", col_names = T) %>%
+  left_join(subsegmentsLocs) %>%
   mutate(fullRefHe = refSeqDiv$he[1])
 
-subsegmentsDiv = subsegmentsDiv %>% 
-  arrange(desc(he)) %>% 
-  mutate(rank = row_number()) %>% 
+subsegmentsDiv = subsegmentsDiv %>%
+  arrange(desc(he)) %>%
+  mutate(rank = row_number()) %>%
   mutate(heMatchesRef = fullRefHe == he)
 ```
 
-# Variable sub regions  
+# Variable sub regions
 
-Regions across the whole region. Regions are created by combing each variable region, the blocks are sorted by expected hetereozygosity, with the full region being on the bottom. The red blocks are the variable regions.  
+Regions across the whole region. Regions are created by combing each variable region, the blocks are sorted by expected hetereozygosity, with the full region being on the bottom. The red blocks are the variable regions.
 
 ```{r, fig.width=30}
-variableRegionDiv = variableRegionDiv %>% 
+#| fig-column: screen-inset-shaded
+#| column: screen-inset-shaded
+#| fig-height: 20
+variableRegionDiv = variableRegionDiv %>%
   mutate(length = X3 - X2, start = X2, end = X3)
-subsegmentsDiv = subsegmentsDiv  %>% 
+subsegmentsDiv = subsegmentsDiv  %>%
   mutate(length = X3 - X2, start = X2, end = X3)
-  
+
 ggplotly(ggplot() +
   geom_rect(aes(xmin = X2, xmax = X3,
-                ymin = rank,  ymax = rank + 1, 
-                fill = heMatchesRef, 
-                he = he, 
+                ymin = rank,  ymax = rank + 1,
+                fill = heMatchesRef,
+                he = he,
                 start = start, end = end, length = length),
             color = "black",
-            data = subsegmentsDiv) + 
+            data = subsegmentsDiv) +
   geom_rect(aes(xmin = X2, xmax = X3,
-                ymin = 0,  ymax = 1, 
-                he = he, 
+                ymin = 0,  ymax = 1,
+                he = he,
                 start = X2, end = X3, length = X5),
             color = "black",
             fill = "blue",
-            data = refSeqDiv) + 
+            data = refSeqDiv) +
   geom_rect(aes(xmin = X2, xmax = X3,
-                ymin = 0, ymax = -he * 10, 
-                he = he, start = start, end = end, target = target, 
+                ymin = 0, ymax = -he * 10,
+                he = he, start = start, end = end, target = target,
                 length = length),
-            data = variableRegionDiv, fill = "red") + 
-  sofonias_theme + 
-  labs(y = "he-rank") + 
+            data = variableRegionDiv, fill = "red") +
+  sofonias_theme +
+  labs(y = "he-rank") +
   scale_fill_brewer(palette = "Dark2"))
 
 ```
 
-# Coded 
+# Coded
 
 ```{r}
 refNames = readr::read_tsv("refNames.txt", col_names = F)
@@ -1138,112 +1180,120 @@ rownames(varRegionCoded_mat) = varRegionCoded$name
 
 varRegionCoded_mat_hclust = hclust(dist(varRegionCoded_mat))
 
-varRegionCoded_gat = varRegionCoded %>% 
-  gather(region, code, 2:ncol(.)) %>% 
+varRegionCoded_gat = varRegionCoded %>%
+  gather(region, code, 2:ncol(.)) %>%
   mutate(name = factor(name, levels = rownames(varRegionCoded_mat)[varRegionCoded_mat_hclust$order]))
 
-varRegionCoded_seq = varRegionCoded[,2:ncol(varRegionCoded)] %>% 
-  unique() %>% 
+varRegionCoded_seq = varRegionCoded[,2:ncol(varRegionCoded)] %>%
+  group_by_all() %>%
+  summarise(Seq_ID_count = n()) %>%
+  arrange(desc(Seq_ID_count)) %>%
+  ungroup() %>%
   mutate(Seq_ID = row_number() - 1)
 
-varRegionCoded = varRegionCoded %>% 
+varRegionCoded = varRegionCoded %>%
   left_join(varRegionCoded_seq)
 
-varRegionCoded_seqIDCount = varRegionCoded %>% 
-  group_by(Seq_ID) %>% 
-  count()
 
 
-varRegionCoded_ref = varRegionCoded %>% 
-  mutate(ref = name %in% refNames$X1) %>% 
-  filter(ref) %>% 
-  select(name, Seq_ID, ref) %>% 
-  unique() %>% 
+
+varRegionCoded_ref = varRegionCoded %>%
+  mutate(ref = name %in% refNames$X1) %>%
+  filter(ref) %>%
+  select(name, Seq_ID, ref) %>%
+  unique() %>%
   mutate(refLabel = gsub("\\[.*", "", name))
 
-varRegionCoded_ref_collapsed = varRegionCoded_ref %>% 
-  group_by() %>% 
-  group_by(Seq_ID) %>% 
+varRegionCoded_ref_collapsed = varRegionCoded_ref %>%
+  group_by() %>%
+  group_by(Seq_ID) %>%
   summarise(RefLabel = paste0(refLabel, collapse = ","))
 
 
-varRegionCoded_seq_labs = varRegionCoded_seq %>% 
-  select(Seq_ID) %>% 
-  left_join(varRegionCoded_ref_collapsed) %>% 
+varRegionCoded_seq_labs = varRegionCoded_seq %>%
+  select(Seq_ID) %>%
+  left_join(varRegionCoded_ref_collapsed) %>%
   mutate(Seq_ID_Label = ifelse(is.na(RefLabel), Seq_ID, paste0(RefLabel)))
-varRegionCoded_seqIDCount = varRegionCoded_seqIDCount %>% 
+
+varRegionCoded_seqIDCount = varRegionCoded %>%
+  group_by(Seq_ID) %>%
+  summarise(n = n()) %>%
   left_join(varRegionCoded_seq_labs)
 
-varRegionCoded_mod = varRegionCoded %>% 
-  mutate(Pop = gsub(".*PopUID=", "", name))%>% 
-  mutate(Pop = gsub(";.*", "", Pop)) %>% 
-  select(Pop, Seq_ID) %>% 
-  unique() %>% 
-  arrange(Pop) %>% 
+varRegionCoded_seqIDCount = varRegionCoded_seqIDCount %>%
+  left_join(varRegionCoded_seq_labs) %>%
+  mutate(Seq_ID_PopLabel = paste0(Seq_ID, "[GlobalN=", n, "]"))
+
+varRegionCoded_mod = varRegionCoded %>%
+  mutate(Pop = gsub(".*PopUID=", "", name))%>%
+  mutate(Pop = gsub(";.*", "", Pop)) %>%
+  select(Pop, Seq_ID) %>%
+  unique() %>%
+  arrange(Pop) %>%
   left_join(varRegionCoded_seqIDCount)
-DT::datatable(varRegionCoded_mod,
-          extensions = 'Buttons', options = list(
-    dom = 'Bfrtip',
-    buttons = c('csv')
-  ))
 
+varRegionCoded_mod_label = varRegionCoded_mod %>%
+  ungroup() %>%
+  select(Seq_ID, RefLabel, Seq_ID_Label, Seq_ID_PopLabel) %>%
+  unique()
 
+create_dt(varRegionCoded_mod)
 
-
-varRegionCoded_seq_mat = as.matrix(varRegionCoded_seq[,1:(ncol(varRegionCoded_seq) - 1)])
-rownames(varRegionCoded_seq_mat) = varRegionCoded_seq_labs$Seq_ID_Label
+varRegionCoded_seq_mat = as.matrix(varRegionCoded_seq[,1:(ncol(varRegionCoded_seq) - 2)])
+rownames(varRegionCoded_seq_mat) = varRegionCoded_mod_label$Seq_ID_PopLabel
 varRegionCoded_seq_hclust = hclust(dist(varRegionCoded_seq_mat))
 
-codedColors = scheme$hex(length(unique(varRegionCoded_gat$code)))
+
+codedColors = createColorListFromDf(varRegionCoded_gat %>% select(code) %>% as.data.frame())$code
 names(codedColors) = unique(varRegionCoded_gat$code)
 
 ```
 
-# Variable Blocks    
-Below colored blocks, each column is colored by how prevalent each block is at that variable region.  
+# Variable Blocks
+Below colored blocks, each column is colored by how prevalent each block is at that variable region.
 
-## All sequences  
+## All sequences
 ```{r}
-ggplot(varRegionCoded_gat) + 
-  geom_tile(aes(x = region, y = name, fill = factor(code))) + 
-  sofonias_theme_xRotate + 
-  theme(axis.text.y = element_blank()) + 
+ggplot(varRegionCoded_gat) +
+  geom_tile(aes(x = region, y = name, fill = factor(code))) +
+  sofonias_theme_xRotate +
+  theme(axis.text.y = element_blank()) +
   scale_fill_manual("Variable blocks", values = codedColors)
 
 
-varRegionCoded_seq_gat = varRegionCoded_seq %>% 
-  gather(region, code, 1:(ncol(.) - 1) ) %>% 
-  left_join(varRegionCoded_seq_labs) %>% 
-  mutate(Seq_ID_Label = factor(Seq_ID_Label, levels = rownames(varRegionCoded_seq_mat)[varRegionCoded_seq_hclust$order]))
+varRegionCoded_seq_gat = varRegionCoded_seq %>%
+  gather(region, code, 1:(ncol(.) - 2) ) %>%
+  left_join(varRegionCoded_mod) %>%
+  mutate(Seq_ID_PopLabel = factor(Seq_ID_PopLabel, levels = rownames(varRegionCoded_seq_mat)[varRegionCoded_seq_hclust$order]))
 ```
 
 ## Unique
 
 ```{r}
-ggplot(varRegionCoded_seq_gat) + 
-  geom_tile(aes(x = region, y = Seq_ID_Label, fill = factor(code))) + 
-  sofonias_theme_xRotate + 
+ggplot(varRegionCoded_seq_gat) +
+  geom_tile(aes(x = region, y = Seq_ID_PopLabel, fill = factor(code))) +
+  sofonias_theme_xRotate +
   scale_fill_manual("Variable blocks", values = codedColors)
 
 #plot(varRegionCoded_seq_hclust)
 ```
 
-# Dendrogram  
+# Dendrogram
 
-Below is a dendrogram based on clustering on per variable block regions  
+Below is a dendrogram based on clustering on per variable block regions
 ```{r}
 clus <- cutree(varRegionCoded_seq_hclust, 4)
 g <- split(names(clus), clus)
 
 p <- ggtree(varRegionCoded_seq_hclust)
 clades <- sapply(g, function(n) MRCA(p, n))
-# 
+#
 p <- groupClade(p, clades, group_name='subtree') + aes(color=subtree)
-# 
-d <- tibble(label = names(clus)) %>% 
-  left_join(varRegionCoded_seqIDCount %>% 
-              mutate(Seq_ID_Label = as.character(Seq_ID_Label)) %>% 
-              rename(label = Seq_ID_Label))
+#
+d <- tibble(label = names(clus)) %>%
+  left_join(varRegionCoded_seqIDCount %>%
+              mutate(Seq_ID_PopLabel = as.character(Seq_ID_PopLabel)) %>%
+              rename(label = Seq_ID_PopLabel))
 
 subtreeColor = RColorBrewer::brewer.pal(4, "Set1");
 names(subtreeColor) = c("1", "2", "3", "4")
@@ -1255,20 +1305,20 @@ p %<+% d +
   #geom_tiplab(aes(label=cyl), size=3, hjust=.5, color='black') +
   geom_tiplab(angle=90, hjust=1, offset=-0.1, show.legend=FALSE) +
   scale_color_manual(values = subtreeColor) +
-  scale_fill_manual(values = subtreeColor) + 
+  scale_fill_manual(values = subtreeColor) +
   theme_dendrogram(plot.margin=margin(6,6,80,6)) #+
   #theme(legend.position=c(.9, .6))
-# 
+#
 
 ```
 
-# Seq ID counts   
-Counts of unique sequences  
+# Seq ID counts
+Counts of unique sequences
 ```{r}
-ggplot(varRegionCoded_seqIDCount %>% 
-         mutate(Seq_ID_Label = factor(Seq_ID_Label))) + 
-  geom_bar(aes(x = Seq_ID_Label, y = n), stat = "identity") + 
-  geom_text(aes(x  = Seq_ID_Label, y = n + 15, label = n) ) + 
+ggplot(varRegionCoded_seqIDCount %>%
+         mutate(Seq_ID_PopLabel = factor(Seq_ID_PopLabel, levels = .$Seq_ID_PopLabel))) +
+  geom_bar(aes(x = Seq_ID_PopLabel, y = n), stat = "identity") +
+  geom_text(aes(x  = Seq_ID_PopLabel, y = n + 15, label = n) ) +
   sofonias_theme_xRotate
 
 ```)";
@@ -1561,25 +1611,26 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	//diversity
 	{
 		OutputStream outDivMeasures(njh::files::make_path(setUp.pars_.directoryName_, "divMeasuresFullRegion.tab.txt"));
-		outDivMeasures << "target\tlength\ttotalHaps\tuniqueHaps\the\texp3\texp4\texp5\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE" << std::endl;
+		outDivMeasures << "target\trefLocationID\tlength\ttotalHaps\tuniqueHaps\the\texp3\texp4\texp5\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE" << std::endl;
 
 		//first full div
 		{
 			std::unordered_map<std::string, uint32_t> popCounts;
 			auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversityRawInput(seqs);
-			outDivMeasures << refSeqLoc.createUidFromCoordsStrand()
-													<< "\t" << refSeqLoc.getLen()
-													<< "\t" << seqs.size()
-													<< "\t" << divMeasures.alleleNumber_
-													<< "\t" << divMeasures.heterozygostiy_
-													<< "\t" << divMeasures.ploidy3_.expectedCOIForPloidy_[3]
-													<< "\t" << divMeasures.ploidy4_.expectedCOIForPloidy_[4]
-													<< "\t" << divMeasures.ploidy5_.expectedCOIForPloidy_[5]
-													<< "\t" << divMeasures.singlets_
-													<< "\t" << divMeasures.doublets_
-													<< "\t" << divMeasures.effectiveNumOfAlleles_
-													<< "\t" << divMeasures.ShannonEntropyE_
-													<< std::endl;
+			outDivMeasures << refSeqLoc.uid_
+										 << "\t" << refSeqLoc.createUidFromCoordsStrand()
+										 << "\t" << refSeqLoc.getLen()
+										 << "\t" << seqs.size()
+										 << "\t" << divMeasures.alleleNumber_
+										 << "\t" << divMeasures.heterozygostiy_
+										 << "\t" << divMeasures.ploidy3_.expectedCOIForPloidy_[3]
+										 << "\t" << divMeasures.ploidy4_.expectedCOIForPloidy_[4]
+										 << "\t" << divMeasures.ploidy5_.expectedCOIForPloidy_[5]
+										 << "\t" << divMeasures.singlets_
+										 << "\t" << divMeasures.doublets_
+										 << "\t" << divMeasures.effectiveNumOfAlleles_
+										 << "\t" << divMeasures.ShannonEntropyE_
+										 << std::endl;
 		}
 	}
 
@@ -2359,7 +2410,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 
 	}
 
-	OutputStream plottingTemplateOut(njh::files::make_path(setUp.pars_.directoryName_, "plottingSubRegions.Rmd"));
+	OutputStream plottingTemplateOut(njh::files::make_path(setUp.pars_.directoryName_, "plottingSubRegions.qmd"));
 	plottingTemplateOut << plottingRmdTemplate << std::endl;
 
 	return 0;
