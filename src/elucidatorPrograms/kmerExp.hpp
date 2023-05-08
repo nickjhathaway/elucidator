@@ -107,6 +107,8 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int filterUniqueKmerSetForEntropy(const njh::progutils::CmdArgs & inputCommands);
 	static int testingSimpleKmerHasher(const njh::progutils::CmdArgs & inputCommands);
 
+	static int findUniqKmersFromGenomeSubRegions(const njh::progutils::CmdArgs & inputCommands);
+
 	static int findKmersInSets(const njh::progutils::CmdArgs & inputCommands);
 
 	static int extractByCountingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands);

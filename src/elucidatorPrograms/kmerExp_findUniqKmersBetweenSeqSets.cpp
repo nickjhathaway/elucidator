@@ -31,7 +31,6 @@
 #include <njhseq/objects/kmer.h>
 
 #include "elucidator/simulation.h"
-#include "elucidator/objects/seqObjects/seqKmers.h"
 
 #include "elucidator/objects/MiscUtility/GenomeSeqSearch.hpp"
 
@@ -95,7 +94,7 @@ int kmerExpRunner::filterUniqueKmerSetForEntropy(const njh::progutils::CmdArgs &
 int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlns(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
 	bfs::path countTable = "";
-	std::string sampleName = "";
+	std::string sampleName;
 	bool includeRevComp = false;
 	OutOptions outOpts(bfs::path(""), ".tab.txt.gz");
 	seqSetUp setUp(inputCommands);
@@ -293,12 +292,12 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlns(const njh::progutils:
 	}
 
 	return 0;
-
 }
+
 int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
 	bfs::path countTable = "";
-	std::string sampleName = "";
+	std::string sampleName;
 	bool includeRevComp = false;
 	OutOptions outOpts(bfs::path(""), ".tab.txt.gz");
 	seqSetUp setUp(inputCommands);
@@ -539,7 +538,7 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 int kmerExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
 	bfs::path countTable = "";
-	std::string sampleName = "";
+	std::string sampleName;
 	bool includeRevComp = false;
 	OutOptions outOpts(bfs::path(""), ".tab.txt.gz");
 	seqSetUp setUp(inputCommands);
@@ -551,7 +550,7 @@ int kmerExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArg
 	setUp.setOption(sampleName, "--sampleName", "Name to add to output file", true);
 
 	setUp.setOption(numThreads, "--numThreads", "numThreads");
-	setUp.setOption(includeRevComp, "--includeRevComp", "include Rev Comp of the input seqs");
+	setUp.setOption(includeRevComp, "--includeRevComp", "include Rev Comp of the input seqs");
 
 
 
@@ -601,7 +600,7 @@ int kmerExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArg
 		out << "\tfracInSetRevComp";
 		out << "\tfracOfSetFoundRevComp";
 	}
-	out << "\twinnerSet\twinnerSetFrac\twinderSetRecComp";
+	out << "\twinnerSet\twinnerSetFrac\twinnerSetRecComp";
 	out << std::endl;
 
 	if (setUp.pars_.ioOptions_.isPairedIn()) {
@@ -805,8 +804,10 @@ int kmerExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArg
 int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
 	bfs::path countTable = "";
-	std::string sampleName = "";
+	std::string sampleName;
 	bool includeRevComp = false;
+	bool doNotWriteUndetermined = false;
+	uint32_t hardCountOff = 10;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -814,6 +815,8 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	setUp.processReadInNames(true);
 	setUp.setOption(countTable, "--countTable", "countTable, 1)set,2)kmer", true);
 	setUp.setOption(sampleName, "--sampleName", "Name to add to output file", true);
+	setUp.setOption(doNotWriteUndetermined, "--doNotWriteUndetermined", "do Not Write Undetermined");
+	setUp.setOption(hardCountOff, "--hardCountOff", "hard Count Off, do not count sets unless greater thant his number");
 
 	setUp.setOption(numThreads, "--numThreads", "numThreads");
 	setUp.setOption(includeRevComp, "--includeRevComp", "include Rev Comp of the input seqs");
@@ -848,6 +851,13 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	if(setUp.pars_.verbose_){
 		std::cout << watch.getLapName() << "\t" << watch.timeLapFormatted() <<std::endl;
 	}
+
+
+	if(setUp.pars_.ioOptions_.isPairedIn()) {
+		setUp.pars_.ioOptions_.revComplMate_ = true;
+		//to make below count correctly, make sure mate is automatically reversed complemented
+	}
+
 	SeqInput reader(setUp.pars_.ioOptions_);
 	reader.openIn();
 
@@ -864,7 +874,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 			seqOut.addReader(name, seqOutOpts);
 		}
 		seqOut.addReader("undetermined", SeqIOOptions::genPairedOutGz(njh::files::make_path(setUp.pars_.directoryName_, "undetermined")));
-		readInComp = [&reader, &uniqueKmersPerSet, &readsPerSet,&readsPerSetRevComp,&mut,&klen,&includeRevComp,&seqOut]() {
+		readInComp = [&reader, &uniqueKmersPerSet, &readsPerSet,&readsPerSetRevComp,&mut,&klen,&includeRevComp,&seqOut,&doNotWriteUndetermined,&hardCountOff]() {
 		//readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp]() {
 
 			SimpleKmerHash hasher;
@@ -924,6 +934,17 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 						}
 					}
 				}
+				//set a hard cut off, reset counts to zero
+				for(auto & perSet : foundPerSet){
+					if(perSet.second < hardCountOff){
+						perSet.second = 0;
+					}
+				}
+				for(auto & perSet : foundPerSetRevComp){
+					if(perSet.second < hardCountOff){
+						perSet.second = 0;
+					}
+				}
 				std::string winnerSet = "undetermined";
 				double bestFrac = 0;
 				bool winnerRevComp = false;
@@ -948,7 +969,11 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 					++readsPerSetCurrent[winnerSet];
 					pseq.mateSeqBase_.reverseComplementRead(false, true);
 				}
-				seqOut.openWrite(winnerSet, pseq);
+				if(!doNotWriteUndetermined || winnerSet != "undetermined"){
+					//since we forced the input to be mate reverse complemented, have to reverse back
+					pseq.mateSeqBase_.reverseComplementRead(false, true);
+					seqOut.openWrite(winnerSet, pseq);
+				}
 			}
 			{
 				std::lock_guard<std::mutex> lockGuard(mut);
@@ -967,7 +992,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 			seqOut.addReader(name, seqOutOpts);
 		}
 		seqOut.addReader("undetermined", SeqIOOptions::genFastqOutGz(njh::files::make_path(setUp.pars_.directoryName_, "undetermined")));
-		readInComp = [&reader, &uniqueKmersPerSet, &readsPerSet,&readsPerSetRevComp,&mut,&klen,&includeRevComp,&seqOut,&sampleName]() {
+		readInComp = [&reader, &uniqueKmersPerSet, &readsPerSet,&readsPerSetRevComp,&mut,&klen,&includeRevComp,&seqOut,&doNotWriteUndetermined,&hardCountOff]() {
 //		readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp]() {
 			SimpleKmerHash hasher;
 			seqInfo seq;
@@ -1016,6 +1041,17 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 						}
 					}
 				}
+				//set a hard cut off, reset counts to zero
+				for(auto & perSet : foundPerSet){
+					if(perSet.second < hardCountOff){
+						perSet.second = 0;
+					}
+				}
+				for(auto & perSet : foundPerSetRevComp){
+					if(perSet.second < hardCountOff){
+						perSet.second = 0;
+					}
+				}
 				std::string winnerSet = "undetermined";
 				double bestFrac = 0;
 				bool winnerRevComp = false;
@@ -1039,7 +1075,9 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 				}else{
 					++readsPerSetCurrent[winnerSet];
 				}
-				seqOut.openWrite(winnerSet, seq);
+				if(!doNotWriteUndetermined || winnerSet != "undetermined"){
+					seqOut.openWrite(winnerSet, seq);
+				}
 			}
 			{
 				std::lock_guard<std::mutex> lockGuard(mut);
@@ -1119,7 +1157,7 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
-	setUp.description_ = "Get kmers that appear within all the sequences supplied and are unique to that set";
+	setUp.description_ = "Get kmers that appear within the sequences supplied and are unique to that set compared to the other sets";
 	setUp.setOption(seqSetTableFnp, "--seqSetTableFnp", "Seq Set Table, 2 columns, 1)set,2)2bit", true);
 	setUp.setOption(seqSetSuppFastaTableFnp, "--seqSetSuppFastaTableFnp", "Seq Set Table supplement small fasta files, 2 columns, 1)set,2)fasta");
 
@@ -1141,7 +1179,7 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 	}
 
 	table inputFastaSupp;
-	if("" != seqSetSuppFastaTableFnp){
+	if(!seqSetSuppFastaTableFnp.empty()){
 		inputFastaSupp= table(seqSetSuppFastaTableFnp, "\t", true);
 		inputFastaSupp.checkForColumnsThrow(VecStr{"set", "fasta"}, __PRETTY_FUNCTION__);
 	}
@@ -1390,6 +1428,9 @@ int kmerExpRunner::findUniqKmersBetweenSeqSets(const njh::progutils::CmdArgs & i
 
 	return 0;
 }
+
+
+
 
 }  //namespace njhseq
 

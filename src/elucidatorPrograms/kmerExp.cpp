@@ -97,7 +97,8 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("getKmerDetailedKmerDistAgainstRef", getKmerDetailedKmerDistAgainstRef, false),
 					 addFunc("findingKmerEnrichment", findingKmerEnrichment, false),
 					 addFunc("simpleHashKmer", simpleHashKmer, false),
-					 addFunc("findKmersInSets", findKmersInSets, false),
+					 addFunc("findUniqKmersFromGenomeSubRegions", findUniqKmersFromGenomeSubRegions, false),
+
 					 //
            },
           "kmerExp") {}
