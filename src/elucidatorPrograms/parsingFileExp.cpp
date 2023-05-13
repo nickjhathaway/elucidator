@@ -638,7 +638,7 @@ public:
 		uint32_t actualEnd = reverseStrand() ? queryStart_ : queryEnd_;
 		meta.addMeta("actualStart", actualStart);
 		meta.addMeta("actualEnd", actualEnd);
-
+    meta.addMeta("queryName", queryName_);
 		meta.addMeta("queryStart", queryStart_);
 		meta.addMeta("queryEnd", queryEnd_);
 
@@ -650,7 +650,7 @@ public:
 											 refEnd_ ,
 //											 reverseStrand() ? refEnd_ -1 : refStart_ -1,
 //											 reverseStrand() ? refStart_ : refEnd_,
-											 queryName_,
+											 njh::pasteAsStr(queryName_, "-",actualStart , "-", actualEnd),
 											 uAbsdiff(refStart_, refEnd_) + 1,
 											 reverseStrand() ? '-' : '+');
 		ret.extraFields_.emplace_back(meta.createMetaName());
