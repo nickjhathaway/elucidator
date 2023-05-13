@@ -803,19 +803,29 @@ int kmerExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArg
 
 int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
-	bfs::path countTable = "";
+	std::set<std::string> excludeSetNames;
+	bfs::path countTable;
+	bfs::path excludesCountTable;
 	std::string sampleName;
 	bool includeRevComp = false;
 	bool doNotWriteUndetermined = false;
+	bool writeOutExclude = false;
 	uint32_t hardCountOff = 10;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.pars_.ioOptions_.revComplMate_ = true;
 	setUp.processReadInNames(true);
-	setUp.setOption(countTable, "--countTable", "countTable, 1)set,2)kmer", true);
+	setUp.setOption(excludesCountTable, "--excludesCountTable", "excludes Count Table, 1)set,2)kmer");
+	setUp.setOption(excludeSetNames, "--excludeSetNames", "names of sets of unqiue kmers to ignore from the --kmerTable");
+
+
+	setUp.setOption(countTable, "--kmerTable,--countTable", "countTable, 1)set,2)kmer", true);
 	setUp.setOption(sampleName, "--sampleName", "Name to add to output file", true);
 	setUp.setOption(doNotWriteUndetermined, "--doNotWriteUndetermined", "do Not Write Undetermined");
+	setUp.setOption(writeOutExclude, "--writeOutExclude", "write Out Excluded reads that match the excluded kmer sets");
+
+
 	setUp.setOption(hardCountOff, "--hardCountOff", "hard Count Off, do not count sets unless greater thant his number");
 
 	setUp.setOption(numThreads, "--numThreads", "numThreads");
@@ -833,6 +843,8 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	std::mutex mut;
 	uint32_t klen = 0;
 	watch.startNewLap("reading in unique kmer table");
+
+
 	{
 		SimpleKmerHash hasher;
 
@@ -844,6 +856,22 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 		}
 		VecStr row;
 		while(uniqKmers.getNextRow(row)){
+			klen = row[1].size();
+			uniqueKmersPerSet[row[0]].emplace(hasher.hash(row[1]));
+		}
+	}
+	if(!excludesCountTable.empty()){
+		SimpleKmerHash hasher;
+
+		TableReader uniqKmers(TableIOOpts::genTabFileIn(countTable, false));
+		if(uniqKmers.header_.nCol() < 2){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "need to have 2 columns" << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		VecStr row;
+		while(uniqKmers.getNextRow(row)){
+			excludeSetNames.emplace(row[0]);
 			klen = row[1].size();
 			uniqueKmersPerSet[row[0]].emplace(hasher.hash(row[1]));
 		}
@@ -874,8 +902,10 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 			seqOut.addReader(name, seqOutOpts);
 		}
 		seqOut.addReader("undetermined", SeqIOOptions::genPairedOutGz(njh::files::make_path(setUp.pars_.directoryName_, "undetermined")));
-		readInComp = [&reader, &uniqueKmersPerSet, &readsPerSet,&readsPerSetRevComp,&mut,&klen,&includeRevComp,&seqOut,&doNotWriteUndetermined,&hardCountOff]() {
-		//readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp]() {
+		readInComp = [&reader, &uniqueKmersPerSet, &readsPerSet, &readsPerSetRevComp,
+									&mut, &klen, &includeRevComp, &seqOut, &doNotWriteUndetermined,
+									&hardCountOff, &excludeSetNames, &writeOutExclude]() {
+			//readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp]() {
 
 			SimpleKmerHash hasher;
 			PairedRead pseq;
@@ -970,9 +1000,11 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 					pseq.mateSeqBase_.reverseComplementRead(false, true);
 				}
 				if(!doNotWriteUndetermined || winnerSet != "undetermined"){
-					//since we forced the input to be mate reverse complemented, have to reverse back
-					pseq.mateSeqBase_.reverseComplementRead(false, true);
-					seqOut.openWrite(winnerSet, pseq);
+					if(writeOutExclude || !njh::in(winnerSet, excludeSetNames)){
+						//since we forced the input to be mate reverse complemented, have to reverse back
+						pseq.mateSeqBase_.reverseComplementRead(false, true);
+						seqOut.openWrite(winnerSet, pseq);
+					}
 				}
 			}
 			{
@@ -992,7 +1024,9 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 			seqOut.addReader(name, seqOutOpts);
 		}
 		seqOut.addReader("undetermined", SeqIOOptions::genFastqOutGz(njh::files::make_path(setUp.pars_.directoryName_, "undetermined")));
-		readInComp = [&reader, &uniqueKmersPerSet, &readsPerSet,&readsPerSetRevComp,&mut,&klen,&includeRevComp,&seqOut,&doNotWriteUndetermined,&hardCountOff]() {
+		readInComp = [&reader, &uniqueKmersPerSet, &readsPerSet,&readsPerSetRevComp,
+									&mut,&klen,&includeRevComp,&seqOut,&doNotWriteUndetermined,
+						&hardCountOff, &excludeSetNames, &writeOutExclude]() {
 //		readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp]() {
 			SimpleKmerHash hasher;
 			seqInfo seq;
@@ -1076,7 +1110,9 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 					++readsPerSetCurrent[winnerSet];
 				}
 				if(!doNotWriteUndetermined || winnerSet != "undetermined"){
-					seqOut.openWrite(winnerSet, seq);
+					if(writeOutExclude || !njh::in(winnerSet, excludeSetNames)){
+						seqOut.openWrite(winnerSet, seq);
+					}
 				}
 			}
 			{
@@ -1126,7 +1162,6 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 								<< "\t" << static_cast<double>(readsPerSet["undetermined"]) / static_cast<double>(totalExtracted)
 								<< std::endl;
 		}
-
 	} else {
 		outCounts << "sample\ttotalReads\ttarget\tcount\tfrac";
 		outCounts << std::endl;
