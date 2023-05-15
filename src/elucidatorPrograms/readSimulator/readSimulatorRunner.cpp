@@ -604,7 +604,7 @@ int readSimulatorRunner::simPcrShotgunSequences(const njh::progutils::CmdArgs & 
 	uint32_t initialPcrRounds = 10;
 	long double errorRate = 3.5e-06;
 	uint32_t numThreads = 2;
-	std::string abundanceFile = "";
+	std::string abundanceFile;
 	bool simIllumina = false;
 	bool sim454 = false;
 	bool both = false;
