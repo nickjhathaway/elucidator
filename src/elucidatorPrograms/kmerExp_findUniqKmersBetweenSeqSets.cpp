@@ -808,7 +808,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSetsIterative(const njh::progut
 	bfs::path countTable;
 	bfs::path excludesCountTable;
 	bfs::path nonUniqueKmerTable;
-
+	uint32_t maxIterations = std::numeric_limits<uint32_t>::max();
 	std::string sampleName;
 	bool includeRevComp = false;
 	bool doNotWriteUndetermined = false;
@@ -824,6 +824,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSetsIterative(const njh::progut
 	setUp.setOption(excludeSetNames, "--excludeSetNames", "names of sets of unqiue kmers to ignore from the --kmerTable");
 	setUp.setOption(nonUniqueKmerTable, "--nonUniqueKmerTable", "non-unique Kmer Table, 1)set,2)kmer");
 	setUp.setOption(extractAfterIterating, "--extractAfterIterating", "Extract After Iterating");
+	setUp.setOption(maxIterations, "--maxIterations", "max Iterations to perform");
 
 
 	setUp.setOption(countTable, "--kmerTable,--countTable", "countTable, 1)set,2)kmer", true);
@@ -1231,7 +1232,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSetsIterative(const njh::progut
 	}
 
 
-	while(iterate){
+	while(iterate && iterNumber < maxIterations){
 		watch.startNewLap(njh::pasteAsStr(iterNumber, "- read in new kmers"));
 		seqOut.closeOutForReopeningAll();
 		std::map<std::string, std::unordered_set<uint64_t>> rawKmersPerInput;
