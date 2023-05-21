@@ -402,89 +402,84 @@ int programWrapperRunner::genPossiblePrimersWithPrimer3(const njh::progutils::Cm
 		}
 	}
 
-	for(const auto & res : results){
-		const auto & region = nameToRegion[res->sequence_id_];
+  for(const auto & res : results){
+    const auto & region = nameToRegion[res->sequence_id_];
+    for(const auto & primer : res->leftPrimers_){
+      double penaltyWithOutSize = primer->penalty_ - uAbsdiff(primer->forwardOrientationPos_.size_, p3Opts.PRIMER_OPT_SIZE);
 
+      MetaDataInName primerMeta;
+      primerMeta.addMeta("SeqID", res->sequence_id_);
+      primerMeta.addMeta("Name", primer->name_);
+      primerMeta.addMeta("RightSide", false);
+      primerMeta.addMeta("Penalty", primer->penalty_);
+      primerMeta.addMeta("PenaltyWithOutSize", penaltyWithOutSize);
 
-		for(const auto & res : results){
+      primer3ResultsLeftPrimerLocs << region->chrom_
+                                   << "\t" << region->chromStart_ + primer->forwardOrientationPos_.start_
+                                   << "\t" << region->chromStart_ + primer->forwardOrientationPos_.start_ + primer->forwardOrientationPos_.size_
+                                   << "\t" << primerMeta.createMetaName()
+                                   << "\t" << primer->forwardOrientationPos_.size_
+                                   << "\t" << "+" << std::endl;
 
-			for(const auto & primer : res->leftPrimers_){
-				double penaltyWithOutSize = primer->penalty_ - uAbsdiff(primer->forwardOrientationPos_.size_, p3Opts.PRIMER_OPT_SIZE);
+      primer3ResultsOut << njh::conToStr(toVecStr(
+          res->sequence_id_,
+          primer->name_,
+          "left",
+          primer->seq_,
+          primer->forwardOrientationPos_.start_,
+          primer->forwardOrientationPos_.start_ + primer->forwardOrientationPos_.size_,
+          primer->forwardOrientationPos_.size_,
+          primer->end_stability_,
+          primer->gc_percent_,
+          primer->hairpin_th_,
+          primer->penalty_,
+          penaltyWithOutSize,
+          primer->self_any_th_,
+          primer->self_end_th_,
+          primer->tm_,
+          primer->tm_ - primer->hairpin_th_,
+          njh::conToStr(primer->problems_, ";")
+      ), "\t") << std::endl;
+    }
 
-				MetaDataInName primerMeta;
-				primerMeta.addMeta("SeqID", res->sequence_id_);
-				primerMeta.addMeta("Name", primer->name_);
-				primerMeta.addMeta("RightSide", false);
-				primerMeta.addMeta("Penalty", primer->penalty_);
-				primerMeta.addMeta("PenaltyWithOutSize", penaltyWithOutSize);
+    for(const auto & primer : res->rightPrimers_){
+      double penaltyWithOutSize = primer->penalty_ - uAbsdiff(primer->forwardOrientationPos_.size_, p3Opts.PRIMER_OPT_SIZE);
 
-				primer3ResultsLeftPrimerLocs << region->chrom_
-						<< "\t" << region->chromStart_ + primer->forwardOrientationPos_.start_
-						<< "\t" << region->chromStart_ + primer->forwardOrientationPos_.start_ + primer->forwardOrientationPos_.size_
-						<< "\t" << primerMeta.createMetaName()
-						<< "\t" << primer->forwardOrientationPos_.size_
-						<< "\t" << "+" << std::endl;
+      MetaDataInName primerMeta;
+      primerMeta.addMeta("SeqID", res->sequence_id_);
+      primerMeta.addMeta("Name", primer->name_);
+      primerMeta.addMeta("RightSide", true);
+      primerMeta.addMeta("Penalty", primer->penalty_);
+      primerMeta.addMeta("PenaltyWithOutSize", penaltyWithOutSize);
 
-				primer3ResultsOut << njh::conToStr(toVecStr(
-					res->sequence_id_,
-					primer->name_,
-					"left",
-					primer->seq_,
-					primer->forwardOrientationPos_.start_,
-					primer->forwardOrientationPos_.start_ + primer->forwardOrientationPos_.size_,
-					primer->forwardOrientationPos_.size_,
-					primer->end_stability_,
-					primer->gc_percent_,
-					primer->hairpin_th_,
-					primer->penalty_,
-					penaltyWithOutSize,
-					primer->self_any_th_,
-					primer->self_end_th_,
-					primer->tm_,
-					primer->tm_ - primer->hairpin_th_,
-					njh::conToStr(primer->problems_, ";")
-				), "\t") << std::endl;
-			}
+      primer3ResultsRightPrimerLocs << region->chrom_
+                                    << "\t" << region->chromStart_ + primer->forwardOrientationPos_.start_
+                                    << "\t" << region->chromStart_ + primer->forwardOrientationPos_.start_ + primer->forwardOrientationPos_.size_
+                                    << "\t" << primerMeta.createMetaName()
+                                    << "\t" << primer->forwardOrientationPos_.size_
+                                    << "\t" << "+" << std::endl;
 
-			for(const auto & primer : res->rightPrimers_){
-				double penaltyWithOutSize = primer->penalty_ - uAbsdiff(primer->forwardOrientationPos_.size_, p3Opts.PRIMER_OPT_SIZE);
-
-				MetaDataInName primerMeta;
-				primerMeta.addMeta("SeqID", res->sequence_id_);
-				primerMeta.addMeta("Name", primer->name_);
-				primerMeta.addMeta("RightSide", true);
-				primerMeta.addMeta("Penalty", primer->penalty_);
-				primerMeta.addMeta("PenaltyWithOutSize", penaltyWithOutSize);
-
-				primer3ResultsRightPrimerLocs << region->chrom_
-						<< "\t" << region->chromStart_ + primer->forwardOrientationPos_.start_
-						<< "\t" << region->chromStart_ + primer->forwardOrientationPos_.start_ + primer->forwardOrientationPos_.size_
-						<< "\t" << primerMeta.createMetaName()
-						<< "\t" << primer->forwardOrientationPos_.size_
-						<< "\t" << "+" << std::endl;
-
-				primer3ResultsOut << njh::conToStr(toVecStr(
-					res->sequence_id_,
-					primer->name_,
-					"right",
-					primer->seq_,
-					primer->forwardOrientationPos_.start_,
-					primer->forwardOrientationPos_.start_ + primer->forwardOrientationPos_.size_,
-					primer->forwardOrientationPos_.size_,
-					primer->end_stability_,
-					primer->gc_percent_,
-					primer->hairpin_th_,
-					primer->penalty_,
-					penaltyWithOutSize,
-					primer->self_any_th_,
-					primer->self_end_th_,
-					primer->tm_,
-					primer->tm_ - primer->hairpin_th_,
-					njh::conToStr(primer->problems_, ";")
-				), "\t") << std::endl;
-			}
-		}
-	}
+      primer3ResultsOut << njh::conToStr(toVecStr(
+          res->sequence_id_,
+          primer->name_,
+          "right",
+          primer->seq_,
+          primer->forwardOrientationPos_.start_,
+          primer->forwardOrientationPos_.start_ + primer->forwardOrientationPos_.size_,
+          primer->forwardOrientationPos_.size_,
+          primer->end_stability_,
+          primer->gc_percent_,
+          primer->hairpin_th_,
+          primer->penalty_,
+          penaltyWithOutSize,
+          primer->self_any_th_,
+          primer->self_end_th_,
+          primer->tm_,
+          primer->tm_ - primer->hairpin_th_,
+          njh::conToStr(primer->problems_, ";")
+      ), "\t") << std::endl;
+    }
+  }
 
 	return 0;
 }
@@ -590,6 +585,10 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 
 
 	//SEQUENCE_TARGET, SEQUENCE_EXCLUDED_REGION
+  bfs::path regionsOfInterestDir = njh::files::make_path(setUp.pars_.directoryName_, "regionsOfInterest");
+  if(!regionsOfInterest.empty()){
+    njh::files::makeDir(njh::files::MkdirPar{regionsOfInterestDir});
+  }
 	{
 		OutputStream primer3Input(njh::files::make_path(setUp.pars_.directoryName_, "primer3File.txt"));
 		primer3Input << "PRIMER_THERMODYNAMIC_PARAMETERS_PATH=" << p3Opts.primer3ConfigPath.string() << std::endl;
@@ -629,6 +628,12 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 					}
 				}
 			}
+
+      OutputStream regionsOfInterest_withinRegion_bedOut(njh::files::make_path(regionsOfInterestDir, reg->name_ + ".bed"));
+      for(const auto & bed :regionsOfInterest_withinRegion){
+        regionsOfInterest_withinRegion_bedOut << bed.toDelimStrWithExtra() << std::endl;
+      }
+
 			BedUtility::extendLeftRight(*reg, extendRegion, extendRegion, njh::mapAt(chromLens, reg->chrom_) );
 
 			inputRegionsExpanded << reg->toDelimStrWithExtra() << std::endl;
@@ -764,9 +769,9 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 			defaultPars << "PRIMER_OPT_SIZE=" << p3Opts.PRIMER_OPT_SIZE << std::endl;
 
 			if(!excludeRegions_relToRegion.empty()){
-				std::string SEQUENCE_EXCLUDED_REGION = "";
+				std::string SEQUENCE_EXCLUDED_REGION;
 				for(const auto & exclude : excludeRegions_relToRegion){
-					if("" != SEQUENCE_EXCLUDED_REGION){
+					if(!SEQUENCE_EXCLUDED_REGION.empty()){
 						SEQUENCE_EXCLUDED_REGION += " ";
 					}
 					SEQUENCE_EXCLUDED_REGION += njh::pasteAsStr(exclude.chromStart_, ",", exclude.chromEnd_ - exclude.chromStart_);
@@ -828,7 +833,7 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 		bool targeted = !res->sequence_target_.empty();
 		if(0 == res->primer_pair_num_returned_){
 			//should log which attempts had 0 returned
-			std::string targetedName = "";
+			std::string targetedName;
 			if (targeted) {
 				targetedName = njh::pasteAsStr(region->chrom_, "-",
 						region->chromStart_ + res->sequence_target_.front().start_, "-",
@@ -972,14 +977,14 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 			DNABaseCounter counter;
 			counter.increase(target);
 			counter.setFractions();
-			bool targeted = !res->sequence_target_.empty();
+
 			//since above we split out targets to be just a single at a time will just take the front
 			if(res->sequence_target_.size() > 1){
 				std::stringstream ss;
 				ss << __PRETTY_FUNCTION__ << ", error " << ", target size shouldn't be more than 1, res->sequence_target_.size(): " << res->sequence_target_.size()<< "\n";
 				throw std::runtime_error{ss.str()};
 			}
-			std::string targetedName = "";
+			std::string targetedName;
 			if (targeted) {
 				targetedName = njh::pasteAsStr(region->chrom_, "-",
 						region->chromStart_ + res->sequence_target_.front().start_, "-",
@@ -1110,13 +1115,13 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 	primer3ResultsSummaryOut << njh::conToStr(VecStr { "seqID", "chrom", "start",
 			"end", "len", "targeted", "targetedID", "targetedChrom", "targetedStart",
 			"targetedEnd", "targetedSize", "excludedRegions", "excludedRegionsIDs", "primerTask",
-			"pairNumReturned", "leftNumReturned", "rightNumReurned", "pairExplained",
+			"pairNumReturned", "leftNumReturned", "rightNumReturned", "pairExplained",
 			"leftExplained", "rightExplained", "warnings" }, "\t") << std::endl;
 
 	for (const auto &res : results) {
 		const auto &region = nameToRegion[res->sequence_id_];
 		bool targeted = !res->sequence_target_.empty();
-		std::string targetedName = "";
+		std::string targetedName;
 		if (targeted) {
 			targetedName = njh::pasteAsStr(region->chrom_, "-",
 					region->chromStart_ + res->sequence_target_.front().start_, "-",
@@ -1133,7 +1138,8 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 			seqExcludedRegions += excludeRel;
 			seqExcludedRegionsIDs += excludeID;
 		}
-		primer3ResultsSummaryOut << njh::conToStr(toVecStr(
+
+    primer3ResultsSummaryOut << njh::conToStr(toVecStr(
 			res->sequence_id_,
 			region->chrom_,
 			region->chromStart_,
@@ -1141,10 +1147,10 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 			region->length(),
 			njh::boolToStr(targeted),
 			(targeted ? targetedName: std::string("NA")),
-			region->chrom_,
-			region->chromStart_ + res->sequence_target_.front().start_,
-			region->chromStart_ + res->sequence_target_.front().start_ + res->sequence_target_.front().size_,
-			res->sequence_target_.front().size_,
+      (targeted ? region->chrom_: std::string("NA")),
+      (targeted ? estd::to_string(region->chromStart_ + res->sequence_target_.front().start_) :std::string("NA")) ,
+      (targeted ? estd::to_string(region->chromStart_ + res->sequence_target_.front().start_ + res->sequence_target_.front().size_) :std::string("NA")),
+      (targeted ? estd::to_string(res->sequence_target_.front().size_) : std::string("NA")),
 			seqExcludedRegions,
 			seqExcludedRegionsIDs,
 			res->primer_task_,
