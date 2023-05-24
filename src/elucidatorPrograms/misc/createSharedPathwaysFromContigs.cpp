@@ -1349,7 +1349,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 
 	TranslatorByAlignment::RunPars variantCallerRunPars;
 	CollapsedHaps::GenPopMeasuresPar calcPopMeasuresPars;
-	calcPopMeasuresPars.getPairwiseComps = true;
+	calcPopMeasuresPars.getPairwiseComps = false;
 
 	variantCallerRunPars.lowVariantCutOff = 0.005;
 	variantCallerRunPars.occurrenceCutOff = 1;
@@ -1363,6 +1363,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	bool refNameRequired = setUp.processSeq(refSeq, "--refSeq", "Reference seq", false);
 	setUp.setOption(numThreads, "--numThreads", "num Threads");
 	setUp.setOption(uniqueHapCountCutOff, "--uniqueHapCountCutOff", "unique Hap Count Cut Off");
+	setUp.setOption(calcPopMeasuresPars.getPairwiseComps, "--calcPopMeasuresPars.getPairwiseComps", "get Pairwise Comps");
 
 	setUp.setOption(kSimFilter, "--kSimFilter", "filter input sequences on kSimFilter for artifacts");
 	setUp.setOption(kLenForFilter, "--kLenForFilter", "filter kLenForFilter for artifacts");
@@ -1788,6 +1789,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 				uniqueSeqsWriter.write(uniqCorrectedSeqs.seqs_[renamedRetInfo.newNameToPos_[key]]);
 			}
 		}
+		//uniqCorrectedSeqs.writeNamesPerLine(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs_namesPerLine.tab.txt.gz")));
 		uniqCorrectedSeqs.writeNames(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs_names.tab.txt.gz")));
 		uniqCorrectedSeqs.writeOutMetaFields(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs_meta.tab.txt.gz")));
 		uniqCorrectedSeqs.writeLabIsolateNames(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "uniqueSeqs_labIsolateNames.tab.txt.gz")));
@@ -2179,6 +2181,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 						}
 						varInfo.setFinals(variantCallerRunPars);
 						{
+
 							calcPopMeasuresPars.numSegSites_ = varInfo.getFinalNumberOfSegratingSites();
 							auto divMeasures = uniqSeqs.getGeneralMeasuresOfDiversity(
 									calcPopMeasuresPars, alignerObj);

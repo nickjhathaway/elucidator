@@ -257,7 +257,7 @@ int bedExpRunner::bedFilterRegionsCompletelyInOther(const njh::progutils::CmdArg
 					if(reg1.chrom_ == reg2.chrom_) {
 						if(reg1.chromStart_ == reg2.chromStart_) {
 							if(reg1.chromEnd_ == reg2.chromEnd_){
-								if(reg1.extraFields_.size() > 0 && reg2.extraFields_.size() > 0){
+								if(!reg1.extraFields_.empty() && !reg2.extraFields_.empty()){
 									return reg1.extraFields_[0] < reg2.extraFields_[0];
 								}else{
 									return true;

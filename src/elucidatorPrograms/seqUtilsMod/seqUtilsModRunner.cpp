@@ -54,6 +54,7 @@ seqUtilsModRunner::seqUtilsModRunner()
 		addFunc("sortReadsByKCompToTop", sortReadsByKCompToTop, false),
 		addFunc("sortReadsByNameNaturalSort", sortReadsByNameNaturalSort, false),
 		addFunc("renameSeqNameToUniqueNames", renameSeqNameToUniqueNames, false),
+		addFunc("compSeq", compSeq, false),
 
 
 },//
@@ -590,6 +591,34 @@ int seqUtilsModRunner::translate(
 	return 0;
 }
 
+int seqUtilsModRunner::compSeq(const njh::progutils::CmdArgs & inputCommands) {
+	seqUtilsModSetUp setUp(inputCommands);
+	std::string seqType = "DNA";
+	if (!setUp.processDefaultReader(false)) {
+		setUp.processSeq(true);
+	} else {
+		if (setUp.pars_.ioOptions_.out_.outFilename_ == "out") {
+			setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(njh::files::removeExtension(setUp.pars_.ioOptions_.firstName_), "comp_");
+		}
+	}
+	setUp.setOption(seqType, "--seqType", "SequenceType");
+	setUp.finishSetUp(std::cout);
+
+	if (setUp.pars_.ioOptions_.firstName_.empty()) {
+		std::cout << seqUtil::complement(setUp.pars_.seq_, seqType)
+							<< std::endl;
+	} else {
+		SeqIO reader(setUp.pars_.ioOptions_);
+		reader.openIn();
+		reader.openOut();
+		seqInfo read;
+		while (reader.readNextRead(read)) {
+			read.complementRead();
+			reader.out_.writeNoCheck(read);
+		}
+	}
+	return 0;
+}
 int seqUtilsModRunner::revCompSeq(const njh::progutils::CmdArgs & inputCommands) {
 	seqUtilsModSetUp setUp(inputCommands);
   std::string seqType = "DNA";

@@ -57,7 +57,7 @@
 #include "elucidatorPrograms/genomeExp.hpp"
 #include "elucidatorPrograms/statsExp.hpp"
 #include "elucidatorPrograms/popGen.h"
-
+#include "elucidatorPrograms/primerUtils.h"
 #include <njhcpp/progutils/oneRing.hpp>
 
 #include <seqServerPrograms.h>
@@ -103,6 +103,7 @@ elucidatorRunner::elucidatorRunner() :
 					addRing<statsExpRunner>(),
 					addRing<popGenExpRunner>(),
 					addRing<programWrappersAssembleOnPathWeaverRunner>(),
+					addRing<primerUtilsRunner>(),
 
 
 				},//
