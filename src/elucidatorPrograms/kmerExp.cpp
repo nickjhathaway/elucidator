@@ -87,6 +87,7 @@ kmerExpRunner::kmerExpRunner()
 					 //addFunc("findUniqKmersBetweenSeqSetsMultiDev", findUniqKmersBetweenSeqSetsMultiDev, false),
 					 addFunc("countingUniqKmersFromSets", countingUniqKmersFromSets, false),
 					 addFunc("extractByCountingUniqKmersFromSets", extractByCountingUniqKmersFromSets, false),
+					 addFunc("extractByCountingUniqKmersFromSetsIterative", extractByCountingUniqKmersFromSets, false),
 					 addFunc("countingUniqKmersFromSetsPerRead", countingUniqKmersFromSetsPerRead, false),
 
 
@@ -100,8 +101,7 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("findUniqKmersFromGenomeSubRegions", findUniqKmersFromGenomeSubRegions, false),
 					 addFunc("addToUniqKmersSet", addToUniqKmersSet, false),
 					 addFunc("findUniqKmersFromGenomeSubRegionsMultiple", findUniqKmersFromGenomeSubRegionsMultiple, false),
-					 addFunc("extractByCountingUniqKmersFromSetsIterative", extractByCountingUniqKmersFromSetsIterative, false),
-					 //
+					 //extractByCountingUniqKmersFromSetsIterative
            },
           "kmerExp") {}
 

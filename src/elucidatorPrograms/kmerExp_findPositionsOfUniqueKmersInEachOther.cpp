@@ -35,8 +35,155 @@
 
 
 #include <njhseq/concurrency/PairwisePairFactory.hpp>
+#include <utility>
 
 namespace njhseq {
+
+std::string visQmd_kmerCompareTwoSetsOfContigs = R"(---
+title: "Processing Shared"
+author: "Nicholas Hathaway"
+format:
+  html:
+    theme: cosmo
+    fig-height: 10
+    fig-width: 15
+    toc: true
+    toc-depth: 4 # default is 3
+    toc-title: Contents
+    number-sections: true
+    anchor-sections: true
+    smooth-scroll: true
+    highlight-style: textmate
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code-link: true
+---
+
+
+```{r setup, echo=FALSE, message=FALSE}
+require(knitr)
+require(DT)
+require(tidyverse)
+require(stringr)
+require(dbscan)
+require(ape)
+require(rwantshue)
+require(tsne)
+require(ggforce)
+require(GGally)
+require(plotly)
+require(heatmaply)
+require(ComplexHeatmap)
+require(fastmatch)
+require(HaplotypeRainbows)
+require(ggtree)
+#turn off messages and warnings and make it so output isn't prefixed by anything,
+#default is to put "##" in front of all output for some reason
+#also set tidy to true so code is wrapped properly
+opts_chunk$set(message=FALSE, warning=FALSE, comment = "", cache = F)
+options(width = 200)
+`%!in%` <- Negate(`%in%`)
+scheme <- iwanthue(seed = 42, force_init = TRUE)
+
+myFormula= x~y
+library(ggpmisc)
+`%!in%` <- Negate(`%in%`)
+
+sofonias_theme = theme_bw() +
+  theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank() )+
+  theme(axis.line.x = element_line(color="black", linewidth = 0.3),axis.line.y =
+          element_line(color="black", linewidth = 0.3))+
+  theme(text=element_text(size=12, family="Helvetica"))+
+  theme(axis.text.y = element_text(size=12))+
+  theme(axis.text.x = element_text(size=12)) +
+   theme(legend.position = "bottom") +
+   theme(plot.title = element_text(hjust = 0.5))
+
+sofonias_theme_xRotate = sofonias_theme +
+  theme(axis.text.x = element_text(size=12, angle = -90, vjust = 0.5, hjust = 0))
+create_dt <- function(x){
+  DT::datatable(x,
+                extensions = 'Buttons',
+                options = list(dom = 'Blfrtip',
+                               buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+                               lengthMenu = list(c(10,25,50,-1),
+                                                 c(10,25,50,"All"))),
+                filter = "top")
+}
+colorPalette_08 = c("#2271B2","#F748A5","#359B73","#F0E442","#D55E00","#3DB7E9","#E69F00","#000000")
+colorPalette_12 = c("#E20134","#FF6E3A","#008DF9","#8400CD","#FFC33B","#9F0162","#009F81","#FF5AAF","#00FCCF","#00C2F9","#FFB2FD","#A40122")
+colorPalette_15 = c("#F60239","#003C86","#EF0096","#9400E6","#009FFA","#008169","#68023F","#00DCB5","#FFCFE2","#FF71FD","#7CFFFA","#6A0213","#008607","#00E307","#FFDC3D")
+
+createColorListFromDf <- function(df, colorPalette = colorPalette_12, iwanthudSeed = rnorm(1) * 100){
+  colorList = list()
+  for (dfColname in colnames(df)) {
+    levels = sort(unique(df[[dfColname]]))
+    scheme <- iwanthue(seed = iwanthudSeed, force_init = TRUE)
+    if (length(levels) <= length(colorPalette_12)) {
+      levelsCols = colorPalette_12[1:length(levels)]
+    } else{
+      levelsCols = scheme$hex(length(levels))
+    }
+    names(levelsCols) = levels
+    colorList[[dfColname]] = levelsCols
+  }
+  return(colorList)
+}
+```
+
+<style type="text/css">
+div.content {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
+
+
+
+```{r, fig.width=15, fig.height=15}
+inputSeqsLen = readr::read_tsv("inputSeqLengths.tab.txt")
+inputSeqsLen = inputSeqsLen %>%
+  mutate(name = factor(name, levels = name))
+refSeqsLen = readr::read_tsv("refSeqLengths.tab.txt")
+refSeqsLen = refSeqsLen %>%
+  mutate(name = factor(name, levels = name))
+
+inputSeqsSharedSegments = readr::read_tsv("sharedRegions.tab.txt") %>%
+  mutate(`#name` = factor(`#name`, levels = inputSeqsLen$name))%>%
+  mutate(refName = factor(refName, levels = refSeqsLen$name))%>%
+  mutate(id = factor(row_number()))
+
+
+ggplotly(ggplot() +
+    geom_rect(data = inputSeqsLen, aes(xmin = 0, xmax = length,
+                                                ymin = as.numeric(name)- 0.5,
+                                                ymax = as.numeric(name)+ 0.5, length = length), fill = "grey55") +
+  geom_rect(data = inputSeqsSharedSegments%>%
+              filter(length > 100), aes(xmin = start, xmax = end,
+                                                ymin = as.numeric(`#name`)- 0.4,
+                                                ymax = as.numeric(`#name`)+ 0.4, fill = id, length = length), alpha = 1) +
+    sofonias_theme)
+
+
+```
+
+```{r, fig.width=15, fig.height=15}
+
+ggplotly(ggplot() +
+    geom_rect(data = refSeqsLen, aes(xmin = 0, xmax = length,
+                                                ymin = as.numeric(name)- 0.5,
+                                                ymax = as.numeric(name)+ 0.5, length = length), fill = "grey55") +
+  geom_rect(data = inputSeqsSharedSegments %>%
+              filter(length > 100), aes(xmin = refStart, xmax = refEnd,
+                                                ymin = as.numeric(refName)- 0.4,
+                                                ymax = as.numeric(refName)+ 0.4, fill = id, length = length), alpha = 1) +
+    sofonias_theme)
+
+```
+
+)";
 
 
 int kmerExpRunner::kmerCompareTwoSetsOfContigs(const njh::progutils::CmdArgs & inputCommands){
@@ -176,16 +323,23 @@ int kmerExpRunner::kmerCompareTwoSetsOfContigs(const njh::progutils::CmdArgs & i
 			refSeqsLensOut << seq.name_ << '\t' << len(seq) << std::endl;
 		}
 	}
+
+	{
+		OutputStream visQmdOut(njh::files::make_path(setUp.pars_.directoryName_, "vis.qmd"));
+		visQmdOut << visQmd_kmerCompareTwoSetsOfContigs << std::endl;
+	}
 	return 0;
 }
 
 class ChromVsChromGraph {
 public:
 
-	struct node{
-		node(const Bed6RecordCore & chrom1Reg, const Bed6RecordCore & chrom2Reg):chrom1Reg_(chrom1Reg), chrom2Reg_(chrom2Reg){
+	struct node {
+		node(Bed6RecordCore chrom1Reg, const Bed6RecordCore &chrom2Reg) : chrom1Reg_(std::move(chrom1Reg)),
+																																			chrom2Reg_(chrom2Reg) {
 
 		}
+
 		Bed6RecordCore chrom1Reg_;
 		Bed6RecordCore chrom2Reg_;
 
