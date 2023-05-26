@@ -6,9 +6,9 @@
 #include <njhseq/objects/kmer/KmerUtils.hpp>
 #include <njhseq/objects/kmer.h>
 
-#include "elucidator/simulation.h"
 
 #include "elucidator/objects/MiscUtility/GenomeSeqSearch.hpp"
+#include "elucidator/helpers/UniqueKmerSetHelper.hpp"
 
 #include <njhseq/objects/dataContainers/tables/TableReader.hpp>
 #include <njhseq/objects/BioDataObject/reading.hpp>
@@ -17,6 +17,44 @@
 namespace njhseq {
 
 
+
+
+int kmerExpRunner::reportOnUniqKmersSet(const njh::progutils::CmdArgs & inputCommands){
+
+	bfs::path countTable;
+	bfs::path nonUniqueKmerTable;
+
+	OutOptions outOpts;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.description_ = "Add unique kmers to set of already determined unique kmers";
+	setUp.setOption(nonUniqueKmerTable, "--nonUniqueKmerTable", "non-unique Kmer Table, 1)set,2)kmer");
+	setUp.setOption(countTable, "--kmerTable,--countTable", "unique kmer sets, 1)set,2)kmer", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	njh::files::checkExistenceThrow(countTable, __PRETTY_FUNCTION__ );
+	if(!nonUniqueKmerTable.empty()){
+		njh::files::checkExistenceThrow(nonUniqueKmerTable, __PRETTY_FUNCTION__ );
+	}
+	OutputStream out(outOpts);
+	uint32_t klen = UniqueKmerSetHelper::getKmerLenFromUniqueKmerTable(countTable);
+	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet = UniqueKmerSetHelper::readInUniqueKmerTablePerSet(
+					countTable);
+	std::string nonUniqueRegionName = "NON_UNIQUE";
+	std::unordered_set<uint64_t> nonUniqueKmersPerSet;
+	if (!nonUniqueKmerTable.empty()) {
+		nonUniqueKmersPerSet = UniqueKmerSetHelper::readInUniqueKmerTableSetsCollapsed(nonUniqueKmerTable);
+	}
+	out << "set\tuniquerKmers" << std::endl;
+	out << "klen\t" << klen << std::endl;
+	for (const auto &set: uniqueKmersPerSet) {
+		out << set.first << "\t" << set.second.size() << std::endl;
+	}
+	out << nonUniqueRegionName << "\t" << nonUniqueKmersPerSet.size() << std::endl;
+	return 0;
+}
 
 int kmerExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputCommands){
 
@@ -43,47 +81,22 @@ int kmerExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputComman
 	nonUniqKmersOutOpts.transferOverwriteOpts(outOpts);
 	setUp.finishSetUp(std::cout);
 
+	njh::files::checkExistenceThrow(countTable, __PRETTY_FUNCTION__ );
+	if(!nonUniqueKmerTable.empty()){
+		njh::files::checkExistenceThrow(nonUniqueKmerTable, __PRETTY_FUNCTION__ );
+	}
 	OutputStream out(outOpts);
-
 	OutputStream nonUniqKmersOut(nonUniqKmersOutOpts);
 
-	uint32_t klen = 0;
-	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet;
-
-	{
-		SimpleKmerHash hasher;
-
-		TableReader uniqKmers(TableIOOpts::genTabFileIn(countTable, false));
-		if(uniqKmers.header_.nCol() < 2){
-			std::stringstream ss;
-			ss << __PRETTY_FUNCTION__ << ", error " << "need to have 2 columns" << "\n";
-			throw std::runtime_error{ss.str()};
-		}
-		VecStr row;
-		while(uniqKmers.getNextRow(row)){
-			klen = row[1].size();
-			uniqueKmersPerSet[row[0]].emplace(hasher.hash(row[1]));
-		}
-	}
-
-	std::unordered_set<uint64_t> nonUniqueKmersPerSet;
+	uint32_t klen = UniqueKmerSetHelper::getKmerLenFromUniqueKmerTable(countTable);
+	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet = UniqueKmerSetHelper::readInUniqueKmerTablePerSet(
+					countTable);
 	std::string nonUniqueRegionName = "NON_UNIQUE";
-	if(!nonUniqueKmerTable.empty()){
-
-		SimpleKmerHash hasher;
-		TableReader uniqKmers(TableIOOpts::genTabFileIn(nonUniqueKmerTable, false));
-		if(uniqKmers.header_.nCol() < 2){
-			std::stringstream ss;
-			ss << __PRETTY_FUNCTION__ << ", error " << "need to have 2 columns" << "\n";
-			throw std::runtime_error{ss.str()};
-		}
-		VecStr row;
-		while(uniqKmers.getNextRow(row)){
-			klen = row[1].size();
-			//currently this will overwrite whatever the original non-unique kmer set name was
-			nonUniqueKmersPerSet.emplace(hasher.hash(row[1]));
-		}
+	std::unordered_set<uint64_t> nonUniqueKmersPerSet;
+	if (!nonUniqueKmerTable.empty()) {
+		nonUniqueKmersPerSet = UniqueKmerSetHelper::readInUniqueKmerTableSetsCollapsed(nonUniqueKmerTable);
 	}
+
 
 	seqInfo seq;
 	SeqInput reader(setUp.pars_.ioOptions_);
@@ -165,10 +178,14 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutil
 	bool doNotReverseCompOfGenomeRegions = false;
 	bool separateGenomeOutput = false;
 	OutOptions outOpts;
+
+	uint32_t expand = 0;
+
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.description_ = "Get the unique kmers that appear within the bed region compared to the rest of the genome";
+	setUp.setOption(expand, "--expand", "expand this amount out around the regions when creating the rest of genome unique kmers");
 
 	setUp.setOption(genomeFnp, "--genomeFnp", "genome file to extract from, a .2bit file needs to exist for the supplied genome", true);
 	setUp.setOption(regionTableFnp, "--bedFnp", "sub regions to extract to compare to the rest of the genome", true);
@@ -286,27 +303,42 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutil
 		ss << njh::conToStr(chromsDoNotExist, ", ") << "\n";
 		throw std::runtime_error{ss.str()};
 	}
-	std::unordered_map<std::string, std::vector<std::shared_ptr<Bed6RecordCore>>> bedsByChrom;
-	for(const auto & bedRegion : allBeds){
-		bedsByChrom[bedRegion->chrom_].emplace_back(bedRegion);
+	std::unordered_map<std::string, std::vector<std::shared_ptr<Bed6RecordCore>>> bedsByChromForSubstracting;
+
+	std::vector<std::shared_ptr<Bed6RecordCore>> allBedsForSubtracting;
+	for (const auto &region: allBeds) {
+		Bed6RecordCore regionToAdd = *region;
+		if (expand > 0) {
+			BedUtility::extendLeftRight(regionToAdd, expand, expand, chromLengths.at(regionToAdd.chrom_));
+		}
+		if (!allBedsForSubtracting.empty() && allBedsForSubtracting.back()->overlaps(regionToAdd, 1)) {
+			allBedsForSubtracting.back()->chromEnd_ = std::max(allBedsForSubtracting.back()->chromEnd_,
+																												 regionToAdd.chromEnd_);
+		} else {
+			allBedsForSubtracting.emplace_back(std::make_shared<Bed6RecordCore>(regionToAdd));
+		}
+	}
+
+	for(const auto & bedRegion : allBedsForSubtracting){
+		bedsByChromForSubstracting[bedRegion->chrom_].emplace_back(bedRegion);
 	}
 
 	//// subtract region to create other regions
 	std::vector<Bed6RecordCore> inbetweenRegions;
 	for (const auto &chromKey: njh::getSetOfMapKeys(chromLengths)) {
 
-		if (njh::in(chromKey, bedsByChrom)) {
+		if (njh::in(chromKey, bedsByChromForSubstracting)) {
 			//add front
-			if (0 != bedsByChrom[chromKey].front()->chromStart_) {
-				inbetweenRegions.emplace_back(chromKey, 0, bedsByChrom[chromKey].front()->chromStart_,
+			if (0 != bedsByChromForSubstracting[chromKey].front()->chromStart_) {
+				inbetweenRegions.emplace_back(chromKey, 0, bedsByChromForSubstracting[chromKey].front()->chromStart_,
 																			njh::pasteAsStr(chromKey, "-", 0, "-",
-																											bedsByChrom[chromKey].front()->chromStart_),
-																			bedsByChrom[chromKey].front()->chromStart_, '+');
+																											bedsByChromForSubstracting[chromKey].front()->chromStart_),
+																			bedsByChromForSubstracting[chromKey].front()->chromStart_, '+');
 			}
-			if(bedsByChrom[chromKey].size() > 1){
-				for(const auto pos : iter::range(bedsByChrom[chromKey].size() - 1)){
-					auto start = bedsByChrom[chromKey][pos]->chromEnd_;
-					auto end = bedsByChrom[chromKey][pos + 1]->chromStart_;
+			if(bedsByChromForSubstracting[chromKey].size() > 1){
+				for(const auto pos : iter::range(bedsByChromForSubstracting[chromKey].size() - 1)){
+					auto start = bedsByChromForSubstracting[chromKey][pos]->chromEnd_;
+					auto end = bedsByChromForSubstracting[chromKey][pos + 1]->chromStart_;
 					if(start != end){
 						inbetweenRegions.emplace_back(chromKey, start, end,
 																					njh::pasteAsStr(chromKey, "-", start, "-",
@@ -316,11 +348,11 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutil
 				}
 			}
 			//add back
-			if (chromLengths[chromKey] != bedsByChrom[chromKey].back()->chromEnd_) {
-				inbetweenRegions.emplace_back(chromKey, bedsByChrom[chromKey].back()->chromEnd_, chromLengths[chromKey],
-																			njh::pasteAsStr(chromKey, "-", bedsByChrom[chromKey].back()->chromEnd_, "-",
+			if (chromLengths[chromKey] != bedsByChromForSubstracting[chromKey].back()->chromEnd_) {
+				inbetweenRegions.emplace_back(chromKey, bedsByChromForSubstracting[chromKey].back()->chromEnd_, chromLengths[chromKey],
+																			njh::pasteAsStr(chromKey, "-", bedsByChromForSubstracting[chromKey].back()->chromEnd_, "-",
 																											chromLengths[chromKey]),
-																			chromLengths[chromKey] - bedsByChrom[chromKey].back()->chromEnd_, '+');
+																			chromLengths[chromKey] - bedsByChromForSubstracting[chromKey].back()->chromEnd_, '+');
 			}
 		} else {
 			//no bed regions for this chrom

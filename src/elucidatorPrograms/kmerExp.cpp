@@ -101,7 +101,8 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("findUniqKmersFromGenomeSubRegions", findUniqKmersFromGenomeSubRegions, false),
 					 addFunc("addToUniqKmersSet", addToUniqKmersSet, false),
 					 addFunc("findUniqKmersFromGenomeSubRegionsMultiple", findUniqKmersFromGenomeSubRegionsMultiple, false),
-					 //extractByCountingUniqKmersFromSetsIterative
+					 addFunc("reportOnUniqKmersSet", reportOnUniqKmersSet, false),
+					 //
            },
           "kmerExp") {}
 

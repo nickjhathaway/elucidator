@@ -28,4 +28,5 @@
 //
 
 #include "elucidator/helpers/expSeqUtil.hpp"
+#include "elucidator/helpers/UniqueKmerSetHelper.hpp"
 

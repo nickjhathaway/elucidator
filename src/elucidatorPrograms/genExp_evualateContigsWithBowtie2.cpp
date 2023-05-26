@@ -678,18 +678,25 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 	return 0;
 }
 
-std::string DisplayResultsRMD = R"(---
+std::string DisplayResultsQmd = R"(---
 title: "Displaying Results of Eval Against Expected"
 author: "Nicholas Hathaway"
-output:
- html_document:
-   highlight: textmate
-   theme: flatly
-   code_folding: hide
-   toc: yes
-   toc_float: yes
-   fig_width: 12
-   fig_height: 8
+format:
+  html:
+    theme: cosmo
+    fig-height: 10
+    fig-width: 15
+    toc: true
+    toc-depth: 4 # default is 3
+    toc-title: Contents
+    number-sections: true
+    anchor-sections: true
+    smooth-scroll: true
+    highlight-style: textmate
+    page-layout: full
+    code-fold: true
+    code-tools: true
+    code-link: true
 ---
 
 
@@ -697,43 +704,85 @@ output:
 require(knitr)
 require(DT)
 require(tidyverse)
+require(stringr)
+require(dbscan)
+require(ape)
+require(rwantshue) 
+require(tsne)
+require(ggforce)
+require(GGally)
 require(plotly)
 require(heatmaply)
+require(ComplexHeatmap)
+require(fastmatch)
+require(HaplotypeRainbows)
+require(ggtree)
 #turn off messages and warnings and make it so output isn't prefixed by anything,
 #default is to put "##" in front of all output for some reason
-#also set tidy to true so code is wrapped properly
+#also set tidy to true so code is wrapped properly 
 opts_chunk$set(message=FALSE, warning=FALSE, comment = "", cache = F)
 options(width = 200)
 `%!in%` <- Negate(`%in%`)
+scheme <- iwanthue(seed = 42, force_init = TRUE) 
 
 myFormula= x~y
 library(ggpmisc)
 `%!in%` <- Negate(`%in%`)
 
 sofonias_theme = theme_bw() +
-								 theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank() )+
-								 theme(axis.line.x = element_line(color="black", size = 0.3),axis.line.y =
-												 element_line(color="black", size = 0.3))+
-								 theme(text=element_text(size=12, family="Helvetica"))+
-								 theme(axis.text.y = element_text(size=12))+
-								 theme(axis.text.x = element_text(size=12)) +
-								 theme(legend.position = "bottom") +
-								 theme(plot.title = element_text(hjust = 0.5))
+  theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank() )+
+  theme(axis.line.x = element_line(color="black", linewidth = 0.3),axis.line.y =
+          element_line(color="black", linewidth = 0.3))+
+  theme(text=element_text(size=12, family="Helvetica"))+
+  theme(axis.text.y = element_text(size=12))+
+  theme(axis.text.x = element_text(size=12)) +
+   theme(legend.position = "bottom") + 
+   theme(plot.title = element_text(hjust = 0.5))
 
-sofonias_theme_xRotate = sofonias_theme +
-												 theme(axis.text.x = element_text(size=12, angle = -90, vjust = 0.5, hjust = 0))
+sofonias_theme_xRotate = sofonias_theme + 
+  theme(axis.text.x = element_text(size=12, angle = -90, vjust = 0.5, hjust = 0)) 
+create_dt <- function(x){
+  DT::datatable(x,
+                extensions = 'Buttons',
+                options = list(dom = 'Blfrtip',
+                               buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+                               lengthMenu = list(c(10,25,50,-1),
+                                                 c(10,25,50,"All"))), 
+                filter = "top")
+}
+colorPalette_08 = c("#2271B2","#F748A5","#359B73","#F0E442","#D55E00","#3DB7E9","#E69F00","#000000")
+colorPalette_12 = c("#E20134","#FF6E3A","#008DF9","#8400CD","#FFC33B","#9F0162","#009F81","#FF5AAF","#00FCCF","#00C2F9","#FFB2FD","#A40122")
+colorPalette_15 = c("#F60239","#003C86","#EF0096","#9400E6","#009FFA","#008169","#68023F","#00DCB5","#FFCFE2","#FF71FD","#7CFFFA","#6A0213","#008607","#00E307","#FFDC3D")
+
+createColorListFromDf <- function(df, colorPalette = colorPalette_12, iwanthudSeed = rnorm(1) * 100){
+  colorList = list()
+  for (dfColname in colnames(df)) {
+    levels = sort(unique(df[[dfColname]]))
+    scheme <- iwanthue(seed = iwanthudSeed, force_init = TRUE)
+    if (length(levels) <= length(colorPalette_12)) {
+      levelsCols = colorPalette_12[1:length(levels)]
+    } else{
+      levelsCols = scheme$hex(length(levels))
+    }
+    names(levelsCols) = levels
+    colorList[[dfColname]] = levelsCols
+  }
+  return(colorList)
+}
 ```
+
 <style type="text/css">
-						div.main-container {
-										max-width: 1800px;
-										margin-left: auto;
-										margin-right: auto;
-						}
-						</style>
+div.content {
+  max-width: 1800px;
+  margin-left: auto;
+  margin-right: auto;
+}
+</style>
 
 ## Expected Regions
 
 ```{r}
+
 expectedRegions = readr::read_tsv("expectedRegionsInputInfo/expectedRegions.bed", col_names = F)
 colnames(expectedRegions)[1:6] = c("chrom", "start", "end", "name", "length", "strand")
 DT::datatable(
@@ -794,42 +843,96 @@ DT::datatable(
 ## Plotting by groupped regions
 
 ```{r}
-groupedRegions = readr::read_tsv("groupedRegions.bed", col_names = F)
-expectedRegions = expectedRegions %>%
-rename(desp = X7) %>%
-mutate(X7 = name)
 
-allNotCoveredRegions = allNotCoveredRegions %>%
-mutate(X7 = gsub(":.*", "", X4))
+groupedRegions = readr::read_tsv("groupedRegions.bed", col_names = F)
+expectedRegions_mod = expectedRegions %>%
+  rename(desp = X7) %>%
+  mutate(X7 = name)
+
+if (nrow(allNotCoveredRegions) > 1) {
+  allNotCoveredRegions = allNotCoveredRegions %>%
+    mutate(X7 = gsub(":.*", "", X4))
+}
+
 
 refComparisonInfo_errorFree = refComparisonInfo %>%
-filter(totalErrors == 0)
+  filter(totalErrors == 0)
 
 groupedRegions = groupedRegions %>%
-mutate(errorFree = X8 %in% refComparisonInfo_errorFree$ReadId)
+  mutate(errorFree = X8 %in% refComparisonInfo_errorFree$ReadId) %>%
+  mutate(
+    name = X4,
+    chrom = X1,
+    start = X2,
+    end = X3,
+    strand = X6
+  )
 
-ggplot(groupedRegions) +
-geom_rect(aes(xmin = X2, xmax = X3,
-							ymin = X9, ymax = X9+ 1,
-							fill = errorFree),
-				color = "black") +
-geom_rect(aes(xmin = start, xmax = end,
-							ymin = -0.5, ymax = 0),
-				data = expectedRegions,
-				fill = "red",
-				color = "black") +
-geom_rect(
-				aes(xmin = X2, xmax = X3,
-						ymin = -1, ymax = -0.5),
-				data = allNotCoveredRegions,
-				fill = "blue",
-				color = "black"
-) +
-sofonias_theme_xRotate +
-scale_fill_manual(values = c("TRUE" = "#0AB45A", "FALSE" = "#AA0A3C")) +
-facet_wrap(~X7, scales = "free")
+groupedRegions_plot = ggplot(groupedRegions) +
+  geom_rect(
+    aes(
+      xmin = X2,
+      xmax = X3,
+      ymin = X9,
+      ymax = X9 + 1,
+      fill = errorFree,
+      name = name,
+      chrom = chrom,
+      start = start,
+      end = end,
+      strand = strand
+    ),
+    color = "black"
+  ) +
+  geom_rect(
+    aes(
+      xmin = start,
+      xmax = end,
+      ymin = -0.5,
+      ymax = 0,
+      name = name,
+      chrom = chrom,
+      start = start,
+      end = end,
+      strand = strand
+    ),
+    data = expectedRegions_mod,
+    fill = "red",
+    color = "black"
+  )
+if (nrow(allNotCoveredRegions) > 1) {
+  groupedRegions_plot = groupedRegions_plot +
+    geom_rect(
+      aes(
+        xmin = X2,
+        xmax = X3,
+        ymin = -1,
+        ymax = -0.5
+      ),
+      data = allNotCoveredRegions,
+      fill = "blue",
+      color = "black"
+    )
+}
 
-```)";
+groupedRegions_plot = groupedRegions_plot +
+  sofonias_theme_xRotate +
+  scale_fill_manual(values = c("TRUE" = "#0AB45A", "FALSE" = "#AA0A3C")) +
+  facet_wrap( ~ X7, scales = "free")
+```
+
+```{r}
+#| fig-column: screen-inset-shaded
+
+print(groupedRegions_plot)
+```
+
+```{r}
+#| column: screen-inset-shaded
+#| fig-height: 20
+ggplotly(groupedRegions_plot)
+```
+)";
 
 
 int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs & inputCommands){
@@ -1903,8 +2006,8 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	}
 
 	{
-		OutputStream displayResultsRMDOut(njh::files::make_path(setUp.pars_.directoryName_, "displayResults.Rmd"));
-		displayResultsRMDOut << DisplayResultsRMD << std::endl;
+		OutputStream DisplayResultsQmdOut(njh::files::make_path(setUp.pars_.directoryName_, "displayResults.qmd"));
+		DisplayResultsQmdOut << DisplayResultsQmd << std::endl;
 	}
 	return 0;
 }
