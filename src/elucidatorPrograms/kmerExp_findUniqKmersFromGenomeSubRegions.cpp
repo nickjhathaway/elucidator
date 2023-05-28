@@ -18,6 +18,47 @@ namespace njhseq {
 
 
 
+int kmerExpRunner::uniqKmersSetToFasta(const njh::progutils::CmdArgs & inputCommands){
+
+	bfs::path countTable;
+	bfs::path nonUniqueKmerTable;
+
+	OutOptions outOpts;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.description_ = "Add unique kmers to set of already determined unique kmers";
+	setUp.setOption(countTable, "--kmerTable", "unique kmer sets, 1)set,2)kmer", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	njh::files::checkExistenceThrow(countTable, __PRETTY_FUNCTION__ );
+	if(!nonUniqueKmerTable.empty()){
+		njh::files::checkExistenceThrow(nonUniqueKmerTable, __PRETTY_FUNCTION__ );
+	}
+
+	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet = UniqueKmerSetHelper::readInUniqueKmerTablePerSet(
+					countTable);
+	SimpleKmerHash hasher;
+	for (const auto &set: uniqueKmersPerSet) {
+		bfs::path outFnp = set.first;
+		if (!outOpts.outFilename_.empty()) {
+			outFnp = njh::files::nameAppendBeforeExt(outOpts.outFilename_, set.first);
+		}
+		auto seqOutForSet = SeqIOOptions::genFastaOutGz(outFnp);
+		seqOutForSet.out_.transferOverwriteOpts(outOpts);
+
+		SeqOutput writer(seqOutForSet);
+		writer.openOut();
+		uint32_t kmerCount = 0;
+		for(const auto & k : set.second){
+			writer.write(seqInfo(estd::to_string(kmerCount), hasher.reverseHash(k)));
+			++kmerCount;
+		}
+	}
+
+	return 0;
+}
 
 int kmerExpRunner::reportOnUniqKmersSet(const njh::progutils::CmdArgs & inputCommands){
 

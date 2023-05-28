@@ -111,10 +111,10 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutils::CmdArgs & inputCommands);
 	static int addToUniqKmersSet(const njh::progutils::CmdArgs & inputCommands);
 	static int reportOnUniqKmersSet(const njh::progutils::CmdArgs & inputCommands);
+	static int uniqKmersSetToFasta(const njh::progutils::CmdArgs & inputCommands);
 
 	static int findKmersInSets(const njh::progutils::CmdArgs & inputCommands);
 
-	//static int extractByCountingUniqKmersFromSetsIterative(const njh::progutils::CmdArgs & inputCommands);
 	static int extractByCountingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands);
 	static int countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArgs & inputCommands);
 	static int countingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands);

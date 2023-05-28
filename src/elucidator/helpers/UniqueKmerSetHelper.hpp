@@ -9,6 +9,7 @@
 #include <njhcpp/common.h>
 #include <njhseq/objects/kmer.h>
 #include <njhseq/objects/dataContainers/tables/TableReader.hpp>
+#include <njhseq/IO/SeqIO/MultiSeqIO.hpp>
 
 
 namespace njhseq {
@@ -44,6 +45,114 @@ public:
 	 * Expects the file to be a two column table with kmers in the second column, kmers can't be longer than 19 in length
 	 */
 	static std::unordered_set<uint64_t> readInUniqueKmerTableSetsCollapsed(const bfs::path &uniqueKmerTableFnp);
+
+	struct CompareReadToSetPars {
+		bool includeRevComp = false;
+		uint32_t klen = 19;
+		std::string sampleName;
+		bool pairsSeparate = false;
+		uint32_t hardCountOff = 0;
+	};
+
+	struct CompareReadToSetRes {
+		std::unordered_map<uint64_t, uint64_t> hashedInputKmers;
+		std::unordered_map<uint64_t, uint64_t> hashedInputKmersRevComp;
+		std::unordered_map<std::string, uint32_t> foundPerSet;
+		std::unordered_map<std::string, uint32_t> foundPerSetRevComp;
+
+		std::string winnerSet = "undetermined";
+		double bestFrac = 0;
+		bool winnerRevComp = false;
+
+		void zeroFillFoundSets(const VecStr &setNames);
+		static VecStr genOutputHeader(const CompareReadToSetPars &compPars);
+		static void writeOutputHeader(std::ostream & out, const CompareReadToSetPars &compPars, const std::string & delim = "\t");
+
+		std::vector<std::vector<std::string>> genOutput(const seqInfo &seq,
+										 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+										 const CompareReadToSetPars &pars);
+
+		void writeOutput(std::ostream & out, const seqInfo &seq,
+										 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+										 const CompareReadToSetPars &pars, const std::string & delim = "\t");
+
+	};
+
+
+	static CompareReadToSetRes compareReadToSetRes(PairedRead &pseq,
+																								 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+																								 const CompareReadToSetPars &compPars, const SimpleKmerHash &hasher);
+
+	static CompareReadToSetRes compareReadToSetRes(seqInfo &seq,
+																								 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+																								 const CompareReadToSetPars &compPars, const SimpleKmerHash &hasher);
+
+
+	struct ProcessReadForExtractingPars {
+		CompareReadToSetPars compPars;
+		uint32_t smallLenCutOff = 0;
+		bool writeOutExclude = false;
+		bool doNotWriteUndetermined = false;
+		bool doReCheckExcludeSets = false;
+		std::set<std::string> excludeSetNames{"genomeRest"};
+		uint32_t addingInKmersCountCutOff = 0;
+
+	};
+
+	struct ProcessReadForExtractingCounts{
+		std::unordered_map<std::string, uint32_t> readsPerSet;
+		std::unordered_map<std::string, uint32_t> readsPerSetRevComp;
+		uint32_t smallLenCutOffCount = 0;
+
+		void addOtherCounts(const ProcessReadForExtractingCounts & otherCounts);
+
+		[[nodiscard]] uint64_t getTotalCounts() const;
+		[[nodiscard]] uint64_t genTotalUndeterminedCount() const;
+		[[nodiscard]] uint64_t genTotalDeterminedCount() const;
+		static VecStr genOutCountsHeader(const ProcessReadForExtractingPars & extractingPars);
+		static void writeOutCountsHeader(std::ostream & out, const ProcessReadForExtractingPars & extractingPars, const std::string & delim = "\t");
+
+
+		[[nodiscard]] std::vector<std::vector<std::string>> genOutCounts(const ProcessReadForExtractingPars & extractingPars,
+												const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+												const std::string & iterName) const;
+
+		void writeOutCounts(std::ostream & out, const ProcessReadForExtractingPars & extractingPars,
+											const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+												const std::string & iterName, const std::string & delim = "\t") const;
+
+
+
+	};
+
+	static void processReadForExtracting(PairedRead &pseq,
+																			 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+																			 const ProcessReadForExtractingPars &extractingPars, const SimpleKmerHash &hasher,
+																			 MultiSeqIO &seqOut, ProcessReadForExtractingCounts &counts);
+
+	static void processReadForExtracting(seqInfo &seq,
+																			 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+																			 const ProcessReadForExtractingPars &extractingPars, const SimpleKmerHash &hasher,
+																			 MultiSeqIO &seqOut, ProcessReadForExtractingCounts &counts);
+
+
+	static std::unordered_map<std::string, std::unordered_map<uint64_t, uint32_t>>
+	readInNewKmersFromExtractedReads(const bfs::path &directoryIn,
+																	 const VecStr &kmerSets,
+																	 const ProcessReadForExtractingPars &extractingPars);
+
+	static std::unordered_map<std::string, std::unordered_set<uint64_t>> filterReExtractedKmersForNonUnique(
+					const std::unordered_map<std::string, std::unordered_map<uint64_t, uint32_t>> &rawKmersPerInput,
+					const ProcessReadForExtractingPars &extractingPars,
+					const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+					std::unordered_set<uint64_t> &nonUniqueKmersPerSet) ;
+
+	static std::unordered_map<std::string, std::unordered_set<uint64_t>> filterReExtractedKmersForNonUniqueIncludeExcludedSets(
+					const std::unordered_map<std::string, std::unordered_map<uint64_t, uint32_t>> &rawKmersPerInput,
+					const ProcessReadForExtractingPars &extractingPars,
+					const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+					std::unordered_set<uint64_t> &nonUniqueKmersPerSet) ;
+
 
 };
 

@@ -85,8 +85,6 @@ int kmerExpRunner::filterUniqueKmerSetForEntropy(const njh::progutils::CmdArgs &
 	return 0;
 }
 
-
-
 int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlns(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
 	bfs::path countTable = "";
@@ -289,7 +287,6 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlns(const njh::progutils:
 
 	return 0;
 }
-
 int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
 	bfs::path countTable = "";
@@ -531,6 +528,75 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 }
 
 
+int kmerExpRunner::findUniqKmersBetweenSeqSets(const njh::progutils::CmdArgs & inputCommands){
+	KmerGatherer::KmerGathererPars countPars;
+	bfs::path genomeFnp1 = "";
+	bfs::path genomeFnp2 = "";
+	bool writeOutAllCounts = false;
+
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(genomeFnp1, "--genomeFnp1,--seqSetFnp1", "genomeFnp1", true);
+	setUp.setOption(genomeFnp2, "--genomeFnp2,--seqSetFnp2", "genomeFnp2", true);
+	countPars.setOptions(setUp);
+	setUp.setOption(writeOutAllCounts, "--writeOutAllCounts", "writeOutAllCounts");
+	std::string genomeFnp1Base = bfs::basename(njh::files::removeExtension(genomeFnp1));
+	std::string genomeFnp2Base = bfs::basename(njh::files::removeExtension(genomeFnp2));
+
+	setUp.processDirectoryOutputName(njh::pasteAsStr(genomeFnp1Base, "_vs_", genomeFnp2Base, "_TODAY"), true);
+	setUp.finishSetUp(std::cout);
+	setUp.startARunLog(setUp.pars_.directoryName_);
+
+	KmerGatherer kGather(countPars);
+
+	setUp.rLog_.setCurrentLapName("initial");
+
+	setUp.rLog_.logCurrentTime("genome1_counting-" + genomeFnp1Base);
+	std::unordered_map<std::string, uint32_t> genome1Counts = kGather.countGenomeKmers(genomeFnp1);
+	setUp.rLog_.logCurrentTime("genome2_counting-" + genomeFnp2Base);
+	std::unordered_map<std::string, uint32_t> genome2Counts = kGather.countGenomeKmers(genomeFnp2);
+
+
+	if(writeOutAllCounts){
+		setUp.rLog_.logCurrentTime("genome1_writing_all-" + genomeFnp1Base);
+
+		OutputStream genome1CountsOut(njh::files::make_path(setUp.pars_.directoryName_, genomeFnp1Base + "_counts.tab.txt.gz"));
+		for(const auto & count : genome1Counts){
+			genome1CountsOut << count.first << "\t" << count.second << "\n";
+		}
+		setUp.rLog_.logCurrentTime("genome2_writing_all-" + genomeFnp2Base);
+
+		OutputStream genome2CountsOut(njh::files::make_path(setUp.pars_.directoryName_, genomeFnp2Base + "_counts.tab.txt.gz"));
+		for(const auto & count : genome2Counts){
+			genome2CountsOut << count.first << "\t" << count.second << "\n";
+		}
+	}
+
+
+	std::function<bool(char)> charCheck = [&countPars](char base){
+		return njh::in(base, countPars.allowableCharacters_);
+	};
+	setUp.rLog_.logCurrentTime("genome1_unique_determination-" + genomeFnp1Base);
+
+	OutputStream genome1UniqueCountsOut(njh::files::make_path(setUp.pars_.directoryName_, genomeFnp1Base + "_uniqueKmers_counts.tab.txt.gz"));
+	for(const auto & count : genome1Counts){
+		if(std::all_of(count.first.begin(), count.first.end(), charCheck) && !njh::in(count.first, genome2Counts) ){
+			genome1UniqueCountsOut << count.first << "\t" << count.second << "\n";
+		}
+	}
+	setUp.rLog_.logCurrentTime("genome2_unique_determination-" + genomeFnp2Base);
+	OutputStream genome2UniqueCountsOut(njh::files::make_path(setUp.pars_.directoryName_, genomeFnp2Base + "_uniqueKmers_counts.tab.txt.gz"));
+	for(const auto & count : genome2Counts){
+		if(std::all_of(count.first.begin(), count.first.end(), charCheck) && !njh::in(count.first, genome1Counts) ){
+			genome2UniqueCountsOut << count.first << "\t" << count.second << "\n";
+		}
+	}
+	setUp.rLog_.logCurrentTime("end");
+
+	return 0;
+}
+
 int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands){
 	KmerGatherer::KmerGathererPars countPars;
 	bfs::path seqSetTableFnp = "";
@@ -678,13 +744,12 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 	return 0;
 }
 
-
-
 int kmerExpRunner::findKmersInSets(const njh::progutils::CmdArgs & inputCommands){
 	KmerGatherer::KmerGathererPars countPars;
 	std::vector<bfs::path> seqSetFnps;
 	uint32_t minOccurrences = 1;
 	seqSetUp setUp(inputCommands);
+	setUp.description_ = "Take a sequence file and report for each kmer stepped along the seq if that kmer can be found within a set of other fasta files";
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.setOption(seqSetFnps, "--seqSetFnps", "seqSetFnps", true);
@@ -712,7 +777,6 @@ int kmerExpRunner::findKmersInSets(const njh::progutils::CmdArgs & inputCommands
 	OutputStream kmerClassifierOut(njh::files::make_path(setUp.pars_.directoryName_, "seqsKmerClassified.tab.txt.gz"));
 	kmerClassifierOut << "name\tpos\tkmer\tfoundIn" << std::endl;
 	while(reader.readNextRead(seq)){
-
 		if(len(seq) >= countPars.kmerLength_){
 			for(auto pos = 0; pos < (len(seq) + 1 - countPars.kmerLength_); ++pos){
 				auto currentK = seq.seq_.substr(pos, countPars.kmerLength_);
@@ -722,13 +786,14 @@ int kmerExpRunner::findKmersInSets(const njh::progutils::CmdArgs & inputCommands
 						setsFounds.emplace(seqSet.first);
 					}
 				}
-				kmerClassifierOut << seq.name_
-				<< "\t" << pos
-				<< "\t" << currentK
-				<< "\t";
-				if(setsFounds.empty()){
+				kmerClassifierOut
+								<< seq.name_
+								<< "\t" << pos
+								<< "\t" << currentK
+								<< "\t";
+				if (setsFounds.empty()) {
 					kmerClassifierOut << "none";
-				}else{
+				} else {
 					kmerClassifierOut << njh::conToStr(setsFounds, ",");
 				}
 				kmerClassifierOut << std::endl;
@@ -741,74 +806,6 @@ int kmerExpRunner::findKmersInSets(const njh::progutils::CmdArgs & inputCommands
 	return 0;
 }
 
-int kmerExpRunner::findUniqKmersBetweenSeqSets(const njh::progutils::CmdArgs & inputCommands){
-	KmerGatherer::KmerGathererPars countPars;
-	bfs::path genomeFnp1 = "";
-	bfs::path genomeFnp2 = "";
-	bool writeOutAllCounts = false;
-
-	seqSetUp setUp(inputCommands);
-	setUp.processVerbose();
-	setUp.processDebug();
-	setUp.setOption(genomeFnp1, "--genomeFnp1,--seqSetFnp1", "genomeFnp1", true);
-	setUp.setOption(genomeFnp2, "--genomeFnp2,--seqSetFnp2", "genomeFnp2", true);
-	countPars.setOptions(setUp);
-	setUp.setOption(writeOutAllCounts, "--writeOutAllCounts", "writeOutAllCounts");
-	std::string genomeFnp1Base = bfs::basename(njh::files::removeExtension(genomeFnp1));
-	std::string genomeFnp2Base = bfs::basename(njh::files::removeExtension(genomeFnp2));
-
-	setUp.processDirectoryOutputName(njh::pasteAsStr(genomeFnp1Base, "_vs_", genomeFnp2Base, "_TODAY"), true);
-	setUp.finishSetUp(std::cout);
-	setUp.startARunLog(setUp.pars_.directoryName_);
-
-	KmerGatherer kGather(countPars);
-
-	setUp.rLog_.setCurrentLapName("initial");
-
-	setUp.rLog_.logCurrentTime("genome1_counting-" + genomeFnp1Base);
-	std::unordered_map<std::string, uint32_t> genome1Counts = kGather.countGenomeKmers(genomeFnp1);
-	setUp.rLog_.logCurrentTime("genome2_counting-" + genomeFnp2Base);
-	std::unordered_map<std::string, uint32_t> genome2Counts = kGather.countGenomeKmers(genomeFnp2);
-
-
-	if(writeOutAllCounts){
-		setUp.rLog_.logCurrentTime("genome1_writing_all-" + genomeFnp1Base);
-
-		OutputStream genome1CountsOut(njh::files::make_path(setUp.pars_.directoryName_, genomeFnp1Base + "_counts.tab.txt.gz"));
-		for(const auto & count : genome1Counts){
-			genome1CountsOut << count.first << "\t" << count.second << "\n";
-		}
-		setUp.rLog_.logCurrentTime("genome2_writing_all-" + genomeFnp2Base);
-
-		OutputStream genome2CountsOut(njh::files::make_path(setUp.pars_.directoryName_, genomeFnp2Base + "_counts.tab.txt.gz"));
-		for(const auto & count : genome2Counts){
-			genome2CountsOut << count.first << "\t" << count.second << "\n";
-		}
-	}
-
-
-	std::function<bool(char)> charCheck = [&countPars](char base){
-		return njh::in(base, countPars.allowableCharacters_);
-	};
-	setUp.rLog_.logCurrentTime("genome1_unique_determination-" + genomeFnp1Base);
-
-	OutputStream genome1UniqueCountsOut(njh::files::make_path(setUp.pars_.directoryName_, genomeFnp1Base + "_uniqueKmers_counts.tab.txt.gz"));
-	for(const auto & count : genome1Counts){
-		if(std::all_of(count.first.begin(), count.first.end(), charCheck) && !njh::in(count.first, genome2Counts) ){
-			genome1UniqueCountsOut << count.first << "\t" << count.second << "\n";
-		}
-	}
-	setUp.rLog_.logCurrentTime("genome2_unique_determination-" + genomeFnp2Base);
-	OutputStream genome2UniqueCountsOut(njh::files::make_path(setUp.pars_.directoryName_, genomeFnp2Base + "_uniqueKmers_counts.tab.txt.gz"));
-	for(const auto & count : genome2Counts){
-		if(std::all_of(count.first.begin(), count.first.end(), charCheck) && !njh::in(count.first, genome1Counts) ){
-			genome2UniqueCountsOut << count.first << "\t" << count.second << "\n";
-		}
-	}
-	setUp.rLog_.logCurrentTime("end");
-
-	return 0;
-}
 
 
 
