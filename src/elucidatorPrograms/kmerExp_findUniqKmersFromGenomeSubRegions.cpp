@@ -13,6 +13,7 @@
 #include <njhseq/objects/dataContainers/tables/TableReader.hpp>
 #include <njhseq/objects/BioDataObject/reading.hpp>
 #include <njhseq/objects/BioDataObject/BioRecordsUtils/BedUtility.hpp>
+#include <njhseq/objects/counters/DNABaseCounter.hpp>
 
 namespace njhseq {
 
@@ -104,7 +105,9 @@ int kmerExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputComman
 	bool getRevComp = false;
 	std::string regionName;
 	OutOptions outOpts;
-
+	KmerGatherer::KmerGathererPars countPars;
+	countPars.allUpper_ = false;
+	countPars.entropyFilter_ = 0;
 
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -112,6 +115,12 @@ int kmerExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputComman
 	setUp.description_ = "Add unique kmers to set of already determined unique kmers";
 	setUp.setOption(nonUniqueKmerTable, "--nonUniqueKmerTable", "non-unique Kmer Table, 1)set,2)kmer");
 	setUp.setOption(getRevComp, "--getRevComp", "Add Rev Comp kmers");
+
+	setUp.setOption(countPars.allowableCharacters_, "--allowableCharacters",
+									"Only count kmers with these allowable Characters");
+	setUp.setOption(countPars.entropyFilter_, "--entropyFilter", "entropy Filter cut off, exclusive, will only keep kmers above this entropy level");
+	setUp.setOption(countPars.allUpper_, "--changeSeqsToUpper", "change all sequences to upper case, otherwise they will filter off");
+
 	setUp.setOption(countTable, "--kmerTable,--countTable", "unique kmer sets, 1)set,2)kmer", true);
 	setUp.setOption(regionName, "--regionName", "region name for the input, can be a name already in --kmerTable", true);
 	setUp.processReadInNames(VecStr{"--fasta", "--fastagz", "--fastq", "--fastqgz"}, true);
@@ -140,21 +149,40 @@ int kmerExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputComman
 
 
 	seqInfo seq;
+	if(countPars.allUpper_){
+		setUp.pars_.ioOptions_.lowerCaseBases_ = "upper";
+	}
+	std::function<bool(const std::string&)> seqCheck = [&countPars](const std::string & k){
+		return std::all_of(k.begin(), k.end(), [&countPars](char base){return njh::in(base, countPars.allowableCharacters_);});
+	};
 	SeqInput reader(setUp.pars_.ioOptions_);
 	reader.openIn();
 	SimpleKmerHash hasher;
 	std::unordered_set<uint64_t> rawKmersPerInput;
-	while(reader.readNextRead(seq)){
+	while (reader.readNextRead(seq)) {
 		for (uint32_t pos = 0; pos < len(seq.seq_) - klen + 1; ++pos) {
-			rawKmersPerInput.emplace(
-							hasher.hash(seq.seq_.substr(pos, klen)));
+
+			auto k = seq.seq_.substr(pos, klen);
+			if (seqCheck(k)) {
+				DNABaseCounter counter(countPars.allowableCharacters_);
+				counter.increase(k);
+				if (counter.computeEntrophy() > countPars.entropyFilter_) {
+					rawKmersPerInput.emplace(hasher.hash(k));
+				}
+			}
 		}
 		if (getRevComp) {
-			seq.seq_ = seqUtil::reverseComplement(seq.seq_, "DNA");
 			for (uint32_t pos = 0; pos < len(seq.seq_) - klen + 1;
 					 ++pos) {
-				rawKmersPerInput.emplace(
-								hasher.hash(seq.seq_.substr(pos, klen)));
+				auto k = seq.seq_.substr(pos, klen);
+				if (seqCheck(k)) {
+					DNABaseCounter counter(countPars.allowableCharacters_);
+					counter.increase(k);
+					if (counter.computeEntrophy() > countPars.entropyFilter_) {
+						rawKmersPerInput.emplace(
+										hasher.revCompHash(k));
+					}
+				}
 			}
 		}
 	}

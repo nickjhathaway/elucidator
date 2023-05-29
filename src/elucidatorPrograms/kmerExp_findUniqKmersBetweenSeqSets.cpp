@@ -528,75 +528,6 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 }
 
 
-int kmerExpRunner::findUniqKmersBetweenSeqSets(const njh::progutils::CmdArgs & inputCommands){
-	KmerGatherer::KmerGathererPars countPars;
-	bfs::path genomeFnp1 = "";
-	bfs::path genomeFnp2 = "";
-	bool writeOutAllCounts = false;
-
-	seqSetUp setUp(inputCommands);
-	setUp.processVerbose();
-	setUp.processDebug();
-	setUp.setOption(genomeFnp1, "--genomeFnp1,--seqSetFnp1", "genomeFnp1", true);
-	setUp.setOption(genomeFnp2, "--genomeFnp2,--seqSetFnp2", "genomeFnp2", true);
-	countPars.setOptions(setUp);
-	setUp.setOption(writeOutAllCounts, "--writeOutAllCounts", "writeOutAllCounts");
-	std::string genomeFnp1Base = bfs::basename(njh::files::removeExtension(genomeFnp1));
-	std::string genomeFnp2Base = bfs::basename(njh::files::removeExtension(genomeFnp2));
-
-	setUp.processDirectoryOutputName(njh::pasteAsStr(genomeFnp1Base, "_vs_", genomeFnp2Base, "_TODAY"), true);
-	setUp.finishSetUp(std::cout);
-	setUp.startARunLog(setUp.pars_.directoryName_);
-
-	KmerGatherer kGather(countPars);
-
-	setUp.rLog_.setCurrentLapName("initial");
-
-	setUp.rLog_.logCurrentTime("genome1_counting-" + genomeFnp1Base);
-	std::unordered_map<std::string, uint32_t> genome1Counts = kGather.countGenomeKmers(genomeFnp1);
-	setUp.rLog_.logCurrentTime("genome2_counting-" + genomeFnp2Base);
-	std::unordered_map<std::string, uint32_t> genome2Counts = kGather.countGenomeKmers(genomeFnp2);
-
-
-	if(writeOutAllCounts){
-		setUp.rLog_.logCurrentTime("genome1_writing_all-" + genomeFnp1Base);
-
-		OutputStream genome1CountsOut(njh::files::make_path(setUp.pars_.directoryName_, genomeFnp1Base + "_counts.tab.txt.gz"));
-		for(const auto & count : genome1Counts){
-			genome1CountsOut << count.first << "\t" << count.second << "\n";
-		}
-		setUp.rLog_.logCurrentTime("genome2_writing_all-" + genomeFnp2Base);
-
-		OutputStream genome2CountsOut(njh::files::make_path(setUp.pars_.directoryName_, genomeFnp2Base + "_counts.tab.txt.gz"));
-		for(const auto & count : genome2Counts){
-			genome2CountsOut << count.first << "\t" << count.second << "\n";
-		}
-	}
-
-
-	std::function<bool(char)> charCheck = [&countPars](char base){
-		return njh::in(base, countPars.allowableCharacters_);
-	};
-	setUp.rLog_.logCurrentTime("genome1_unique_determination-" + genomeFnp1Base);
-
-	OutputStream genome1UniqueCountsOut(njh::files::make_path(setUp.pars_.directoryName_, genomeFnp1Base + "_uniqueKmers_counts.tab.txt.gz"));
-	for(const auto & count : genome1Counts){
-		if(std::all_of(count.first.begin(), count.first.end(), charCheck) && !njh::in(count.first, genome2Counts) ){
-			genome1UniqueCountsOut << count.first << "\t" << count.second << "\n";
-		}
-	}
-	setUp.rLog_.logCurrentTime("genome2_unique_determination-" + genomeFnp2Base);
-	OutputStream genome2UniqueCountsOut(njh::files::make_path(setUp.pars_.directoryName_, genomeFnp2Base + "_uniqueKmers_counts.tab.txt.gz"));
-	for(const auto & count : genome2Counts){
-		if(std::all_of(count.first.begin(), count.first.end(), charCheck) && !njh::in(count.first, genome1Counts) ){
-			genome2UniqueCountsOut << count.first << "\t" << count.second << "\n";
-		}
-	}
-	setUp.rLog_.logCurrentTime("end");
-
-	return 0;
-}
-
 int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands){
 	KmerGatherer::KmerGathererPars countPars;
 	bfs::path seqSetTableFnp = "";
@@ -670,22 +601,21 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 		std::function<void()> condenseKmers = [&seqSetNamesQueue,&allKmers,&twobitsForSet,&kmersPerSet](){
 			std::string name;
 			while(seqSetNamesQueue.getVal(name)){
-				SimpleKmerHash hasher;
 				for(const auto & twobit : twobitsForSet.at(name)){
 //					std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //					std::cout << "twobit: " << twobit << std::endl;
 //					std::cout << allKmers.at(twobit).size() << std::endl;
-					for(const auto & k : allKmers.at(twobit)){
-						kmersPerSet[name].emplace(k);
+					kmersPerSet[name].insert(allKmers.at(twobit).begin(), allKmers.at(twobit).end());
+//					for(const auto & k : allKmers.at(twobit)){
+//						kmersPerSet[name].emplace(k);
 //						if(seqCheck(hasher.reverseHash(k))){
 //							kmersPerSet[name].emplace(k);
 //						}
-					}
+//					}
 				}
 			}
 		};
 		njh::concurrent::runVoidFunctionThreaded(condenseKmers, countPars.numThreads_);
-
 	}
 	std::map<std::string, std::set<uint64_t>> uniqueKmersFinal;
 	setUp.rLog_.logCurrentTime("compare");

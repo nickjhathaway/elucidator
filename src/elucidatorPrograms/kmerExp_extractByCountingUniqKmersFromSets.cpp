@@ -189,6 +189,11 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 
 	if(setUp.pars_.verbose_){
 		std::cout << watch.getLapName() << "\t" << watch.timeLapFormatted() <<std::endl;
+		std::cout << "klen: " << extractingPars.compPars.klen << std::endl;
+		for(const auto & uni : uniqueKmersPerSet){
+			std::cout << uni.first << "\t" << uni.second.size() << std::endl;
+		}
+		std::cout << "NON_UNIQUE" << "\t" << nonUniqueKmersPerSet.size() << std::endl;
 	}
 	MultiSeqIO initialSeqOut;
 	watch.startNewLap("initial scan");

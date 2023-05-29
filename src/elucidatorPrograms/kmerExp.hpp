@@ -102,7 +102,7 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int kmerCompareTwoSetsOfContigs(const njh::progutils::CmdArgs & inputCommands);
 	static int findUniqKmersBetweenSeqs(const njh::progutils::CmdArgs & inputCommands);
 
-	static int findUniqKmersBetweenSeqSets(const njh::progutils::CmdArgs & inputCommands);
+	//static int findUniqKmersBetweenSeqSets(const njh::progutils::CmdArgs & inputCommands);
 	static int findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands);
 	static int filterUniqueKmerSetForEntropy(const njh::progutils::CmdArgs & inputCommands);
 	static int testingSimpleKmerHasher(const njh::progutils::CmdArgs & inputCommands);
