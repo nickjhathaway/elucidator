@@ -420,10 +420,10 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 			std::cout << "iterNumber: " << iterNumber << std::endl;
 			std::cout << "Determined: " << totalDeterminedReads - currentTotalDeterminedReads << " more reads" <<std::endl;
 			std::cout << "Current counts: " << std::endl;
-			std::cout << "\tTotal Initial Reads: " << currentTotalReads << std::endl;
-			std::cout << "\tTotal Initial Undetermined Reads: " << currentTotalUndeterminedReads << " (" << currentTotalUndeterminedReads * 100 /static_cast<double>(currentTotalReads)<< "%)" << std::endl;
-			std::cout << "\tTotal Initial Determined Reads: " << currentTotalDeterminedReads << " (" << currentTotalDeterminedReads * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
-			std::cout << "\tTotal Initial Less Than Small Len Cut Off Count: " << initialCounts.smallLenCutOffCount << " (" << initialCounts.smallLenCutOffCount * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
+			std::cout << "\tTotal Reads: " << currentTotalReads << std::endl;
+			std::cout << "\tTotal Undetermined Reads: " << currentTotalUndeterminedReads << " (" << currentTotalUndeterminedReads * 100 /static_cast<double>(currentTotalReads)<< "%)" << std::endl;
+			std::cout << "\tTotal Determined Reads: " << currentTotalDeterminedReads << " (" << currentTotalDeterminedReads * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
+			std::cout << "\tTotal Less Than Small Len Cut Off Count: " << initialCounts.smallLenCutOffCount << " (" << initialCounts.smallLenCutOffCount * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
 			std::cout << std::endl;
 		}
 		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
@@ -544,10 +544,10 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 		finalCounts.writeOutCounts(outCounts,extractingPars,uniqueKmersPerSet,"final");
 		if(setUp.pars_.verbose_){
 			std::cout << "iterNumber: " << "final" << std::endl;
-			std::cout << "Total Initial Reads: " << finalCounts.getTotalCounts() << std::endl;
-			std::cout << "Total Initial Undetermined Reads: " << finalCounts.genTotalUndeterminedCount() << " (" << finalCounts.genTotalUndeterminedCount() * 100 /static_cast<double>(finalCounts.getTotalCounts())<< "%)" << std::endl;
-			std::cout << "Total Initial Determined Reads: " << finalCounts.genTotalDeterminedCount() << " (" << finalCounts.genTotalDeterminedCount() * 100 /static_cast<double>(finalCounts.getTotalCounts())<< "%)"<< std::endl;
-			std::cout << "Total Initial Less Than Small Len Cut Off Count: " << finalCounts.smallLenCutOffCount << " (" << finalCounts.smallLenCutOffCount * 100 /static_cast<double>(finalCounts.getTotalCounts())<< "%)"<< std::endl;
+			std::cout << "Total Reads: " << finalCounts.getTotalCounts() << std::endl;
+			std::cout << "Total Undetermined Reads: " << finalCounts.genTotalUndeterminedCount() << " (" << finalCounts.genTotalUndeterminedCount() * 100 /static_cast<double>(finalCounts.getTotalCounts())<< "%)" << std::endl;
+			std::cout << "Total Determined Reads: " << finalCounts.genTotalDeterminedCount() << " (" << finalCounts.genTotalDeterminedCount() * 100 /static_cast<double>(finalCounts.getTotalCounts())<< "%)"<< std::endl;
+			std::cout << "Total Less Than Small Len Cut Off Count: " << finalCounts.smallLenCutOffCount << " (" << finalCounts.smallLenCutOffCount * 100 /static_cast<double>(finalCounts.getTotalCounts())<< "%)"<< std::endl;
 		}
 		if(!keepTemporaryFiles){
 			//remove all fast[aq] files and fast[aq].gz files within directory
