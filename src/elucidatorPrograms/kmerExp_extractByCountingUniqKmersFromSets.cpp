@@ -418,7 +418,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 		if(setUp.pars_.verbose_){
 
 			std::cout << "iterNumber: " << iterNumber << std::endl;
-			std::cout << "Determined: " << totalDeterminedReads - currentTotalDeterminedReads << " more reads" <<std::endl;
+			std::cout << "Determined: " << currentTotalDeterminedReads - totalDeterminedReads << " more reads" <<std::endl;
 			std::cout << "Current counts: " << std::endl;
 			std::cout << "\tTotal Reads: " << currentTotalReads << std::endl;
 			std::cout << "\tTotal Undetermined Reads: " << currentTotalUndeterminedReads << " (" << currentTotalUndeterminedReads * 100 /static_cast<double>(currentTotalReads)<< "%)" << std::endl;
