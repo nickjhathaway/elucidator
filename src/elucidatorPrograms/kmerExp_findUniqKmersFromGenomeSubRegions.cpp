@@ -566,7 +566,7 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegions(const njh::progutils::CmdAr
 	bfs::path bedFnp;
 	std::string regionName;
 	bool getReverseCompOfInputRegions = false;
-	bool doNotReverseCompOfGenomeRegions = false;
+	bool getReverseCompOfGenomeRegions = false;
 	OutOptions outOpts;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -585,7 +585,7 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegions(const njh::progutils::CmdAr
 		setUp.addWarning("region name can't have whitespace characters");
 	}
 	setUp.setOption(getReverseCompOfInputRegions, "--getReverseCompOfInputRegions", "get Reverse Comp Of Input Regions");
-	setUp.setOption(doNotReverseCompOfGenomeRegions, "--doNotReverseCompOfGenomeRegions", "do Not Reverse Comp Of Genome Regions");
+	setUp.setOption(getReverseCompOfGenomeRegions, "--getReverseCompOfGenomeRegions", "get Reverse Comp Of Genome Regions");
 
 	setUp.processWritingOptions(outOpts);
 	bfs::path nonUniqueOutputFnp = njh::files::prependFileBasename(outOpts.outName(), "nonUnqiueKmers_");
@@ -725,11 +725,10 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegions(const njh::progutils::CmdAr
 							hasher.hash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
 		}
 		if (getReverseCompOfInputRegions) {
-			currentSeq.seq_ = seqUtil::reverseComplement(currentSeq.seq_, "DNA");
 			for (uint32_t pos = 0; pos < len(currentSeq.seq_) - countPars.kmerLength_ + 1;
 					 ++pos) {
 				rawKmersPerInput.emplace(
-								hasher.hash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
+								hasher.revCompHash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
 			}
 		}
 	}
@@ -750,12 +749,11 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegions(const njh::progutils::CmdAr
 			kmersPerInbetween.emplace(
 							hasher.hash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
 		}
-		if (!doNotReverseCompOfGenomeRegions) {
-			currentSeq.seq_ = seqUtil::reverseComplement(currentSeq.seq_, "DNA");
+		if (getReverseCompOfGenomeRegions) {
 			for (uint32_t pos = 0; pos < len(currentSeq.seq_) - countPars.kmerLength_ + 1;
 					 ++pos) {
 				kmersPerInbetween.emplace(
-								hasher.hash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
+								hasher.revCompHash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
 			}
 		}
 
