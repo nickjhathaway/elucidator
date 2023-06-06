@@ -111,30 +111,18 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlns(const njh::progutils:
 	//setUp.startARunLog(setUp.pars_.directoryName_);
 	njh::stopWatch watch;
 	watch.setLapName("initial");
-	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet;
-	std::unordered_map<std::string, std::unordered_map<uint64_t, uint64_t>> uniqueKmersFoundPerSet;
-	std::unordered_map<std::string, std::vector<uint64_t>> kmersFoundPerSeq;
+
+	auto klen =	UniqueKmerSetHelper::getKmerLenFromUniqueKmerTable(countTable);
 
 	std::mutex mut;
-	uint32_t klen = 0;
+
 	watch.startNewLap("reading in unique kmer table");
-	{
-		SimpleKmerHash hasher;
-		TableReader uniqKmers(TableIOOpts::genTabFileIn(countTable, false));
-		if(uniqKmers.header_.nCol() < 2){
-			std::stringstream ss;
-			ss << __PRETTY_FUNCTION__ << ", error " << "need to have 2 columns" << "\n";
-			throw std::runtime_error{ss.str()};
-		}
-		VecStr row;
-		while(uniqKmers.getNextRow(row)){
-			klen = row[1].size();
-			uniqueKmersPerSet[row[0]].emplace(hasher.hash(row[1]));
-		}
-	}
+	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet = UniqueKmerSetHelper::readInUniqueKmerTablePerSet(countTable);
 	if(setUp.pars_.verbose_){
 		std::cout << watch.getLapName() << "\t" << watch.timeLapFormatted() <<std::endl;
 	}
+	std::unordered_map<std::string, std::unordered_map<uint64_t, uint64_t>> uniqueKmersFoundPerSet;
+	std::unordered_map<std::string, std::vector<uint64_t>> kmersFoundPerSeq;
 	OutputStream out(outOpts);
 	VecStr names = getVectorOfMapKeys(uniqueKmersPerSet);
 //	MultiSeqIO seqOut;
@@ -194,6 +182,7 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlns(const njh::progutils:
 				if(bAln.IsPrimaryAlignment() && !bAln.IsMapped()){
 
 					std::unordered_map<uint64_t, uint64_t> hashedInputKmers;
+
 					//since unmapped reads are modifed can just take the query bases and don't have to worry about revComping
 					if(len(bAln.QueryBases) > klen){
 						for(uint32_t pos = 0; pos < len(bAln.QueryBases) - klen + 1; ++pos){
@@ -287,6 +276,8 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlns(const njh::progutils:
 
 	return 0;
 }
+
+
 int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
 	bfs::path countTable = "";
@@ -313,30 +304,17 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 	//setUp.startARunLog(setUp.pars_.directoryName_);
 	njh::stopWatch watch;
 	watch.setLapName("initial");
-	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet;
-	std::unordered_map<std::string, std::unordered_map<uint64_t, uint64_t>> uniqueKmersFoundPerSet;
-	std::unordered_map<std::string, std::vector<uint64_t>> kmersFoundPerSeq;
+	auto klen =	UniqueKmerSetHelper::getKmerLenFromUniqueKmerTable(countTable);
 
 	std::mutex mut;
-	uint32_t klen = 0;
+
 	watch.startNewLap("reading in unique kmer table");
-	{
-		SimpleKmerHash hasher;
-		TableReader uniqKmers(TableIOOpts::genTabFileIn(countTable, false));
-		if(uniqKmers.header_.nCol() < 2){
-			std::stringstream ss;
-			ss << __PRETTY_FUNCTION__ << ", error " << "need to have 2 columns" << "\n";
-			throw std::runtime_error{ss.str()};
-		}
-		VecStr row;
-		while(uniqKmers.getNextRow(row)){
-			klen = row[1].size();
-			uniqueKmersPerSet[row[0]].emplace(hasher.hash(row[1]));
-		}
-	}
+	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet = UniqueKmerSetHelper::readInUniqueKmerTablePerSet(countTable);
 	if(setUp.pars_.verbose_){
 		std::cout << watch.getLapName() << "\t" << watch.timeLapFormatted() <<std::endl;
 	}
+	std::unordered_map<std::string, std::unordered_map<uint64_t, uint64_t>> uniqueKmersFoundPerSet;
+	std::unordered_map<std::string, std::vector<uint64_t>> kmersFoundPerSeq;
 	SeqInput reader(setUp.pars_.ioOptions_);
 	reader.openIn();
 

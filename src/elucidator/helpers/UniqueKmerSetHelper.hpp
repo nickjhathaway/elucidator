@@ -52,6 +52,10 @@ public:
 		std::string sampleName;
 		bool pairsSeparate = false;
 		uint32_t hardCountOff = 0;
+		double fracCutOff = 0;
+
+		uint32_t kmerLengthForEntropyCalc_{1};
+		double entropyFilter_{1.95};
 	};
 
 	struct CompareReadToSetRes {
@@ -88,6 +92,7 @@ public:
 																								 const CompareReadToSetPars &compPars, const SimpleKmerHash &hasher);
 
 
+
 	struct ProcessReadForExtractingPars {
 		CompareReadToSetPars compPars;
 		uint32_t smallLenCutOff = 0;
@@ -95,8 +100,10 @@ public:
 		bool doNotWriteUndetermined = false;
 		bool doReCheckExcludeSets = false;
 		std::set<std::string> excludeSetNames{"genomeRest"};
-		uint32_t addingInKmersCountCutOff = 0;
+		uint32_t addingInKmersCountCutOff = 3;
 
+		bool markReadsPerIteration = false;
+		bool writeOutFinalKmerSets = false;
 	};
 
 	struct ProcessReadForExtractingCounts{
@@ -128,18 +135,31 @@ public:
 	static void processReadForExtracting(PairedRead &pseq,
 																			 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
 																			 const ProcessReadForExtractingPars &extractingPars, const SimpleKmerHash &hasher,
-																			 MultiSeqIO &seqOut, ProcessReadForExtractingCounts &counts);
+																			 MultiSeqIO &seqOut, ProcessReadForExtractingCounts &counts,
+																			 const std::string & iterationName);
 
 	static void processReadForExtracting(seqInfo &seq,
 																			 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
 																			 const ProcessReadForExtractingPars &extractingPars, const SimpleKmerHash &hasher,
-																			 MultiSeqIO &seqOut, ProcessReadForExtractingCounts &counts);
+																			 MultiSeqIO &seqOut, ProcessReadForExtractingCounts &counts,
+																			 const std::string & iterationName);
 
 
 	static std::unordered_map<std::string, std::unordered_map<uint64_t, uint32_t>>
 	readInNewKmersFromExtractedReads(const bfs::path &directoryIn,
 																	 const VecStr &kmerSets,
 																	 const ProcessReadForExtractingPars &extractingPars);
+	struct FilePositons {
+		FilePositons() = default;
+		std::ifstream::pos_type r1FnpEnd = 0;
+		std::ifstream::pos_type r2FnpEnd = 0;
+		std::ifstream::pos_type singleFnpEnd = 0;
+	};
+	static std::unordered_map<std::string, std::unordered_map<uint64_t, uint32_t>>
+	readInNewKmersFromExtractedReads(const bfs::path &directoryIn,
+																	 const VecStr &kmerSets,
+																	 const ProcessReadForExtractingPars &extractingPars,
+																	 const std::unordered_map<std::string, UniqueKmerSetHelper::FilePositons> & positionAfterLastIteration);
 
 	static std::unordered_map<std::string, std::unordered_set<uint64_t>> filterReExtractedKmersForNonUnique(
 					const std::unordered_map<std::string, std::unordered_map<uint64_t, uint32_t>> &rawKmersPerInput,

@@ -947,7 +947,6 @@ GenomicRegion determineRefSeqLocation(const seqInfo & refSeq,
 
 std::string plottingRmdTemplate = R"(---
 title: "Plotting Subsegments"
-author: "Nicholas Hathaway"
 format:
   html:
     theme: cosmo
@@ -1099,7 +1098,8 @@ ggplot() +
 Each variable block's TajimaD, the grey block is the full region.
 
 ```{r}
-ggplot() +
+if("TajimaDPVal" %in% colnames(variableRegionDiv)){
+  ggplot() +
   geom_rect(aes(xmin = X2, xmax = X3,
                 ymin = -1, ymax = 1),
             fill = "#00000055",
@@ -1110,7 +1110,7 @@ ggplot() +
             data = variableRegionDiv) +
   sofonias_theme + scale_fill_manual(values = c("TRUE" = "red", "FALSE" = "blue")) +
   labs(y = "TajimaD")
-
+}
 ```
 
 
@@ -1254,6 +1254,8 @@ Below colored blocks, each column is colored by how prevalent each block is at t
 
 ## All sequences
 ```{r}
+#| fig-column: screen-inset-shaded
+#| fig-height: 20
 ggplot(varRegionCoded_gat) +
   geom_tile(aes(x = region, y = name, fill = factor(code))) +
   sofonias_theme_xRotate +
@@ -1270,6 +1272,8 @@ varRegionCoded_seq_gat = varRegionCoded_seq %>%
 ## Unique
 
 ```{r}
+#| fig-column: screen-inset-shaded
+#| fig-height: 20
 ggplot(varRegionCoded_seq_gat) +
   geom_tile(aes(x = region, y = Seq_ID_PopLabel, fill = factor(code))) +
   sofonias_theme_xRotate +
@@ -1282,6 +1286,8 @@ ggplot(varRegionCoded_seq_gat) +
 
 Below is a dendrogram based on clustering on per variable block regions
 ```{r}
+#| fig-column: screen-inset-shaded
+#| fig-height: 20
 clus <- cutree(varRegionCoded_seq_hclust, 4)
 g <- split(names(clus), clus)
 
@@ -1315,13 +1321,16 @@ p %<+% d +
 # Seq ID counts
 Counts of unique sequences
 ```{r}
+#| fig-column: screen-inset-shaded
+#| fig-height: 20
 ggplot(varRegionCoded_seqIDCount %>%
          mutate(Seq_ID_PopLabel = factor(Seq_ID_PopLabel, levels = .$Seq_ID_PopLabel))) +
   geom_bar(aes(x = Seq_ID_PopLabel, y = n), stat = "identity") +
   geom_text(aes(x  = Seq_ID_PopLabel, y = n + 15, label = n) ) +
   sofonias_theme_xRotate
 
-```)";
+```
+)";
 
 
 
@@ -1363,7 +1372,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	bool refNameRequired = setUp.processSeq(refSeq, "--refSeq", "Reference seq", false);
 	setUp.setOption(numThreads, "--numThreads", "num Threads");
 	setUp.setOption(uniqueHapCountCutOff, "--uniqueHapCountCutOff", "unique Hap Count Cut Off");
-	setUp.setOption(calcPopMeasuresPars.getPairwiseComps, "--calcPopMeasuresPars.getPairwiseComps", "get Pairwise Comps");
+	setUp.setOption(calcPopMeasuresPars.getPairwiseComps, "--getPairwiseComps", "get Pairwise Comps");
 
 	setUp.setOption(kSimFilter, "--kSimFilter", "filter input sequences on kSimFilter for artifacts");
 	setUp.setOption(kLenForFilter, "--kLenForFilter", "filter kLenForFilter for artifacts");

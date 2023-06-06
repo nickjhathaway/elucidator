@@ -226,8 +226,8 @@ int bamExpRunner::determineRegion(
 									"keep Intermediate Files");
 	setUp.finishSetUp(std::cout);
 	auto genomeName = bfs::basename(genomeFnp);
-	if (std::string::npos != genomeName.rfind(".")) {
-		genomeName = genomeName.substr(0, genomeName.rfind("."));
+	if (std::string::npos != genomeName.rfind('.')) {
+		genomeName = genomeName.substr(0, genomeName.rfind('.'));
 	}
 
 	MultiGenomeMapper genomeMapper(genomeFnp.parent_path(),
@@ -259,7 +259,7 @@ int bamExpRunner::determineRegion(
 		auto determinedRegions = genomeMapper.getRegionsFromBams(bamFnps);
 		if(!determinedRegions.at(genomeName).empty()){
 			auto region = determinedRegions.at(genomeName).front();
-			if("" != name){
+			if(!name.empty()){
 				region.uid_ = name;
 			}
 			//write out all the regions determined
@@ -278,7 +278,7 @@ int bamExpRunner::determineRegion(
 int bamExpRunner::determineRegionLastz(
 		const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path genomeFnp = "";
-	std::string name = "";
+	std::string name;
 	bool individual = false;
 	BioCmdsUtils::LastZPars lzPars;
 	bool keepIntermediateFiles = false;
@@ -313,7 +313,7 @@ int bamExpRunner::determineRegionLastz(
 			genomeName);
 	genomeMapper.setSelectedGenomes(VecStr { genomeName });
 	genomeMapper.loadInGenomes();
-	if(0 == genomeMapper.genomes_.size()){
+	if(genomeMapper.genomes_.empty()){
 		std::stringstream ss;
 		ss << __PRETTY_FUNCTION__ << ", " << genomeFnp << " not found" << "\n";
 		throw std::runtime_error{ss.str()};
@@ -381,7 +381,7 @@ int bamExpRunner::determineRegionLastz(
 		auto determinedRegions = genomeMapper.getRegionsFromBams(bamFnps);
 		if(!determinedRegions.at(genomeName).empty()){
 			auto region = determinedRegions.at(genomeName).front();
-			if("" != name){
+			if(!name.empty()){
 				region.uid_ = name;
 			}
 			//write out all the regions determined
@@ -412,7 +412,7 @@ int bamExpRunner::outputSoftClipCounts(const njh::progutils::CmdArgs & inputComm
 	OutOptions outOpts(bfs::path(""));
 	//uint32_t numThreads = 1;
 	bfs::path bedFnp = "";
-	std::string bam = "";
+	std::string bam;
 	outOpts.outExtention_ = ".bed";
 	bool noHeader = false;
 	seqSetUp setUp(inputCommands);
@@ -436,7 +436,7 @@ int bamExpRunner::outputSoftClipCounts(const njh::progutils::CmdArgs & inputComm
 	if(!noHeader){
 		out << "#chrom\tstart\tend\tname\tscore\tstrand\tforwardClip\tbackClip" << "\n";
 	}
-	if("" != bedFnp){
+	if(!bedFnp.empty()){
 		auto regions = bed3PtrsToGenomicRegs(getBed3s(bedFnp));
 		for(const auto & region : regions){
 			setBamFileRegionThrow(bReader, region);
@@ -494,7 +494,7 @@ int bamExpRunner::bamMulticov(const njh::progutils::CmdArgs & inputCommands){
 	OutOptions outOpts(bfs::path(""));
 	uint32_t numThreads = 1;
 	bfs::path bedFnp = "";
-	std::string bams = "";
+	std::string bams;
 	std::string pat = ".*.bam$";
 	outOpts.outExtention_ = ".tab.txt";
 	bool noHeader = false;
@@ -643,7 +643,7 @@ int bamExpRunner::bamMultiPairStats(const njh::progutils::CmdArgs & inputCommand
 	OutOptions outOpts(bfs::path("out"));
 	uint32_t numThreads = 1;
 	bfs::path bedFnp = "";
-	std::string bams = "";
+	std::string bams;
 	std::string pat = ".*.bam$";
 	uint32_t insertSizeCutOff = 5000;
 	double percentInRegion = 0.5;
@@ -1088,7 +1088,7 @@ int bamExpRunner::bamMulticovBasesRough(const njh::progutils::CmdArgs & inputCom
 	OutOptions outOpts(bfs::path(""));
 	uint32_t numThreads = 1;
 	bfs::path bedFnp = "";
-	std::string bams = "";
+	std::string bams;
 	std::string pat = ".*.bam$";
 	bool noHeader = false;
 	outOpts.outExtention_ = ".tab.txt";

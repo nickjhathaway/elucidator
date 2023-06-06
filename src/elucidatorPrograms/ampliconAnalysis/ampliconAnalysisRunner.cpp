@@ -37,6 +37,7 @@ ampliconAnalysisRunner::ampliconAnalysisRunner()
                      addFunc("markChimeras", markChimeras, false),
                      addFunc("greedyCluster", greedyCluster, false),
 										 addFunc("singleLinkageClusteringOnPerId", singleLinkageClusteringOnPerId, false),
+										 addFunc("processRawExtractByKmerPathWeaverResults", processRawExtractByKmerPathWeaverResults, false),
 										 },
                     "ampliconAnalysis") {}
 
