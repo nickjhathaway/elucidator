@@ -447,6 +447,7 @@ int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs &
 
 		for(const auto & reg : regions){
 			auto seqTemplate = GenomicRegion(*reg).extractSeq(tReader);
+			njh::strToUpper(seqTemplate.seq_);
 			DNABaseCounter counter;
 			counter.increase(seqTemplate.seq_);
 			counter.setFractions();
@@ -471,6 +472,9 @@ int programWrapperRunner::testPrimersWithPrimer3(const njh::progutils::CmdArgs &
 
 					primer3Input << "PRIMER_PRODUCT_SIZE_RANGE=" << len(seqTemplate) << "-" << len(seqTemplate ) + 1 << std::endl;
 					primer3Input << "PRIMER_OPT_GC_PERCENT=" << p3Opts.PRIMER_OPT_GC_PERCENT << std::endl;
+//					primer3Input << "PRIMER_MAX_SIZE=" << std::min(leftPrimer.size(), rightPrimer.size()) << std::endl;
+//					primer3Input << "PRIMER_MIN_SIZE=" << std::max(leftPrimer.size(), rightPrimer.size())  << std::endl;
+
 					primer3Input << "PRIMER_MAX_SIZE=" << p3Opts.PRIMER_MAX_SIZE << std::endl;
 					primer3Input << "PRIMER_MIN_SIZE=" << p3Opts.PRIMER_MIN_SIZE << std::endl;
 					primer3Input << "PRIMER_OPT_SIZE=" << p3Opts.PRIMER_OPT_SIZE << std::endl;

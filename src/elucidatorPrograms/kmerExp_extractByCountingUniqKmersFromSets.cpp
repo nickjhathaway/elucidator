@@ -114,12 +114,23 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	bool keepTemporaryFiles = false;
 	bool doNotDoFinalExtract = false;
 
+	uint32_t iterationsToFilterDissimilar = std::numeric_limits<uint32_t>::max();
+	UniqueKmerSetHelper::CompareReadToSetPars dissimilarFilterPars;
+	dissimilarFilterPars.hardCountOff = 0;
+	dissimilarFilterPars.fracCutOff = 0;
 
 	UniqueKmerSetHelper::ProcessReadForExtractingPars extractingPars;
 	extractingPars.compPars.hardCountOff = 20;
-	extractingPars.compPars.fracCutOff = 0.15;
+	extractingPars.compPars.fracCutOff = 0.12;
 	extractingPars.compPars.kmerLengthForEntropyCalc_ = 2;
 	extractingPars.compPars.entropyFilter_ = 1.20;
+
+	extractingPars.compPars.initialExcludeHardCountOff = 60;
+	extractingPars.compPars.initialExcludeFracCutOff = 0.25;
+	uint32_t iterationToLowerExcludeCutOff = 6;
+
+	bool finalExtractionPairsSeparate = false;
+
 
 
 	seqSetUp setUp(inputCommands);
@@ -144,14 +155,28 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	bool pairsTogether = false;
 	setUp.setOption(pairsTogether, "--pairsTogether", "extract the pairs together");
 	extractingPars.compPars.pairsSeparate = !pairsTogether;
+	setUp.setOption(finalExtractionPairsSeparate, "--finalExtractionPairsSeparate", "extract the pairs separately for final extraction step");
+
+
+
 	//setUp.setOption(extractingPars.compPars.pairsSeparate, "--pairsSeparate", "extract the pairs separately");
 	setUp.setOption(extractingPars.compPars.entropyFilter_, "--entropyFilter", "entropy Filter_");
 	setUp.setOption(extractingPars.compPars.kmerLengthForEntropyCalc_, "--kmerLengthForEntropyCalc", "kmerLength For Entropy Calculation");
+
+
+	setUp.setOption(dissimilarFilterPars.hardCountOff, "--hardCountOffForDissimilarFiltering", "hard Count Off For Dissimilar Filtering");
+	setUp.setOption(dissimilarFilterPars.fracCutOff, "--fracCutOffForDissimilarFiltering", "frac Cut Off For Dissimilar Filtering");
+	setUp.setOption(iterationsToFilterDissimilar, "--iterationsToFilterDissimilar", "iterations To Filter Dissimilar");
+
+	setUp.setOption(extractingPars.compPars.initialExcludeFracCutOff, "--initialExcludeFracCutOff", "initial for exclusion sets per read Kmer Frac Cut Off");
+	setUp.setOption(extractingPars.compPars.initialExcludeHardCountOff, "--initialExcludeHardCountOff", "initial for exclusion sets hard Count Off, do not count sets unless greater thant his number");
+	setUp.setOption(iterationToLowerExcludeCutOff, "--iterationToLowerExcludeCutOff", "iterations To Lower Exclusion set Cut Off to the nomral cut offs");
 
 	if(bfs::exists(countTable)){
 		auto row = tokenizeString(njh::files::getFirstLine(countTable), "\t");
 		extractingPars.compPars.klen = row[1].size();
 	}
+	setUp.setOption(extractingPars.compPars.fracCutOff, "--readKmerFracCutOff", "per read Kmer Frac Cut Off");
 	setUp.setOption(extractingPars.compPars.hardCountOff, "--hardCountOff", "hard Count Off, do not count sets unless greater thant his number");
 	extractingPars.smallLenCutOff = extractingPars.compPars.hardCountOff + extractingPars.compPars.klen + 11;
 	setUp.setOption(extractingPars.smallLenCutOff, "--smallLenCutOff", "small Len Cut Off of input sequences, if less than this size will skip over");
@@ -160,7 +185,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	setUp.setOption(extractingPars.writeOutFinalKmerSets, "--writeOutFinalKmerSets", "write Out Final Kmer Sets");
 
 	setUp.setOption(excludesCountTable, "--excludesCountTable", "excludes Count Table, 1)set,2)kmer");
-	setUp.setOption(extractingPars.excludeSetNames, "--excludeSetNames", "names of sets of unqiue kmers to ignore from the --kmerTable");
+	setUp.setOption(extractingPars.compPars.excludeSetNames, "--excludeSetNames", "names of sets of unique kmers to ignore from the --kmerTable");
 	//
 	setUp.setOption(keepTemporaryFiles, "--keepTemporaryFiles", "Keep Temporary Files");
 	setUp.setOption(extractingPars.addingInKmersCountCutOff, "--addingInKmersCountCutOff", "adding In Kmers Count Cut Off");
@@ -250,24 +275,47 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 		if (!setUp.pars_.ioOptions_.firstName_.empty()) {
 			SeqInput reader(setUp.pars_.ioOptions_);
 			reader.openIn();
-			std::function<void()> readInComp = [&reader, &uniqueKmersPerSet,
-							&mut, &extractingPars, &initialSeqOut, &initialCounts
-//							, &testReads
-			]() {
-				SimpleKmerHash hasher;
-				PairedRead pseq;
-				UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
-				while (reader.readNextReadLock(pseq)) {
-					UniqueKmerSetHelper::processReadForExtracting(pseq, uniqueKmersPerSet,
-																												extractingPars, hasher, initialSeqOut,
-																												currentCounts,
-																												"initial");
-				}
-				{
-					std::lock_guard<std::mutex> lockGuard(mut);
-					initialCounts.addOtherCounts(currentCounts);
-				}
-			};
+			std::function<void()> readInComp;
+
+			if(extractingPars.compPars.pairsSeparate){
+				readInComp = [&reader, &uniqueKmersPerSet,
+								&mut, &extractingPars, &initialSeqOut, &initialCounts
+				]() {
+					SimpleKmerHash hasher;
+					PairedRead pseq;
+					UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
+					while (reader.readNextReadLock(pseq)) {
+						UniqueKmerSetHelper::processReadForExtractingPairsSeparate(pseq, uniqueKmersPerSet,
+																																			 extractingPars, hasher, initialSeqOut,
+																																			 currentCounts,
+																																			 "initial");
+					}
+					{
+						std::lock_guard<std::mutex> lockGuard(mut);
+						initialCounts.addOtherCounts(currentCounts);
+					}
+				};
+			}else{
+				readInComp = [&reader, &uniqueKmersPerSet,
+								&mut, &extractingPars, &initialSeqOut, &initialCounts
+				]() {
+					SimpleKmerHash hasher;
+					PairedRead pseq;
+					UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
+					while (reader.readNextReadLock(pseq)) {
+						UniqueKmerSetHelper::processReadForExtractingPairsTogether(pseq, uniqueKmersPerSet,
+																													extractingPars, hasher, initialSeqOut,
+																													currentCounts,
+																													"initial");
+					}
+					{
+						std::lock_guard<std::mutex> lockGuard(mut);
+						initialCounts.addOtherCounts(currentCounts);
+					}
+				};
+			}
+
+
 			njh::concurrent::runVoidFunctionThreaded(readInComp, numThreads);
 		}
 		if (!singlesOption.firstName_.empty()) {
@@ -300,7 +348,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	{
 		auto kmerSetNames = njh::getSetOfMapKeys(uniqueKmersPerSet);
 		for(const auto & kmerSetName : kmerSetNames){
-			if(njh::in(kmerSetName, extractingPars.excludeSetNames)){
+			if(njh::in(kmerSetName, extractingPars.compPars.excludeSetNames)){
 				continue;
 			}
 			UniqueKmerSetHelper::FilePositons positions;
@@ -335,9 +383,13 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	if(0 == totalUndeterminedExtracted){
 		iterate = false;
 	}
+
+
+
+
 	auto original_initialCounts = initialCounts;
-	initialCounts.readsPerSet["undetermined"] = 0;
-	initialCounts.readsPerSetRevComp["undetermined"] = 0;
+	initialCounts.readCountsPerSet[false]["undetermined"] = 0;
+	initialCounts.readCountsPerSet[true]["undetermined"] = 0;
 	uint64_t totalDeterminedReads = initialCounts.genTotalDeterminedCount();
 //	std::cout << __FILE__ << " " << __LINE__ << std::endl;
 	while(iterate && iterNumber < maxIterations){
@@ -347,6 +399,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 		initialSeqOut.closeOutForReopeningAll();
 		auto rawUniqKmerSets = njh::getVecOfMapKeys(uniqueKmersPerSet);
 		removeElement(rawUniqKmerSets, std::string("undetermined"));
+		removeElements(rawUniqKmerSets, VecStr(extractingPars.compPars.excludeSetNames.begin(), extractingPars.compPars.excludeSetNames.end()));
 		std::unordered_map<std::string, std::unordered_map<uint64_t, uint32_t>> rawKmersPerInput;
 		if (iterNumber > 0) {
 			rawKmersPerInput = UniqueKmerSetHelper::readInNewKmersFromExtractedReads(
@@ -372,7 +425,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 																																																																										nonUniqueKmersPerSet);
 //		std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		if(!extractingPars.doReCheckExcludeSets){
-			for(const auto & excludeName : extractingPars.excludeSetNames){
+			for(const auto & excludeName : extractingPars.compPars.excludeSetNames){
 				outputUniqueKmersPerSet[excludeName] = std::move(uniqueKmersPerSet[excludeName]);
 			}
 		}
@@ -389,6 +442,12 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 			}
 			std::cout << "NON_UNIQUE" << "\t" << nonUniqueKmersPerSet.size() << std::endl;
 		}
+
+		if(iterNumber >= iterationToLowerExcludeCutOff){
+			extractingPars.compPars.initialExcludeHardCountOff = extractingPars.compPars.hardCountOff;
+			extractingPars.compPars.initialExcludeFracCutOff = extractingPars.compPars.fracCutOff;
+		}
+
 		bfs::path orig_undeterminedInput = njh::files::make_path(setUp.pars_.directoryName_, "undetermined.fastq");
 		bfs::path orig_undeterminedInputR1 = njh::files::make_path(setUp.pars_.directoryName_, "undetermined_R1.fastq");
 		bfs::path orig_undeterminedInputR2 = njh::files::make_path(setUp.pars_.directoryName_, "undetermined_R2.fastq");
@@ -401,27 +460,146 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 		SeqIOOptions undeterminedSingleInOpts;
 		bool pairedInUndeterminedExists = bfs::exists(orig_undeterminedInputR1);
 		bool singleInUndeterminedExists = bfs::exists(orig_undeterminedInput);
-		if (pairedInUndeterminedExists) {
-			bfs::rename(orig_undeterminedInputR1, undeterminedInputR1);
-			bfs::rename(orig_undeterminedInputR2, undeterminedInputR2);
-			undeterminedPairedInOpts.firstName_ = undeterminedInputR1;
-			undeterminedPairedInOpts.secondName_ = undeterminedInputR2;
-			undeterminedPairedInOpts.inFormat_ = SeqIOOptions::inFormats::FASTQPAIRED;
-			undeterminedPairedInOpts.revComplMate_ = true;
-			//to make below count correctly, make sure mate is automatically reversed complemented
+
+		if (iterNumber == iterationsToFilterDissimilar) {
+			//add outputs
+			auto extractingParsForFiltering = extractingPars;
+			extractingParsForFiltering.compPars.hardCountOff = dissimilarFilterPars.hardCountOff;
+			extractingParsForFiltering.compPars.fracCutOff = dissimilarFilterPars.fracCutOff;
+			extractingParsForFiltering.compPars.initialExcludeHardCountOff = dissimilarFilterPars.hardCountOff;
+			extractingParsForFiltering.compPars.initialExcludeFracCutOff = dissimilarFilterPars.fracCutOff;
+
+			extractingParsForFiltering.compPars.excludeSetNames = extractingPars.compPars.excludeSetNames;
+			MultiSeqIO filteringSeqOut;
+			std::string keep = "undetermined";
+			std::string filter = "dissimilar";
+			filteringSeqOut.addReader("undetermined-paired", SeqIOOptions::genPairedOut(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr(iterNumber, "_undetermined"))));
+			filteringSeqOut.addReader("undetermined-single", SeqIOOptions::genFastqOut(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr(iterNumber, "_undetermined"))));
+			filteringSeqOut.addReader("dissimilar-paired", SeqIOOptions::genPairedOut(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr(iterNumber, "_dissimilar"))));
+			filteringSeqOut.addReader("dissimilar-single", SeqIOOptions::genFastqOut(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr(iterNumber, "_dissimilar"))));
+			if (pairedInUndeterminedExists) {
+				SeqIOOptions undeterminedPairedInOptsForFiltering;
+				undeterminedPairedInOptsForFiltering.firstName_ = orig_undeterminedInputR1;
+				undeterminedPairedInOptsForFiltering.secondName_ = orig_undeterminedInputR2;
+				undeterminedPairedInOptsForFiltering.inFormat_ = SeqIOOptions::inFormats::FASTQPAIRED;
+				undeterminedPairedInOptsForFiltering.revComplMate_ = true;
+
+
+				//re-extract paired in
+				SeqInput reader(undeterminedPairedInOptsForFiltering);
+				reader.openIn();
+				std::function<void()> readInComp;
+
+				if(extractingPars.compPars.pairsSeparate){
+					readInComp = [&reader, &uniqueKmersPerSet,
+									&mut, &extractingParsForFiltering, &filteringSeqOut, &initialCounts,
+									&iterNumber,&keep,&filter
+					]() {
+						SimpleKmerHash hasher;
+						PairedRead pseq;
+						UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
+						while (reader.readNextReadLock(pseq)) {
+							UniqueKmerSetHelper::processReadForFilteringPairsSeparate(pseq, uniqueKmersPerSet,
+																																				extractingParsForFiltering, hasher, filteringSeqOut,
+																																				 currentCounts,
+																																				 njh::pasteAsStr(iterNumber),
+																																				 filter,
+																																				 keep);
+						}
+						{
+							std::lock_guard<std::mutex> lockGuard(mut);
+							initialCounts.addOtherCounts(currentCounts);
+						}
+					};
+				} else {
+					readInComp = [&reader, &uniqueKmersPerSet,
+									&mut, &extractingParsForFiltering, &filteringSeqOut, &initialCounts,
+									&iterNumber,&keep,&filter
+					]() {
+						SimpleKmerHash hasher;
+						PairedRead pseq;
+						UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
+						while (reader.readNextReadLock(pseq)) {
+							UniqueKmerSetHelper::processReadForFilteringPairsTogether(pseq, uniqueKmersPerSet,
+																																				extractingParsForFiltering, hasher, filteringSeqOut,
+																																				 currentCounts,
+																																				 njh::pasteAsStr(iterNumber),
+																																				filter,
+																																				keep);
+						}
+						{
+							std::lock_guard<std::mutex> lockGuard(mut);
+							initialCounts.addOtherCounts(currentCounts);
+						}
+					};
+				}
+				njh::concurrent::runVoidFunctionThreaded(readInComp, numThreads);
+			}
+			if (singleInUndeterminedExists) {
+				//re-extract single in
+				SeqIOOptions undeterminedSingleInOptsForFiltering;
+				undeterminedSingleInOptsForFiltering.firstName_ = orig_undeterminedInput;
+				undeterminedSingleInOptsForFiltering.inFormat_ = SeqIOOptions::inFormats::FASTQ;
+				SeqInput reader(undeterminedSingleInOptsForFiltering);
+				reader.openIn();
+				std::function<void()> readInComp = [&reader, &uniqueKmersPerSet,
+								&mut, &extractingParsForFiltering, &filteringSeqOut, &initialCounts
+								, &iterNumber,&keep,&filter]() {
+					SimpleKmerHash hasher;
+					seqInfo seq;
+					UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
+					while (reader.readNextReadLock(seq)) {
+						UniqueKmerSetHelper::processReadForFiltering(seq, uniqueKmersPerSet,
+																												 extractingParsForFiltering, hasher, filteringSeqOut,
+																												 currentCounts,
+																												 njh::pasteAsStr(iterNumber),
+																												 filter,
+																												 keep);
+					}
+					{
+						std::lock_guard<std::mutex> lockGuard(mut);
+						initialCounts.addOtherCounts(currentCounts);
+					}
+				};
+				njh::concurrent::runVoidFunctionThreaded(readInComp, numThreads);
+			}
+			if (pairedInUndeterminedExists) {
+				bfs::remove(orig_undeterminedInputR1);
+				bfs::remove(orig_undeterminedInputR2);
+				undeterminedPairedInOpts.firstName_ = undeterminedInputR1;
+				undeterminedPairedInOpts.secondName_ = undeterminedInputR2;
+				undeterminedPairedInOpts.inFormat_ = SeqIOOptions::inFormats::FASTQPAIRED;
+				undeterminedPairedInOpts.revComplMate_ = true;
+			}
+			if (singleInUndeterminedExists) {
+				bfs::remove(orig_undeterminedInput);
+				undeterminedSingleInOpts.firstName_ = undeterminedInput;
+				undeterminedSingleInOpts.inFormat_ = SeqIOOptions::inFormats::FASTQ;
+			}
+		} else {
+			if (pairedInUndeterminedExists) {
+				bfs::rename(orig_undeterminedInputR1, undeterminedInputR1);
+				bfs::rename(orig_undeterminedInputR2, undeterminedInputR2);
+				undeterminedPairedInOpts.firstName_ = undeterminedInputR1;
+				undeterminedPairedInOpts.secondName_ = undeterminedInputR2;
+				undeterminedPairedInOpts.inFormat_ = SeqIOOptions::inFormats::FASTQPAIRED;
+				undeterminedPairedInOpts.revComplMate_ = true;
+				//to make below count correctly, make sure mate is automatically reversed complemented
+			}
+			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+			if (singleInUndeterminedExists) {
+				bfs::rename(orig_undeterminedInput, undeterminedInput);
+				undeterminedSingleInOpts.firstName_ = undeterminedInput;
+				undeterminedSingleInOpts.inFormat_ = SeqIOOptions::inFormats::FASTQ;
+			}
 		}
-		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-		if(singleInUndeterminedExists) {
-			bfs::rename(orig_undeterminedInput, undeterminedInput);
-			undeterminedSingleInOpts.firstName_ = undeterminedInput;
-			undeterminedSingleInOpts.inFormat_ = SeqIOOptions::inFormats::FASTQ;
-		}
+
 		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		{
 			//determine positions before extracting more
 			auto kmerSetNames = njh::getSetOfMapKeys(uniqueKmersPerSet);
 			for(const auto & kmerSetName : kmerSetNames){
-				if(njh::in(kmerSetName, extractingPars.excludeSetNames)){
+				if(njh::in(kmerSetName, extractingPars.compPars.excludeSetNames)){
 					continue;
 				}
 				UniqueKmerSetHelper::FilePositons positions;
@@ -439,42 +617,53 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 			//re-extract paired in
 			SeqInput reader(undeterminedPairedInOpts);
 			reader.openIn();
-			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-			std::function<void()> readInComp = [&reader, &uniqueKmersPerSet,
-							&mut, &extractingPars, &initialSeqOut, &initialCounts
-			, &iterNumber]() {
-				//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-				SimpleKmerHash hasher;
-				PairedRead pseq;
-				UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
-				//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-				while (reader.readNextReadLock(pseq)) {
-					//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-					UniqueKmerSetHelper::processReadForExtracting(pseq, uniqueKmersPerSet,
-																												extractingPars, hasher, initialSeqOut,
-																												currentCounts,
-																												njh::pasteAsStr(iterNumber));
-					//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-				}
-				{
-					std::lock_guard<std::mutex> lockGuard(mut);
-					//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-					initialCounts.addOtherCounts(currentCounts);
-					//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+			std::function<void()> readInComp;
 
-				}
-			};
-			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+			if(extractingPars.compPars.pairsSeparate){
+				readInComp = [&reader, &uniqueKmersPerSet,
+								&mut, &extractingPars, &initialSeqOut, &initialCounts,
+								&iterNumber
+				]() {
+					SimpleKmerHash hasher;
+					PairedRead pseq;
+					UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
+					while (reader.readNextReadLock(pseq)) {
+						UniqueKmerSetHelper::processReadForExtractingPairsSeparate(pseq, uniqueKmersPerSet,
+																																			 extractingPars, hasher, initialSeqOut,
+																																			 currentCounts,
+																																			 njh::pasteAsStr(iterNumber));
+					}
+					{
+						std::lock_guard<std::mutex> lockGuard(mut);
+						initialCounts.addOtherCounts(currentCounts);
+					}
+				};
+			}else{
+				readInComp = [&reader, &uniqueKmersPerSet,
+								&mut, &extractingPars, &initialSeqOut, &initialCounts,
+								&iterNumber
+				]() {
+					SimpleKmerHash hasher;
+					PairedRead pseq;
+					UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
+					while (reader.readNextReadLock(pseq)) {
+						UniqueKmerSetHelper::processReadForExtractingPairsTogether(pseq, uniqueKmersPerSet,
+																																			 extractingPars, hasher, initialSeqOut,
+																																			 currentCounts,
+																																			 njh::pasteAsStr(iterNumber));
+					}
+					{
+						std::lock_guard<std::mutex> lockGuard(mut);
+						initialCounts.addOtherCounts(currentCounts);
+					}
+				};
+			}
 			njh::concurrent::runVoidFunctionThreaded(readInComp, numThreads);
-			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		}
-		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		if(singleInUndeterminedExists) {
-			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			//re-extract single in
 			SeqInput reader(undeterminedSingleInOpts);
 			reader.openIn();
-			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			std::function<void()> readInComp = [&reader, &uniqueKmersPerSet,
 							&mut, &extractingPars, &initialSeqOut, &initialCounts
 //							, &testReads
@@ -488,14 +677,14 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 																												currentCounts,
 																												njh::pasteAsStr(iterNumber));
 				}
+
 				{
 					std::lock_guard<std::mutex> lockGuard(mut);
 					initialCounts.addOtherCounts(currentCounts);
 				}
 			};
-			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
+
 			njh::concurrent::runVoidFunctionThreaded(readInComp, numThreads);
-			//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		}
 		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		initialCounts.writeOutCounts(outCounts,extractingPars,uniqueKmersPerSet,njh::pasteAsStr(iterNumber));
@@ -503,8 +692,8 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 		uint64_t currentTotalUndeterminedReads = initialCounts.genTotalUndeterminedCount();
 		uint64_t currentTotalReads = initialCounts.getTotalCounts();
 		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-		initialCounts.readsPerSet["undetermined"] = 0;
-		initialCounts.readsPerSetRevComp["undetermined"] = 0;
+		initialCounts.readCountsPerSet[false]["undetermined"] = 0;
+		initialCounts.readCountsPerSet[true]["undetermined"] = 0;
 		uint64_t currentTotalDeterminedReads = initialCounts.genTotalDeterminedCount();
 		if(setUp.pars_.verbose_){
 			std::cout << "iterNumber: " << iterNumber << std::endl;
@@ -514,6 +703,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 			std::cout << "\tTotal Undetermined Reads: " << currentTotalUndeterminedReads << " (" << currentTotalUndeterminedReads * 100 /static_cast<double>(currentTotalReads)<< "%)" << std::endl;
 			std::cout << "\tTotal Determined Reads: " << currentTotalDeterminedReads << " (" << currentTotalDeterminedReads * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
 			std::cout << "\tTotal Less Than Small Len Cut Off Count: " << initialCounts.smallLenCutOffCount << " (" << initialCounts.smallLenCutOffCount * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
+			std::cout << "\tDissimilar Filter: " << initialCounts.filteredDissimilarCount << " (" << initialCounts.filteredDissimilarCount * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
 			std::cout << std::endl;
 		}
 		if(currentTotalUndeterminedReads == 0 || totalDeterminedReads == currentTotalDeterminedReads){
@@ -578,28 +768,50 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 		}
 		finalSeqOut.addReader("undetermined-single", SeqIOOptions::genFastqOutGz(njh::files::make_path(finalExtractionDir, "undetermined")));
 
-
+		extractingPars.compPars.pairsSeparate = finalExtractionPairsSeparate;
 		if (!setUp.pars_.ioOptions_.firstName_.empty()) {
 			SeqInput reader(setUp.pars_.ioOptions_);
 			reader.openIn();
-			std::function<void()> readInComp = [&reader, &uniqueKmersPerSet,
-							&mut, &extractingPars, &finalSeqOut, &finalCounts
-//							, &testReads
-			]() {
-				SimpleKmerHash hasher;
-				PairedRead pseq;
-				UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
-				while (reader.readNextReadLock(pseq)) {
-					UniqueKmerSetHelper::processReadForExtracting(pseq, uniqueKmersPerSet,
-																												extractingPars, hasher, finalSeqOut,
-																												currentCounts,
-																												"final");
-				}
-				{
-					std::lock_guard<std::mutex> lockGuard(mut);
-					finalCounts.addOtherCounts(currentCounts);
-				}
-			};
+
+			std::function<void()> readInComp;
+
+			if(extractingPars.compPars.pairsSeparate){
+				readInComp = [&reader, &uniqueKmersPerSet,
+								&mut, &extractingPars, &finalSeqOut, &finalCounts
+				]() {
+					SimpleKmerHash hasher;
+					PairedRead pseq;
+					UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
+					while (reader.readNextReadLock(pseq)) {
+						UniqueKmerSetHelper::processReadForExtractingPairsSeparate(pseq, uniqueKmersPerSet,
+																																			 extractingPars, hasher, finalSeqOut,
+																																			 currentCounts,
+																																			 "final");
+					}
+					{
+						std::lock_guard<std::mutex> lockGuard(mut);
+						finalCounts.addOtherCounts(currentCounts);
+					}
+				};
+			}else{
+				readInComp = [&reader, &uniqueKmersPerSet,
+								&mut, &extractingPars, &finalSeqOut, &finalCounts
+				]() {
+					SimpleKmerHash hasher;
+					PairedRead pseq;
+					UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
+					while (reader.readNextReadLock(pseq)) {
+						UniqueKmerSetHelper::processReadForExtractingPairsTogether(pseq, uniqueKmersPerSet,
+																																			 extractingPars, hasher, finalSeqOut,
+																																			 currentCounts,
+																																			 "final");
+					}
+					{
+						std::lock_guard<std::mutex> lockGuard(mut);
+						finalCounts.addOtherCounts(currentCounts);
+					}
+				};
+			}
 			njh::concurrent::runVoidFunctionThreaded(readInComp, numThreads);
 		}
 		if (!singlesOption.firstName_.empty()) {
@@ -675,7 +887,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 		}
 		OutputStream nonUniqueKmerSets(njh::files::make_path(setUp.pars_.directoryName_, "nonUniqueKmers_finalUniqueKmerSets.tsv.gz"));
 		for(const auto & nonUniqK : nonUniqueKmersPerSet){
-			finalUniqueKmerSetsOut << nonUniqueRegionName << "\t" << hasher.reverseHash(nonUniqK) << "\n";
+			nonUniqueKmerSets << nonUniqueRegionName << "\t" << hasher.reverseHash(nonUniqK) << "\n";
 		}
 	}
 

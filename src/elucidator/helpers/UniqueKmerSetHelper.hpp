@@ -54,6 +54,11 @@ public:
 		uint32_t hardCountOff = 0;
 		double fracCutOff = 0;
 
+		std::set<std::string> excludeSetNames{"genomeRest"};
+
+		uint32_t initialExcludeHardCountOff = 0;
+		double initialExcludeFracCutOff = 0;
+
 		uint32_t kmerLengthForEntropyCalc_{1};
 		double entropyFilter_{1.95};
 	};
@@ -67,6 +72,8 @@ public:
 		std::string winnerSet = "undetermined";
 		double bestFrac = 0;
 		bool winnerRevComp = false;
+
+		uint32_t getTotalDetermined();
 
 		void zeroFillFoundSets(const VecStr &setNames);
 		static VecStr genOutputHeader(const CompareReadToSetPars &compPars);
@@ -99,7 +106,6 @@ public:
 		bool writeOutExclude = false;
 		bool doNotWriteUndetermined = false;
 		bool doReCheckExcludeSets = false;
-		std::set<std::string> excludeSetNames{"genomeRest"};
 		uint32_t addingInKmersCountCutOff = 3;
 
 		bool markReadsPerIteration = false;
@@ -107,9 +113,16 @@ public:
 	};
 
 	struct ProcessReadForExtractingCounts{
-		std::unordered_map<std::string, uint32_t> readsPerSet;
-		std::unordered_map<std::string, uint32_t> readsPerSetRevComp;
+//		std::unordered_map<std::string, uint32_t> readsPerSet;
+//		std::unordered_map<std::string, uint32_t> readsPerSetRevComp;
+		ProcessReadForExtractingCounts(){
+			readCountsPerSet[false] = std::unordered_map<std::string, uint32_t>{};
+			readCountsPerSet[true] = std::unordered_map<std::string, uint32_t>{};
+		}
+		std::unordered_map<bool, std::unordered_map<std::string, uint32_t>> readCountsPerSet;
 		uint32_t smallLenCutOffCount = 0;
+
+		uint32_t filteredDissimilarCount = 0;//not to be included final counts
 
 		void addOtherCounts(const ProcessReadForExtractingCounts & otherCounts);
 
@@ -133,6 +146,48 @@ public:
 	};
 
 	static void processReadForExtracting(PairedRead &pseq,
+																			 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+																			 const ProcessReadForExtractingPars &extractingPars, const SimpleKmerHash &hasher,
+																			 MultiSeqIO &seqOut, ProcessReadForExtractingCounts &counts,
+																			 const std::string & iterationName);
+
+	static void processReadForFilteringPairsSeparate(PairedRead &pseq,
+																										const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+																										const ProcessReadForExtractingPars &extractingPars,
+																										const SimpleKmerHash &hasher,
+																										MultiSeqIO &seqOut,
+																										ProcessReadForExtractingCounts &counts,
+																										const std::string & iterationName,
+																										const std::string & filterName,
+																										const std::string & keepName);
+
+	static void processReadForFilteringPairsTogether(PairedRead &pseq,
+																									 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+																									 const ProcessReadForExtractingPars &extractingPars,
+																									 const SimpleKmerHash &hasher,
+																									 MultiSeqIO &seqOut,
+																									 ProcessReadForExtractingCounts &counts,
+																									 const std::string & iterationName,
+																									 const std::string & filterName,
+																									 const std::string & keepName);
+
+	static void processReadForFiltering(seqInfo &seq,
+																									 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+																									 const ProcessReadForExtractingPars &extractingPars,
+																									 const SimpleKmerHash &hasher,
+																									 MultiSeqIO &seqOut,
+																									 ProcessReadForExtractingCounts &counts,
+																									 const std::string & iterationName,
+																									 const std::string & filterName,
+																									 const std::string & keepName);
+
+	static void processReadForExtractingPairsSeparate(PairedRead &pseq,
+																			 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+																			 const ProcessReadForExtractingPars &extractingPars, const SimpleKmerHash &hasher,
+																			 MultiSeqIO &seqOut, ProcessReadForExtractingCounts &counts,
+																			 const std::string & iterationName);
+
+	static void processReadForExtractingPairsTogether(PairedRead &pseq,
 																			 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
 																			 const ProcessReadForExtractingPars &extractingPars, const SimpleKmerHash &hasher,
 																			 MultiSeqIO &seqOut, ProcessReadForExtractingCounts &counts,

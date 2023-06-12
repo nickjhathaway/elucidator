@@ -250,7 +250,7 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutil
 	bool getReverseCompOfGenomeRegions = false;
 	bool separateGenomeOutput = false;
 	OutOptions outOpts;
-
+	bool filterGenomeRestForEntropyToo = false;
 	uint32_t expand = 0;
 
 	seqSetUp setUp(inputCommands);
@@ -258,6 +258,7 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutil
 	setUp.processDebug();
 	setUp.description_ = "Get the unique kmers that appear within the bed region compared to the rest of the genome";
 	setUp.setOption(expand, "--expand", "expand this amount out around the regions when creating the rest of genome unique kmers");
+	setUp.setOption(filterGenomeRestForEntropyToo, "--filterGenomeRestForEntropyToo", "filter Genome Rest For low Entropy kmers Too");
 
 	setUp.setOption(genomeFnp, "--genomeFnp", "genome file to extract from, a .2bit file needs to exist for the supplied genome", true);
 	setUp.setOption(regionTableFnp, "--bedFnp", "sub regions to extract to compare to the rest of the genome", true);
@@ -452,20 +453,22 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutil
 		for (const auto &region: regionBeds.second) {
 			auto currentSeq = GenomicRegion(*region).extractSeq(tReader);
 			for (uint32_t pos = 0; pos < len(currentSeq.seq_) - countPars.kmerLength_ + 1; ++pos) {
-				auto k = currentSeq.seq_.substr(pos, countPars.kmerLength_);
-				kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
-				if(kInfo.computeKmerEntropy() > countPars.entropyFilter_){
-					rawKmersPerInput[regionBeds.first].emplace(hasher.hash(k));
-				}
+				rawKmersPerInput[regionBeds.first].emplace(hasher.hash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
+//				auto k = currentSeq.seq_.substr(pos, countPars.kmerLength_);
+//				kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
+//				if(kInfo.computeKmerEntropy() > countPars.entropyFilter_){
+//					rawKmersPerInput[regionBeds.first].emplace(hasher.hash(k));
+//				}
 			}
 			if (getReverseCompOfInputRegions) {
 				for (uint32_t pos = 0; pos < len(currentSeq.seq_) - countPars.kmerLength_ + 1;
 						 ++pos) {
-					auto k = currentSeq.seq_.substr(pos, countPars.kmerLength_);
-					kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
-					if(kInfo.computeKmerEntropy() > countPars.entropyFilter_){
-						rawKmersPerInput[regionBeds.first].emplace(hasher.revCompHash(k));
-					}
+					rawKmersPerInput[regionBeds.first].emplace(hasher.revCompHash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
+//					auto k = currentSeq.seq_.substr(pos, countPars.kmerLength_);
+//					kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
+//					if(kInfo.computeKmerEntropy() > countPars.entropyFilter_){
+//						rawKmersPerInput[regionBeds.first].emplace(hasher.revCompHash(k));
+//					}
 				}
 			}
 		}
@@ -509,22 +512,22 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutil
 		auto currentSeq = GenomicRegion(region).extractSeq(tReader);
 
 		for (uint32_t pos = 0; pos < len(currentSeq.seq_) - countPars.kmerLength_ + 1; ++pos) {
-			auto k = currentSeq.seq_.substr(pos, countPars.kmerLength_);
-			kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
-			if(kInfo.computeKmerEntropy() > countPars.entropyFilter_){
-				kmersPerInbetween.emplace(
-								hasher.hash(k));
-			}
-
+			kmersPerInbetween.emplace(hasher.hash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
+//			auto k = currentSeq.seq_.substr(pos, countPars.kmerLength_);
+//			kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
+//			if(kInfo.computeKmerEntropy() > countPars.entropyFilter_){
+//				kmersPerInbetween.emplace(hasher.hash(k));
+//			}
 		}
 		if (getReverseCompOfGenomeRegions) {
 			for (uint32_t pos = 0; pos < len(currentSeq.seq_) - countPars.kmerLength_ + 1;
 					 ++pos) {
-				auto k = currentSeq.seq_.substr(pos, countPars.kmerLength_);
-				kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
-				if(kInfo.computeKmerEntropy() > countPars.entropyFilter_){
-					kmersPerInbetween.emplace(hasher.revCompHash(k));
-				}
+				kmersPerInbetween.emplace(hasher.revCompHash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
+//				auto k = currentSeq.seq_.substr(pos, countPars.kmerLength_);
+//				kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
+//				if(kInfo.computeKmerEntropy() > countPars.entropyFilter_){
+//					kmersPerInbetween.emplace(hasher.revCompHash(k));
+//				}
 			}
 		}
 
@@ -556,16 +559,36 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutil
 	}
 	if(separateGenomeOutput){
 		for(const auto & finalKmer : restOfGenomeUniqueKmers){
-			*restOfGenomeKmersOut.out_ << restOfGenomeRegionName << "\t" << hasher.reverseHash(finalKmer) << std::endl;
+			if(filterGenomeRestForEntropyToo){
+				auto k = hasher.reverseHash(finalKmer);
+				kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
+				if (kInfo.computeKmerEntropy() > countPars.entropyFilter_) {
+					*restOfGenomeKmersOut.out_ << restOfGenomeRegionName << "\t" << k << std::endl;
+				}
+			} else {
+				*restOfGenomeKmersOut.out_ << restOfGenomeRegionName << "\t" << hasher.reverseHash(finalKmer) << std::endl;
+			}
 		}
-	}else{
+	} else {
 		for(const auto & finalKmer : restOfGenomeUniqueKmers){
-			out << restOfGenomeRegionName << "\t" << hasher.reverseHash(finalKmer) << std::endl;
+			if(filterGenomeRestForEntropyToo){
+				auto k = hasher.reverseHash(finalKmer);
+				kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
+				if (kInfo.computeKmerEntropy() > countPars.entropyFilter_) {
+					out << restOfGenomeRegionName << "\t" << k << std::endl;
+				}
+			} else {
+				out << restOfGenomeRegionName << "\t" << hasher.reverseHash(finalKmer) << std::endl;
+			}
 		}
 	}
 	for(const auto & finalKmerSet : finalKmersPerInput){
 		for(const auto & finalKmer : finalKmerSet.second){
-			out << finalKmerSet.first << "\t" << hasher.reverseHash(finalKmer) << std::endl;
+			auto k = hasher.reverseHash(finalKmer);
+			kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
+			if (kInfo.computeKmerEntropy() > countPars.entropyFilter_) {
+				out << finalKmerSet.first << "\t" << k << std::endl;
+			}
 		}
 	}
 	for(const auto & finalKmer : nonUniqueKmers){
@@ -574,6 +597,8 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutil
 
 	return 0;
 }
+
+
 //
 //int kmerExpRunner::findUniqKmersFromGenomeSubRegions(const njh::progutils::CmdArgs & inputCommands){
 //	std::string nonUniqueRegionName = "NON_UNIQUE";
