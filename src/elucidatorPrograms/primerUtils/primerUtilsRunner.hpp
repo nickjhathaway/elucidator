@@ -16,7 +16,7 @@ public:
 
 	static int computeDimerizationScore(const njh::progutils::CmdArgs & inputCommands);
 	static int testWithBlastForUnspecificAmplification(const njh::progutils::CmdArgs & inputCommands);
-
+	static int creatingMultiplexAmpliconPools(const njh::progutils::CmdArgs & inputCommands);
 
 };
 

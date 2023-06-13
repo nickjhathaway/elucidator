@@ -242,7 +242,7 @@ int kmerExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputComman
 int kmerExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutils::CmdArgs & inputCommands){
 	std::string nonUniqueRegionName = "NON_UNIQUE";
 	KmerGatherer::KmerGathererPars countPars;
-	countPars.entropyFilter_ = 1.20;
+	countPars.entropyFilter_ = 0;
 	countPars.kmerLengthForEntropyCalc_ = 2;
 	bfs::path genomeFnp;
 	bfs::path regionTableFnp;

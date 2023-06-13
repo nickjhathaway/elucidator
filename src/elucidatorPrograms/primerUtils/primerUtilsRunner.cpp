@@ -12,8 +12,6 @@
 #include <njhseq/objects/BioDataObject/BioDataFileIO.hpp>
 #include <njhseq/BamToolsUtils/ReAlignedSeq.hpp>
 #include <njhseq/GenomeUtils/GenomeExtraction/ParsingAlignmentInfo/GenomeExtractResult.hpp>
-#include <njhseq/objects/BioDataObject/BioRecordsUtils/BedUtility.hpp>
-#include <utility>
 
 namespace njhseq {
 
@@ -24,6 +22,7 @@ primerUtilsRunner::primerUtilsRunner()
 				{
 								addFunc("computeDimerizationScore", computeDimerizationScore, false),
 								addFunc("testWithBlastForUnspecificAmplification", testWithBlastForUnspecificAmplification, false),
+								addFunc("creatingMultiplexAmpliconPools", creatingMultiplexAmpliconPools, false),
 								//
 				},
 				"primerUtils") {}
@@ -39,7 +38,7 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 	bfs::path genomeFnp;
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(numThreads, "--numThreads", "number of Threads");
-	setUp.setOption(minLen, "--minLen", "min length of the 3` end of the alignment");
+	setUp.setOption(minLen, "--minLen", "min length of the 3` end of the alignment, (inclusive)");
 	setUp.setOption(errorAllowed, "--errorAllowed", "errors allowed");
 	setUp.setOption(maxTargetSize, "--maxTargetSize", "max target size");
 	setUp.setOption(minTargetSize, "--minTargetSize", "min target size");
