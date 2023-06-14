@@ -284,7 +284,6 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 			portion.resetMetaInName(meta);
 			return portion;
 		}
-
 	};
 	std::vector<GenomeExtractResultWithHits> extractions;
 	if(results.size() > 1){
