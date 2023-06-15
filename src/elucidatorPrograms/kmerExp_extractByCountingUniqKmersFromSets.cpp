@@ -4,6 +4,7 @@
 
 #include "kmerExp.hpp"
 #include <njhseq/IO/SeqIO/MultiSeqIO.hpp>
+#include <njhseq/BamToolsUtils/bamExtractUtils.hpp>
 #include "elucidator/helpers/UniqueKmerSetHelper.hpp"
 
 namespace njhseq {
@@ -136,26 +137,50 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
+
 	//read in options
+	bfs::path bamFnp;
+	bfs::path bamExtractBedFnp;
+	double bamExtractBedPercInRegion = 0.50;
+	setUp.setOption(bamExtractBedPercInRegion, "--bamExtractBedPercInRegion", "bam Extract Bed Perc In Region", false);
+	bool bamFnpSet = setUp.setOption(bamFnp, "--bamFnp", "bam Fnp", false);
+	setUp.setOption(bamExtractBedFnp, "--bamExtractBedFnp", "bam Extract Bed Fnp regions", false);
 	setUp.pars_.ioOptions_.revComplMate_ = true;
-	bool pairedEndSet = setUp.processReadInNames(njhseq::seqSetUp::pairedReadInFormatsAvailable_, false);
+	bool pairedEndSet = setUp.processReadInNames(njhseq::seqSetUp::pairedReadInFormatsAvailable_, !bamFnpSet);
 	auto singlesOption = SeqIOOptions();
-	setUp.processJustReadInNames(singlesOption, njhseq::seqSetUp::singleInFormatsAvailable_, !pairedEndSet);
+	bool singlesEndSet = setUp.processJustReadInNames(singlesOption, njhseq::seqSetUp::singleInFormatsAvailable_, !pairedEndSet && !bamFnpSet);
 	singlesOption.lowerCaseBases_ = setUp.pars_.ioOptions_.lowerCaseBases_;
 	singlesOption.removeGaps_ = setUp.pars_.ioOptions_.removeGaps_;
 	singlesOption.includeWhiteSpaceInName_ = setUp.pars_.ioOptions_.includeWhiteSpaceInName_;
 
+	if((singlesEndSet || pairedEndSet) && bamFnpSet){
+		setUp.failed_ = true;
+		setUp.addWarning(njh::pasteAsStr("can't set both bam file and fastq inputs"));
+	}
+
 	setUp.setOption(countTable, "--kmerTable", "countTable, 1)set,2)kmer", true);
+	setUp.setOption(nonUniqueKmerTable, "--nonUniqueKmerTable", "non-unique Kmer Table, 1)set,2)kmer");
+	if(nonUniqueKmerTable.empty()){
+		auto possibleNonUniqueTable = njh::files::prependFileBasename(countTable, "nonUniqueKmers_");
+		if(exists(possibleNonUniqueTable)){
+			nonUniqueKmerTable = possibleNonUniqueTable;
+		}
+	}
 	setUp.setOption(extractingPars.compPars.sampleName, "--sampleName", "Name to add to output file", true);
 	bool doNotIncludeRevComp = false;
 	setUp.setOption(doNotIncludeRevComp, "--doNotIncludeRevComp", "do not include Rev Comp of the input seqs");
 	extractingPars.compPars.includeRevComp = !doNotIncludeRevComp;
 	//setUp.setOption(extractingPars.compPars.includeRevComp, "--includeRevComp", "include Rev Comp of the input seqs");
 
-	bool pairsTogether = false;
-	setUp.setOption(pairsTogether, "--pairsTogether", "extract the pairs together");
-	extractingPars.compPars.pairsSeparate = !pairsTogether;
-	setUp.setOption(finalExtractionPairsSeparate, "--finalExtractionPairsSeparate", "extract the pairs separately for final extraction step");
+//	bool pairsTogether = false;
+//	setUp.setOption(pairsTogether, "--pairsTogether", "extract the pairs together");
+//	extractingPars.compPars.pairsSeparate = !pairsTogether;
+	setUp.setOption(extractingPars.compPars.pairsSeparate, "--pairsSeparate", "extract the pairs separately");
+
+	bool finalExtractionPairsTogether = false;
+	setUp.setOption(finalExtractionPairsTogether, "--finalExtractionPairsTogether", "final extraction the pairs together");
+	finalExtractionPairsSeparate = !finalExtractionPairsTogether;
+	//setUp.setOption(finalExtractionPairsSeparate, "--finalExtractionPairsSeparate", "extract the pairs separately for final extraction step");
 
 
 
@@ -200,7 +225,6 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 //	setUp.setOption(doFinalRecheckOfExcludeSeqs, "--doFinalRecheckOfExcludeSeqs", "Normal the exclusion kmer set is left alone, if this flag is set, it will be filter during the final re-extraction process");
 
 	setUp.setOption(doNotDoFinalExtract, "--doNotDoFinalExtract", "do Not Do Final Extract");
-	setUp.setOption(nonUniqueKmerTable, "--nonUniqueKmerTable", "non-unique Kmer Table, 1)set,2)kmer");
 	//setUp.setOption(extractAfterIterating, "--extractAfterIterating", "Extract After Iterating");
 	setUp.setOption(maxIterations, "--maxIterations", "max Iterations to perform");
 
@@ -222,6 +246,42 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	UniqueKmerSetHelper::ProcessReadForExtractingCounts initialCounts;
 
 	std::mutex mut;
+	OutOptions bamExtractOut(njh::files::make_path(setUp.pars_.directoryName_, "bamExtract"));
+	bamExtractOut.append_ = true;
+	if (bamFnpSet) {
+		watch.startNewLap(njh::pasteAsStr("bam extract files"));
+		njh::files::checkExistenceThrow(bamFnp, __PRETTY_FUNCTION__);
+		BamExtractor bExtractor(setUp.pars_.verbose_);
+		if (bamExtractBedFnp.empty()) {
+			bExtractor.writeExtractReadsFromBam(bamFnp, bamExtractOut);
+		} else {
+			auto regions = gatherRegions(bamExtractBedFnp.string(), "", setUp.pars_.verbose_);
+			for (const auto &region: regions) {
+				bExtractor.writeExtractReadsFromBamRegion(bamFnp,
+																									region, bamExtractBedPercInRegion, bamExtractOut);
+			}
+		}
+
+		bfs::path bamExtractR1Fnp = bamExtractOut.outFilename_.string() + "_R1.fastq.gz";
+		bfs::path bamExtractR2Fnp = bamExtractOut.outFilename_.string() + "_R2.fastq.gz";
+		bfs::path bamExtractFnp = bamExtractOut.outFilename_.string() + ".fastq.gz";
+		if (exists(bamExtractR1Fnp)) {
+			setUp.pars_.ioOptions_ = SeqIOOptions::genPairedInGz(bamExtractR1Fnp, bamExtractR2Fnp);
+//			setUp.pars_.ioOptions_.inFormat_ = SeqIOOptions::inFormats::FASTQPAIREDGZ;
+//			setUp.pars_.ioOptions_.outFormat_ = SeqIOOptions::outFormats::FASTQPAIREDGZ;
+//			setUp.pars_.ioOptions_.firstName_ = bamExtractR1Fnp;
+//			setUp.pars_.ioOptions_.firstName_ = bamExtractR2Fnp;
+		}
+		if (exists(bamExtractFnp)) {
+			singlesOption = SeqIOOptions::genFastqInGz(bamExtractFnp);
+//			singlesOption.inFormat_ = SeqIOOptions::inFormats::FASTQGZ;
+//			singlesOption.outFormat_ = SeqIOOptions::outFormats::FASTQGZ;
+//			singlesOption.firstName_ = bamExtractFnp;
+		}
+		if(setUp.pars_.verbose_){
+			std::cout << watch.getLapName() << "\t" << watch.timeLapFormatted() <<std::endl;
+		}
+	}
 
 	watch.startNewLap("reading in unique kmer table");
 
@@ -314,8 +374,6 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 					}
 				};
 			}
-
-
 			njh::concurrent::runVoidFunctionThreaded(readInComp, numThreads);
 		}
 		if (!singlesOption.firstName_.empty()) {
@@ -878,7 +936,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 
 	if(extractingPars.writeOutFinalKmerSets){
 		SimpleKmerHash hasher;
-		watch.startNewLap(njh::pasteAsStr(iterNumber, "- write Out Final Kmer Sets"));
+		watch.startNewLap(njh::pasteAsStr("write Out Final Kmer Sets"));
 		OutputStream finalUniqueKmerSetsOut(njh::files::make_path(setUp.pars_.directoryName_, "finalUniqueKmerSets.tsv.gz"));
 		for(const auto & uniqKSet : uniqueKmersPerSet){
 			for(const auto & uniqK : uniqKSet.second){
@@ -890,7 +948,22 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 			nonUniqueKmerSets << nonUniqueRegionName << "\t" << hasher.reverseHash(nonUniqK) << "\n";
 		}
 	}
+	if(!keepTemporaryFiles){
+		if (bamFnpSet) {
+			watch.startNewLap(njh::pasteAsStr("remove bam extracted files"));
 
+			bfs::path bamExtractR1Fnp = bamExtractOut.outFilename_.string() + "_R1.fastq.gz";
+			bfs::path bamExtractR2Fnp = bamExtractOut.outFilename_.string() + "_R2.fastq.gz";
+			bfs::path bamExtractFnp = bamExtractOut.outFilename_.string() + ".fastq.gz";
+			if (exists(bamExtractR1Fnp)) {
+				bfs::remove(bamExtractR1Fnp);
+				bfs::remove(bamExtractR2Fnp);
+			}
+			if (exists(bamExtractFnp)) {
+				bfs::remove(bamExtractFnp);
+			}
+		}
+	}
 	watch.logLapTimes(setUp.rLog_.runLogFile_, true, 6, true);
 	return 0;
 }

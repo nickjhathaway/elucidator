@@ -26,7 +26,6 @@
 
 #include <TwoBit.h>
 #include "genExp.hpp"
-#include "elucidator/BamToolsUtils.h"
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/objects/dataContainers/graphs.h"
 #include <njhseq/GenomeUtils.h>
@@ -38,8 +37,8 @@ namespace njhseq {
 
 int genExpRunner::bioIndexGenomes(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path genomeDir = "";
-	std::string primaryGenome = "";
-	std::string selectedGenomes = "";
+	std::string primaryGenome;
+	std::string selectedGenomes;
 	uint32_t numThreads = 1;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -146,7 +145,7 @@ int genExpRunner::extractRefSeqsFromGenomesWithPrimers(
 	extractBetweenSeqsPars pars;
 	std::set<std::string> forwardPrimers;
 	std::set<std::string> reversePrimers;
-	std::string targetName = "";
+	std::string targetName;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -162,7 +161,7 @@ int genExpRunner::extractRefSeqsFromGenomesWithPrimers(
 
 	table primerTable;
 
-	if ("" != pars.primersFile) {
+	if (!pars.primersFile.empty()) {
 		primerTable = seqUtil::readPrimers(pars.primersFile.string(), "whitespace",
 				false);
 	} else {
@@ -183,7 +182,7 @@ int genExpRunner::extractRefSeqsFromGenomesWithPrimers(
 	}
 
 	PrimersAndMids ids(targets);
-	if(0 == ids.getTargets().size() ){
+	if(ids.getTargets().empty() ){
 		std::stringstream ss;
 		ss << __PRETTY_FUNCTION__ << ", error in reading in target primers file " << pars.primersFile << "\n";
 		ss << "Make sure there is a line that starts with target in file" << "\n";
@@ -278,12 +277,12 @@ int genExpRunner::extractRefSeqsFromGenomes(
   setUp.setOption(genomeMappingPars.genomeDir_, "--genomeDir", "Name of the genome file fnp", true);
 	setUp.setOption(genomeMappingPars.primaryGenome_, "--primaryGenome", "Name of the primary genome, should be in --genomeDir", true);
 	//genomeMappingPars.setGenomeFnp();
-	std::string selectedGenomesStr = "";
+	std::string selectedGenomesStr;
 	setUp.setOption(selectedGenomesStr, "--selectedGenomes", "Name of the other genomes in --genomeDir to be read in, leave blank to just do all fastas");
 
-	std::string extraGffAttributes = "";
+	std::string extraGffAttributes;
 	setUp.setOption(extraGffAttributes, "--extraGffAttributes", "Extra Gff Attributes");
-	if("" != extraGffAttributes){
+	if(!extraGffAttributes.empty()){
 		genomeMappingPars.gffIntersectPars_.extraAttributes_ = tokenizeString(extraGffAttributes, ",");
 	}
 	//genomeMappingPars.numThreads_
