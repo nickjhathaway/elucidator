@@ -145,6 +145,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	setUp.setOption(bamExtractBedPercInRegion, "--bamExtractBedPercInRegion", "bam Extract Bed Perc In Region", false);
 	bool bamFnpSet = setUp.setOption(bamFnp, "--bamFnp", "bam Fnp", false);
 	setUp.setOption(bamExtractBedFnp, "--bamExtractBedFnp", "bam Extract Bed Fnp regions", false);
+
 	setUp.pars_.ioOptions_.revComplMate_ = true;
 	bool pairedEndSet = setUp.processReadInNames(njhseq::seqSetUp::pairedReadInFormatsAvailable_, !bamFnpSet);
 	auto singlesOption = SeqIOOptions();

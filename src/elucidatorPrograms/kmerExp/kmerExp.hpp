@@ -114,6 +114,8 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int uniqKmersSetToFasta(const njh::progutils::CmdArgs & inputCommands);
 
 	static int findKmersInSets(const njh::progutils::CmdArgs & inputCommands);
+	static int countPerKmerPerSeq(const njh::progutils::CmdArgs & inputCommands );
+
 
 	static int extractByCountingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands);
 	static int countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArgs & inputCommands);

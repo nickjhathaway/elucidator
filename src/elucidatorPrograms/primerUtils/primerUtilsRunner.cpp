@@ -23,6 +23,7 @@ primerUtilsRunner::primerUtilsRunner()
 								addFunc("computeDimerizationScore", computeDimerizationScore, false),
 								addFunc("testWithBlastForUnspecificAmplification", testWithBlastForUnspecificAmplification, false),
 								addFunc("creatingMultiplexAmpliconPools", creatingMultiplexAmpliconPools, false),
+								addFunc("testForPrimerDimers", testForPrimerDimers, false),
 								//
 				},
 				"primerUtils") {}

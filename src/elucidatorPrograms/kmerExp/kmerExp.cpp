@@ -104,7 +104,7 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("reportOnUniqKmersSet", reportOnUniqKmersSet, false),
 					 addFunc("findKmersInSets", findKmersInSets, false),
 					 addFunc("uniqKmersSetToFasta", uniqKmersSetToFasta, false),
-
+					 addFunc("countPerKmerPerSeq", countPerKmerPerSeq, false),
 
 
 									//

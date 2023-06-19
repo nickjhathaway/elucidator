@@ -7,7 +7,7 @@
 
 
 
-#include "elucidatorPrograms/programWrappers.hpp"
+#include "elucidatorPrograms/programWrappers/programWrappers.hpp"
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/BamToolsUtils.h"
 

@@ -24,7 +24,7 @@
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-#include "elucidatorPrograms/programWrappers.hpp"
+#include "elucidatorPrograms/programWrappers/programWrappers.hpp"
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/BamToolsUtils.h"
 

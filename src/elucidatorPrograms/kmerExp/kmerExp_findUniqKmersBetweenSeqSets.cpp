@@ -506,15 +506,28 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 }
 
 
+
+
 int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands){
 	KmerGatherer::KmerGathererPars countPars;
+
 	bfs::path seqSetTableFnp = "";
 	bfs::path seqSetSuppFastaTableFnp = "";
+	bool fasta = false;
+	bool noFilters = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.description_ = "Get kmers that appear within the sequences supplied and are unique to that set compared to the other sets";
-	setUp.setOption(seqSetTableFnp, "--seqSetTableFnp", "Seq Set Table, 2 columns, 1)set,2)2bit", true);
+	setUp.setOption(fasta, "--fasta", "file contains fasta files instead of 2bit files");
+	setUp.setOption(noFilters, "--noFilters", "Don't do filtering on kmers sets");
+	if(noFilters){
+		countPars.entropyFilter_ = 0;
+		countPars.allowableCharacters_ = njh::genSetOfAnsiPrintable();
+	}
+
+	std::string columnsHelp = njh::pasteAsStr("1)set,2)", (fasta? "fasta": "2bit"));
+	setUp.setOption(seqSetTableFnp, "--seqSetTableFnp", "Seq Set Table, 2 columns, " + columnsHelp, true);
 	setUp.setOption(seqSetSuppFastaTableFnp, "--seqSetSuppFastaTableFnp", "Seq Set Table supplement small fasta files, 2 columns, 1)set,2)fasta");
 
 	countPars.setOptions(setUp);
@@ -523,14 +536,21 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
 
+
+
+
+	VecStr columnRequired{"set", "2bit"};
+	if(fasta){
+		columnRequired = {"set", "fasta"};
+	}
 	KmerGatherer kGather(countPars);
 
-	std::unordered_map<std::string, std::set<std::string>> twobitsForSet;
+	std::unordered_map<std::string, std::set<std::string>> seqFilesForSet;
 	{
 		table input(seqSetTableFnp, "\t", true);
-		input.checkForColumnsThrow(VecStr{"set", "2bit"}, __PRETTY_FUNCTION__);
+		input.checkForColumnsThrow(columnRequired, __PRETTY_FUNCTION__);
 		for(const auto & row : input){
-			twobitsForSet[row[input.getColPos("set")]].emplace(row[input.getColPos("2bit")]);
+			seqFilesForSet[row[input.getColPos("set")]].emplace(row[input.getColPos(columnRequired[1])]);
 		}
 	}
 
@@ -542,10 +562,10 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 
 	setUp.rLog_.setCurrentLapName("initial");
 
-	std::vector<bfs::path> twoBitFiles;
-	for(const auto & seqSet : twobitsForSet){
+	std::vector<bfs::path> seqFiles;
+	for(const auto & seqSet : seqFilesForSet){
 		for(const auto & fnp : seqSet.second){
-			twoBitFiles.emplace_back(fnp);
+			seqFiles.emplace_back(fnp);
 		}
 	}
 	std::map<std::string, std::set<uint64_t>> kmersPerSet;
@@ -558,11 +578,16 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 	{
 		setUp.rLog_.logCurrentTime("count_all");
 		setUp.rLog_.runLogFile_.flush();
-		auto allKmers = kGather.getUniqueKmersSetHashWithFilters(twoBitFiles);
+		std::unordered_map<std::string, std::set<uint64_t>> allKmers;
+		if (!fasta) {
+			allKmers = kGather.getUniqueKmersSetHashWithFilters(seqFiles);
+		} else {
+			allKmers = kGather.getUniqueKmersSetHashWithFiltersFromFastas(seqFiles);
+		}
 		if(!seqSetSuppFastaTableFnp.empty()){
 			std::vector<bfs::path> fastaFiles;
 			for(const auto & row : inputFastaSupp){
-				twobitsForSet[row[inputFastaSupp.getColPos("set")]].emplace(row[inputFastaSupp.getColPos("fasta")]);
+				seqFilesForSet[row[inputFastaSupp.getColPos("set")]].emplace(row[inputFastaSupp.getColPos("fasta")]);
 				fastaFiles.emplace_back(row[inputFastaSupp.getColPos("fasta")]);
 			}
 			auto suppKmers = kGather.getUniqueKmersSetHashWithFiltersFromFastas(fastaFiles);
@@ -572,14 +597,14 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 		}
 		setUp.rLog_.logCurrentTime("condense");
 		setUp.rLog_.runLogFile_.flush();
-		njh::concurrent::LockableQueue<std::string> seqSetNamesQueue(getVectorOfMapKeys(twobitsForSet));
-		for(const auto & name : twobitsForSet){
+		njh::concurrent::LockableQueue<std::string> seqSetNamesQueue(getVectorOfMapKeys(seqFilesForSet));
+		for(const auto & name : seqFilesForSet){
 			kmersPerSet[name.first] = std::set<uint64_t>{};
 		}
-		std::function<void()> condenseKmers = [&seqSetNamesQueue,&allKmers,&twobitsForSet,&kmersPerSet](){
+		std::function<void()> condenseKmers = [&seqSetNamesQueue,&allKmers,&seqFilesForSet,&kmersPerSet](){
 			std::string name;
 			while(seqSetNamesQueue.getVal(name)){
-				for(const auto & twobit : twobitsForSet.at(name)){
+				for(const auto & twobit : seqFilesForSet.at(name)){
 //					std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //					std::cout << "twobit: " << twobit << std::endl;
 //					std::cout << allKmers.at(twobit).size() << std::endl;
