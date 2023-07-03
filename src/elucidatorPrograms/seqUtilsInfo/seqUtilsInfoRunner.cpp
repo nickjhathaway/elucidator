@@ -63,6 +63,7 @@ seqUtilsInfoRunner::seqUtilsInfoRunner()
 	addFunc("getReadLens", getReadLens, false),
 	addFunc("multipleAlnProteinToPcaInput", multipleAlnProteinToPcaInput, false),
 	addFunc("getSlidingEntropy", getSlidingEntropy, false),
+	addFunc("getSlidingEntropyGenomicRegion", getSlidingEntropyGenomicRegion, false),
 	},
                     "seqUtilsInfo") {}
 //

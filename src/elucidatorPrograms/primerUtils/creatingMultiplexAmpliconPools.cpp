@@ -294,6 +294,9 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 
 	uint32_t testIterMax = 0;
 
+	double defaultExpP5 = 0.80;
+	std::set <bfs::path> additionalNonDiversityDirs;
+
 	std::set <bfs::path> subsegmentDirs;
 	std::set <bfs::path> unspecificAmplificationGenomes;
 	std::string primer3ResultDirName;
@@ -309,6 +312,11 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 
 	setUp.processVerbose();
 	setUp.processDebug();
+
+	setUp.setOption(additionalNonDiversityDirs, "--additionalNonDiversityDirs", "additional Non Diversity Dirs, could be vaccine, drug resistance, diagnostic etc");
+	setUp.setOption(defaultExpP5, "--defaultExpP5", "defaultExpP5");
+
+
 	setUp.setOption(diversityFactor, "--diversityFactor", "diversity Factor");
 	setUp.setOption(dimerFactor, "--dimerFactor", "dimer Factor");
 	setUp.setOption(pairPenaltyFactor, "--pairPenaltyFactor", "pair Penalty Factor");
@@ -348,6 +356,7 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 			throw std::runtime_error{ss.str()};
 		}
 	}
+	std::set<bfs::path> additionalNonDiversityDirsWithResults;
 	std::set<bfs::path> subsegmentDirsWithResults;
 	std::vector<seqInfo> allPrimers;
 	std::vector<seqInfo> allUniquePrimers;
@@ -378,11 +387,29 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 				addOtherVec(primerLocs, getBeds(njh::files::make_path(d, primer3ResultDirName, "primer3_results_primerLocs.bed")));
 			}
 		}
+
+		//gather any potential non-div targets
+		for (const auto &d: additionalNonDiversityDirs) {
+			auto allPrimersFnp = njh::files::make_path(d, primer3ResultDirName, "allPrimers.fasta");
+			njh::files::checkExistenceThrow(allPrimersFnp, __PRETTY_FUNCTION__ );
+			if(!njh::files::isFileEmpty(allPrimersFnp)){
+				additionalNonDiversityDirsWithResults.emplace(d);
+				//if empty that means no primers were generated for the input to primer3
+				SeqInput reader(SeqIOOptions::genFastaIn(allPrimersFnp));
+				reader.openIn();
+				seqInfo seq;
+				while(reader.readNextRead(seq)){
+					seq.name_ = seq.seq_;
+					allPrimers.emplace_back(seq);
+				}
+				addOtherVec(ampLocs, getBeds(njh::files::make_path(d, primer3ResultDirName, "primer3_results_ampLocs.bed")));
+				addOtherVec(insertLocs, getBeds(njh::files::make_path(d, primer3ResultDirName, "primer3_results_insertLocs.bed")));
+				addOtherVec(primerLocs, getBeds(njh::files::make_path(d, primer3ResultDirName, "primer3_results_primerLocs.bed")));
+			}
+		}
 		readVecSorter::sortBySeq(allPrimers, false);
 		for (const auto &primer: allPrimers) {
-			if (allUniquePrimers.empty()) {
-				allUniquePrimers.emplace_back(primer);
-			} else if (allUniquePrimers.back().seq_ != primer.seq_) {
+			if (allUniquePrimers.empty() || (allUniquePrimers.back().seq_ != primer.seq_)) {
 				allUniquePrimers.emplace_back(primer);
 			}
 		}
@@ -418,6 +445,19 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 		}
 		OutputStream subsegmentDirsWithNoResultsOut(njh::files::make_path(setUp.pars_.directoryName_, "subsegmentDirsWithNoResults.txt"));
 		subsegmentDirsWithNoResultsOut << njh::conToStr(dirsWithNoResults, "\n") << std::endl;
+	}
+
+	if(!additionalNonDiversityDirs.empty()){
+		OutputStream additionalNonDiversityDirsWithResultsOut(njh::files::make_path(setUp.pars_.directoryName_, "additionalNonDiversityDirsWithResults.txt"));
+		additionalNonDiversityDirsWithResultsOut << njh::conToStr(additionalNonDiversityDirsWithResults, "\n") << std::endl;
+		std::set<bfs::path> dirsWithNoResults;
+		for(const auto & d : additionalNonDiversityDirs){
+			if(!njh::in(d, additionalNonDiversityDirsWithResults)){
+				dirsWithNoResults.emplace(d);
+			}
+		}
+		OutputStream additionalNonDiversityDirsWithNoResultsOut(njh::files::make_path(setUp.pars_.directoryName_, "additionalNonDiversityDirsWithNoResults.txt"));
+		additionalNonDiversityDirsWithNoResultsOut << njh::conToStr(dirsWithNoResults, "\n") << std::endl;
 	}
 
 	//summarizing finalResults
@@ -510,8 +550,14 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 		primer3ResTab.addColumn(ExpP5MinusNormPairPenaltyMinusDimer, "ExpP5-norm_pair_penalty_noSize-normDimer");
 
 		primer3ResTab.sortTable("ExpP5-norm_pair_penalty_noSize-normDimer","ExpP5", "negative_norm_pair_penalty_noSize", "forwardReverseDimerNormScore", true);
-		primer3ResTab.outPutContents(TableIOOpts::genTabFileOut(
-						njh::files::make_path(setUp.pars_.directoryName_, bfs::basename(d) + "_primer3_results.tab.txt.gz")));
+		primer3ResTab.hasHeader_ = true;
+		primer3ResTab.addColumn(VecStr{"diversity"}, "class");
+		{
+			auto primer3ResTabCopy = primer3ResTab;
+			primer3ResTabCopy.outPutContents(TableIOOpts::genTabFileOut(
+							njh::files::make_path(setUp.pars_.directoryName_, bfs::basename(d) + "_primer3_results.tab.txt.gz")));
+
+		}
 		std::vector<uint32_t> rowsToSelect(std::min(sliceTop, primer3ResTab.nRow()));
 		njh::iota(rowsToSelect, 0U);
 		if (top.empty()) {
@@ -520,6 +566,106 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 			top.rbind(primer3ResTab.getRows(rowsToSelect), false);
 		}
 	}
+
+
+	for(const auto & d : additionalNonDiversityDirsWithResults){
+		//diversity
+
+
+		//primer3 finalResults
+		auto primer3ResFnp = njh::files::make_path(d, primer3ResultDirName, "primer3_results.tab.txt");
+		table primer3ResTab(primer3ResFnp, "\t", true);
+		primerPairsPerTopRegion[d.string()] = primer3ResTab.nRow();
+
+		for(const auto & primerPairName : primer3ResTab.getColumn("SeqIDPrimerPairName")){
+			primerPairsNamesPerTopRegion[d.string()].emplace(primerPairName);
+			primerPairNameToTopRegionKey[primerPairName] = d.string();
+		}
+		//add in default ExpP5
+		primer3ResTab.addColumn(VecStr{estd::to_string(defaultExpP5)}, "ExpP5");
+		primer3ResTab.addColumn(VecStr{estd::to_string(defaultExpP5)}, "he");
+
+		//primer3ResTab.cbind(divResTab, false);
+		//1-Expected ploidy 5
+		std::vector<double> OneMinusExpP5(primer3ResTab.nRow(), 0);
+		for(const auto & row : iter::enumerate(primer3ResTab.content_)){
+			OneMinusExpP5[row.index] = 1.0 - njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("ExpP5")]);
+		}
+		primer3ResTab.addColumn(OneMinusExpP5, "1-ExpP5");
+		//norm primer penality
+		std::vector<double> normPairPenalty(primer3ResTab.nRow(), 0);
+		for(const auto & row : iter::enumerate(primer3ResTab.content_)){
+			normPairPenalty[row.index] = njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("pair_penalty_noSize")])/4.0;
+		}
+		primer3ResTab.addColumn(normPairPenalty, "norm_pair_penalty_noSize");
+		njh::for_each(normPairPenalty,[](double & score){score *=-1;});
+		primer3ResTab.addColumn(normPairPenalty, "negative_norm_pair_penalty_noSize");
+
+		std::vector<double> OneMinusExpP5PlusPairPenalty(primer3ResTab.nRow(), 0);
+		for(const auto & row : iter::enumerate(primer3ResTab.content_)){
+			OneMinusExpP5PlusPairPenalty[row.index] = njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("1-ExpP5")]) + njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("pair_penalty_noSize")]);
+		}
+		primer3ResTab.addColumn(OneMinusExpP5PlusPairPenalty, "1-ExpP5+pair_penalty_noSize");
+		//add in dimer scores for this pair
+		table dimerScoresTab = table(VecStr{"SeqIDPrimerPairName", "forwardPrimerSelfDimer", "reversePrimerSelfDimer", "forwardReverseDimer", "sumDimerScores", "forwardReverseDimerNormScore"});
+		for(const auto & row : iter::enumerate(primer3ResTab.content_)){
+			auto forwardPrimer = row.element[primer3ResTab.getColPos("left_seq")];
+			auto reversePrimer = row.element[primer3ResTab.getColPos("right_seq")];
+			auto forwardPrimerSelfDimer = dimerScores[primerToIdx[forwardPrimer]][primerToIdx[forwardPrimer]];
+			auto reversePrimerSelfDimer = dimerScores[primerToIdx[reversePrimer]][primerToIdx[reversePrimer]];
+			auto forwardReverseDimer = dimerScores[primerToIdx[forwardPrimer]][primerToIdx[reversePrimer]];
+			auto forwardReverseDimerNormScore = -1.0 *(forwardReverseDimer + reversePrimerSelfDimer + forwardReverseDimer)/20.0;
+			dimerScoresTab.addRow(
+							row.element[primer3ResTab.getColPos("SeqIDPrimerPairName")],
+							forwardPrimerSelfDimer,
+							reversePrimerSelfDimer,
+							forwardReverseDimer,
+							forwardReverseDimer + reversePrimerSelfDimer + forwardReverseDimer,
+							forwardReverseDimerNormScore
+			);
+			//OneMinusExpP5PlusPairPenalty[row.index] = njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("1-ExpP5")]) + njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("pair_penalty_noSize")]);
+		}
+		primer3ResTab = table::cbind(std::vector<table>{primer3ResTab, dimerScoresTab}, "SeqIDPrimerPairName", false);
+		//primer3ResTab.cbind(dimerScoresTab, false);
+		//add in a score based on 1-ExpP5+pair_penalty_noSize+normDimer
+		std::vector<double> OneMinusExpP5PlusPairPenaltyPlusDimer(primer3ResTab.nRow(), 0);
+		for (const auto &row: iter::enumerate(primer3ResTab.content_)) {
+			OneMinusExpP5PlusPairPenaltyPlusDimer[row.index] =
+							njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("1-ExpP5")]) +
+							njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("pair_penalty_noSize")]) -
+							njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("forwardReverseDimerNormScore")]);
+
+		}
+		primer3ResTab.addColumn(OneMinusExpP5PlusPairPenaltyPlusDimer, "1-ExpP5+pair_penalty_noSize+normDimer");
+
+		//add in a score based on ExpP5+norm_pair_penalty_noSize+-normDimer
+		std::vector<double> ExpP5MinusNormPairPenaltyMinusDimer(primer3ResTab.nRow(), 0);
+		for (const auto &row: iter::enumerate(primer3ResTab.content_)) {
+			ExpP5MinusNormPairPenaltyMinusDimer[row.index] =
+							diversityFactor * njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("ExpP5")]) -
+							pairPenaltyFactor * njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("norm_pair_penalty_noSize")]) -
+							dimerFactor * njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("forwardReverseDimerNormScore")]);
+		}
+		primer3ResTab.addColumn(ExpP5MinusNormPairPenaltyMinusDimer, "ExpP5-norm_pair_penalty_noSize-normDimer");
+
+		primer3ResTab.sortTable("ExpP5-norm_pair_penalty_noSize-normDimer","ExpP5", "negative_norm_pair_penalty_noSize", "forwardReverseDimerNormScore", true);
+		primer3ResTab.hasHeader_ = true;
+		primer3ResTab.addColumn(VecStr{"diversity"}, "add");
+		primer3ResTab.outPutContents(TableIOOpts::genTabFileOut(
+						njh::files::make_path(setUp.pars_.directoryName_, bfs::basename(d) + "_primer3_results.tab.txt.gz")));
+
+		std::vector<uint32_t> rowsToSelect(std::min(sliceTop, primer3ResTab.nRow()));
+		njh::iota(rowsToSelect, 0U);
+		if (top.empty()) {
+			top = primer3ResTab.getRows(rowsToSelect);
+		} else {
+			top.rbind(primer3ResTab.getRows(rowsToSelect), true);
+		}
+	}
+
+
+
+
 	top.outPutContents(TableIOOpts::genTabFileOut(
 					njh::files::make_path(setUp.pars_.directoryName_, "top_primer3_results.tab.txt.gz")));
 
@@ -655,6 +801,10 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 	VecStr subsegmentDirsWithResultsNames;
 	std::transform(subsegmentDirsWithResults.begin(), subsegmentDirsWithResults.end(),
 								 std::back_inserter(subsegmentDirsWithResultsNames), [](const bfs::path &fnp) { return fnp.string(); });
+	if(!additionalNonDiversityDirsWithResults.empty()){
+		std::transform(additionalNonDiversityDirsWithResults.begin(), additionalNonDiversityDirsWithResults.end(),
+									 std::back_inserter(subsegmentDirsWithResultsNames), [](const bfs::path &fnp) { return fnp.string(); });
+	}
 
 	PossibleAmpliconPanelGraph pool(subsegmentDirsWithResultsNames);
 	//add in edges
@@ -716,6 +866,7 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 		finalResults["primerPairs"] = njh::json::toJson(finalPrimerPairs);
 		finalResults["totalWeight"] = njh::json::toJson(pool.getTotalOnWeight());
 		finalResults["subsegmentDirsWithResults"] = njh::json::toJson(subsegmentDirsWithResults);
+		finalResults["additionalNonDiversityDirsWithResults"] = njh::json::toJson(additionalNonDiversityDirsWithResults);
 		finalResults["subsegmentDirs"] = njh::json::toJson(subsegmentDirs);
 		if(setUp.pars_.debug_){
 			for(const auto & finalPrimerPair : finalPrimerPairs){
