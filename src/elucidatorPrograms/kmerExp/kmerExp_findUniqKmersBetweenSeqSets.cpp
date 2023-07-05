@@ -882,7 +882,7 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 			}
 			auto suppKmers = kGather.getUniqueKmersSetHashWithFiltersFromFastas(fastaFiles);
 			for(const auto & supp : suppKmers){
-				allKmers.emplace(supp);
+				allKmers[supp.first].insert(supp.second.begin(), supp.second.end());
 			}
 		}
 		setUp.rLog_.logCurrentTime("condense");
