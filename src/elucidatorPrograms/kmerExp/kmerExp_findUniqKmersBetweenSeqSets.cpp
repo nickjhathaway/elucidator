@@ -810,12 +810,15 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 	bfs::path seqSetSuppFastaTableFnp = "";
 	bool fasta = false;
 	bool noFilters = false;
+	bool exportNonUniqueKmers = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.description_ = "Get kmers that appear within the sequences supplied and are unique to that set compared to the other sets";
 	setUp.setOption(fasta, "--fasta", "file contains fasta files instead of 2bit files");
 	setUp.setOption(noFilters, "--noFilters", "Don't do filtering on kmers sets");
+	setUp.setOption(exportNonUniqueKmers, "--exportNonUniqueKmers", "export Non Unique Kmers");
+
 	if(noFilters){
 		countPars.entropyFilter_ = 0;
 		countPars.allowableCharacters_ = njh::genSetOfAnsiPrintable();
@@ -924,7 +927,7 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 			njh::concurrent::LockableQueue<std::string> seqSetNamesQueue(namesFound);
 
 			std::function<void()> compareKmers = [&seqSetNamesQueue, &kmersPerSet, &uniqueKmersFinal,
-																						&mut, &nonUniqueKmers]() {
+																						&mut, &nonUniqueKmers, &exportNonUniqueKmers]() {
 				std::string name;
 				std::unordered_set<uint64_t> currentNonUnique;
 				while (seqSetNamesQueue.getVal(name)) {
@@ -942,13 +945,14 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 											otherSet.second.begin(), otherSet.second.end(),
 											std::back_inserter(notShared));
 							uniqueKmers = njh::vecToSet(notShared);
-
-							std::vector<uint64_t> shared;
-							std::set_union(
-											kmersPerSet.at(name).begin(), kmersPerSet.at(name).end(),
-											otherSet.second.begin(), otherSet.second.end(),
-											std::back_inserter(shared));
-							njh::addVecToUOSet(shared, currentNonUnique);
+							if(exportNonUniqueKmers){
+								std::vector<uint64_t> shared;
+								std::set_union(
+												kmersPerSet.at(name).begin(), kmersPerSet.at(name).end(),
+												otherSet.second.begin(), otherSet.second.end(),
+												std::back_inserter(shared));
+								njh::addVecToUOSet(shared, currentNonUnique);
+							}
 						} else {
 							std::vector<uint64_t> notShared;
 
@@ -957,19 +961,20 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 											otherSet.second.begin(), otherSet.second.end(),
 											std::back_inserter(notShared));
 							uniqueKmers = njh::vecToSet(notShared);
-
-							std::vector<uint64_t> shared;
-							std::set_union(
-											uniqueKmers.begin(), uniqueKmers.end(),
-											otherSet.second.begin(), otherSet.second.end(),
-											std::back_inserter(shared));
-							njh::addVecToUOSet(shared, currentNonUnique);
+							if(exportNonUniqueKmers){
+								std::vector<uint64_t> shared;
+								std::set_union(
+												uniqueKmers.begin(), uniqueKmers.end(),
+												otherSet.second.begin(), otherSet.second.end(),
+												std::back_inserter(shared));
+								njh::addVecToUOSet(shared, currentNonUnique);
+							}
 						}
 						++count;
 					}
 					uniqueKmersFinal[name] = uniqueKmers;
 				}
-				{
+				if(exportNonUniqueKmers){
 					std::lock_guard<std::mutex> lock(mut);
 					nonUniqueKmers.insert(currentNonUnique.begin(), currentNonUnique.end());
 				}
@@ -990,11 +995,13 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 
 		}
 	}
-	std::string nonUniqueRegionName = "NON_UNIQUE";
-	OutputStream nonUniquOut(njh::files::make_path(setUp.pars_.directoryName_, "nonUniqueKmers_kmerSets.tsv.gz"));
-	kmerPerSetCounts[nonUniqueRegionName] = nonUniqueKmers.size();
-	for(const auto & kmer : nonUniqueKmers){
-		nonUniquOut << nonUniqueRegionName << "\t" << hasher.reverseHash(kmer) << "\n";
+	if(exportNonUniqueKmers){
+		std::string nonUniqueRegionName = "NON_UNIQUE";
+		OutputStream nonUniquOut(njh::files::make_path(setUp.pars_.directoryName_, "nonUniqueKmers_kmerSets.tsv.gz"));
+		kmerPerSetCounts[nonUniqueRegionName] = nonUniqueKmers.size();
+		for(const auto & kmer : nonUniqueKmers){
+			nonUniquOut << nonUniqueRegionName << "\t" << hasher.reverseHash(kmer) << "\n";
+		}
 	}
 	OutputStream countOut(njh::files::make_path(setUp.pars_.directoryName_, "counts.tsv.gz"));
 	countOut << "set\tcount" << std::endl;
