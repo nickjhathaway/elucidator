@@ -775,7 +775,7 @@ int kmerExpRunner::countingUniqKmersFromSetsBestSet(const njh::progutils::CmdArg
 				<< "\t" << name
 				<< "\t" << total
 				<< "\t" << totalForward
-				<< "\t" << totalForward/static_cast<long double>(total)
+				<< "\t" << (total > 0 ? totalForward/static_cast<long double>(total) : 0)
 				<< std::endl;
 	}
 	return 0;
