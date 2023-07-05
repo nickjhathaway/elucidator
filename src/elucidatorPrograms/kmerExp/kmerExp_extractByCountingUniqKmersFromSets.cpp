@@ -147,7 +147,7 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	setUp.setOption(bamExtractBedFnp, "--bamExtractBedFnp", "bam Extract Bed Fnp regions", false);
 
 	setUp.pars_.ioOptions_.revComplMate_ = true;
-	bool pairedEndSet = setUp.processReadInNames(njhseq::seqSetUp::pairedReadInFormatsAvailable_, !bamFnpSet);
+	bool pairedEndSet = setUp.processReadInNames(njhseq::seqSetUp::pairedReadInFormatsAvailable_, false);
 	auto singlesOption = SeqIOOptions();
 	bool singlesEndSet = setUp.processJustReadInNames(singlesOption, njhseq::seqSetUp::singleInFormatsAvailable_, !pairedEndSet && !bamFnpSet);
 	singlesOption.lowerCaseBases_ = setUp.pars_.ioOptions_.lowerCaseBases_;
@@ -160,13 +160,13 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	}
 
 	setUp.setOption(countTable, "--kmerTable", "countTable, 1)set,2)kmer", true);
-	setUp.setOption(nonUniqueKmerTable, "--nonUniqueKmerTable", "non-unique Kmer Table, 1)set,2)kmer");
-	if(nonUniqueKmerTable.empty()){
+	{
 		auto possibleNonUniqueTable = njh::files::prependFileBasename(countTable, "nonUniqueKmers_");
 		if(exists(possibleNonUniqueTable)){
 			nonUniqueKmerTable = possibleNonUniqueTable;
 		}
 	}
+	setUp.setOption(nonUniqueKmerTable, "--nonUniqueKmerTable", "non-unique Kmer Table, 1)set,2)kmer");
 	setUp.setOption(extractingPars.compPars.sampleName, "--sampleName", "Name to add to output file", true);
 	bool doNotIncludeRevComp = false;
 	setUp.setOption(doNotIncludeRevComp, "--doNotIncludeRevComp", "do not include Rev Comp of the input seqs");
@@ -398,7 +398,6 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 				}
 			};
 			njh::concurrent::runVoidFunctionThreaded(readInComp, numThreads);
-
 		}
 		initialCounts.writeOutCounts(outCounts,extractingPars,uniqueKmersPerSet,"initial");
 	}

@@ -102,12 +102,10 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int kmerCompareTwoSetsOfContigs(const njh::progutils::CmdArgs & inputCommands);
 	static int findUniqKmersBetweenSeqs(const njh::progutils::CmdArgs & inputCommands);
 
-	//static int findUniqKmersBetweenSeqSets(const njh::progutils::CmdArgs & inputCommands);
 	static int findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands);
 	static int filterUniqueKmerSetForEntropy(const njh::progutils::CmdArgs & inputCommands);
 	static int testingSimpleKmerHasher(const njh::progutils::CmdArgs & inputCommands);
 
-	//static int findUniqKmersFromGenomeSubRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutils::CmdArgs & inputCommands);
 	static int addToUniqKmersSet(const njh::progutils::CmdArgs & inputCommands);
 	static int reportOnUniqKmersSet(const njh::progutils::CmdArgs & inputCommands);
@@ -119,6 +117,9 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 
 	static int extractByCountingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands);
 	static int countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArgs & inputCommands);
+	static int countingUniqKmersFromSetsBestSet(const njh::progutils::CmdArgs & inputCommands);
+	static int countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::progutils::CmdArgs & inputCommands);
+
 	static int countingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands);
 	static int countingUniqKmersFromSetsInUnmappedAlns(const njh::progutils::CmdArgs & inputCommands);
 
