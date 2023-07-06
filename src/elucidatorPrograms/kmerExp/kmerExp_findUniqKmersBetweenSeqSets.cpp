@@ -515,7 +515,7 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::pro
 	extractingPars.compPars.entropyFilter_ = 1.20;
 	extractingPars.compPars.initialExcludeHardCountOff = 60;
 	extractingPars.compPars.initialExcludeFracCutOff = 0.25;
-
+	bool looseCounting = false;
 	OutOptions outOpts(bfs::path(""), ".tab.txt.gz");
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -603,6 +603,7 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::pro
 	LockedBamReader bamReader(setUp.pars_.ioOptions_.firstName_);
 
 	std::function<void()> readInComp = [&bamReader, &uniqueKmersPerSet, &matchingCounts,&matchingCountsMut,&extractingPars,
+																			&looseCounting,
 																			&totalInput, &totalUnmapped]() {
 		SimpleKmerHash hasher;
 		std::unordered_map<bool, std::unordered_map<std::string, uint64_t>> currentMatchingCounts;
@@ -615,6 +616,23 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::pro
 					seqInfo seq = bamAlnToSeqInfo(bAln);
 					auto compRes = UniqueKmerSetHelper::compareReadToSetRes(seq, uniqueKmersPerSet, extractingPars.compPars,
 																																	hasher);
+					if (!looseCounting && "undetermined" != compRes.winnerSet) {
+						if (compRes.winnerRevComp) {
+							for (const auto &perSet: compRes.foundPerSetRevComp) {
+								if (perSet.first != compRes.winnerSet && perSet.second > 0) {
+									compRes.winnerSet = "undetermined";
+									break;
+								}
+							}
+						} else {
+							for (const auto &perSet: compRes.foundPerSet) {
+								if (perSet.first != compRes.winnerSet && perSet.second > 0) {
+									compRes.winnerSet = "undetermined";
+									break;
+								}
+							}
+						}
+					}
 					++currentMatchingCounts[compRes.winnerRevComp][compRes.winnerSet];
 					++currentTotalInput;
 					++currentTotalUnmapped;
@@ -660,13 +678,13 @@ int kmerExpRunner::countingUniqKmersFromSetsBestSet(const njh::progutils::CmdArg
 	bfs::path countTable = "";
 
 	UniqueKmerSetHelper::ProcessReadForExtractingPars extractingPars;
-	extractingPars.compPars.hardCountOff = 20;
-	extractingPars.compPars.fracCutOff = 0.12;
+	extractingPars.compPars.hardCountOff = 10;
+	extractingPars.compPars.fracCutOff = 0;
 	extractingPars.compPars.kmerLengthForEntropyCalc_ = 2;
 	extractingPars.compPars.entropyFilter_ = 1.20;
 	extractingPars.compPars.initialExcludeHardCountOff = 60;
 	extractingPars.compPars.initialExcludeFracCutOff = 0.25;
-
+	bool looseCounting = false;
 	OutOptions outOpts(bfs::path(""), ".tab.txt.gz");
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -681,6 +699,7 @@ int kmerExpRunner::countingUniqKmersFromSetsBestSet(const njh::progutils::CmdArg
 	singlesOption.includeWhiteSpaceInName_ = setUp.pars_.ioOptions_.includeWhiteSpaceInName_;
 	setUp.setOption(countTable, "--kmerTable", "kmer set table, 1)set,2)kmer", true);
 	setUp.setOption(extractingPars.compPars.sampleName, "--sampleName", "Name to add to output file", true);
+	setUp.setOption(looseCounting, "--looseCounting", "by default will only count reads if there is only one set with reads, by adding this flag will count just best winner");
 
 	setUp.setOption(extractingPars.compPars.includeRevComp, "--includeRevComp", "include Rev Comp of the input seqs");
 //	setUp.setOption(extractingPars.compPars.entropyFilter_, "--entropyFilter", "entropy Filter_");
@@ -729,7 +748,7 @@ int kmerExpRunner::countingUniqKmersFromSetsBestSet(const njh::progutils::CmdArg
 		readInComp = [&reader, &uniqueKmersPerSet,&extractingPars,
 									&matchingCounts,&matchingCountsMut,
 									&seqOut,
-									&totalInputReads ]() {
+									&totalInputReads , &looseCounting]() {
 
 			SimpleKmerHash hasher;
 			PairedRead pseq;
@@ -738,6 +757,23 @@ int kmerExpRunner::countingUniqKmersFromSetsBestSet(const njh::progutils::CmdArg
 			uint64_t currentTotalInputReads = 0;
 			while(reader.readNextReadLock(pseq)){
 				auto compRes = UniqueKmerSetHelper::compareReadToSetRes(pseq, uniqueKmersPerSet, extractingPars.compPars, hasher);
+				if(!looseCounting && "undetermined" != compRes.winnerSet){
+					if(compRes.winnerRevComp){
+						for(const auto & perSet : compRes.foundPerSetRevComp){
+							if(perSet.first != compRes.winnerSet && perSet.second > 0){
+								compRes.winnerSet = "undetermined";
+								break;
+							}
+						}
+					}else{
+						for(const auto & perSet : compRes.foundPerSet){
+							if(perSet.first != compRes.winnerSet && perSet.second > 0){
+								compRes.winnerSet = "undetermined";
+								break;
+							}
+						}
+					}
+				}
 				++currentMatchingCounts[compRes.winnerRevComp][compRes.winnerSet];
 				++currentTotalInputReads;
 				if("undetermined" != compRes.winnerSet){
@@ -768,7 +804,7 @@ int kmerExpRunner::countingUniqKmersFromSetsBestSet(const njh::progutils::CmdArg
 		readInComp = [&reader, &uniqueKmersPerSet,&extractingPars,
 						&matchingCounts,&matchingCountsMut,
 						&seqOut,
-						&totalInputReads]() {
+						&totalInputReads, &looseCounting]() {
 
 			SimpleKmerHash hasher;
 			seqInfo seq;
@@ -776,7 +812,26 @@ int kmerExpRunner::countingUniqKmersFromSetsBestSet(const njh::progutils::CmdArg
 			std::unordered_map<bool, std::unordered_map<std::string, uint64_t>> currentMatchingCounts;
 			uint64_t currentTotalInputReads = 0;
 			while(reader.readNextReadLock(seq)){
-				auto compRes = UniqueKmerSetHelper::compareReadToSetRes(seq, uniqueKmersPerSet, extractingPars.compPars, hasher);
+				auto compRes = UniqueKmerSetHelper::compareReadToSetRes(seq, uniqueKmersPerSet, extractingPars.compPars,
+																																hasher);
+				if (!looseCounting && "undetermined" != compRes.winnerSet) {
+					if (compRes.winnerRevComp) {
+						for (const auto &perSet: compRes.foundPerSetRevComp) {
+							if (perSet.first != compRes.winnerSet && perSet.second > 0) {
+								compRes.winnerSet = "undetermined";
+								break;
+							}
+						}
+					} else {
+						for (const auto &perSet: compRes.foundPerSet) {
+							if (perSet.first != compRes.winnerSet && perSet.second > 0) {
+								compRes.winnerSet = "undetermined";
+								break;
+							}
+						}
+					}
+				}
+				++currentTotalInputReads;
 				++currentMatchingCounts[compRes.winnerRevComp][compRes.winnerSet];
 				if("undetermined" != compRes.winnerSet){
 					seqOut.openWrite(compRes.winnerSet, seq);
