@@ -1010,7 +1010,7 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 							uniqueKmers = njh::vecToSet(notShared);
 							if(exportNonUniqueKmers){
 								std::vector<uint64_t> shared;
-								std::set_union(
+								std::set_intersection(
 												kmersPerSet.at(name).begin(), kmersPerSet.at(name).end(),
 												otherSet.second.begin(), otherSet.second.end(),
 												std::back_inserter(shared));
@@ -1026,7 +1026,7 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 							uniqueKmers = njh::vecToSet(notShared);
 							if(exportNonUniqueKmers){
 								std::vector<uint64_t> shared;
-								std::set_union(
+								std::set_intersection(
 												uniqueKmers.begin(), uniqueKmers.end(),
 												otherSet.second.begin(), otherSet.second.end(),
 												std::back_inserter(shared));

@@ -97,6 +97,8 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int chromVsChromUniqueComp(const njh::progutils::CmdArgs & inputCommands);
 
 
+	static int getUniqueSequenceRegions(const njh::progutils::CmdArgs & inputCommands);
+
 	static int genomeKmerCompare(const njh::progutils::CmdArgs & inputCommands);
 	static int profileSharedKmerBlocks(const njh::progutils::CmdArgs & inputCommands);
 	static int kmerCompareTwoSetsOfContigs(const njh::progutils::CmdArgs & inputCommands);
