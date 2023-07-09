@@ -732,22 +732,22 @@ int kmerExpRunner::countingUniqKmersFromSetsBestSet(const njh::progutils::CmdArg
 
 	OutputStream out(outOpts);
 	std::function<void()> readInComp;
-	MultiSeqIO seqOut;
+//	MultiSeqIO seqOut;
 	uint64_t totalInputReads = 0;
 	std::unordered_map<bool, std::unordered_map<std::string, uint64_t>> matchingCounts;
 	std::mutex matchingCountsMut;
 	if (!setUp.pars_.ioOptions_.firstName_.empty()) {
 		SeqInput reader(setUp.pars_.ioOptions_);
 		reader.openIn();
-		for(const auto & name : names){
-			auto seqOutOpts = SeqIOOptions::genPairedOutGz(name);
-			seqOutOpts.out_.overWriteFile_ = true;
-			seqOut.addReader(name, seqOutOpts);
-		}
+//		for(const auto & name : names){
+//			auto seqOutOpts = SeqIOOptions::genPairedOutGz(name);
+//			seqOutOpts.out_.overWriteFile_ = true;
+//			seqOut.addReader(name, seqOutOpts);
+//		}
 //		readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp,&seqOut]() {
 		readInComp = [&reader, &uniqueKmersPerSet,&extractingPars,
 									&matchingCounts,&matchingCountsMut,
-									&seqOut,
+//									&seqOut,
 									&totalInputReads , &looseCounting]() {
 
 			SimpleKmerHash hasher;
@@ -776,9 +776,9 @@ int kmerExpRunner::countingUniqKmersFromSetsBestSet(const njh::progutils::CmdArg
 				}
 				++currentMatchingCounts[compRes.winnerRevComp][compRes.winnerSet];
 				++currentTotalInputReads;
-				if("undetermined" != compRes.winnerSet){
-					seqOut.openWrite(compRes.winnerSet, pseq);
-				}
+//				if("undetermined" != compRes.winnerSet){
+//					seqOut.openWrite(compRes.winnerSet, pseq);
+//				}
 			}
 			{
 				std::lock_guard<std::mutex> lock(matchingCountsMut);
@@ -795,15 +795,15 @@ int kmerExpRunner::countingUniqKmersFromSetsBestSet(const njh::progutils::CmdArg
 	if(!singlesOption.firstName_.empty()){
 		SeqInput reader(singlesOption);
 		reader.openIn();
-		for(const auto & name : names){
-			auto seqOutOpts = SeqIOOptions::genFastqOutGz(name);
-			seqOutOpts.out_.overWriteFile_ = true;
-			seqOut.addReader(name, seqOutOpts);
-		}
+//		for(const auto & name : names){
+//			auto seqOutOpts = SeqIOOptions::genFastqOutGz(name);
+//			seqOutOpts.out_.overWriteFile_ = true;
+//			seqOut.addReader(name, seqOutOpts);
+//		}
 //		readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp,&seqOut]() {
 		readInComp = [&reader, &uniqueKmersPerSet,&extractingPars,
 						&matchingCounts,&matchingCountsMut,
-						&seqOut,
+//						&seqOut,
 						&totalInputReads, &looseCounting]() {
 
 			SimpleKmerHash hasher;
@@ -833,9 +833,9 @@ int kmerExpRunner::countingUniqKmersFromSetsBestSet(const njh::progutils::CmdArg
 				}
 				++currentTotalInputReads;
 				++currentMatchingCounts[compRes.winnerRevComp][compRes.winnerSet];
-				if("undetermined" != compRes.winnerSet){
-					seqOut.openWrite(compRes.winnerSet, seq);
-				}
+//				if("undetermined" != compRes.winnerSet){
+//					seqOut.openWrite(compRes.winnerSet, seq);
+//				}
 			}
 			{
 				std::lock_guard<std::mutex> lock(matchingCountsMut);

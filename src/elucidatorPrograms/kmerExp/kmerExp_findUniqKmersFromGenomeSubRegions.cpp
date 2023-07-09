@@ -77,7 +77,7 @@ int kmerExpRunner::reportOnUniqKmersSet(const njh::progutils::CmdArgs & inputCom
 	setUp.processDebug();
 	setUp.description_ = "Add unique kmers to set of already determined unique kmers";
 	setUp.setOption(nonUniqueKmerTable, "--nonUniqueKmerTable", "non-unique Kmer Table, 1)set,2)kmer");
-	setUp.setOption(countTable, "--kmerTable,--countTable", "unique kmer sets, 1)set,2)kmer", true);
+	setUp.setOption(countTable, "--countTable,--kmerTable", "unique kmer sets, 1)set,2)kmer", true);
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 
@@ -250,6 +250,7 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutil
 	bool getReverseCompOfGenomeRegions = false;
 	bool separateGenomeOutput = false;
 	bool doNotWriteOutSeparateGenome = false;
+	bool gatherRestOfGenomeInOneGo = false;
 	OutOptions outOpts;
 	bool filterGenomeRestForEntropyToo = false;
 	uint32_t expand = 0;
@@ -265,6 +266,7 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutil
 	setUp.setOption(genomeFnp, "--genomeFnp", "genome file to extract from, a .2bit file needs to exist for the supplied genome", true);
 	setUp.setOption(regionTableFnp, "--bedFnp", "sub regions to extract to compare to the rest of the genome", true);
 
+	setUp.setOption(gatherRestOfGenomeInOneGo, "--gatherRestOfGenomeInOneGo", "gather Rest Of Genome In One Go, can be memory expensive depending on genome");
 
 	setUp.setOption(getReverseCompOfInputRegions, "--getReverseCompOfInputRegions", "get Reverse Comp Of Input Regions");
 	setUp.setOption(getReverseCompOfGenomeRegions, "--getReverseCompOfGenomeRegions", "get Reverse Comp Of Genome Regions");
@@ -465,13 +467,26 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutil
 					njh::strToUpper(currentSeq.seq_);
 				}
 				for (uint32_t pos = 0; pos < len(currentSeq.seq_) - countPars.kmerLength_ + 1; ++pos) {
-					rawKmersPerInput[regionBeds.first].emplace(hasher.hash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
-				}
-				if (getReverseCompOfInputRegions) {
-					for (uint32_t pos = 0; pos < len(currentSeq.seq_) - countPars.kmerLength_ + 1; ++pos) {
-						rawKmersPerInput[regionBeds.first].emplace(hasher.revCompHash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
+					auto k = currentSeq.seq_.substr(pos, countPars.kmerLength_);
+					kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
+					if (kInfo.computeKmerEntropy() > countPars.entropyFilter_ && seqCheck(k)) {
+						rawKmersPerInput[regionBeds.first].emplace(hasher.hash(k));
+						if (getReverseCompOfInputRegions) {
+							rawKmersPerInput[regionBeds.first].emplace(hasher.revCompHash(k));
+						}
 					}
+					//rawKmersPerInput[regionBeds.first].emplace(hasher.hash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
 				}
+//				if (getReverseCompOfInputRegions) {
+//					for (uint32_t pos = 0; pos < len(currentSeq.seq_) - countPars.kmerLength_ + 1; ++pos) {
+//						auto k = currentSeq.seq_.substr(pos, countPars.kmerLength_);
+//						kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
+//						if (kInfo.computeKmerEntropy() > countPars.entropyFilter_ && seqCheck(k)) {
+//							rawKmersPerInput[regionBeds.first].emplace(hasher.revCompHash(k));
+//						}
+//						//rawKmersPerInput[regionBeds.first].emplace(hasher.revCompHash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
+//					}
+//				}
 			}
 		}
 	}
@@ -500,52 +515,71 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutil
 	}
 
 	//// get kmers for the rest of the genome
+	std::function<bool(std::string)> doesGenomeKPass;
+	if (filterGenomeRestForEntropyToo) {
+		doesGenomeKPass = [&seqCheck, &countPars](const std::string &k) {
+			kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
+			return kInfo.computeKmerEntropy() > countPars.entropyFilter_ && seqCheck(k);
+		};
+	} else {
+		doesGenomeKPass = [&seqCheck](const std::string &k) {
+			return seqCheck(k);
+		};
+	}
 
-	for(const auto & region : inbetweenRegions){
-		if(region.length()>=countPars.kmerLength_){
-			if(setUp.pars_.verbose_){
-				std::cout << region.name_ << std::endl;
-				for(const auto & finalKmerSet : finalKmersPerInput){
-					std::cout << "\t" << "prior to filter for set: " << finalKmerSet.first  << " " << finalKmerSet.second.size() << std::endl;
+	if (gatherRestOfGenomeInOneGo) {
+		std::set<uint64_t> kmersPerInbetween;
+		if(setUp.pars_.verbose_){
+			for(const auto & finalKmerSet : finalKmersPerInput){
+				std::cout << "\t" << "prior to filter for set: " << finalKmerSet.first  << " " << finalKmerSet.second.size() << std::endl;
+			}
+			std::cout << "\t" << "nonUniqueKmers: " << nonUniqueKmers.size()  << std::endl;
+			if(!doNotWriteOutSeparateGenome){
+				std::cout << "\t" << "restOfGenomeUniqueKmers: " << restOfGenomeUniqueKmers.size() << std::endl << std::endl;
+			}
+		}
+		for(const auto & region : inbetweenRegions){
+			if(region.length()>=countPars.kmerLength_){
+				auto currentSeq = GenomicRegion(region).extractSeq(tReader);
+				if("upper" == lower){
+					njh::strToUpper(currentSeq.seq_);
 				}
-				std::cout << "\t" << "nonUniqueKmers: " << nonUniqueKmers.size()  << std::endl;
-				if(!doNotWriteOutSeparateGenome){
-					std::cout << "\t" << "restOfGenomeUniqueKmers: " << restOfGenomeUniqueKmers.size() << std::endl << std::endl;
+				for (uint32_t pos = 0; pos < len(currentSeq.seq_) - countPars.kmerLength_ + 1; ++pos) {
+					auto k  = currentSeq.seq_.substr(pos, countPars.kmerLength_);
+					if(doesGenomeKPass(k)){
+						kmersPerInbetween.emplace(hasher.hash(k));
+						if (getReverseCompOfGenomeRegions) {
+							kmersPerInbetween.emplace(hasher.revCompHash(k));
+						}
+					}
+					//kmersPerInbetween.emplace(hasher.hash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
 				}
+//			if (getReverseCompOfGenomeRegions) {
+//				for (uint32_t pos = 0; pos < len(currentSeq.seq_) - countPars.kmerLength_ + 1; ++pos) {
+//					//kmersPerInbetween.emplace(hasher.revCompHash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
+//				}
+//			}
 			}
-			std::set<uint64_t> kmersPerInbetween;
-			auto currentSeq = GenomicRegion(region).extractSeq(tReader);
-			if("upper" == lower){
-				njh::strToUpper(currentSeq.seq_);
-			}
-			for (uint32_t pos = 0; pos < len(currentSeq.seq_) - countPars.kmerLength_ + 1; ++pos) {
-				kmersPerInbetween.emplace(hasher.hash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
-			}
-			if (getReverseCompOfGenomeRegions) {
-				for (uint32_t pos = 0; pos < len(currentSeq.seq_) - countPars.kmerLength_ + 1;
-						 ++pos) {
-					kmersPerInbetween.emplace(hasher.revCompHash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
-				}
-			}
+		}
 
-			//filter kmers
-			std::map<std::string, std::set<uint64_t> > filterKmers;
+		//filter kmers
+		std::map<std::string, std::set<uint64_t> > filterKmers;
 //			for (const auto &finalKmerSet: finalKmersPerInput) {
 //				filterKmers[finalKmerSet.first].reserve(finalKmerSet.second.size());
 //			}
-			for (const auto &finalKmerSet: finalKmersPerInput) {
-				std::vector<uint64_t> uniqueTo_finalKmerSet;
-				uniqueTo_finalKmerSet.reserve(finalKmerSet.second.size());
-				std::vector<uint64_t> uniqueTo_kmersPerInbetween;
-				uniqueTo_kmersPerInbetween.reserve(kmersPerInbetween.size());
-				std::vector<uint64_t> shared;
-				njh::decompose_sets(finalKmerSet.second.begin(), finalKmerSet.second.end(),
-								kmersPerInbetween.begin(), kmersPerInbetween.end(),
-								std::back_inserter(uniqueTo_finalKmerSet),
-								std::back_inserter(uniqueTo_kmersPerInbetween),
-								std::back_inserter(shared));
-				std::move(uniqueTo_finalKmerSet.begin(), uniqueTo_finalKmerSet.end(), std::inserter(filterKmers[finalKmerSet.first],filterKmers[finalKmerSet.first].end()));
-				std::move(shared.begin(), shared.end(), std::inserter(nonUniqueKmers,nonUniqueKmers.end()));
+		for (const auto &finalKmerSet: finalKmersPerInput) {
+			std::vector<uint64_t> uniqueTo_finalKmerSet;
+			uniqueTo_finalKmerSet.reserve(finalKmerSet.second.size());
+			std::vector<uint64_t> uniqueTo_kmersPerInbetween;
+			uniqueTo_kmersPerInbetween.reserve(kmersPerInbetween.size());
+			std::vector<uint64_t> shared;
+			njh::decompose_sets(finalKmerSet.second.begin(), finalKmerSet.second.end(),
+													kmersPerInbetween.begin(), kmersPerInbetween.end(),
+													std::back_inserter(uniqueTo_finalKmerSet),
+													std::back_inserter(uniqueTo_kmersPerInbetween),
+													std::back_inserter(shared));
+			std::move(uniqueTo_finalKmerSet.begin(), uniqueTo_finalKmerSet.end(), std::inserter(filterKmers[finalKmerSet.first],filterKmers[finalKmerSet.first].end()));
+			std::move(shared.begin(), shared.end(), std::inserter(nonUniqueKmers,nonUniqueKmers.end()));
 //				std::vector<uint64_t> notShared;
 //				notShared.reserve(finalKmerSet.second.size());
 //				std::set_difference(
@@ -574,69 +608,177 @@ int kmerExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutil
 //						nonUniqueKmers.emplace(finalKmer);
 //					}
 //				}
-			}
-			finalKmersPerInput = std::move(filterKmers);
+		}
+		finalKmersPerInput = std::move(filterKmers);
 
+		if(!doNotWriteOutSeparateGenome){
+			for(const auto & finalKmer: kmersPerInbetween){
+				if(!njh::in(finalKmer, nonUniqueKmers)){
+					restOfGenomeUniqueKmers.emplace(finalKmer);
+				}
+			}
+		}
+
+		if(setUp.pars_.verbose_){
+			for(const auto & finalKmerSet : finalKmersPerInput){
+				std::cout << "\t" << "set: " << finalKmerSet.first  << " " << finalKmerSet.second.size() << std::endl;
+			}
+			std::cout << "\t" << "nonUniqueKmers: " << nonUniqueKmers.size()  << std::endl;
 			if(!doNotWriteOutSeparateGenome){
-				for(const auto & finalKmer: kmersPerInbetween){
-					if(!njh::in(finalKmer, nonUniqueKmers)){
-						restOfGenomeUniqueKmers.emplace(finalKmer);
+				std::cout << "\t" << "restOfGenomeUniqueKmers: " << restOfGenomeUniqueKmers.size() << std::endl << std::endl;
+			}
+		}
+	} else {
+		for(const auto & region : inbetweenRegions){
+			if(region.length()>=countPars.kmerLength_){
+				if(setUp.pars_.verbose_){
+					std::cout << region.name_ << std::endl;
+					for(const auto & finalKmerSet : finalKmersPerInput){
+						std::cout << "\t" << "prior to filter for set: " << finalKmerSet.first  << " " << finalKmerSet.second.size() << std::endl;
+					}
+					std::cout << "\t" << "nonUniqueKmers: " << nonUniqueKmers.size()  << std::endl;
+					if(!doNotWriteOutSeparateGenome){
+						std::cout << "\t" << "restOfGenomeUniqueKmers: " << restOfGenomeUniqueKmers.size() << std::endl << std::endl;
 					}
 				}
-			}
+				std::set<uint64_t> kmersPerInbetween;
+				auto currentSeq = GenomicRegion(region).extractSeq(tReader);
+				if("upper" == lower){
+					njh::strToUpper(currentSeq.seq_);
+				}
+				for (uint32_t pos = 0; pos < len(currentSeq.seq_) - countPars.kmerLength_ + 1; ++pos) {
+					auto k  = currentSeq.seq_.substr(pos, countPars.kmerLength_);
+					if(doesGenomeKPass(k)){
+						kmersPerInbetween.emplace(hasher.hash(k));
+						if (getReverseCompOfGenomeRegions) {
+							kmersPerInbetween.emplace(hasher.revCompHash(k));
+						}
+					}
+					//kmersPerInbetween.emplace(hasher.hash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
+				}
+//			if (getReverseCompOfGenomeRegions) {
+//				for (uint32_t pos = 0; pos < len(currentSeq.seq_) - countPars.kmerLength_ + 1; ++pos) {
+//					//kmersPerInbetween.emplace(hasher.revCompHash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
+//				}
+//			}
 
-			if(setUp.pars_.verbose_){
-				for(const auto & finalKmerSet : finalKmersPerInput){
-					std::cout << "\t" << "set: " << finalKmerSet.first  << " " << finalKmerSet.second.size() << std::endl;
+				//filter kmers
+				std::map<std::string, std::set<uint64_t> > filterKmers;
+//			for (const auto &finalKmerSet: finalKmersPerInput) {
+//				filterKmers[finalKmerSet.first].reserve(finalKmerSet.second.size());
+//			}
+				for (const auto &finalKmerSet: finalKmersPerInput) {
+					std::vector<uint64_t> uniqueTo_finalKmerSet;
+					uniqueTo_finalKmerSet.reserve(finalKmerSet.second.size());
+					std::vector<uint64_t> uniqueTo_kmersPerInbetween;
+					uniqueTo_kmersPerInbetween.reserve(kmersPerInbetween.size());
+					std::vector<uint64_t> shared;
+					njh::decompose_sets(finalKmerSet.second.begin(), finalKmerSet.second.end(),
+															kmersPerInbetween.begin(), kmersPerInbetween.end(),
+															std::back_inserter(uniqueTo_finalKmerSet),
+															std::back_inserter(uniqueTo_kmersPerInbetween),
+															std::back_inserter(shared));
+					std::move(uniqueTo_finalKmerSet.begin(), uniqueTo_finalKmerSet.end(), std::inserter(filterKmers[finalKmerSet.first],filterKmers[finalKmerSet.first].end()));
+					std::move(shared.begin(), shared.end(), std::inserter(nonUniqueKmers,nonUniqueKmers.end()));
+//				std::vector<uint64_t> notShared;
+//				notShared.reserve(finalKmerSet.second.size());
+//				std::set_difference(
+//								finalKmerSet.second.begin(), finalKmerSet.second.end(),
+//								kmersPerInbetween.begin(), kmersPerInbetween.end(),
+//								std::back_inserter(notShared));
+//
+//				std::move(notShared.begin(), notShared.end(), std::inserter(filterKmers[finalKmerSet.first],filterKmers[finalKmerSet.first].end()));
+//
+//				std::vector<uint64_t> shared;
+//				shared.reserve(finalKmerSet.second.size());
+//				std::set_intersection(
+//								finalKmerSet.second.begin(), finalKmerSet.second.end(),
+//								kmersPerInbetween.begin(), kmersPerInbetween.end(),
+//								std::back_inserter(shared));
+//				if(setUp.pars_.debug_ && setUp.pars_.verbose_){
+//					std::cout << finalKmerSet.first << std::endl;
+//					std::cout << "shared: " << shared.size() << std::endl;
+//				}
+//				std::move(shared.begin(), shared.end(), std::inserter(nonUniqueKmers,nonUniqueKmers.end()));
+
+//				for (const auto &finalKmer: finalKmerSet.second) {
+//					if (!njh::in(finalKmer, kmersPerInbetween)) {
+//						filterKmers[finalKmerSet.first].emplace(finalKmer);
+//					} else {
+//						nonUniqueKmers.emplace(finalKmer);
+//					}
+//				}
 				}
-				std::cout << "\t" << "nonUniqueKmers: " << nonUniqueKmers.size()  << std::endl;
+				finalKmersPerInput = std::move(filterKmers);
+
 				if(!doNotWriteOutSeparateGenome){
-					std::cout << "\t" << "restOfGenomeUniqueKmers: " << restOfGenomeUniqueKmers.size() << std::endl << std::endl;
+					for(const auto & finalKmer: kmersPerInbetween){
+						if(!njh::in(finalKmer, nonUniqueKmers)){
+							restOfGenomeUniqueKmers.emplace(finalKmer);
+						}
+					}
 				}
-			}
+
+				if(setUp.pars_.verbose_){
+					for(const auto & finalKmerSet : finalKmersPerInput){
+						std::cout << "\t" << "set: " << finalKmerSet.first  << " " << finalKmerSet.second.size() << std::endl;
+					}
+					std::cout << "\t" << "nonUniqueKmers: " << nonUniqueKmers.size()  << std::endl;
+					if(!doNotWriteOutSeparateGenome){
+						std::cout << "\t" << "restOfGenomeUniqueKmers: " << restOfGenomeUniqueKmers.size() << std::endl << std::endl;
+					}
+				}
 //			if("PKNH_00_v2_archived_contig_14" == region.name_){
 //				exit(1);
 //			}
+			}
 		}
 	}
+
+
 	if(!doNotWriteOutSeparateGenome){
 		if(separateGenomeOutput){
 			for(const auto & finalKmer : restOfGenomeUniqueKmers){
 				auto k = hasher.reverseHash(finalKmer);
-				if(filterGenomeRestForEntropyToo){
-					kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
-					if (kInfo.computeKmerEntropy() > countPars.entropyFilter_ && seqCheck(k)) {
-						*restOfGenomeKmersOut.out_ << restOfGenomeRegionName << "\t" << k << std::endl;
-					}
-				} else {
-					if(seqCheck(k)){
-						*restOfGenomeKmersOut.out_ << restOfGenomeRegionName << "\t" << hasher.reverseHash(finalKmer) << std::endl;
-					}
-				}
+				*restOfGenomeKmersOut.out_ << restOfGenomeRegionName << "\t" << k << std::endl;
+//				if(filterGenomeRestForEntropyToo){
+//					kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
+//					if (kInfo.computeKmerEntropy() > countPars.entropyFilter_ && seqCheck(k)) {
+//						*restOfGenomeKmersOut.out_ << restOfGenomeRegionName << "\t" << k << std::endl;
+//					}
+//				} else {
+//					if(seqCheck(k)){
+//						*restOfGenomeKmersOut.out_ << restOfGenomeRegionName << "\t" << k << std::endl;
+//					}
+//				}
 			}
 		} else {
 			for(const auto & finalKmer : restOfGenomeUniqueKmers){
 				auto k = hasher.reverseHash(finalKmer);
-				if(filterGenomeRestForEntropyToo){
-					kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
-					if (kInfo.computeKmerEntropy() > countPars.entropyFilter_ && seqCheck(k)) {
-						out << restOfGenomeRegionName << "\t" << k << std::endl;
-					}
-				} else {
-					if(seqCheck(k)){
-						out << restOfGenomeRegionName << "\t" << hasher.reverseHash(finalKmer) << std::endl;
-					}
-				}
+				out << restOfGenomeRegionName << "\t" << k << std::endl;
+//				if(filterGenomeRestForEntropyToo){
+//					kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
+//					if (kInfo.computeKmerEntropy() > countPars.entropyFilter_ && seqCheck(k)) {
+//						out << restOfGenomeRegionName << "\t" << k << std::endl;
+//					}
+//				} else {
+//					if(seqCheck(k)){
+//						out << restOfGenomeRegionName << "\t" << k << std::endl;
+//					}
+//				}
 			}
 		}
 	}
 	for(const auto & finalKmerSet : finalKmersPerInput){
 		for(const auto & finalKmer : finalKmerSet.second){
 			auto k = hasher.reverseHash(finalKmer);
-			kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
-			if (kInfo.computeKmerEntropy() > countPars.entropyFilter_ && seqCheck(k)) {
-				out << finalKmerSet.first << "\t" << k << std::endl;
-			}
+			out << finalKmerSet.first << "\t" << k << std::endl;
+//
+//
+//			kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
+//			if (kInfo.computeKmerEntropy() > countPars.entropyFilter_ && seqCheck(k)) {
+//				out << finalKmerSet.first << "\t" << k << std::endl;
+//			}
 		}
 	}
 	for(const auto & finalKmer : nonUniqueKmers){
