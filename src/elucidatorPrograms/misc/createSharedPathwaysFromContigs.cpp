@@ -1650,8 +1650,13 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 		seqKey[seq.element.name_] = seq.index;
 	}
 	//replace refseq with any error correction done
-	refSeq = seqs[seqKey[refSeq.name_]];
-
+//	std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//	std::cout << "refSeq.name_: " << refSeq.name_ << std::endl;
+//	std::cout << "seqKey[refSeq.name_]: " << seqKey[refSeq.name_] << std::endl;
+	refSeq = seqs[njh::mapAt(seqKey, refSeq.name_)];
+//	std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//	std::cout << "refSeq.name_: " << refSeq.name_ << std::endl;
+//	exit(1);
 	ContigsCompareGraphDev compGraph(graphCorrectingPars.klen);
 	compGraph.setOccurenceCutOff(graphCorrectingPars.kmerOccurenceCutOff);
 	for(const auto & seq : seqs){
@@ -1817,6 +1822,9 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 
 		auto transfromCorrectedRefPosition = [&alignerObj](
 				uint32_t correctSeqPos) {
+//			alignerObj.alignObjectA_.seqBase_.outPutSeqAnsi(std::cout);
+//			alignerObj.alignObjectB_.seqBase_.outPutSeqAnsi(std::cout);
+
 			return getRealPosForAlnPos(alignerObj.alignObjectA_.seqBase_.seq_,
 					getAlnPosForRealPos(alignerObj.alignObjectB_.seqBase_.seq_,
 							correctSeqPos));
@@ -1824,11 +1832,14 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 
 		auto modSubSegmentToCorrectedRef = [&transfromCorrectedRefPosition](
 				Bed3RecordCore & region) {
+
 			region.chromStart_ = transfromCorrectedRefPosition(region.chromStart_);
-			region.chromEnd_ = transfromCorrectedRefPosition(region.chromEnd_ -1 ) + 1;
+			region.chromEnd_ = transfromCorrectedRefPosition(region.chromEnd_ - 1 ) + 1;
+
 		};
 		OutputStream conservedNodeOut(njh::files::make_path(conservedRegionInfoDir, "conservedNodesPerGroup.tab.txt"));
 		conservedNodeOut << "group\tsubSegment\tsubSegmentID\tseqCount\ttailCount\theadCount" << std::endl;
+
 		for(const auto & nodes : nodesWithFull){
 
 
@@ -1842,7 +1853,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 				for(const auto & n : nodes.second){
 					auto ID = processedNodes.subseqToIDKey[n->k_];
 
-					conservedSeqs.emplace_back(seqInfo(ID, n->k_));
+					conservedSeqs.emplace_back(ID, n->k_);
 					conservedNodeOut << nodes.first
 							<< "\t" << n->k_
 							<< "\t" << ID
@@ -1859,8 +1870,8 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 			{
 				OutputStream keyOut(njh::files::make_path(conservedRegionInfoDir, njh::pasteAsStr(nodes.first, "_conservedNodesKey.tab.txt")));
 				keyOut << "seq\tID" << std::endl;
-				for(const auto & seqKey : processedNodes.subseqToIDKey){
-					keyOut << seqKey.first << "\t" << seqKey.second << std::endl;
+				for(const auto & subSeqKey : processedNodes.subseqToIDKey){
+					keyOut << subSeqKey.first << "\t" << subSeqKey.second << std::endl;
 				}
 			}
 
@@ -1874,16 +1885,30 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					refLocsOut << loc.toDelimStrWithExtra() << std::endl;
 				}
 			}
+
 			//output reference locations relative to genomic location
 			{
 				OutputStream refLocsOut(njh::files::make_path(conservedRegionInfoDir, njh::pasteAsStr(nodes.first, "_ref_sharedLocs_genomic.bed")));
 				for(auto loc : processedNodes.nameToSubSegPositions_raw.at(refSeq.name_)){
+
+					std::cout << loc.toDelimStrWithExtra() << std::endl;
+
 					modSubSegmentToCorrectedRef(loc);
+
+
 					std::string newName = processedNodes.subseqToIDKey[loc.name_];
+
+
 					newName = njh::pasteAsStr(refSeqLoc.createUidFromCoordsStrand(), "__", newName);
+
+
 					loc = refSeqLoc.genBedRecordCore().adjustSubRegionToRelativePosition(loc);
 					loc.name_ = newName;
+
+
 					refLocsOut << loc.toDelimStrWithExtra() << std::endl;
+
+
 				}
 			}
 
@@ -1945,7 +1970,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 				if(len(refCorrectedInfo) !=  processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).back().chromEnd_){
 					++totalVar;
 				}
-//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 
 
 
@@ -1955,7 +1980,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					varName = njh::pasteAsStr(refSeqLoc.createUidFromCoordsStrand(), "__", varName);
 					uint32_t start = 0;
 					uint32_t end = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).front().chromStart_;
-//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 //					std::cout << "start: " << start << std::endl;
 //					std::cout << "end: " << end << std::endl;
 
@@ -1966,13 +1991,13 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					createSubRegion(start, end, varName, variableRegionsRelativeExpaned, variableRegionsGenomicExpaned);
 					subRegionsRefSeqsLoc[varName] = variableRegionsGenomicExpaned.back();
 					++varCount;
-//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 					//getting diversity
 					std::vector<seqInfo> subSeqs;
 					for(const auto & endRegion : processedNodes.subSeqToNameToPos[processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).front().name_]){
 						uint32_t start = 0;
 						uint32_t end = endRegion.second.chromStart_ + klen_minus1;
-//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 //						std::cout << "start: " << start << std::endl;
 //						std::cout << "end: " << end << std::endl;
 
@@ -1983,18 +2008,18 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 						variableRegions[subSeq.name_][varName] = subSeq.seq_;
 						renameSeq(subSeq, start, end, varName);
 						subSeqs.emplace_back(subSeq);
-//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 					}
 					subRegionsSeqs[varName] = subSeqs;
 				}
-//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 				//middle
 //				std::cout << "processedNodes.nameToSubSegPositions_raw.at(refSeq.name_).size() : " << processedNodes.nameToSubSegPositions_raw.at(refSeq.name_).size() << std::endl;
 //				std::cout << "processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size(): " << processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() << std::endl;
 //
 //				if(processedNodes.nameToSubSegPositions_raw.at(refSeq.name_).size() > 1){
 //					for(auto pos : iter::range(processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() - 1)){
-//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 //						std::cout << "rawstart: " << processedNodes.nameToSubSegPositions_raw.at(refSeq.name_)[pos].chromEnd_ << std::endl;
 //						std::cout << "rawend: " << processedNodes.nameToSubSegPositions_raw.at(refSeq.name_)[pos + 1].chromStart_ << std::endl;
 //						std::cout << "rawlen: " << processedNodes.nameToSubSegPositions_raw.at(refSeq.name_)[pos + 1].chromStart_ - processedNodes.nameToSubSegPositions_raw.at(refSeq.name_)[pos].chromEnd_ << std::endl;
@@ -2011,7 +2036,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 //						std::cout << varName << std::endl;
 						uint32_t start = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_)[pos].chromEnd_;
 						uint32_t end = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_)[pos + 1].chromStart_;
-//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 //						std::cout << "start: " << start << std::endl;
 //						std::cout << "end: " << end << std::endl;
 //						std::cout << "len " << end - start << std::endl;
@@ -2045,7 +2070,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 //						varRegion.name_ = varName;
 //						variableRegionsGenomic.emplace_back(varRegion);
 						++varCount;
-//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 						//getting diversity
 						std::vector<seqInfo> subSeqs;
 						for(const auto & frontRegion : processedNodes.subSeqToNameToPos[processedNodes.nameToSubSegPositions_filt.at(refSeq.name_)[pos].name_]){
@@ -2055,7 +2080,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 							uint32_t start = frontRegion.second.chromEnd_ - klen_minus1;
 							uint32_t end = endRegion.chromStart_ + klen_minus1;
 
-//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 //							std::cout << "pos: " << pos << std::endl;
 //							std::cout << "processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size(): " << processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() << std::endl;
 //							std::cout << "processedNodes.nameToSubSegPositions_filt.at(refSeq.name_)[pos].name_: " << processedNodes.nameToSubSegPositions_filt.at(refSeq.name_)[pos].name_ << std::endl;
@@ -2078,7 +2103,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 								ss << __PRETTY_FUNCTION__ << ", error " << "end: " << end << " is past the end of the seq len: " << seqs[seqKey[frontRegion.first]].seq_.size() << "\n";
 								throw std::runtime_error{ss.str()};
 							}
-//							std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 //							std::cout << "start: " << start << std::endl;
 //							std::cout << "end: " << end << std::endl;
 
@@ -2093,7 +2118,8 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 						subRegionsSeqs[varName] = subSeqs;
 					}
 				}
-//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+
+//
 				//check back
 				if(len(refCorrectedInfo) !=  processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).back().chromEnd_){
 					auto varName = njh::pasteAsStr("var.", njh::leftPadNumStr<uint32_t>(varCount, totalVar));
@@ -2101,7 +2127,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					uint32_t start = processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).back().chromEnd_;
 					uint32_t end = len(refCorrectedInfo);
 
-//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 //					std::cout << "start: " << start << std::endl;
 //					std::cout << "end: " << end << std::endl;
 
@@ -2112,7 +2138,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					createSubRegion(start, end, varName, variableRegionsRelativeExpaned, variableRegionsGenomicExpaned);
 					subRegionsRefSeqsLoc[varName] = variableRegionsGenomicExpaned.back();
 					++varCount;
-//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 
 					//getting diversity
 					std::vector<seqInfo> subSeqs;
@@ -2129,8 +2155,9 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					}
 					subRegionsSeqs[varName] = subSeqs;
 				}
-//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 				//genomic out
+
 				for(auto & varRegion : variableRegionsGenomic){
 					variableRegionsGenomicOut << varRegion.toDelimStrWithExtra() << std::endl;
 				}
@@ -2283,7 +2310,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					auto endRegion = njh::mapAt(njh::mapAt(processedNodes.subSeqToNameToPos,subReg.endRegion_.name_), frontRegion.first);
 					BedUtility::SubRegionCombo subRegionForSeq(startRegion, endRegion);
 					auto outRegion = subRegionForSeq.genOut(subRegionComboPars.includeFromSubRegionSize);
-	//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+	//
 	//						std::cout << "frontRegion.first: " << frontRegion.first << std::endl;
 	//						std::cout << "seqKey[frontRegion.first]: " << seqKey[frontRegion.first] << std::endl;
 	//						std::cout << "outRegion.chromStart_: " << outRegion.chromStart_ << std::endl;
@@ -2291,17 +2318,18 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	//						std::cout << "seqs[seqKey[frontRegion.first]].size(): " << seqs[seqKey[frontRegion.first]].seq_.size()<< std::endl;
 
 					seqInfo subSeq(seqs[seqKey[frontRegion.first]].getSubRead(outRegion.chromStart_, outRegion.length()));
-	//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+	//
 					renameSeq(subSeq, outRegion.chromStart_, outRegion.chromEnd_, bedReg_genomic.name_);
 //					MetaDataInName seqMeta(subSeq.name_);
 //					seqMeta.addMeta("SubRegUID", bedReg_genomic.name_, true);
 //					seqMeta.addMeta("SeqStart", outRegion.chromStart_, true);
 //					seqMeta.addMeta("SeqStop", outRegion.chromEnd_, true);
-//	//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//	//
 //
 //					seqMeta.resetMetaInName(subSeq.name_);
 					seqsFromLargestSubRegion.emplace_back(subSeq);
 				}
+
 				// diversity
 				{
 					auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversityRawInput(seqsFromLargestSubRegion);
@@ -2321,7 +2349,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 				}
 			}
 
-//			std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 			std::vector<Bed6RecordCore> subRegionsGenomicLocs;
 			if(processedNodes.nameToSubSegPositions_filt.at(refSeq.name_).size() > 1 ){
 				for(const auto & subReg : subRegions){
@@ -2350,12 +2378,12 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 							processedNodes.subseqToIDKey[subReg.endRegion_.name_]);
 					refSubRegionsLocsRelOut << bedReg.toDelimStr() << std::endl;
 				}
-//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 
 				for(const auto & subReg : subRegionsGenomicLocs){
 					sharedLocsOutRefSeq << subReg.toDelimStr()<< std::endl;
 				}
-//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 				//cut input to subsegments
 				std::unordered_map<std::string, std::vector<seqInfo>> subRegionsSeqs;
 	//			std::cout << "subPortionsByConservedSeq.size(): " << subPortionsByConservedSeq.size() << std::endl;
@@ -2368,13 +2396,13 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					for(const auto & frontRegion : processedNodes.subSeqToNameToPos[subRegion.second.first]){
 	//					std::cout << "\t" << subRegion.second.first << std::endl;
 	//					std::cout << "\t" << subRegion.second.second << std::endl;
-//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 
 						auto startRegion = frontRegion.second;
 						auto endRegion = njh::mapAt(njh::mapAt(processedNodes.subSeqToNameToPos,subRegion.second.second), frontRegion.first);
 						BedUtility::SubRegionCombo subRegionForSeq(startRegion, endRegion);
 						auto outRegion = subRegionForSeq.genOut(subRegionComboPars.includeFromSubRegionSize);
-//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 //						std::cout << "frontRegion.first: " << frontRegion.first << std::endl;
 //						std::cout << "seqKey[frontRegion.first]: " << seqKey[frontRegion.first] << std::endl;
 //						std::cout << "outRegion.chromStart_: " << outRegion.chromStart_ << std::endl;
@@ -2382,19 +2410,19 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 //						std::cout << "seqs[seqKey[frontRegion.first]].size(): " << seqs[seqKey[frontRegion.first]].seq_.size()<< std::endl;
 
 						seqInfo subSeq(seqs[seqKey[frontRegion.first]].getSubRead(outRegion.chromStart_, outRegion.length()));
-//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 						renameSeq(subSeq, outRegion.chromStart_, outRegion.chromEnd_, subRegion.first);
 //						MetaDataInName seqMeta(subSeq.name_);
 //						seqMeta.addMeta("SubRegUID", subRegion.first, true);
 //						seqMeta.addMeta("SeqStart", outRegion.chromStart_, true);
 //						seqMeta.addMeta("SeqStop", outRegion.chromEnd_, true);
-//						std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 //						seqMeta.resetMetaInName(subSeq.name_);
 						subRegionsSeqs[subRegion.first].emplace_back(subSeq);
 					}
 				}
 	//			std::cout << "subRegionsSeqs.size(): " << subRegionsSeqs.size() << std::endl;
-//				std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//
 
 				for(const auto & subSeqs : subRegionsSeqs){
 					auto subSeqOpts = SeqIOOptions::genFastaOutGz(njh::files::make_path(seqsDir, subSeqs.first + ".fasta.gz"));

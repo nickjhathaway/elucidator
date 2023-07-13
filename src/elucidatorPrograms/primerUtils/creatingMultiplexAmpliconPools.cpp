@@ -3,6 +3,7 @@
 //
 
 #include "primerUtilsRunner.hpp"
+#include "elucidator/primerUtils/PossibleAmpliconPanelGraph.hpp"
 #include <njhseq/IO/SeqIO/SeqInput.hpp>
 #include <njhseq/IO/OutputStream.hpp>
 #include <njhseq/PrimerIDUtils/PrimerDimerUtils.hpp>
@@ -10,9 +11,7 @@
 #include <TwoBit/IO/TwoBitFile.hpp>
 #include <njhseq/objects/BioDataObject/BLASTHitTabular.hpp>
 #include <njhseq/objects/BioDataObject/BioDataFileIO.hpp>
-#include <njhseq/BamToolsUtils/ReAlignedSeq.hpp>
-#include <njhseq/GenomeUtils/GenomeExtraction/ParsingAlignmentInfo/GenomeExtractResult.hpp>
-#include <njhseq/objects/BioDataObject/BioRecordsUtils/BedUtility.hpp>
+
 #include <njhseq/concurrency/PairwisePairFactory.hpp>
 #include <njhseq/objects/BioDataObject/reading.hpp>
 #include <njhseq/objects/dataContainers/tables/TableReader.hpp>
@@ -21,267 +20,7 @@
 namespace njhseq {
 
 
-/**
- * @brief Undirected weighted graph, each node is a different region, each edge is a different set of primer pairs combo with a cost of having those primers together
- */
-class PossibleAmpliconPanelGraph{
 
-public:
-
-	class edge;
-
-	class node{
-	public:
-		explicit node(std::string region): region_(std::move(region)){
-
-		}
-		std::string region_;
-		bool visited_{false};
-
-		std::vector<std::shared_ptr<edge>> edges_;
-
-		void turnOnAllEdges() {
-			for (auto &e: edges_) {
-				e->on_ = true;
-			}
-		}
-
-		void reset() {
-			visited_ = false;
-			turnOnAllEdges();
-		}
-
-		void sortEdgesMaxTotalWeightTop(){
-			njh::sort(edges_, [](const std::shared_ptr<edge> & e1, const std::shared_ptr<edge> & e2){
-				return e1->getTotalWeights() > e2->getTotalWeights();
-			});
-		}
-
-		void sortEdgesMaxRegionPrimerWeightTop(){
-			njh::sort(edges_, [this](const std::shared_ptr<edge> & e1, const std::shared_ptr<edge> & e2){
-				if(e1->primerPairIndvWeights_[e1->regionToPrimerName_[this->region_]] == e2->primerPairIndvWeights_[e2->regionToPrimerName_[this->region_]]){
-					return e1->getTotalWeights() > e2->getTotalWeights();
-				}else{
-					return e1->primerPairIndvWeights_[e1->regionToPrimerName_[this->region_]] > e2->primerPairIndvWeights_[e2->regionToPrimerName_[this->region_]];
-				}
-			});
-		}
-
-		std::string getTopOnPrimerMaxTotalWeightOnTop(){
-			sortEdgesMaxTotalWeightTop();
-			if(edges_.empty()){
-				return {""};
-			}
-			return edges_.front()->regionToPrimerName_[region_];
-		}
-
-		void toggleOnEdgesForPrimer(const std::string & name){
-			for(const auto & e : edges_){
-				e->on_ = e->regionToPrimerName_[region_] == name;
-			}
-		}
-
-		void turnOffAllOtherPrimers(const std::string & name){
-			for(const auto & e : edges_){
-				if(e->regionToPrimerName_[region_] != name){
-					e->on_ = false;
-				}
-			}
-		}
-
-		void turnOffPrimer(const std::string & name){
-			for(const auto & e : edges_){
-				if(e->regionToPrimerName_[region_] == name){
-					e->on_ = false;
-				}
-			}
-		}
-
-		void turnOffEdge(const std::string & p1, const std::string & p2){
-			for(const auto & e : edges_){
-				auto primerPairs = njh::getVecOfMapValues(e->regionToPrimerName_);
-				if(njh::in(p1, primerPairs) && njh::in(p2, primerPairs)){
-					e->on_ = false;
-				}
-			}
-		}
-
-		/**
-		 * @brief turn off all edges to the other region in the keepEdge expect for the keepEdge
-		 * @param keepEdge the edge to keep, turn off all other edges going to this region
-		 */
-		void turnOfOtherEdgesForOtherRegion(const edge &keepEdge) {
-			for (auto &e: edges_) {
-				if (njh::in(keepEdge.regionToOtherRegion_.at(region_), e->regionToPrimerName_) &&
-						e->regionToPrimerName_[keepEdge.regionToOtherRegion_.at(region_)] !=
-						keepEdge.regionToPrimerName_.at(keepEdge.regionToOtherRegion_.at(region_))) {
-					e->on_ = false;
-				}
-			}
-		}
-
-		[[nodiscard]] VecStr getUniquePrimersOn() const {
-			auto onCounts = getTotalOnEdgesForPrimers();
-			return njh::getVecOfMapKeys(onCounts);
-		}
-
-		[[nodiscard]] uint32_t getTotalUniquePrimersOn() const {
-			auto onCounts = getTotalOnEdgesForPrimers();
-			return onCounts.size();
-		}
-
-		[[nodiscard]] std::unordered_map<std::string, uint32_t> getTotalOnEdgesForPrimers() const {
-			std::unordered_map<std::string, uint32_t> ret;
-			for (const auto &e: edges_) {
-				if (e->on_) {
-					++ret[e->regionToPrimerName_[region_]];
-				}
-			}
-			return ret;
-		}
-
-		[[nodiscard]] std::unordered_map<std::string, uint32_t> getTotalOnEdgesForOtherRegions() const {
-			std::unordered_map<std::string, uint32_t> ret;
-			for (const auto &e: edges_) {
-				if (e->on_) {
-					++ret[e->regionToOtherRegion_[region_]];
-				}
-			}
-			return ret;
-		}
-
-
-	};
-
-	class edge {
-	public:
-		std::unordered_map<std::string, std::string> regionToPrimerName_;/*< key is region name, key is primer pair name*/
-		std::unordered_map<std::string, std::string> regionToOtherRegion_;/*< key is region name, key is the other region in this edge*/
-
-		bool on_{true};
-		double primerPairVsPrimerPairWeight_{0};
-
-		double primerPairVsPrimerPairUnSpecAmpCnt_{0};
-
-		std::unordered_map<std::string, double> primerPairIndvWeights_;
-
-		[[nodiscard]] std::string getUid() const{
-			auto pairs = njh::getVecOfMapValues(regionToPrimerName_);
-			njh::sort(pairs);
-			return njh::pasteAsStr(pairs);
-		}
-
-		[[nodiscard]] double sumInvWeights() const {
-			double ret = 0;
-			for (const auto &pweight: primerPairIndvWeights_) {
-				ret += pweight.second;
-			}
-			return ret;
-		}
-
-		[[nodiscard]] double getTotalWeights() const {
-			return primerPairVsPrimerPairWeight_ + sumInvWeights();
-		}
-	};
-
-	explicit PossibleAmpliconPanelGraph(const VecStr & regions){
-		for(const auto & r : regions){
-			nodes_.emplace_back(r);
-		}
-		setNodeIdx();
-	}
-	void setNodeIdx(){
-		nodeIdx_.clear();
-		for(const auto & n : iter::enumerate(nodes_)){
-			nodeIdx_[n.element.region_] = n.index;
-		}
-	}
-
-	void resetAll(){
-		njh::for_each(nodes_,[](auto & n){
-			n.reset();
-		});
-	}
-
-	void turnOffPrimer(const std::string & name){
-		for(auto & n : nodes_){
-			n.turnOffPrimer(name);
-		}
-	}
-
-	void resetAndGenerateRandomPool(){
-		resetAll();
-		njh::randomGenerator rgen;
-		for(auto & n : nodes_){
-			auto randomPrimer = rgen.unifRandSelection(n.getUniquePrimersOn());
-			n.turnOffAllOtherPrimers(randomPrimer);
-		}
-	}
-
-	std::vector<std::shared_ptr<PossibleAmpliconPanelGraph::edge>> greedyDetermineHeaviestPool(){
-		auto keepGoingFunc = [this](){
-			bool keepGoing = false;
-			for(const auto & n : nodes_){
-				if(n.getTotalUniquePrimersOn() > 1){
-					keepGoing = true;
-					break;
-				}
-			}
-			return keepGoing;
-		};
-		std::vector<std::shared_ptr<PossibleAmpliconPanelGraph::edge>> topEdges;
-		std::unordered_set<std::string> topEdgeUids;
-		std::shared_ptr<PossibleAmpliconPanelGraph::edge> topEdge = nullptr;
-		while(keepGoingFunc()){
-			topEdge = nullptr;
-			for(auto & n : nodes_){
-				for(const auto & e : n.edges_){
-					if(e->on_ && !njh::in(e->getUid(), topEdgeUids)){
-						if(nullptr == topEdge || e->getTotalWeights() > topEdge->getTotalWeights()){
-							topEdge = e;
-						}
-					}
-				}
-				//turn off all other primers
-				nodes_[nodeIdx_[topEdge->regionToOtherRegion_.begin()->first]].turnOffAllOtherPrimers(topEdge->regionToPrimerName_[topEdge->regionToOtherRegion_.begin()->first]);
-				nodes_[nodeIdx_[topEdge->regionToOtherRegion_[topEdge->regionToOtherRegion_.begin()->first]]].turnOffAllOtherPrimers(topEdge->regionToPrimerName_[topEdge->regionToOtherRegion_[topEdge->regionToOtherRegion_.begin()->first]]);
-				//turn off all other connections between these two regions
-				nodes_[nodeIdx_[topEdge->regionToOtherRegion_.begin()->first]].turnOfOtherEdgesForOtherRegion(*topEdge);
-				nodes_[nodeIdx_[topEdge->regionToOtherRegion_[topEdge->regionToOtherRegion_.begin()->first]]].turnOfOtherEdgesForOtherRegion(*topEdge);
-			}
-			topEdges.emplace_back(topEdge);
-			topEdgeUids.emplace(topEdge->getUid());
-		}
-		return topEdges;
-	}
-
-	double getTotalOnWeight(){
-		double ret = 0;
-		for(const auto & n : nodes_){
-			for(const auto & e : n.edges_){
-				if(e->on_){
-					ret += e->getTotalWeights();
-				}
-			}
-		}
-		return ret;
-	}
-
-	[[nodiscard]] std::set<std::string> getCurrentOnPrimerPairs() const {
-		std::set < std::string > ret;
-		for (const auto &n: nodes_) {
-			for (const auto &e: n.edges_) {
-				if (e->on_) {
-					njh::addVecToSet(njh::getVecOfMapValues(e->regionToPrimerName_), ret);
-				}
-			}
-		}
-		return ret;
-	}
-
-	std::vector<node> nodes_;
-	std::unordered_map<std::string, uint32_t> nodeIdx_;
-};
 
 
 int primerUtilsRunner::creatingMultiplexAmpliconPools(
@@ -304,9 +43,12 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 	double diversityFactor = 2;
 	double dimerFactor = 0.5;
 	double pairPenaltyFactor = 1;
-	double unspecificAmpFactor = 0.25;
+	double unspecificAmpFactor = 0.50;
 
 	uint32_t hardUnspecAmpCutOff = 20;
+
+	bfs::path genomeGff;
+	bfs::path genomeFnp;
 
 	seqSetUp setUp(inputCommands);
 
@@ -315,6 +57,9 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 
 	setUp.setOption(additionalNonDiversityDirs, "--additionalNonDiversityDirs", "additional Non Diversity Dirs, could be vaccine, drug resistance, diagnostic etc");
 	setUp.setOption(defaultExpP5, "--defaultExpP5", "defaultExpP5");
+
+	bool gffSet = setUp.setOption(genomeGff, "--genomeGff", "A path to a genome annotation gff file to compare final panel against");
+	setUp.setOption(genomeFnp, "--genomeFnp", "A path to a genome annotation gff file to compare final panel against", gffSet);
 
 
 	setUp.setOption(diversityFactor, "--diversityFactor", "diversity Factor");
@@ -553,8 +298,7 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 		primer3ResTab.hasHeader_ = true;
 		primer3ResTab.addColumn(VecStr{"diversity"}, "class");
 		{
-			auto primer3ResTabCopy = primer3ResTab;
-			primer3ResTabCopy.outPutContents(TableIOOpts::genTabFileOut(
+			primer3ResTab.outPutContents(TableIOOpts::genTabFileOut(
 							njh::files::make_path(setUp.pars_.directoryName_, bfs::basename(d) + "_primer3_results.tab.txt.gz")));
 
 		}
@@ -698,6 +442,9 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 
 	std::unordered_map<std::string, uint32_t> numberOfIndvUnspecificAmps;
 	std::unordered_map<std::string, std::unordered_map<std::string, uint32_t>> numberOfBetweenPairsUnspecificAmps;
+
+
+
 	table unspecificAmps;
 	{
 		//testing for unspecific amplification
@@ -757,6 +504,16 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 			row[unspecificAmps.getColPos("expected")] = "false";
 		}
 	}
+	{
+		VecStr primersID;
+		for(auto & row : unspecificAmps){
+			VecStr primers{row[unspecificAmps.getColPos("p1TarName")], row[unspecificAmps.getColPos("p2TarName")]};
+			njh::sort(primers);
+			primersID.emplace_back(njh::pasteAsStr(primers.front(), "__", primers.back()));
+		}
+		unspecificAmps.addColumn(primersID, "primersID");
+	}
+
 	if(setUp.pars_.debug_){
 		std::cout << "numberOfBetweenPairsUnspecificAmps: " << std::endl;
 		for(const auto & numberOfBetweenPairsUnspecificAmp : numberOfBetweenPairsUnspecificAmps){
@@ -844,6 +601,7 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 				}
 				pool.nodes_[pool.nodeIdx_[regionRow]].edges_.emplace_back(e);
 				pool.nodes_[pool.nodeIdx_[regionCol]].edges_.emplace_back(e);
+				pool.edges_.emplace_back(e);
 			}
 		}
 	}
@@ -888,12 +646,32 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 		auto pair_penalty_noSize_vec = vecStrToVecNum<double>(finalTable.getColumn("pair_penalty_noSize"));
 		auto ExpP5_vec = vecStrToVecNum<double>(finalTable.getColumn("ExpP5"));
 		auto he_vec = vecStrToVecNum<double>(finalTable.getColumn("he"));
+
+		//unspecific anps
+		VecStr possiblePrimersIds;
+
+		//unspecific amps for self unspecific amps
 		auto unspecificAmpsCnt_vec = vecStrToVecNum<double>(finalTable.getColumn("unspecificAmpsCnt"));
+		//add in the pairwise
+		for(const auto & e : pool.edges_){
+			if(e->on_){
+				VecStr primers = njh::getVecOfMapValues(e->regionToPrimerName_);
+				njh::sort(primers);
+				possiblePrimersIds.emplace_back(njh::pasteAsStr(primers.front(), "__", primers.back()));
+				unspecificAmpsCnt_vec.emplace_back(e->primerPairVsPrimerPairUnSpecAmpCnt_);
+			}
+		}
+		auto finalUnspecificAmpsTable = unspecificAmps.extractByComp("primersID", [&possiblePrimersIds](const std::string & str){
+			return njh::in(str, possiblePrimersIds);
+		});
+
+		finalUnspecificAmpsTable.outPutContents(TableIOOpts::genTabFileOut(njh::files::make_path(determinedPoolDir, "unspecificAmplificationInfos.tab.txt")));
 
 		finalResults["pair_penalty_noSize_stats"] = njh::json::toJson(getStatsOnVec(pair_penalty_noSize_vec));
 		finalResults["ExpP5_stats"] = njh::json::toJson(getStatsOnVec(ExpP5_vec));
 		finalResults["he_stats"] = njh::json::toJson(getStatsOnVec(he_vec));
 		finalResults["unspecificAmpsCnt_stats"] = njh::json::toJson(getStatsOnVec(unspecificAmpsCnt_vec));
+
 
 		//genomic locations for amp, insert and primers
 		OutputStream ampLocsOut(njh::files::make_path(determinedPoolDir, "ampLocs.bed"));
@@ -911,9 +689,18 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 		OutputStream primerLocsOut(njh::files::make_path(determinedPoolDir, "primerLocs.bed"));
 		for(const auto & reg : primerLocs){
 			if(njh::in(reg->name_, finalPrimerPairs)){
-				primerLocsOut << reg->toDelimStrWithExtra() << std::endl;
+				auto outReg = *reg;
+				if(outReg.reverseStrand()){
+					outReg.name_ += "_R";
+				}else{
+					outReg.name_ += "_F";
+				}
+				primerLocsOut << outReg.toDelimStrWithExtra() << std::endl;
 			}
 		}
+
+
+
 		//primer table
 		{
 			auto primerTab = finalTable.getColumns(VecStr{"SeqIDPrimerPairName", "left_seq", "right_seq"});
@@ -954,35 +741,43 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 		njh::files::makeDir(njh::files::MkdirPar{randomDeterminedPoolDir});
 		Json::Value randomResults;
 		OutputStream testingStatsOut(njh::files::make_path(randomDeterminedPoolDir, "poolStats.tab.txt"));
-		testingStatsOut << "pool\tweight\tExpP5_min\tExpP5_max\tExpP5_mean\tExpP5_median\the_min\the_max\the_mean\the_median\tpair_penalty_noSize_min\tpair_penalty_noSize_max\tpair_penalty_noSize_mean\tpair_penalty_noSize_median\tdimerization_min\tdimerization_max\tdimerization_mean\tdimerization_median\tunspecAmpCnts_min\tunspecAmpCnts_max\tunspecAmpCnts_mean\tunspecAmpCnts_median" << std::endl;
+		testingStatsOut << "pool\tweight\tExpP5_min\tExpP5_max\tExpP5_mean\tExpP5_median\tExpP5_sum\the_min\the_max\the_mean\the_median\the_sum\tpair_penalty_noSize_min\tpair_penalty_noSize_max\tpair_penalty_noSize_mean\tpair_penalty_noSize_median\tpair_penalty_noSize_sum\tdimerization_min\tdimerization_max\tdimerization_mean\tdimerization_median\tdimerization_sum\tunspecAmpCnts_min\tunspecAmpCnts_max\tunspecAmpCnts_mean\tunspecAmpCnts_median\tunspecAmpCnts_sum" << std::endl;
 		randomResults["final"] = finalResults;
 		testingStatsOut << "final"
-										<< "\t" << finalResults["totalWeight"].asDouble()
-										<< "\t" << finalResults["ExpP5_stats"]["min"].asDouble()
-										<< "\t" << finalResults["ExpP5_stats"]["max"].asDouble()
-										<< "\t" << finalResults["ExpP5_stats"]["mean"].asDouble()
-										<< "\t" << finalResults["ExpP5_stats"]["median"].asDouble()
 
-										<< "\t" << finalResults["he_stats"]["min"].asDouble()
-										<< "\t" << finalResults["he_stats"]["max"].asDouble()
-										<< "\t" << finalResults["he_stats"]["mean"].asDouble()
-										<< "\t" << finalResults["he_stats"]["median"].asDouble()
+						<< "\t" << finalResults["totalWeight"].asDouble()
 
-										<< "\t" << finalResults["pair_penalty_noSize_stats"]["min"].asDouble()
-										<< "\t" << finalResults["pair_penalty_noSize_stats"]["max"].asDouble()
-										<< "\t" << finalResults["pair_penalty_noSize_stats"]["mean"].asDouble()
-										<< "\t" << finalResults["pair_penalty_noSize_stats"]["median"].asDouble()
+						<< "\t" << finalResults["ExpP5_stats"]["min"].asDouble()
+						<< "\t" << finalResults["ExpP5_stats"]["max"].asDouble()
+						<< "\t" << finalResults["ExpP5_stats"]["mean"].asDouble()
+						<< "\t" << finalResults["ExpP5_stats"]["median"].asDouble()
+						<< "\t" << finalResults["ExpP5_stats"]["sum"].asDouble()
 
-										<< "\t" << finalResults["dimerizationScores_stats"]["min"].asDouble()
-										<< "\t" << finalResults["dimerizationScores_stats"]["max"].asDouble()
-										<< "\t" << finalResults["dimerizationScores_stats"]["mean"].asDouble()
-										<< "\t" << finalResults["dimerizationScores_stats"]["median"].asDouble()
+						<< "\t" << finalResults["he_stats"]["min"].asDouble()
+						<< "\t" << finalResults["he_stats"]["max"].asDouble()
+						<< "\t" << finalResults["he_stats"]["mean"].asDouble()
+						<< "\t" << finalResults["he_stats"]["median"].asDouble()
+						<< "\t" << finalResults["he_stats"]["sum"].asDouble()
 
-										<< "\t" << finalResults["unspecificAmpsCnt_stats"]["min"].asDouble()
-										<< "\t" << finalResults["unspecificAmpsCnt_stats"]["max"].asDouble()
-										<< "\t" << finalResults["unspecificAmpsCnt_stats"]["mean"].asDouble()
-										<< "\t" << finalResults["unspecificAmpsCnt_stats"]["median"].asDouble()
-										<< std::endl;
+						<< "\t" << finalResults["pair_penalty_noSize_stats"]["min"].asDouble()
+						<< "\t" << finalResults["pair_penalty_noSize_stats"]["max"].asDouble()
+						<< "\t" << finalResults["pair_penalty_noSize_stats"]["mean"].asDouble()
+						<< "\t" << finalResults["pair_penalty_noSize_stats"]["median"].asDouble()
+						<< "\t" << finalResults["pair_penalty_noSize_stats"]["sum"].asDouble()
+
+						<< "\t" << finalResults["dimerizationScores_stats"]["min"].asDouble()
+						<< "\t" << finalResults["dimerizationScores_stats"]["max"].asDouble()
+						<< "\t" << finalResults["dimerizationScores_stats"]["mean"].asDouble()
+						<< "\t" << finalResults["dimerizationScores_stats"]["median"].asDouble()
+						<< "\t" << finalResults["dimerizationScores_stats"]["sum"].asDouble()
+
+						<< "\t" << finalResults["unspecificAmpsCnt_stats"]["min"].asDouble()
+						<< "\t" << finalResults["unspecificAmpsCnt_stats"]["max"].asDouble()
+						<< "\t" << finalResults["unspecificAmpsCnt_stats"]["mean"].asDouble()
+						<< "\t" << finalResults["unspecificAmpsCnt_stats"]["median"].asDouble()
+						<< "\t" << finalResults["unspecificAmpsCnt_stats"]["sum"].asDouble()
+
+						<< std::endl;
 
 		for(uint32_t testIter = 0; testIter < testIterMax; ++testIter){
 			if(setUp.pars_.verbose_){
@@ -1001,8 +796,14 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 			auto norm_pair_penalty_noSize_vec = vecStrToVecNum<double>(finalTable.getColumn("pair_penalty_noSize"));
 			auto ExpP5_vec = vecStrToVecNum<double>(finalTable.getColumn("ExpP5"));
 			auto he_vec = vecStrToVecNum<double>(finalTable.getColumn("he"));
+			//unspecific amps for self unspecific amps
 			auto unspecificAmpsCnt_vec = vecStrToVecNum<double>(finalTable.getColumn("unspecificAmpsCnt"));
-
+			//add in the pairwise
+			for(const auto & e : pool.edges_){
+				if(e->on_){
+					unspecificAmpsCnt_vec.emplace_back(e->primerPairVsPrimerPairUnSpecAmpCnt_);
+				}
+			}
 			results["pair_penalty_noSize_stats"] = njh::json::toJson(getStatsOnVec(norm_pair_penalty_noSize_vec));
 			results["ExpP5_stats"] = njh::json::toJson(getStatsOnVec(ExpP5_vec));
 			results["he_stats"] = njh::json::toJson(getStatsOnVec(he_vec));
@@ -1036,34 +837,47 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 			randomResults[njh::pasteAsStr(testIter)] = results;
 			testingStatsOut << testIter
 											<< "\t" << results["totalWeight"].asDouble()
+
 											<< "\t" << results["ExpP5_stats"]["min"].asDouble()
 											<< "\t" << results["ExpP5_stats"]["max"].asDouble()
 											<< "\t" << results["ExpP5_stats"]["mean"].asDouble()
 											<< "\t" << results["ExpP5_stats"]["median"].asDouble()
+											<< "\t" << results["ExpP5_stats"]["sum"].asDouble()
 
 											<< "\t" << results["he_stats"]["min"].asDouble()
 											<< "\t" << results["he_stats"]["max"].asDouble()
 											<< "\t" << results["he_stats"]["mean"].asDouble()
 											<< "\t" << results["he_stats"]["median"].asDouble()
+											<< "\t" << results["he_stats"]["sum"].asDouble()
 
 											<< "\t" << results["pair_penalty_noSize_stats"]["min"].asDouble()
 											<< "\t" << results["pair_penalty_noSize_stats"]["max"].asDouble()
 											<< "\t" << results["pair_penalty_noSize_stats"]["mean"].asDouble()
 											<< "\t" << results["pair_penalty_noSize_stats"]["median"].asDouble()
+											<< "\t" << results["pair_penalty_noSize_stats"]["sum"].asDouble()
 
 											<< "\t" << results["dimerizationScores_stats"]["min"].asDouble()
 											<< "\t" << results["dimerizationScores_stats"]["max"].asDouble()
 											<< "\t" << results["dimerizationScores_stats"]["mean"].asDouble()
 											<< "\t" << results["dimerizationScores_stats"]["median"].asDouble()
+											<< "\t" << results["dimerizationScores_stats"]["sum"].asDouble()
 
 											<< "\t" << results["unspecificAmpsCnt_stats"]["min"].asDouble()
 											<< "\t" << results["unspecificAmpsCnt_stats"]["max"].asDouble()
 											<< "\t" << results["unspecificAmpsCnt_stats"]["mean"].asDouble()
 											<< "\t" << results["unspecificAmpsCnt_stats"]["median"].asDouble()
-											<< std::endl;
+							        << "\t" << results["unspecificAmpsCnt_stats"]["sum"].asDouble()
+
+							<< std::endl;
 		}
 		OutputStream randomResOut(njh::files::make_path(randomDeterminedPoolDir, "poolResults.json"));
 		randomResOut << randomResults << std::endl;
+	}
+
+	if(gffSet){
+		std::stringstream cmd;
+		cmd << "cd " << determinedPoolDir << " && elucidator genTargetInfoFromGenomes --longRangeAmplicon --primers primers.tab.txt --genomeDir " << genomeFnp << " --gffDir " << genomeGff << " --dout targetExtraction --useBlast --numThreads " << numThreads << " --errors 1";
+		njh::sys::run(VecStr{cmd.str()});
 	}
 
 	return 0;

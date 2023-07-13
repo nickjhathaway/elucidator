@@ -64,9 +64,12 @@ int kmerExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArg
 			PairedRead pseq;
 			while(reader.readNextReadLock(pseq)){
 				if(compPars.pairsSeparate){
-					auto compResFirstMate = UniqueKmerSetHelper::compareReadToSetRes(pseq.seqBase_, uniqueKmersPerSet, compPars, hasher);
+					auto compResFirstMate = UniqueKmerSetHelper::compareReadToSets(pseq.seqBase_, uniqueKmersPerSet, compPars,
+																																				 hasher);
 					pseq.seqBase_.name_.append("_firstMate");
-					auto compResSecondMate = UniqueKmerSetHelper::compareReadToSetRes(pseq.mateSeqBase_, uniqueKmersPerSet, compPars, hasher);
+					auto compResSecondMate = UniqueKmerSetHelper::compareReadToSets(pseq.mateSeqBase_, uniqueKmersPerSet,
+																																					compPars,
+																																					hasher);
 					pseq.mateSeqBase_.name_.append("_secondMate");
 					{
 						std::lock_guard<std::mutex> lockGuard(outMut);
@@ -74,7 +77,7 @@ int kmerExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArg
 						compResSecondMate.writeOutput(out,pseq.mateSeqBase_,uniqueKmersPerSet, compPars);
 					}
 				}else{
-					auto compRes = UniqueKmerSetHelper::compareReadToSetRes(pseq, uniqueKmersPerSet, compPars, hasher);
+					auto compRes = UniqueKmerSetHelper::compareReadToSets(pseq, uniqueKmersPerSet, compPars, hasher);
 					{
 						std::lock_guard<std::mutex> lockGuard(outMut);
 						compRes.writeOutput(out,pseq.seqBase_,uniqueKmersPerSet, compPars);
@@ -91,7 +94,7 @@ int kmerExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArg
 			SimpleKmerHash hasher;
 			seqInfo seq;
 			while (reader.readNextReadLock(seq)) {
-				auto compRes = UniqueKmerSetHelper::compareReadToSetRes(seq, uniqueKmersPerSet, compPars, hasher);
+				auto compRes = UniqueKmerSetHelper::compareReadToSets(seq, uniqueKmersPerSet, compPars, hasher);
 				{
 					std::lock_guard<std::mutex> lockGuard(outMut);
 					compRes.writeOutput(out, seq, uniqueKmersPerSet, compPars);
@@ -186,7 +189,9 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 
 
 	//setUp.setOption(extractingPars.compPars.pairsSeparate, "--pairsSeparate", "extract the pairs separately");
-	setUp.setOption(extractingPars.compPars.entropyFilter_, "--entropyFilter", "entropy Filter_");
+	setUp.setOption(extractingPars.compPars.allowableCharacters_, "--allowableCharacters", "allowable characters");
+
+	setUp.setOption(extractingPars.compPars.entropyFilter_, "--entropyFilter", "entropy Filter cut off");
 	setUp.setOption(extractingPars.compPars.kmerLengthForEntropyCalc_, "--kmerLengthForEntropyCalc", "kmerLength For Entropy Calculation");
 
 
@@ -449,12 +454,13 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	initialCounts.readCountsPerSet[false]["undetermined"] = 0;
 	initialCounts.readCountsPerSet[true]["undetermined"] = 0;
 	uint64_t totalDeterminedReads = initialCounts.genTotalDeterminedCount();
-//	std::cout << __FILE__ << " " << __LINE__ << std::endl;
+	std::cout << __FILE__ << " " << __LINE__ << std::endl;
 	while(iterate && iterNumber < maxIterations){
 //		std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		watch.startNewLap(njh::pasteAsStr(iterNumber, "- read in new kmers"));
 //		std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		initialSeqOut.closeOutForReopeningAll();
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		auto rawUniqKmerSets = njh::getVecOfMapKeys(uniqueKmersPerSet);
 		removeElement(rawUniqKmerSets, std::string("undetermined"));
 		removeElements(rawUniqKmerSets, VecStr(extractingPars.compPars.excludeSetNames.begin(), extractingPars.compPars.excludeSetNames.end()));
@@ -463,9 +469,12 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 			rawKmersPerInput = UniqueKmerSetHelper::readInNewKmersFromExtractedReads(
 							setUp.pars_.directoryName_, rawUniqKmerSets, extractingPars, positionsAfterLastIteration);
 		} else {
+			std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			rawKmersPerInput = UniqueKmerSetHelper::readInNewKmersFromExtractedReads(
 							setUp.pars_.directoryName_, rawUniqKmerSets, extractingPars);
+			std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		}
+		std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		if (setUp.pars_.verbose_ && setUp.pars_.debug_) {
 			std::cout << "new kmer counts for: " << rawKmersPerInput.size() << " sets" << std::endl;
 			auto setNames = njh::getSetOfMapKeys(rawKmersPerInput);

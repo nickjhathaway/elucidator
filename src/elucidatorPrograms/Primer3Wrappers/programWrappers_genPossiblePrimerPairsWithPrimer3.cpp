@@ -197,8 +197,11 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 	bfs::path vcfFnp;
 	uint32_t blastExpandSize = 10;
 	uint32_t numThreads = 1;
+	bfs::path hardExcludeRegionsFnp;
+
 	bfs::path excludeRegionsFnp;
 	bfs::path regionsOfInterestFnp;
+	bool outputOnlyTargetedRegion = false;
 	bfs::path bedFnp;
 	bfs::path twoBitFnp;
 
@@ -213,6 +216,11 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 	setUp.setOption(vcfFnp, "--vcfFnp", "VCF Fnp");
 	setUp.setOption(createSharedSubSegmentsFromRefSeqsDirFnp, "--createSharedSubSegmentsFromRefSeqsDirFnp", "createSharedSubSegmentsFromRefSeqs directory to compute diversity results of possible primers");
 
+
+	setUp.setOption(outputOnlyTargetedRegion, "--outputOnlyTargetedRegion", "design for only regions that contain a region of interest");
+
+	setUp.setOption(hardExcludeRegionsFnp, "--hardExcludeRegionsFnp", "internal Exclude Regions, internal olgios aren't allowed to overlap these regions");
+
 	setUp.setOption(excludeRegionsFnp, "--excludeRegions", "exclude Regions");
 	setUp.setOption(regionsOfInterestFnp, "--regionsOfInterest", "regions Of Interest");
 	setUp.setOption(numThreads, "--numThreads", "numThreads");
@@ -225,9 +233,10 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 	//setUp.setOption(task, "--task", "primer picking task, examples include:generic(default), pick_sequencing_primers, pick_primer_list");
 
 
-	uint32_t extendRegion = std::max<uint32_t>(p3Opts.PRIMER_MAX_SIZE + 5, std::round(p3Opts.maxSize * 1.5));
-
-	setUp.setOption(extendRegion, "--extendRegion", "extend region by this amount");
+//	uint32_t extendRegion = std::max<uint32_t>(p3Opts.PRIMER_MAX_SIZE + 5, std::round(p3Opts.maxSize * 1.5));
+//	setUp.setOption(extendRegion, "--extendRegion", "extend region by this amount");
+//	taking this away for the moment, i don't think it's as useful anymore
+	uint32_t extendRegion = 0;
 
 	setUp.setOption(bedFnp, "--bedFnp", "genomic locations", true);
 	setUp.setOption(twoBitFnp, "--twoBit", "two Bit file", true);
@@ -237,6 +246,7 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
 
+	std::vector<std::shared_ptr<Bed6RecordCore>> hardExcludeRegions;
 	std::vector<std::shared_ptr<Bed6RecordCore>> excludeRegions;
 	std::vector<std::shared_ptr<Bed6RecordCore>> regionsOfInterest;
 
@@ -247,6 +257,11 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 	if (bfs::exists(excludeRegionsFnp)) {
 		excludeRegions = getBeds(excludeRegionsFnp);
 	}
+
+	if (bfs::exists(hardExcludeRegionsFnp)) {
+		hardExcludeRegions = getBeds(hardExcludeRegionsFnp);
+	}
+
 	std::vector<VCFVariant> allVariants;
 	if (bfs::exists(vcfFnp)) {
 		InputStream vcfIn(vcfFnp);
@@ -261,17 +276,125 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 	}
 
 
-	auto regions = getBeds(bedFnp);
+	auto originalRegions = getBeds(bedFnp);
+	{
+		std::map<std::string, uint32_t> nameCounts;
+		for(const auto & reg : originalRegions){
+			++nameCounts[reg->name_];
+		}
+		VecStr warnings;
+		for(const auto & count : nameCounts){
+			if(count.second > 1){
+				warnings.emplace_back(njh::pasteAsStr(count.first, ": ", count.second));
+			}
+		}
+		if(!warnings.empty()){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "found more than 1 occurence of the following names" << "\n";
+			ss << njh::conToStr(warnings, "\n") << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+	}
+
+	std::unordered_map<std::string, std::string> originalSeqIds;
+
+	std::vector<std::shared_ptr<Bed6RecordCore>> regions;
+
+
+	BedUtility::coordSort(hardExcludeRegions, false);
+	if(!hardExcludeRegions.empty()){
+		for(const auto & reg : originalRegions){
+
+			std::vector<Bed6RecordCore> hardExcludeRegions_withinRegion;
+			//hard exclude regions
+			for (const auto &inter: hardExcludeRegions) {
+				if (inter->chrom_ < reg->chrom_) {
+					//bother regions are sorted if we haven't reached this region's chromosome yet
+					continue;
+				}
+				if (inter->chrom_ > reg->chrom_) {
+					//both regions are sorted so if we run into this we can break
+					break;
+				}
+				if (inter->chrom_ == reg->chrom_ && inter->chromStart_ >= reg->chromEnd_) {
+					//both regions are sorted so if we run into this we can break
+					break;
+				}
+				if (inter->chrom_ == reg->chrom_ && inter->chromEnd_ < reg->chromStart_) {
+					continue;
+				}
+				if (reg->overlaps(*inter, 1)) {
+					//check first if we already have this exact region for exclusion, this can happen if input generated from variant calls and there is more than biallelic SNPs etc
+					bool alreadyHave = false;
+					for (const auto &already: hardExcludeRegions_withinRegion) {
+						if (already.genUIDFromCoords() == inter->genUIDFromCoords()) {
+							alreadyHave = true;
+							break;
+						}
+					}
+					if (!alreadyHave) {
+						hardExcludeRegions_withinRegion.emplace_back(*inter);
+					}
+				}
+			}
+			//book end the exclusion regions
+			for (auto &exclude: hardExcludeRegions_withinRegion) {
+				exclude.chromStart_ = std::max(exclude.chromStart_, reg->chromStart_);
+				exclude.chromEnd_ = std::min(exclude.chromEnd_, reg->chromEnd_);
+			}
+			if(hardExcludeRegions_withinRegion.empty()){
+				regions.emplace_back(reg);
+				originalSeqIds[reg->name_] = reg->name_;
+			} else {
+				auto originalName = reg->name_;
+
+				std::vector<std::shared_ptr<Bed6RecordCore>> newRegions;
+				//start with front if not zero
+				if(hardExcludeRegions_withinRegion.front().chromStart_ != reg->chromStart_){
+					auto newStart = reg->chromStart_;
+					auto newEnd = hardExcludeRegions_withinRegion.front().chromStart_;
+					auto newName = njh::pasteAsStr(reg->name_, "::", reg->chrom_, "-", newStart, "-", newEnd);
+					newRegions.emplace_back(std::make_shared<Bed6RecordCore>(reg->chrom_, newStart, newEnd, newName, newEnd - newStart, '+'));
+					originalSeqIds[newName] = reg->name_;
+				}
+				if(hardExcludeRegions_withinRegion.size() > 1){
+					for(const auto pos : iter::range(2UL, hardExcludeRegions_withinRegion.size())){
+						auto newStart = hardExcludeRegions_withinRegion[pos-1].chromEnd_;
+						auto newEnd = hardExcludeRegions_withinRegion[pos].chromStart_;
+						auto newName = njh::pasteAsStr(reg->name_, "::", reg->chrom_, "-", newStart, "-", newEnd);
+						newRegions.emplace_back(std::make_shared<Bed6RecordCore>(reg->chrom_, newStart, newEnd, newName, newEnd - newStart, '+'));
+						originalSeqIds[newName] = reg->name_;
+					}
+				}
+				//end with back if not at the very end
+				if(hardExcludeRegions_withinRegion.back().chromEnd_ != reg->chromEnd_){
+					auto newStart = hardExcludeRegions_withinRegion.back().chromEnd_;
+					auto newEnd = reg->chromEnd_;
+					auto newName = njh::pasteAsStr(reg->name_, "::", reg->chrom_, "-", newStart, "-", newEnd);
+					newRegions.emplace_back(std::make_shared<Bed6RecordCore>(reg->chrom_, newStart, newEnd, newName, newEnd - newStart, '+'));
+					originalSeqIds[newName] = reg->name_;
+				}
+				addOtherVec(regions, newRegions);
+			}
+		}
+	} else {
+		regions = originalRegions;
+		for(const auto & reg : regions){
+			originalSeqIds[reg->name_] = reg->name_;
+		}
+	}
+
 
 	std::unordered_map<std::string, std::shared_ptr<Bed6RecordCore>> nameToRegion;
 	std::unordered_map<std::string, std::shared_ptr<Bed6RecordCore>> templateToRegion;
 
 	TwoBit::TwoBitFile tReader(twoBitFnp);
 	auto chromLens = tReader.getSeqLens();
-	std::set<std::string> regionNames;
-	for (const auto &reg: regions) {
-		regionNames.emplace(reg->name_);
-	}
+//	std::set<std::string> regionNames;
+//	for (const auto &reg: regions) {
+//		regionNames.emplace(reg->name_);
+//	}
+
 
 	BedUtility::coordSort(excludeRegions, false);
 	BedUtility::coordSort(regions, false);
@@ -302,6 +425,7 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 		OutputStream primer3Input(njh::files::make_path(setUp.pars_.directoryName_, "primer3File.txt"));
 		primer3Input << "PRIMER_THERMODYNAMIC_PARAMETERS_PATH=" << p3Opts.primer3ConfigPath.string() << std::endl;
 
+
 		for (const auto &originalReg: regions) {
 			std::shared_ptr<Bed6RecordCore> reg = std::make_shared<Bed6RecordCore>(*originalReg);
 			reg->strand_ = '+';
@@ -310,6 +434,8 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 
 			std::vector<Bed6RecordCore> excludeRegions_withinRegion;
 			std::vector<Bed6RecordCore> excludeRegions_relToRegion;
+
+
 
 			std::vector<VCFVariant> variants_withinRegion;
 			std::vector<VCFVariant> variants_relToRegion;
@@ -337,6 +463,9 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 					}
 				}
 			}
+			if(outputOnlyTargetedRegion && regionsOfInterest_withinRegion.empty()){
+				continue;
+			}
 			OutputStream regionsOfInterest_withinRegion_bedOut(
 							njh::files::make_path(regionsOfInterestDir, reg->name_ + ".bed"));
 			for (const auto &bed: regionsOfInterest_withinRegion) {
@@ -349,6 +478,10 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 			}
 			inputRegionsExpanded << reg->toDelimStrWithExtra() << std::endl;
 			nameToRegion[reg->name_] = reg;
+
+
+
+
 			{
 				for (const auto &inter: excludeRegions) {
 					if (inter->chrom_ < reg->chrom_) {
@@ -387,6 +520,8 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 					exclude.chromEnd_ = std::min(exclude.chromEnd_, reg->chromEnd_);
 				}
 			}
+
+
 			//variant regions;
 			{
 				for (const auto &var: allVariants) {
@@ -422,6 +557,9 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 				modRegion.chromEnd_ = modRegion.chromEnd_ - reg->chromStart_;
 				regionsOfInterest_relToRegion.emplace_back(modRegion);
 			}
+
+
+
 			for (const auto &var: variants_withinRegion) {
 				auto modRegion = var;
 				modRegion.region_.start_ = modRegion.region_.start_ - reg->chromStart_;
@@ -536,6 +674,7 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 				}
 				defaultPars << "SEQUENCE_EXCLUDED_REGION=" << SEQUENCE_EXCLUDED_REGION << std::endl;
 			}
+
 			if (!regionsOfInterest_relToRegion.empty()) {
 				for (const auto &roi: regionsOfInterest_relToRegion) {
 					std::string SEQUENCE_TARGET = njh::pasteAsStr(roi.chromStart_, ",", roi.chromEnd_ - roi.chromStart_);
@@ -589,6 +728,8 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 								 "right_gc_percent", "right_hairpin_th", "right_penalty", "right_penalty_noSize", "right_self_any_th",
 								 "right_self_end_th", "right_tm", "right_tm_hairpin_diff", "right_problems"
 					}, "\t") << std::endl;
+
+
 	VecStr noTargetsFor;
 	std::stringstream noTargetsBed;
 
@@ -605,6 +746,9 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 	std::vector<std::shared_ptr<njhseq::Primer3Runner::PrimerPairGeneric>> allBestPrimers;
 	std::unordered_set<std::string> alreadyHaveUID;
 	for (const auto &res: results) {
+
+		auto originalSeqID = njh::mapAt(originalSeqIds, res->sequence_id_);
+
 		const auto &region = nameToRegion[res->sequence_id_];
 		bool targeted = !res->sequence_target_.empty();
 		if (0 == res->primer_pair_num_returned_) {
@@ -618,8 +762,7 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 				noTargetsFor.emplace_back(targetedName);
 				noTargetsBed << region->chrom_
 										 << "\t" << region->chromStart_ + res->sequence_target_.front().start_
-										 << "\t"
-										 << region->chromStart_ + res->sequence_target_.front().start_ + res->sequence_target_.front().size_
+										 << "\t" << region->chromStart_ + res->sequence_target_.front().start_ + res->sequence_target_.front().size_
 										 << "\t" << targetedName
 										 << "\t" << res->sequence_target_.front().size_
 										 << "\t" << "+" << std::endl;
@@ -650,11 +793,14 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 																			 region->chromStart_ + res->sequence_target_.front().start_
 																			 + res->sequence_target_.front().size_);
 			}
-			auto primerPairName = njh::pasteAsStr(res->sequence_id_ + (targeted ? "--" + targetedName : ""), "--PP",
+//			auto primerPairName = njh::pasteAsStr(res->sequence_id_ + (targeted ? "--" + targetedName : ""), "--PP",
+//																						njh::replaceString(bestPrimer->name_, "PRIMER_PAIR_", ""));
+			auto primerPairName = njh::pasteAsStr(originalSeqID , (targeted ? "--" + targetedName : ""), "--PP",
 																						njh::replaceString(bestPrimer->name_, "PRIMER_PAIR_", ""));
 
 			GenomicRegion insertRegion(
-							res->sequence_id_,
+							//	res->sequence_id_,
+							originalSeqID,
 							region->chrom_,
 							region->chromStart_ + bestPrimer->left_.forwardOrientationPos_.start_ +
 							bestPrimer->left_.forwardOrientationPos_.size_,
@@ -717,7 +863,8 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 					continue;
 				}
 				GenomicRegion insertRegion(
-								res->sequence_id_,
+								//	res->sequence_id_,
+								originalSeqID,
 								region->chrom_,
 								region->chromStart_ + bestPrimer->left_.forwardOrientationPos_.start_ +
 								bestPrimer->left_.forwardOrientationPos_.size_,
@@ -792,11 +939,14 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 																			 region->chromStart_ + res->sequence_target_.front().start_
 																			 + res->sequence_target_.front().size_);
 			}
-			auto primerPairName = njh::pasteAsStr(res->sequence_id_ + (targeted ? "--" + targetedName : ""), "--PP",
+//			auto primerPairName = njh::pasteAsStr(res->sequence_id_ + (targeted ? "--" + targetedName : ""), "--PP",
+//																						njh::replaceString(primerPair->name_, "PRIMER_PAIR_", ""));
+			auto primerPairName = njh::pasteAsStr(originalSeqID , (targeted ? "--" + targetedName : ""), "--PP",
 																						njh::replaceString(primerPair->name_, "PRIMER_PAIR_", ""));
 			{
 				MetaDataInName ampMeta;
-				ampMeta.addMeta("SeqID", res->sequence_id_);
+				//ampMeta.addMeta("SeqID", res->sequence_id_);
+				ampMeta.addMeta("SeqID", originalSeqID);
 				ampMeta.addMeta("PrimerID", primerPair->name_);
 				if (targeted) {
 					ampMeta.addMeta("target", targetedName);
@@ -812,7 +962,8 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 
 			{
 				MetaDataInName insertMeta;
-				insertMeta.addMeta("SeqID", res->sequence_id_);
+				//insertMeta.addMeta("SeqID", res->sequence_id_);
+				insertMeta.addMeta("SeqID", originalSeqID);
 				insertMeta.addMeta("PrimerID", primerPair->name_);
 				if (targeted) {
 					insertMeta.addMeta("target", targetedName);
@@ -832,7 +983,8 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 
 			{
 				MetaDataInName leftMeta;
-				leftMeta.addMeta("SeqID", res->sequence_id_);
+//				leftMeta.addMeta("SeqID", res->sequence_id_);
+				leftMeta.addMeta("SeqID", originalSeqID);
 				leftMeta.addMeta("PrimerID", primerPair->name_);
 				leftMeta.addMeta("PrimerName", primerPair->left_.name_);
 				if (targeted) {
@@ -848,7 +1000,8 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 																 << "\t" << leftMeta.createMetaName() << std::endl;
 
 				MetaDataInName rightMeta;
-				rightMeta.addMeta("SeqID", res->sequence_id_);
+//				rightMeta.addMeta("SeqID", res->sequence_id_);
+				rightMeta.addMeta("SeqID", originalSeqID);
 				rightMeta.addMeta("PrimerID", primerPair->name_);
 				rightMeta.addMeta("PrimerName", primerPair->right_.name_);
 				if (targeted) {
@@ -881,7 +1034,8 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 			primerNameToRev[primerPairName] = primerPair->right_.seq_;
 
 			primer3ResultsOut << njh::conToStr(toVecStr(
-							res->sequence_id_ + (targeted ? "--" + targetedName : ""),
+							//res->sequence_id_ + (targeted ? "--" + targetedName : ""),
+							originalSeqID + (targeted ? "--" + targetedName : ""),
 							primerPairName,
 							region->chrom_,
 
@@ -962,6 +1116,8 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 	for (const auto &res: results) {
 		const auto &region = nameToRegion[res->sequence_id_];
 		bool targeted = !res->sequence_target_.empty();
+		auto originalSeqID = njh::mapAt(originalSeqIds, res->sequence_id_);
+
 		std::string targetedName;
 		if (targeted) {
 			targetedName = njh::pasteAsStr(region->chrom_, "-",
@@ -981,7 +1137,8 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 		}
 
 		primer3ResultsSummaryOut << njh::conToStr(toVecStr(
-						res->sequence_id_,
+						//res->sequence_id_,
+						originalSeqID,
 						region->chrom_,
 						region->chromStart_,
 						region->chromEnd_,

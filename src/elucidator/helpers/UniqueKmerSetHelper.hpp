@@ -61,6 +61,8 @@ public:
 
 		uint32_t kmerLengthForEntropyCalc_{1};
 		double entropyFilter_{1.95};
+
+		std::vector<char> allowableCharacters_{'A', 'C', 'G', 'T'};
 	};
 
 	struct CompareReadToSetRes {
@@ -90,13 +92,13 @@ public:
 	};
 
 
-	static CompareReadToSetRes compareReadToSetRes(PairedRead &pseq,
-																								 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
-																								 const CompareReadToSetPars &compPars, const SimpleKmerHash &hasher);
+	static CompareReadToSetRes compareReadToSets(PairedRead &pseq,
+																							 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+																							 const CompareReadToSetPars &compPars, const SimpleKmerHash &hasher);
 
-	static CompareReadToSetRes compareReadToSetRes(seqInfo &seq,
-																								 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
-																								 const CompareReadToSetPars &compPars, const SimpleKmerHash &hasher);
+	static CompareReadToSetRes compareReadToSets(seqInfo &seq,
+																							 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+																							 const CompareReadToSetPars &compPars, const SimpleKmerHash &hasher);
 
 
 

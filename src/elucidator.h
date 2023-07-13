@@ -31,3 +31,4 @@
 #include "elucidator/simulation.h"
 #include "elucidator/utils.h"
 
+#include "elucidator/primerUtils.h"

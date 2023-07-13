@@ -86,7 +86,7 @@ int genomeExpRunner::reorientToRefGenome(const njh::progutils::CmdArgs & inputCo
   }
 
 	auto queryNames = getVectorOfMapKeys(queryLens);
-	queryNames = njh::naturalSortName(queryNames);
+	njh::naturalSortNameSet(queryNames);
 
 	if(setUp.pars_.verbose_){
 		std::cout << njh::conToStr(queryNames, "\n") << std::endl;
