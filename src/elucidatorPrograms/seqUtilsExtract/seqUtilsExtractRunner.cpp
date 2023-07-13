@@ -66,21 +66,38 @@ int seqUtilsExtractRunner::extractByName(const njh::progutils::CmdArgs & inputCo
 	}
 	setUp.finishSetUp(std::cout);
 
+
 	SeqIO reader(setUp.pars_.ioOptions_);
 	reader.openIn();
 	reader.openOut();
-	readObject read;
-	while(reader.readNextRead(read)){
-		if(excluding){
-			if(!njh::in(read.seqBase_.name_, names)){
-				reader.write(read);
+	if(setUp.pars_.ioOptions_.isPairedIn()){
+		PairedRead seq;
+		while (reader.readNextRead(seq)) {
+			if (excluding) {
+				if (!njh::in(seq.seqBase_.name_, names)) {
+					reader.write(seq);
+				}
+			} else {
+				if (njh::in(seq.seqBase_.name_, names)) {
+					reader.write(seq);
+				}
 			}
-		}else{
-			if(njh::in(read.seqBase_.name_, names)){
-				reader.write(read);
+		}
+	} else {
+		seqInfo seq;
+		while (reader.readNextRead(seq)) {
+			if (excluding) {
+				if (!njh::in(seq.name_, names)) {
+					reader.write(seq);
+				}
+			} else {
+				if (njh::in(seq.name_, names)) {
+					reader.write(seq);
+				}
 			}
 		}
 	}
+
 	return 0;
 }
 

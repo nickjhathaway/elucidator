@@ -53,8 +53,6 @@ class miscRunner : public njh::progutils::ProgramRunner {
   static int parseBamForForwardPerfectHits(const njh::progutils::CmdArgs & inputCommands);
 
 
-
-
   static int expandTableBySeparatingColumn(const njh::progutils::CmdArgs & inputCommands);
 
   static int codeComparison(const njh::progutils::CmdArgs & inputCommands);

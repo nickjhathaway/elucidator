@@ -54,6 +54,7 @@ seqUtilsModRunner::seqUtilsModRunner()
 		addFunc("sortReadsByKCompToTop", sortReadsByKCompToTop, false),
 		addFunc("sortReadsByNameNaturalSort", sortReadsByNameNaturalSort, false),
 		addFunc("renameSeqNameToUniqueNames", renameSeqNameToUniqueNames, false),
+		//addFunc("sortReadsPairedEnd", sortReadsPairedEnd, false),
 		addFunc("compSeq", compSeq, false),
 
 
