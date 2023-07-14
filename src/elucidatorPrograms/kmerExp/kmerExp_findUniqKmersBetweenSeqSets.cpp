@@ -546,6 +546,7 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::pro
 	watch.setLapName("initial");
 
 	checkBamFilesForIndexesAndAbilityToOpen(std::vector<bfs::path> {bams.begin(), bams.end()}, numThreads * numThreadsPerBam );
+	OutputStream out(outOpts);
 
 	extractingPars.compPars.klen =	UniqueKmerSetHelper::getKmerLenFromUniqueKmerTable(countTable);
 
@@ -557,7 +558,6 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::pro
 
 	VecStr names = getVectorOfMapKeys(uniqueKmersPerSet);
 	njh::naturalSortNameSet(names);
-	OutputStream out(outOpts);
 
 //	MultiSeqIO seqOut;
 //	if(setUp.pars_.debug_){
@@ -686,7 +686,7 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::pro
 			}
 		}
 	};
-	njh::concurrent::runVoidFunctionThreaded(countBam, numThreadsPerBam);
+	njh::concurrent::runVoidFunctionThreaded(countBam, numThreads);
 
 	return 0;
 }
