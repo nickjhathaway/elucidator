@@ -545,7 +545,7 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::pro
 	njh::stopWatch watch;
 	watch.setLapName("initial");
 
-	checkBamFilesForIndexesAndAbilityToOpen(std::vector<bfs::path> {bams.begin(), bams.end()} );
+	checkBamFilesForIndexesAndAbilityToOpen(std::vector<bfs::path> {bams.begin(), bams.end()}, numThreads * numThreadsPerBam );
 
 	extractingPars.compPars.klen =	UniqueKmerSetHelper::getKmerLenFromUniqueKmerTable(countTable);
 
