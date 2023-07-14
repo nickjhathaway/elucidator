@@ -139,7 +139,7 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlns(const njh::progutils:
 //	}
 	struct LockedBamReader {
 
-		LockedBamReader(const bfs::path & bamFnp){
+		explicit LockedBamReader(const bfs::path & bamFnp){
 			bReader_.Open(bamFnp.string());
 			checkBamOpenThrow(bReader_, bamFnp);
 		}
@@ -506,6 +506,7 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 
 int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
+	uint32_t numThreadsPerBam = 1;
 	bfs::path countTable = "";
 
 	UniqueKmerSetHelper::ProcessReadForExtractingPars extractingPars;
@@ -535,6 +536,7 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::pro
 	setUp.setOption(extractingPars.compPars.excludeSetNames, "--excludeSetNames", "names of sets of unique kmers to ignore from the --kmerTable");
 
 	setUp.setOption(numThreads, "--numThreads", "numThreads");
+	setUp.setOption(numThreadsPerBam, "--numThreadsPerBam", "numThreadsPerBam");
 
 	setUp.processWritingOptions(outOpts);
 	//setUp.processDirectoryOutputName("true");
@@ -552,13 +554,11 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::pro
 	if(setUp.pars_.verbose_){
 		std::cout << watch.getLapName() << "\t" << watch.timeLapFormatted() <<std::endl;
 	}
-	std::unordered_map<bool, std::unordered_map<std::string, uint64_t>> matchingCounts;
-	uint64_t totalInput = 0;
-	uint64_t totalUnmapped = 0;
-	std::mutex matchingCountsMut;
 
-	OutputStream out(outOpts);
 	VecStr names = getVectorOfMapKeys(uniqueKmersPerSet);
+	njh::naturalSortNameSet(names);
+	OutputStream out(outOpts);
+
 //	MultiSeqIO seqOut;
 //	if(setUp.pars_.debug_){
 //		for (const auto &name : names) {
@@ -603,78 +603,90 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::pro
 		}
 	};
 	out << "sample\ttotal\ttotalUnmapped\tset\treads\treadsFracTotal\treadsFracUnmapped\treadsInForward\tforwardFrac" << std::endl;
+	std::mutex outMut;
+	njh::concurrent::LockableQueue<bfs::path> bamsQueue(bams);
 
-	for(const auto & bam : bams){
-		LockedBamReader bamReader(bam);
-
-		std::function<void()> readInComp = [&bamReader, &uniqueKmersPerSet, &matchingCounts,&matchingCountsMut,&extractingPars,
-						&looseCounting,
-						&totalInput, &totalUnmapped]() {
-			SimpleKmerHash hasher;
-			std::unordered_map<bool, std::unordered_map<std::string, uint64_t>> currentMatchingCounts;
-			uint64_t currentTotalInput = 0;
-			uint64_t currentTotalUnmapped = 0;
-			std::vector<BamTools::BamAlignment> alns;
-			while (bamReader.readNextAlnLockBatch(alns, 10000)) {
-				for (const auto &bAln: alns) {
-					if (bAln.IsPrimaryAlignment() && !bAln.IsMapped()) {
-						seqInfo seq = bamAlnToSeqInfo(bAln);
-						auto compRes = UniqueKmerSetHelper::compareReadToSets(seq, uniqueKmersPerSet, extractingPars.compPars,
-																																	hasher);
-						if (!looseCounting && "undetermined" != compRes.winnerSet) {
-							if (compRes.winnerRevComp) {
-								for (const auto &perSet: compRes.foundPerSetRevComp) {
-									if (perSet.first != compRes.winnerSet && perSet.second > 0) {
-										compRes.winnerSet = "undetermined";
-										break;
+	std::function<void()> countBam = [&bamsQueue, &out, &outMut,
+																		&numThreadsPerBam, &uniqueKmersPerSet,
+																		&looseCounting, &extractingPars, &names]() {
+		bfs::path bam;
+		while(bamsQueue.getVal(bam)){
+			LockedBamReader bamReader(bam);
+			std::unordered_map<bool, std::unordered_map<std::string, uint64_t>> matchingCounts;
+			uint64_t totalInput = 0;
+			uint64_t totalUnmapped = 0;
+			std::mutex matchingCountsMut;
+			std::function<void()> readInComp = [&bamReader, &uniqueKmersPerSet, &matchingCounts,&matchingCountsMut,&extractingPars,
+							&looseCounting,
+							&totalInput, &totalUnmapped]() {
+				SimpleKmerHash hasher;
+				std::unordered_map<bool, std::unordered_map<std::string, uint64_t>> currentMatchingCounts;
+				uint64_t currentTotalInput = 0;
+				uint64_t currentTotalUnmapped = 0;
+				std::vector<BamTools::BamAlignment> alns;
+				while (bamReader.readNextAlnLockBatch(alns, 10000)) {
+					for (const auto &bAln: alns) {
+						if (bAln.IsPrimaryAlignment() && !bAln.IsMapped()) {
+							seqInfo seq = bamAlnToSeqInfo(bAln);
+							auto compRes = UniqueKmerSetHelper::compareReadToSets(seq, uniqueKmersPerSet, extractingPars.compPars,
+																																		hasher);
+							if (!looseCounting && "undetermined" != compRes.winnerSet) {
+								if (compRes.winnerRevComp) {
+									for (const auto &perSet: compRes.foundPerSetRevComp) {
+										if (perSet.first != compRes.winnerSet && perSet.second > 0) {
+											compRes.winnerSet = "undetermined";
+											break;
+										}
 									}
-								}
-							} else {
-								for (const auto &perSet: compRes.foundPerSet) {
-									if (perSet.first != compRes.winnerSet && perSet.second > 0) {
-										compRes.winnerSet = "undetermined";
-										break;
+								} else {
+									for (const auto &perSet: compRes.foundPerSet) {
+										if (perSet.first != compRes.winnerSet && perSet.second > 0) {
+											compRes.winnerSet = "undetermined";
+											break;
+										}
 									}
 								}
 							}
+							++currentMatchingCounts[compRes.winnerRevComp][compRes.winnerSet];
+							++currentTotalInput;
+							++currentTotalUnmapped;
+						} else if (bAln.IsPrimaryAlignment() && bAln.IsMapped()) {
+							++currentTotalInput;
 						}
-						++currentMatchingCounts[compRes.winnerRevComp][compRes.winnerSet];
-						++currentTotalInput;
-						++currentTotalUnmapped;
-					} else if (bAln.IsPrimaryAlignment() && bAln.IsMapped()) {
-						++currentTotalInput;
 					}
 				}
-			}
+				{
+					std::lock_guard<std::mutex> lock(matchingCountsMut);
+					totalInput += currentTotalInput;
+					totalUnmapped += currentTotalUnmapped;
+					for(const auto & foundPerSet : currentMatchingCounts){
+						for(const auto & count : foundPerSet.second){
+							matchingCounts[foundPerSet.first][count.first] += count.second;
+						}
+					}
+				}
+			};
+			njh::concurrent::runVoidFunctionThreaded(readInComp, numThreadsPerBam);
 			{
-				std::lock_guard<std::mutex> lock(matchingCountsMut);
-				totalInput += currentTotalInput;
-				totalUnmapped += currentTotalUnmapped;
-				for(const auto & foundPerSet : currentMatchingCounts){
-					for(const auto & count : foundPerSet.second){
-						matchingCounts[foundPerSet.first][count.first] += count.second;
-					}
+				std::lock_guard<std::mutex> lock(outMut);
+				for (const auto &name: names) {
+					uint64_t total = matchingCounts[true][name] + matchingCounts[false][name];
+					uint64_t totalForward = matchingCounts[false][name];
+					out << bfs::basename(bam)
+							<< "\t" << totalInput
+							<< "\t" << totalUnmapped
+							<< "\t" << name
+							<< "\t" << total
+							<< "\t" << (totalInput > 0 ? total / static_cast<long double>(totalInput) : 0)
+							<< "\t" << (totalUnmapped > 0 ? total / static_cast<long double>(totalUnmapped) : 0)
+							<< "\t" << totalForward
+							<< "\t" << (total > 0 ? totalForward / static_cast<long double>(total) : 0)
+							<< std::endl;
 				}
 			}
-		};
-		njh::concurrent::runVoidFunctionThreaded(readInComp, numThreads);
-		njh::sort(names);
-		for (const auto &name: names) {
-			uint64_t total = matchingCounts[true][name] + matchingCounts[false][name];
-			uint64_t totalForward = matchingCounts[false][name];
-			out << bam.string()
-					<< "\t" << totalInput
-					<< "\t" << totalUnmapped
-					<< "\t" << name
-					<< "\t" << total
-					<< "\t" << (totalInput > 0 ? total / static_cast<long double>(totalInput) : 0)
-					<< "\t" << (totalUnmapped > 0 ? total / static_cast<long double>(totalUnmapped) : 0)
-					<< "\t" << totalForward
-					<< "\t" << (total > 0 ? totalForward / static_cast<long double>(total) : 0)
-					<< std::endl;
 		}
-	}
-
+	};
+	njh::concurrent::runVoidFunctionThreaded(countBam, numThreadsPerBam);
 
 	return 0;
 }
