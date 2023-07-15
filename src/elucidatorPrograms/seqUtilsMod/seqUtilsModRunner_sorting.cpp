@@ -234,10 +234,32 @@ int seqUtilsModRunner::sortReadsByKCompToTop(
 	readVecSorter::sortReadVectorFunc(allInputReads,[&top](const std::shared_ptr<seqWithKmerInfo>& p1, const std::shared_ptr<seqWithKmerInfo> & p2){
 		return top.compareKmers(*p1).second > top.compareKmers(*p2).second;
 	});
-
-
 	reader.openWrite(allInputReads);
 	setUp.logRunTime(std::cout);
+	return 0;
+}
+
+
+int seqUtilsModRunner::sortReadsPairedEnd(
+				const njh::progutils::CmdArgs & inputCommands) {
+	// parameters
+	seqUtilsModSetUp setUp(inputCommands);
+	// input file info
+	setUp.processDefaultReader(seqSetUp::pairedReadInFormatsAvailable_, true);
+	if (setUp.pars_.ioOptions_.out_.outFilename_ == "out") {
+		setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(
+						njh::files::removeExtension(setUp.pars_.ioOptions_.firstName_), "sorted_");
+	}
+	bool ascending = false;
+	setUp.setOption(ascending, "--ascending", "Ascending Sort");
+
+	setUp.finishSetUp(std::cout);
+	std::vector<PairedRead> allInputReads = SeqInput::getSeqVec<PairedRead>(setUp.pars_.ioOptions_);
+	readVecSorter::sortBySeq(allInputReads, !ascending);
+	SeqOutput::write(allInputReads, setUp.pars_.ioOptions_);
+	if (setUp.pars_.verbose_) {
+		setUp.logRunTime(std::cout);
+	}
 	return 0;
 }
 
