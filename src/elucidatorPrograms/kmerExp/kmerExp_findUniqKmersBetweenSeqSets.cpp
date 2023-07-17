@@ -510,8 +510,8 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::pro
 	bfs::path countTable = "";
 
 	UniqueKmerSetHelper::ProcessReadForExtractingPars extractingPars;
-	extractingPars.compPars.hardCountOff = 20;
-	extractingPars.compPars.fracCutOff = 0.12;
+	extractingPars.compPars.hardCountOff = 10;
+	extractingPars.compPars.fracCutOff = 0;
 	extractingPars.compPars.kmerLengthForEntropyCalc_ = 2;
 	extractingPars.compPars.entropyFilter_ = 1.20;
 	extractingPars.compPars.initialExcludeHardCountOff = 60;
