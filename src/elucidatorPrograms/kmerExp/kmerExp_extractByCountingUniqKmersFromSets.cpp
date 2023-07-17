@@ -454,13 +454,13 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	initialCounts.readCountsPerSet[false]["undetermined"] = 0;
 	initialCounts.readCountsPerSet[true]["undetermined"] = 0;
 	uint64_t totalDeterminedReads = initialCounts.genTotalDeterminedCount();
-	std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//	std::cout << __FILE__ << " " << __LINE__ << std::endl;
 	while(iterate && iterNumber < maxIterations){
 //		std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		watch.startNewLap(njh::pasteAsStr(iterNumber, "- read in new kmers"));
 //		std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		initialSeqOut.closeOutForReopeningAll();
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//		std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		auto rawUniqKmerSets = njh::getVecOfMapKeys(uniqueKmersPerSet);
 		removeElement(rawUniqKmerSets, std::string("undetermined"));
 		removeElements(rawUniqKmerSets, VecStr(extractingPars.compPars.excludeSetNames.begin(), extractingPars.compPars.excludeSetNames.end()));
@@ -469,12 +469,12 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 			rawKmersPerInput = UniqueKmerSetHelper::readInNewKmersFromExtractedReads(
 							setUp.pars_.directoryName_, rawUniqKmerSets, extractingPars, positionsAfterLastIteration);
 		} else {
-			std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//			std::cout << __FILE__ << " " << __LINE__ << std::endl;
 			rawKmersPerInput = UniqueKmerSetHelper::readInNewKmersFromExtractedReads(
 							setUp.pars_.directoryName_, rawUniqKmerSets, extractingPars);
-			std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//			std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		}
-		std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//		std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		if (setUp.pars_.verbose_ && setUp.pars_.debug_) {
 			std::cout << "new kmer counts for: " << rawKmersPerInput.size() << " sets" << std::endl;
 			auto setNames = njh::getSetOfMapKeys(rawKmersPerInput);
