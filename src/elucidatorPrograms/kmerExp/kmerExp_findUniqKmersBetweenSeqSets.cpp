@@ -576,7 +576,7 @@ int kmerExpRunner::countingUniqKmersFromSetsInRegionsAlnsBestSet(const njh::prog
 //		}
 //	}
 
-	out << "sample\ttotal\ttotalUnmapped\tset\treads\treadsFracTotal\treadsFracUnmapped\treadsInForward\tforwardFrac" << std::endl;
+	out << "sample\ttotal\tset\treads\treadsFracTotal\treadsInForward\tforwardFrac" << std::endl;
 	std::mutex outMut;
 	njh::concurrent::LockableQueue<bfs::path> bamsQueue(bams);
 
@@ -592,7 +592,6 @@ int kmerExpRunner::countingUniqKmersFromSetsInRegionsAlnsBestSet(const njh::prog
 			checkBamOpenThrow(bamReader, bam);
 			std::unordered_map<bool, std::unordered_map<std::string, uint64_t>> matchingCounts;
 			uint64_t totalInput = 0;
-			uint64_t totalUnmapped = 0;
 			SimpleKmerHash hasher;
 			BamTools::BamAlignment bAln;
 			for(const auto & reg : regions){
@@ -620,7 +619,6 @@ int kmerExpRunner::countingUniqKmersFromSetsInRegionsAlnsBestSet(const njh::prog
 						}
 						++matchingCounts[compRes.winnerRevComp][compRes.winnerSet];
 						++totalInput;
-						++totalUnmapped;
 					}
 				}
 			}
@@ -631,11 +629,9 @@ int kmerExpRunner::countingUniqKmersFromSetsInRegionsAlnsBestSet(const njh::prog
 					uint64_t totalForward = matchingCounts[false][name];
 					out << bfs::basename(bam)
 							<< "\t" << totalInput
-							<< "\t" << totalUnmapped
 							<< "\t" << name
 							<< "\t" << total
 							<< "\t" << (totalInput > 0 ? total / static_cast<long double>(totalInput) : 0)
-							<< "\t" << (totalUnmapped > 0 ? total / static_cast<long double>(totalUnmapped) : 0)
 							<< "\t" << totalForward
 							<< "\t" << (total > 0 ? totalForward / static_cast<long double>(total) : 0)
 							<< std::endl;
