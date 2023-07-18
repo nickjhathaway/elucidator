@@ -121,6 +121,7 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArgs & inputCommands);
 	static int countingUniqKmersFromSetsBestSet(const njh::progutils::CmdArgs & inputCommands);
 	static int countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::progutils::CmdArgs & inputCommands);
+	static int countingUniqKmersFromSetsInRegionsAlnsBestSet(const njh::progutils::CmdArgs & inputCommands);
 
 	static int countingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands);
 	static int countingUniqKmersFromSetsInUnmappedAlns(const njh::progutils::CmdArgs & inputCommands);

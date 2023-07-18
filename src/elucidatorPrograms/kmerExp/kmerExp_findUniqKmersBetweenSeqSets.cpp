@@ -36,6 +36,7 @@
 
 #include <njhseq/objects/dataContainers/tables/TableReader.hpp>
 #include <njhseq/IO/SeqIO/MultiSeqOutCache.hpp>
+#include <njhseq/objects/BioDataObject/reading.hpp>
 #include "elucidator/helpers/UniqueKmerSetHelper.hpp"
 
 namespace njhseq {
@@ -503,6 +504,146 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 }
 
 
+
+int kmerExpRunner::countingUniqKmersFromSetsInRegionsAlnsBestSet(const njh::progutils::CmdArgs & inputCommands){
+	uint32_t numThreads = 1;
+//	uint32_t numThreadsPerBam = 1;
+	bfs::path countTable = "";
+
+	UniqueKmerSetHelper::ProcessReadForExtractingPars extractingPars;
+	extractingPars.compPars.hardCountOff = 10;
+	extractingPars.compPars.fracCutOff = 0;
+	extractingPars.compPars.kmerLengthForEntropyCalc_ = 2;
+	extractingPars.compPars.entropyFilter_ = 1.20;
+	extractingPars.compPars.initialExcludeHardCountOff = 60;
+	extractingPars.compPars.initialExcludeFracCutOff = 0.25;
+	bool looseCounting = false;
+	OutOptions outOpts(bfs::path(""), ".tab.txt.gz");
+
+	std::set <bfs::path> bams;
+	bfs::path bedFnp;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.pars_.ioOptions_.revComplMate_ = true;
+	setUp.setOption(bedFnp, "--bedFnp", "regions to count from", true);
+	setUp.setOption(bams, "--bams", "input bams to work on", true);
+	setUp.setOption(countTable, "--countTable", "countTable, 1)set,2)kmer", true);
+	//setUp.setOption(extractingPars.compPars.sampleName, "--sampleName", "Name to add to output file", true);
+
+	setUp.setOption(extractingPars.compPars.includeRevComp, "--includeRevComp", "include Rev Comp of the input seqs");
+	setUp.setOption(extractingPars.compPars.entropyFilter_, "--entropyFilter", "entropy Filter_");
+	setUp.setOption(extractingPars.compPars.kmerLengthForEntropyCalc_, "--kmerLengthForEntropyCalc", "kmerLength For Entropy Calculation");
+	setUp.setOption(extractingPars.compPars.fracCutOff, "--readKmerFracCutOff", "per read Kmer Frac Cut Off");
+	setUp.setOption(extractingPars.compPars.hardCountOff, "--hardCountOff", "hard Count Off, do not count sets unless greater thant his number");
+	setUp.setOption(extractingPars.compPars.excludeSetNames, "--excludeSetNames", "names of sets of unique kmers to ignore from the --kmerTable");
+
+	setUp.setOption(numThreads, "--numThreads", "numThreads");
+//	setUp.setOption(numThreadsPerBam, "--numThreadsPerBam", "numThreadsPerBam");
+
+	setUp.processWritingOptions(outOpts);
+	//setUp.processDirectoryOutputName("true");
+	setUp.finishSetUp(std::cout);
+	//setUp.startARunLog(setUp.pars_.directoryName_);
+	njh::stopWatch watch;
+	watch.setLapName("initial");
+
+	auto regions = getBeds(bedFnp);
+	checkBamFilesForIndexesAndAbilityToOpen(std::vector<bfs::path> {bams.begin(), bams.end()}, numThreads  );
+	OutputStream out(outOpts);
+
+	extractingPars.compPars.klen =	UniqueKmerSetHelper::getKmerLenFromUniqueKmerTable(countTable);
+
+	watch.startNewLap("reading in unique kmer table");
+	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet = UniqueKmerSetHelper::readInUniqueKmerTablePerSet(countTable);
+	if(setUp.pars_.verbose_){
+		std::cout << watch.getLapName() << "\t" << watch.timeLapFormatted() <<std::endl;
+	}
+
+	VecStr names = getVectorOfMapKeys(uniqueKmersPerSet);
+	njh::naturalSortNameSet(names);
+
+//	MultiSeqIO seqOut;
+//	if(setUp.pars_.debug_){
+//		for (const auto &name : names) {
+//			auto seqOutOpts = SeqIOOptions::genPairedOutGz(njh::pasteAsStr(basename(setUp.pars_.ioOptions_.firstName_), "-", name, "-paired"));
+//			seqOutOpts.out_.overWriteFile_ = true;
+//			seqOut.addReader(name + "-paired", seqOutOpts);
+//
+//			auto seqOutOpts = SeqIOOptions::genFastqOutGz(njh::pasteAsStr(basename(setUp.pars_.ioOptions_.firstName_), "-", name, "-single"));
+//			seqOutOpts.out_.overWriteFile_ = true;
+//			seqOut.addReader(name+ "-single", seqOutOpts);
+//		}
+//	}
+
+	out << "sample\ttotal\ttotalUnmapped\tset\treads\treadsFracTotal\treadsFracUnmapped\treadsInForward\tforwardFrac" << std::endl;
+	std::mutex outMut;
+	njh::concurrent::LockableQueue<bfs::path> bamsQueue(bams);
+
+	std::function<void()> countBam = [&bamsQueue, &out, &outMut,
+					&uniqueKmersPerSet,
+					&regions,
+					&looseCounting, &extractingPars, &names]() {
+		bfs::path bam;
+		while(bamsQueue.getVal(bam)){
+			BamTools::BamReader bamReader;
+			bamReader.Open(bam.string());
+			checkBamOpenThrow(bamReader, bam);
+			std::unordered_map<bool, std::unordered_map<std::string, uint64_t>> matchingCounts;
+			uint64_t totalInput = 0;
+			uint64_t totalUnmapped = 0;
+			SimpleKmerHash hasher;
+			BamTools::BamAlignment bAln;
+			for(const auto & reg : regions){
+				setBamFileRegionThrow(bamReader, GenomicRegion(*reg));
+				if (bAln.IsPrimaryAlignment() && bAln.IsMapped()) {
+					seqInfo seq = bamAlnToSeqInfo(bAln);
+					auto compRes = UniqueKmerSetHelper::compareReadToSets(seq, uniqueKmersPerSet, extractingPars.compPars, hasher);
+					if (!looseCounting && "undetermined" != compRes.winnerSet) {
+						if (compRes.winnerRevComp) {
+							for (const auto &perSet: compRes.foundPerSetRevComp) {
+								if (perSet.first != compRes.winnerSet && perSet.second > 0) {
+									compRes.winnerSet = "undetermined";
+									break;
+								}
+							}
+						} else {
+							for (const auto &perSet: compRes.foundPerSet) {
+								if (perSet.first != compRes.winnerSet && perSet.second > 0) {
+									compRes.winnerSet = "undetermined";
+									break;
+								}
+							}
+						}
+					}
+					++matchingCounts[compRes.winnerRevComp][compRes.winnerSet];
+					++totalInput;
+					++totalUnmapped;
+				}
+			}
+			{
+				std::lock_guard<std::mutex> lock(outMut);
+				for (const auto &name: names) {
+					uint64_t total = matchingCounts[true][name] + matchingCounts[false][name];
+					uint64_t totalForward = matchingCounts[false][name];
+					out << bfs::basename(bam)
+							<< "\t" << totalInput
+							<< "\t" << totalUnmapped
+							<< "\t" << name
+							<< "\t" << total
+							<< "\t" << (totalInput > 0 ? total / static_cast<long double>(totalInput) : 0)
+							<< "\t" << (totalUnmapped > 0 ? total / static_cast<long double>(totalUnmapped) : 0)
+							<< "\t" << totalForward
+							<< "\t" << (total > 0 ? totalForward / static_cast<long double>(total) : 0)
+							<< std::endl;
+				}
+			}
+		}
+	};
+	njh::concurrent::runVoidFunctionThreaded(countBam, numThreads);
+
+	return 0;
+}
 
 int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
