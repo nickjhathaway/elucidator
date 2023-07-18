@@ -588,6 +588,7 @@ int kmerExpRunner::countingUniqKmersFromSetsInRegionsAlnsBestSet(const njh::prog
 		while(bamsQueue.getVal(bam)){
 			BamTools::BamReader bamReader;
 			bamReader.Open(bam.string());
+			bamReader.LocateIndex();
 			checkBamOpenThrow(bamReader, bam);
 			std::unordered_map<bool, std::unordered_map<std::string, uint64_t>> matchingCounts;
 			uint64_t totalInput = 0;
