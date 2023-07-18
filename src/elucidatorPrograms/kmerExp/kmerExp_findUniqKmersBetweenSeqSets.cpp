@@ -597,29 +597,31 @@ int kmerExpRunner::countingUniqKmersFromSetsInRegionsAlnsBestSet(const njh::prog
 			BamTools::BamAlignment bAln;
 			for(const auto & reg : regions){
 				setBamFileRegionThrow(bamReader, GenomicRegion(*reg));
-				if (bAln.IsPrimaryAlignment() && bAln.IsMapped()) {
-					seqInfo seq = bamAlnToSeqInfo(bAln);
-					auto compRes = UniqueKmerSetHelper::compareReadToSets(seq, uniqueKmersPerSet, extractingPars.compPars, hasher);
-					if (!looseCounting && "undetermined" != compRes.winnerSet) {
-						if (compRes.winnerRevComp) {
-							for (const auto &perSet: compRes.foundPerSetRevComp) {
-								if (perSet.first != compRes.winnerSet && perSet.second > 0) {
-									compRes.winnerSet = "undetermined";
-									break;
+				while(bamReader.GetNextAlignment(bAln)){
+					if (bAln.IsPrimaryAlignment() && bAln.IsMapped()) {
+						seqInfo seq = bamAlnToSeqInfo(bAln);
+						auto compRes = UniqueKmerSetHelper::compareReadToSets(seq, uniqueKmersPerSet, extractingPars.compPars, hasher);
+						if (!looseCounting && "undetermined" != compRes.winnerSet) {
+							if (compRes.winnerRevComp) {
+								for (const auto &perSet: compRes.foundPerSetRevComp) {
+									if (perSet.first != compRes.winnerSet && perSet.second > 0) {
+										compRes.winnerSet = "undetermined";
+										break;
+									}
 								}
-							}
-						} else {
-							for (const auto &perSet: compRes.foundPerSet) {
-								if (perSet.first != compRes.winnerSet && perSet.second > 0) {
-									compRes.winnerSet = "undetermined";
-									break;
+							} else {
+								for (const auto &perSet: compRes.foundPerSet) {
+									if (perSet.first != compRes.winnerSet && perSet.second > 0) {
+										compRes.winnerSet = "undetermined";
+										break;
+									}
 								}
 							}
 						}
+						++matchingCounts[compRes.winnerRevComp][compRes.winnerSet];
+						++totalInput;
+						++totalUnmapped;
 					}
-					++matchingCounts[compRes.winnerRevComp][compRes.winnerSet];
-					++totalInput;
-					++totalUnmapped;
 				}
 			}
 			{
