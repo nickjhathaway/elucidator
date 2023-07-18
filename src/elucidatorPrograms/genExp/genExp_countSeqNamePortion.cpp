@@ -16,8 +16,8 @@ namespace njhseq {
 
 int genExpRunner::countSeqNamePortion(const njh::progutils::CmdArgs & inputCommands){
 	std::string regexPatStr = "([A-Za-z0-9_]+):([0-9]+):([A-Za-z0-9-]+):([0-9]+):([0-9]+):([0-9]+):([0-9]+) ([12]):([NY]):([0-9]):([AGCTN+]+)";
-	uint32_t markCount = 11;
-	std::string name = "";
+	std::set<uint32_t> markCounts{11};
+	std::string name;
 	OutOptions outOpts(bfs::path(""), ".tab.txt");
 	uint64_t numberOfReadsToCount = std::numeric_limits<uint64_t>::max();
 	seqSetUp setUp(inputCommands);
@@ -25,7 +25,7 @@ int genExpRunner::countSeqNamePortion(const njh::progutils::CmdArgs & inputComma
 	setUp.processDebug();
 	setUp.setOption(numberOfReadsToCount, "--numberOfReadsToCount", "Number Of Reads To Count", false);
 	setUp.setOption(regexPatStr, "--regexPatStr", "Regex Pat Str", false);
-	setUp.setOption(markCount, "--markCount", "The mark subexpression to count");
+	setUp.setOption(markCounts, "--markCount", "The mark subexpression to count, can be multiple, should be the pattern number within the regex expression given by --regexPatStr");
 	setUp.setOption(name, "--name", "name to add to output file");
 
 	setUp.processWritingOptions(outOpts);
@@ -36,20 +36,31 @@ int genExpRunner::countSeqNamePortion(const njh::progutils::CmdArgs & inputComma
 	reader.openIn();
 	OutputStream out(outOpts);
 	seqInfo seq;
-	std::unordered_map<std::string, uint32_t> counts;
+	std::unordered_map<uint32_t, std::unordered_map<std::string, uint32_t>> counts;
 	std::regex regexPat{regexPatStr};
-	if(markCount > regexPat.mark_count()){
-		std::stringstream ss;
-		ss << __PRETTY_FUNCTION__ << ", error " << "--markCount(" << markCount << ") can't be larger than the mark_count()(" << regexPat.mark_count() << ") of regular expression "<< "\n";
-		throw std::runtime_error{ss.str()};
+	for(const auto & markCount : markCounts){
+		VecStr warnings;
+		if(markCount > regexPat.mark_count()){
+			std::stringstream ss;
+			ss << "--markCount(" << markCount << ") can't be larger than the mark_count()(" << regexPat.mark_count() << ") of regular expression ";
+			warnings.emplace_back(ss.str());
+		}
+		if(!warnings.empty()){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << njh::conToStr(warnings, "\n") << "\n";
+			throw std::runtime_error{ss.str()};
+		}
 	}
+
 	uint64_t totalCount = 0;
 
 
 	while(reader.readNextRead(seq)){
 		std::smatch match;
 		if(std::regex_match(seq.name_, match, regexPat)){
-			++counts[match[markCount]];
+			for(const auto & markCount : markCounts){
+				++counts[markCount][match[markCount]];
+			}
 		}
 		++totalCount;
 		if(totalCount >= numberOfReadsToCount){
@@ -57,11 +68,11 @@ int genExpRunner::countSeqNamePortion(const njh::progutils::CmdArgs & inputComma
 		}
 	}
 
-	table outTab(counts, VecStr{"mark", "count"});
-	if("" != name){
+	table outTab(counts, VecStr{"mark", "element", "count"});
+	if(!name.empty()){
 		outTab.addColumn({name}, "name");
 	}
-	outTab.sortTable("count", "mark", true);
+	outTab.sortTable("mark", "count", "element", true);
 	outTab.outPutContents(out, "\t");
 	return 0;
 }

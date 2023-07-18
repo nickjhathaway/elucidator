@@ -185,7 +185,6 @@ ggplotly(ggplot() +
 
 )";
 
-
 int kmerExpRunner::kmerCompareTwoSetsOfContigs(const njh::progutils::CmdArgs & inputCommands){
 
 	bfs::path refContigs = "";
@@ -670,7 +669,6 @@ int kmerExpRunner::chromVsChromUniqueComp(const njh::progutils::CmdArgs & inputC
 
 	return 0;
 }
-
 
 int kmerExpRunner::findPositionsOfUniqueKmersInEachOther(const njh::progutils::CmdArgs & inputCommands){
 	seqInfo seq1("seq1");
