@@ -692,7 +692,7 @@ std::unordered_map<std::string, std::string> ContigsCompareGraphDev::writeRectan
 		sampleComboToIndex[sampCombo] = sampleComboIndex++;
 	}
 
-	if(maxSampleSize > moreColors.size()){
+	if(maxSampleSize >= moreColors.size()){
 		auto hColors = njh::heatmapColors(maxSampleSize + 1);
 		njh::reverse(hColors);
 		moreColors.clear();
@@ -842,14 +842,15 @@ void ContigsCompareGraphDev::writeRectangleDotColorBySampleCount(std::ostream & 
 			}
 		}
 	}
-	if(maxSampleSize > moreColors.size()){
+
+
+	if(maxSampleSize >= moreColors.size()){
 		auto hColors = njh::heatmapColors(maxSampleSize + 1);
 		njh::reverse(hColors);
 		moreColors.clear();
 		for(const auto & hColor : hColors){
 			moreColors.emplace_back(hColor.getHexStr());
 		}
-
 		out << "\t"
 				<< "graph [ bgcolor=black, resolution=128, fontname=Arial, fontcolor=white,  fontsize=12 ]; "
 				<< std::endl;
@@ -859,9 +860,7 @@ void ContigsCompareGraphDev::writeRectangleDotColorBySampleCount(std::ostream & 
 				<< std::endl;
 	}
 
-
 	auto maxCov = *std::max_element(avgBaseCoverages.begin(), avgBaseCoverages.end());
-
 
 	for(const auto & node : nodes_){
 		if(!node->on_){
@@ -879,25 +878,25 @@ void ContigsCompareGraphDev::writeRectangleDotColorBySampleCount(std::ostream & 
 		}
 		colorGroup = sampleNames.size();
 		std::string nodeColor = "";
-		nodeColor = moreColors.at(colorGroup);
 
-		double nheight = node->k_.length()/heightNormalizer;
+		nodeColor = moreColors.at(colorGroup);
+		double nheight = node->k_.length() / heightNormalizer;
 		double approxPerBaseCoverage = node->inReadNamesIdx_.size();
 		double nwidth = (approxPerBaseCoverage / maxCov) * 5;
+
 		out << "\t" << node->uid_ << "[fixedsize=true,shape=rect,width=" << nwidth
 				<< ",height=" << nheight << ",style=filled,fillcolor=\"" << nodeColor
-//				<< "\", label=\""
-//				<< (noLabels ?
-//						"" :
-//						njh::pasteAsStr("Len=", node->k_.size(), ";Cov=", roundDecPlaces(approxPerBaseCoverage, 2), ";", "sampleCount=", sampleNames.size(), ";"))
-						<< "\", label=\""
-						<< (noLabels ?
-								"" :
-								njh::pasteAsStr("Len=", node->k_.size(), ";\nCov=", roundDecPlaces(approxPerBaseCoverage, 2), ";\n", "sampleCount=", sampleNames.size(), ";"))
+				//				<< "\", label=\""
+				//				<< (noLabels ?
+				//						"" :
+				//						njh::pasteAsStr("Len=", node->k_.size(), ";Cov=", roundDecPlaces(approxPerBaseCoverage, 2), ";", "sampleCount=", sampleNames.size(), ";"))
+				<< "\", label=\""
+				<< (noLabels ?
+						"" :
+						njh::pasteAsStr("Len=", node->k_.size(), ";\nCov=", roundDecPlaces(approxPerBaseCoverage, 2), ";\n",
+														"sampleCount=", sampleNames.size(), ";"))
 				<< "\"]" << std::endl;
-		;
 	}
-
 	uint32_t maxTailCnt = 0;
 	for (const auto & node : nodes_){
 		if(!node->on_){
@@ -911,9 +910,7 @@ void ContigsCompareGraphDev::writeRectangleDotColorBySampleCount(std::ostream & 
 			}
 		}
 	}
-
 	scale<double> edgePenWidthScale(std::make_pair(0,maxTailCnt), std::make_pair(0,maxPenWidth));
-
 	for (const auto & node : nodes_){
 		if(!node->on_){
 			continue;

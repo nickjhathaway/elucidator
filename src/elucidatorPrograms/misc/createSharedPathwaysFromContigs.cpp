@@ -1670,7 +1670,6 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	if(setUp.pars_.debug_){
 		OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "initialGraph.dot"));
 		compGraph.writeRectangleDotColorBySampleCount(out);
-
 	}
 
 
@@ -1891,7 +1890,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 				OutputStream refLocsOut(njh::files::make_path(conservedRegionInfoDir, njh::pasteAsStr(nodes.first, "_ref_sharedLocs_genomic.bed")));
 				for(auto loc : processedNodes.nameToSubSegPositions_raw.at(refSeq.name_)){
 
-					std::cout << loc.toDelimStrWithExtra() << std::endl;
+					//std::cout << loc.toDelimStrWithExtra() << std::endl;
 
 					modSubSegmentToCorrectedRef(loc);
 
