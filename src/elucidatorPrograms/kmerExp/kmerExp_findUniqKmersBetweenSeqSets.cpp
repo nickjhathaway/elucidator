@@ -563,18 +563,7 @@ int kmerExpRunner::countingUniqKmersFromSetsInRegionsAlnsBestSet(const njh::prog
 	VecStr names = getVectorOfMapKeys(uniqueKmersPerSet);
 	njh::naturalSortNameSet(names);
 
-//	MultiSeqIO seqOut;
-//	if(setUp.pars_.debug_){
-//		for (const auto &name : names) {
-//			auto seqOutOpts = SeqIOOptions::genPairedOutGz(njh::pasteAsStr(basename(setUp.pars_.ioOptions_.firstName_), "-", name, "-paired"));
-//			seqOutOpts.out_.overWriteFile_ = true;
-//			seqOut.addReader(name + "-paired", seqOutOpts);
-//
-//			auto seqOutOpts = SeqIOOptions::genFastqOutGz(njh::pasteAsStr(basename(setUp.pars_.ioOptions_.firstName_), "-", name, "-single"));
-//			seqOutOpts.out_.overWriteFile_ = true;
-//			seqOut.addReader(name+ "-single", seqOutOpts);
-//		}
-//	}
+
 
 	out << "sample\ttotal\tset\treads\treadsFracTotal\treadsInForward\tforwardFrac" << std::endl;
 	std::mutex outMut;
@@ -583,9 +572,21 @@ int kmerExpRunner::countingUniqKmersFromSetsInRegionsAlnsBestSet(const njh::prog
 	std::function<void()> countBam = [&bamsQueue, &out, &outMut,
 					&uniqueKmersPerSet,
 					&regions,
-					&looseCounting, &extractingPars, &names]() {
+					&looseCounting, &extractingPars, &names, &setUp]() {
 		bfs::path bam;
 		while(bamsQueue.getVal(bam)){
+			MultiSeqIO seqOut;
+			if(setUp.pars_.debug_){
+				for (const auto &name : names) {
+//					auto paired_seqOutOpts = SeqIOOptions::genPairedOutGz(njh::pasteAsStr(basename(bam), "-", name, "-paired"));
+//					paired_seqOutOpts.out_.overWriteFile_ = true;
+//					seqOut.addReader(name + "-paired", paired_seqOutOpts);
+
+					auto single_seqOutOpts = SeqIOOptions::genFastqOutGz(njh::pasteAsStr(basename(bam), "-", name));
+					single_seqOutOpts.out_.overWriteFile_ = true;
+					seqOut.addReader(name, single_seqOutOpts);
+				}
+			}
 			BamTools::BamReader bamReader;
 			bamReader.Open(bam.string());
 			bamReader.LocateIndex();
@@ -616,6 +617,9 @@ int kmerExpRunner::countingUniqKmersFromSetsInRegionsAlnsBestSet(const njh::prog
 									}
 								}
 							}
+						}
+						if(setUp.pars_.debug_ && "undetermined" != compRes.winnerSet){
+							seqOut.openWrite(compRes.winnerSet, seq);
 						}
 						++matchingCounts[compRes.winnerRevComp][compRes.winnerSet];
 						++totalInput;
