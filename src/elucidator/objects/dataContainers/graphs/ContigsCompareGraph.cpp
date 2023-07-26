@@ -1559,7 +1559,7 @@ std::vector<seqInfo> ContigsCompareGraphDev::correctSeqsByGraph(const std::vecto
 			std::string subK = seq.seq_.substr(pos, pars.klen);
 			if(compGraph.kCounts_[subK] <= pars.correctionOccurenceCutOff){
 				if(subPositions.empty() || (subPositions.back().pos_ + subPositions.back().size_ + 1 - pars.klen != pos)){
-					subPositions.emplace_back(SubSeqment(pos, pars.klen));
+					subPositions.emplace_back(pos, pars.klen);
 				}else{
 					subPositions.back().size_ += 1;
 				}
@@ -1605,7 +1605,7 @@ std::vector<seqInfo> ContigsCompareGraphDev::correctSeqsByGraph(const std::vecto
 				std::unordered_map<std::string, uint32_t> tailPositions;
 				uint32_t replaceStart = subPosition.pos_;
 				uint32_t replaceLen = subPosition.size_;
-				if("" != head){
+				if(!head.empty()){
 					if(printInfo){
 						std::cout << __FILE__ << " " << __LINE__ << std::endl;
 					}
@@ -1617,7 +1617,7 @@ std::vector<seqInfo> ContigsCompareGraphDev::correctSeqsByGraph(const std::vecto
 						}
 					}
 				}
-				if("" != tail){
+				if(!tail.empty()){
 					if(printInfo){
 						std::cout << __FILE__ << " " << __LINE__ << std::endl;
 					}
@@ -1628,7 +1628,7 @@ std::vector<seqInfo> ContigsCompareGraphDev::correctSeqsByGraph(const std::vecto
 						}
 					}
 				}
-				if("" == head){
+				if(head.empty()){
 					if(printInfo){
 						std::cout << __FILE__ << " " << __LINE__ << std::endl;
 					}
@@ -1636,7 +1636,7 @@ std::vector<seqInfo> ContigsCompareGraphDev::correctSeqsByGraph(const std::vecto
 						headPositions[tailPosition.first] = 0;
 					}
 				}
-				if("" == tail){
+				if(tail.empty()){
 					if(printInfo){
 						std::cout << __FILE__ << " " << __LINE__ << std::endl;
 					}

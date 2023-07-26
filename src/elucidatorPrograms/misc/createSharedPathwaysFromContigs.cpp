@@ -1529,7 +1529,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	seqInfo refCorrectedInfo = refSeq;
 
 	if(graphCorrectingPars.correctionOccurenceCutOff > 0){
-		std::string prefix = "";
+		std::string prefix;
 		if(uniqueHapCountCutOff > 0){
 			prefix = "priorToFreqFilt_";
 		}
