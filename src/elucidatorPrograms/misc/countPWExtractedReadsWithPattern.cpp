@@ -28,12 +28,12 @@ int miscRunner::countPWExtractedReadsWithPattern(const njh::progutils::CmdArgs &
 	uint32_t minReadCounts = 2;
 	OutOptions outOpts;
 
-	VecStr filesToInvestigation = {"extracted.fastq"
-																 "extracted_R1.fastq"
-																 "extracted_R2.fastq"
-																 "filteredPairs_extracted_R1.fastq"
-																 "filteredPairs_extracted_R2.fastq"
-																 "filteredSingles_extracted.fastq"
+	VecStr filesToInvestigation = {"extracted.fastq",
+																 "extracted_R1.fastq",
+																 "extracted_R2.fastq",
+																 "filteredPairs_extracted_R1.fastq",
+																 "filteredPairs_extracted_R2.fastq",
+																 "filteredSingles_extracted.fastq",
 																 "thrownAwayMate_extracted.fastq"};
 
 	seqSetUp setUp(inputCommands);
