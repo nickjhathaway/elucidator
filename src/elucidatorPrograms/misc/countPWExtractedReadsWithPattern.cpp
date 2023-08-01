@@ -24,7 +24,7 @@ int miscRunner::countPWExtractedReadsWithPattern(const njh::progutils::CmdArgs &
 	std::set<std::string> samples;
 	std::string pat;
 	std::string seqPat;
-
+	uint32_t numThreads = 1;
 	uint32_t minReadCounts = 2;
 	OutOptions outOpts;
 
@@ -48,6 +48,7 @@ int miscRunner::countPWExtractedReadsWithPattern(const njh::progutils::CmdArgs &
 	setUp.setOption(samples, "--samples", "Process input from only these samples");
 	setUp.setOption(minReadCounts, "--minReadCounts", "min Read Counts to count a file");
 	setUp.setOption(filesToInvestigation, "--filesToInvestigation", "files To Investigation");
+	setUp.setOption(numThreads, "--numThreads", "number of threads");
 
 	setUp.processWritingOptions(outOpts);
 
@@ -78,40 +79,53 @@ int miscRunner::countPWExtractedReadsWithPattern(const njh::progutils::CmdArgs &
 	auto beds = getBeds(bedFnp);
 
 	OutputStream out(outOpts);
+	std::mutex outMut;
 	out << "sample\tregion\tfile\tcount" << std::endl;
 	std::regex seqPatReg{seqPat};
-	seqInfo seq;
 
-	for(const auto & dir : directories){
-		std::string sample = std::regex_replace(dir.string(), std::regex(pat), "");
-		for(const auto & bed : beds){
-			for(const auto & f : filesToInvestigation){
-				bfs::path inputFnp = njh::files::make_path(dir, bed->name_, sample + "_extraction", f);
-				if(setUp.pars_.debug_){
-					std::cout << "dir: " << dir << ", " << "region: " << bed->name_ << ", " << "f: " << f << std::endl;
-					std::cout << "\t" << inputFnp << std::endl;
-				}
-				if(bfs::exists(inputFnp)){
-					auto inputFnpOpts = SeqIOOptions::genFastqIn(inputFnp);
-					SeqInput reader(inputFnpOpts);
-					reader.openIn();
+	njh::concurrent::LockableVec<bfs::path> dirQueue(directories);
+	std::function<void()> countSample = [&dirQueue,&beds,&filesToInvestigation,&out,&outMut, &minReadCounts, &seqPatReg, &setUp, &pat](){
+		bfs::path dir;
+		while(dirQueue.getVal(dir)){
+			std::string sample = std::regex_replace(dir.filename().string(), std::regex(pat), "");
+			for(const auto & bed : beds){
+				for(const auto & f : filesToInvestigation){
+					bfs::path inputFnp = njh::files::make_path(dir, bed->name_, sample + "_extraction", f);
+					if(setUp.pars_.debug_){
+						std::cout << "dir: " << dir << ", " << "region: " << bed->name_ << ", " << "f: " << f << std::endl;
+						std::cout << "\t" << inputFnp << std::endl;
+					}
+					if(bfs::exists(inputFnp)){
+						seqInfo seq;
+						auto inputFnpOpts = SeqIOOptions::genFastqIn(inputFnp);
+						SeqInput reader(inputFnpOpts);
+						reader.openIn();
+						std::stringstream ss;
+						uint32_t readCounts = 0;
+						while(reader.readNextRead(seq)){
+							std::ptrdiff_t const match_count(std::distance(
+											std::sregex_iterator(seq.seq_.begin(), seq.seq_.end(), seqPatReg),
+											std::sregex_iterator()));
 
-					while(reader.readNextRead(seq)){
-						std::ptrdiff_t const match_count(std::distance(
-										std::sregex_iterator(seq.seq_.begin(), seq.seq_.end(), seqPatReg),
-										std::sregex_iterator()));
-
-						if(match_count >= minReadCounts){
-							out << sample
-							<< "\t" << bed->name_
-							<< "\t" << f
-							<< "\t" << match_count << std::endl;
+							if(match_count >= minReadCounts){
+								readCounts+= minReadCounts;
+								ss << sample
+										<< "\t" << bed->name_
+										<< "\t" << f
+										<< "\t" << match_count << std::endl;
+							}
+						}
+						if(readCounts > 0){
+							std::lock_guard<std::mutex> lock(outMut);
+							out << ss.str();
 						}
 					}
 				}
 			}
 		}
-	}
+	};
+
+	njh::concurrent::runVoidFunctionThreaded(countSample, numThreads);
 
 	return 0;
 
