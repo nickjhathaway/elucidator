@@ -87,15 +87,21 @@ int miscRunner::countPWExtractedReadsWithPattern(const njh::progutils::CmdArgs &
 		for(const auto & bed : beds){
 			for(const auto & f : filesToInvestigation){
 				bfs::path inputFnp = njh::files::make_path(dir, bed->name_, sample + "_extraction");
+				if(setUp.pars_.debug_){
+					std::cout << "dir: " << dir << ", " << "region: " << bed->name_ << ", " << "f: " << f << std::endl;
+					std::cout << "\t" << inputFnp << std::endl;
+				}
 				if(bfs::exists(inputFnp)){
 					auto inputFnpOpts = SeqIOOptions::genFastqIn(inputFnp);
 					SeqInput reader(inputFnpOpts);
 					reader.openIn();
+
 					while(reader.readNextRead(seq)){
 						std::ptrdiff_t const match_count(std::distance(
 										std::sregex_iterator(seq.seq_.begin(), seq.seq_.end(), seqPatReg),
 										std::sregex_iterator()));
-						if(match_count > minReadCounts){
+
+						if(match_count >= minReadCounts){
 							out << sample
 							<< "\t" << bed->name_
 							<< "\t" << f
