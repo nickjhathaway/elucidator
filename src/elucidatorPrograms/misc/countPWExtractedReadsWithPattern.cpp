@@ -25,6 +25,7 @@ int miscRunner::countPWExtractedReadsWithPattern(const njh::progutils::CmdArgs &
 	std::string pat;
 	std::string seqPat;
 	uint32_t numThreads = 1;
+	uint32_t minPatPerRead = 1;
 	uint32_t minReadCounts = 2;
 	OutOptions outOpts;
 
@@ -47,6 +48,7 @@ int miscRunner::countPWExtractedReadsWithPattern(const njh::progutils::CmdArgs &
 	setUp.setOption(inputDirectory, "--inputDirectory", "Input Directory to search");
 	setUp.setOption(samples, "--samples", "Process input from only these samples");
 	setUp.setOption(minReadCounts, "--minReadCounts", "min Read Counts to count a file");
+	setUp.setOption(minPatPerRead, "--minPatPerRead", "min count of patterns per Read Counts to count a read");
 	setUp.setOption(filesToInvestigation, "--filesToInvestigation", "files To Investigation");
 	setUp.setOption(numThreads, "--numThreads", "number of threads");
 
@@ -84,7 +86,8 @@ int miscRunner::countPWExtractedReadsWithPattern(const njh::progutils::CmdArgs &
 	std::regex seqPatReg{seqPat};
 
 	njh::concurrent::LockableVec<bfs::path> dirQueue(directories);
-	std::function<void()> countSample = [&dirQueue,&beds,&filesToInvestigation,&out,&outMut, &minReadCounts, &seqPatReg, &setUp, &pat](){
+	std::function<void()> countSample = [&dirQueue,&beds,&filesToInvestigation,&out,&outMut, &minReadCounts,
+																			 &seqPatReg, &setUp, &pat, &minPatPerRead](){
 		bfs::path dir;
 		while(dirQueue.getVal(dir)){
 			std::string sample = std::regex_replace(dir.filename().string(), std::regex(pat), "");
@@ -106,18 +109,16 @@ int miscRunner::countPWExtractedReadsWithPattern(const njh::progutils::CmdArgs &
 							std::ptrdiff_t const match_count(std::distance(
 											std::sregex_iterator(seq.seq_.begin(), seq.seq_.end(), seqPatReg),
 											std::sregex_iterator()));
-
-							if(match_count >= minReadCounts){
-								readCounts+= minReadCounts;
-								ss << sample
-										<< "\t" << bed->name_
-										<< "\t" << f
-										<< "\t" << match_count << std::endl;
+							if(match_count >= minPatPerRead){
+								++readCounts;
 							}
 						}
-						if(readCounts > 0){
+						if(readCounts >= minReadCounts){
 							std::lock_guard<std::mutex> lock(outMut);
-							out << ss.str();
+							out << sample
+										 << "\t" << bed->name_
+										 << "\t" << f
+										 << "\t" << readCounts << std::endl;
 						}
 					}
 				}
