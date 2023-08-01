@@ -84,6 +84,8 @@ miscRunner::miscRunner()
 										 addFunc("createSharedPathwaysFromContigs", createSharedPathwaysFromContigs, false),
 										 addFunc("createSharedPathwaysFromRefSeqs", createSharedPathwaysFromRefSeqs, false),
 										 addFunc("createSharedSubSegmentsFromRefSeqs", createSharedSubSegmentsFromRefSeqs, false),
+
+										 addFunc("countPWExtractedReadsWithPattern", countPWExtractedReadsWithPattern, false),
 										 },//
                     "misc") {}
 

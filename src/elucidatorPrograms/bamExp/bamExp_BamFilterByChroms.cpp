@@ -197,7 +197,7 @@ int bamExpRunner::BamFilterByChromsToBam(const njh::progutils::CmdArgs & inputCo
 							bWriter.SaveAlignment(*search);
 						}
 					}
-					// now that operations have been computed, remove ther other mate found from cache
+					// now that operations have been computed, remove the other mate found from cache
 					filterAlnCache.remove(search->Name);
 					continue;
 				}

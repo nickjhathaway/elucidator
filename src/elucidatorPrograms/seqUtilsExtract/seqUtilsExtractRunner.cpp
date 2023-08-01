@@ -55,7 +55,7 @@ seqUtilsExtractRunner::seqUtilsExtractRunner()
 //
 int seqUtilsExtractRunner::extractByName(const njh::progutils::CmdArgs & inputCommands){
 	seqSetUp setUp(inputCommands);
-	VecStr names;
+	std::unordered_set <std::string> names;
 	bool excluding = false;
 	setUp.setOption(excluding, "--excluding", "Excluding These Names Instead, default is extract by these names");
 	setUp.setOption(names, "--names", "Names to extract" , true);
