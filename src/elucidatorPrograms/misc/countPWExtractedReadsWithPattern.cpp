@@ -23,7 +23,7 @@ int miscRunner::countPWExtractedReadsWithPattern(const njh::progutils::CmdArgs &
 	bfs::path bedFnp = "";
 	std::set<std::string> samples;
 	std::string pat;
-	std::string seqPat;
+	std::set<std::string> seqPats;
 	uint32_t numThreads = 1;
 	uint32_t minPatPerRead = 1;
 	uint32_t minReadCounts = 2;
@@ -44,7 +44,7 @@ int miscRunner::countPWExtractedReadsWithPattern(const njh::progutils::CmdArgs &
 
 	setUp.setOption(bedFnp, "--bedFnp", "regions", true);
 	setUp.setOption(pat, "--pat", "file pattern", true);
-	setUp.setOption(seqPat, "--seqPat", "seqPat", true);
+	setUp.setOption(seqPats, "--seqPat", "sequence patterns to count", true);
 	setUp.setOption(inputDirectory, "--inputDirectory", "Input Directory to search");
 	setUp.setOption(samples, "--samples", "Process input from only these samples");
 	setUp.setOption(minReadCounts, "--minReadCounts", "min Read Counts to count a file");
@@ -82,12 +82,11 @@ int miscRunner::countPWExtractedReadsWithPattern(const njh::progutils::CmdArgs &
 
 	OutputStream out(outOpts);
 	std::mutex outMut;
-	out << "sample\tregion\tfile\tcount" << std::endl;
-	std::regex seqPatReg{seqPat};
-
+	out << "sample\tregion\tfile\tseqPat\tcount" << std::endl;
+	
 	njh::concurrent::LockableVec<bfs::path> dirQueue(directories);
 	std::function<void()> countSample = [&dirQueue,&beds,&filesToInvestigation,&out,&outMut, &minReadCounts,
-																			 &seqPatReg, &setUp, &pat, &minPatPerRead](){
+																			 &seqPats, &setUp, &pat, &minPatPerRead](){
 		bfs::path dir;
 		while(dirQueue.getVal(dir)){
 			std::string sample = std::regex_replace(dir.filename().string(), std::regex(pat), "");
@@ -99,26 +98,30 @@ int miscRunner::countPWExtractedReadsWithPattern(const njh::progutils::CmdArgs &
 						std::cout << "\t" << inputFnp << std::endl;
 					}
 					if(bfs::exists(inputFnp)){
-						seqInfo seq;
-						auto inputFnpOpts = SeqIOOptions::genFastqIn(inputFnp);
-						SeqInput reader(inputFnpOpts);
-						reader.openIn();
-						std::stringstream ss;
-						uint32_t readCounts = 0;
-						while(reader.readNextRead(seq)){
-							std::ptrdiff_t const match_count(std::distance(
-											std::sregex_iterator(seq.seq_.begin(), seq.seq_.end(), seqPatReg),
-											std::sregex_iterator()));
-							if(match_count >= minPatPerRead){
-								++readCounts;
+						for(const auto & seqPat : seqPats){
+							std::regex seqPatReg{seqPat};
+							seqInfo seq;
+							auto inputFnpOpts = SeqIOOptions::genFastqIn(inputFnp);
+							SeqInput reader(inputFnpOpts);
+							reader.openIn();
+							std::stringstream ss;
+							uint32_t readCounts = 0;
+							while(reader.readNextRead(seq)){
+								std::ptrdiff_t const match_count(std::distance(
+												std::sregex_iterator(seq.seq_.begin(), seq.seq_.end(), seqPatReg),
+												std::sregex_iterator()));
+								if(match_count >= minPatPerRead){
+									++readCounts;
+								}
 							}
-						}
-						if(readCounts >= minReadCounts){
-							std::lock_guard<std::mutex> lock(outMut);
-							out << sample
-										 << "\t" << bed->name_
-										 << "\t" << f
-										 << "\t" << readCounts << std::endl;
+							if(readCounts >= minReadCounts){
+								std::lock_guard<std::mutex> lock(outMut);
+								out << sample
+										<< "\t" << bed->name_
+										<< "\t" << f
+										<< "\t" << seqPat
+										<< "\t" << readCounts << std::endl;
+							}
 						}
 					}
 				}
