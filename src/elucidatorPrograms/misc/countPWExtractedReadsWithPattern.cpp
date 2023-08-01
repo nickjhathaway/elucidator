@@ -52,7 +52,7 @@ int miscRunner::countPWExtractedReadsWithPattern(const njh::progutils::CmdArgs &
 	setUp.processWritingOptions(outOpts);
 
 	setUp.finishSetUp(std::cout);
-	setUp.startARunLog(setUp.pars_.directoryName_);
+//	setUp.startARunLog(setUp.pars_.directoryName_);
 
 
 	std::vector<bfs::path> directories;
