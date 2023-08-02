@@ -29,7 +29,6 @@ namespace njhseq {
 
 int popGenExpRunner::callVariantsAgainstRefGenome(const njh::progutils::CmdArgs & inputCommands) {
 
-	bool noDiagAlnPairwiseComps = false;
 	CollapseAndCallVariantsPars pars;
 
 	seqSetUp setUp(inputCommands);
@@ -47,7 +46,7 @@ int popGenExpRunner::callVariantsAgainstRefGenome(const njh::progutils::CmdArgs 
 	pars.calcPopMeasuresPars.numThreads = pars.numThreads;
 	setUp.setOption(pars.calcPopMeasuresPars.getPairwiseComps, "--getPairwiseComps", "get Pairwise comparison metrics");
 	setUp.setOption(pars.noDiagAlnPairwiseComps, "--noDiagAlnPairwiseComps", "Use diagonal Alignment for Pairwise Comparisons");
-	pars.calcPopMeasuresPars.diagAlnPairwiseComps = !noDiagAlnPairwiseComps;
+	pars.calcPopMeasuresPars.diagAlnPairwiseComps = !pars.noDiagAlnPairwiseComps;
 
 	setUp.setOption(pars.variantCallerRunPars.occurrenceCutOff, "--occurrenceCutOff", "Occurrence Cut Off, don't report variants below this count");
 	setUp.setOption(pars.variantCallerRunPars.lowVariantCutOff, "--lowVariantCutOff", "Low Variant Cut Off, don't report variants below this fraction");

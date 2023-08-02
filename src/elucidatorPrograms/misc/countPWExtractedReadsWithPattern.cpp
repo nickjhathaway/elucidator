@@ -83,7 +83,7 @@ int miscRunner::countPWExtractedReadsWithPattern(const njh::progutils::CmdArgs &
 	OutputStream out(outOpts);
 	std::mutex outMut;
 	out << "sample\tregion\tfile\tseqPat\tcount" << std::endl;
-	
+
 	njh::concurrent::LockableVec<bfs::path> dirQueue(directories);
 	std::function<void()> countSample = [&dirQueue,&beds,&filesToInvestigation,&out,&outMut, &minReadCounts,
 																			 &seqPats, &setUp, &pat, &minPatPerRead](){
