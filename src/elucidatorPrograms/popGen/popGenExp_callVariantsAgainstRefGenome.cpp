@@ -61,6 +61,8 @@ int popGenExpRunner::callVariantsAgainstRefGenome(const njh::progutils::CmdArgs 
 	setUp.setOption(pars.outputDirectory, "--dout", "Output directory", true);
 	setUp.setOption(pars.overWriteDirectory, "--overWriteDir", "over write output Directory");
 
+	setUp.setOption(pars.variantCallerRunPars.realnPars.extendAmount, "--extendAmount", "extend amount");
+
 	setUp.finishSetUp(std::cout);
 
 	collapseAndCallVariants(pars);
