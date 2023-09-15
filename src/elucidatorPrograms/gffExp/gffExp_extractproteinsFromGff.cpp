@@ -15,6 +15,7 @@ int gffExpRunner::extractProteinsFromGff(const njh::progutils::CmdArgs & inputCo
 	bfs::path twoBitFnp = "";
 	uint32_t numThreads = 1;
 	bool forceUntranslatableProteins = false;
+	bool addDescriptionToName = false;
 	VecStr derivedFromRecordFeatures {"polypeptide"};
 	VecStr acceptableMrnaLikeRecords = {"mRNA", "CDS", "transcript"};
 	//VecStr acceptableMrnaLikeRecords = {"mRNA"};
@@ -35,6 +36,7 @@ int gffExpRunner::extractProteinsFromGff(const njh::progutils::CmdArgs & inputCo
 	setUp.setOption(infoKeyOutOpts.outFilename_, "--infoOutname", "name of output file to contain description info on proteins");
 	setUp.setOption(numThreads, "--numThreads", "number of threads to use");
 	setUp.setOption(allowableStarts, "--allowableStarts", "allowable Start codons");
+	setUp.setOption(addDescriptionToName, "--addDescriptionToName", "add Description To Name");
 
 	setUp.processWritingOptions(seqOutOpts.out_);
 	infoKeyOutOpts.transferOverwriteOpts(seqOutOpts.out_);
@@ -168,7 +170,7 @@ int gffExpRunner::extractProteinsFromGff(const njh::progutils::CmdArgs & inputCo
 	std::mutex outMut;
 
 	std::function<void()> extractProteinSeq = [&geneRecordName,&outMut,
-														&gffRecs, &out, &extratedGeneIds, &forceUntranslatableProteins, &twoBitFnp, &acceptableMrnaLikeRecords, &infoOut, &allowableStarts](){
+														&gffRecs, &out, &extratedGeneIds, &forceUntranslatableProteins, &twoBitFnp, &acceptableMrnaLikeRecords, &infoOut, &allowableStarts, &addDescriptionToName](){
 		TwoBit::TwoBitFile tReader(twoBitFnp);
 
 		std::string geneID;
@@ -203,6 +205,10 @@ int gffExpRunner::extractProteinsFromGff(const njh::progutils::CmdArgs & inputCo
 					//check for proteins with premature stop codons
 					if (forceUntranslatableProteins || (startsWithStartCodon && endsWithStop && std::string::npos == modProtein.seq_.find('*'))) {
 						modProtein.name_ = genGeneInfo.first; //rename to transcript name
+						if(addDescriptionToName){
+							modProtein.name_.append(" ");
+							modProtein.name_.append(geneInfo->getOneGeneDetailedName());
+						}
 						std::lock_guard<std::mutex> lock(outMut);
 						out.write(modProtein);
 						extratedGeneIds.emplace(geneID);
