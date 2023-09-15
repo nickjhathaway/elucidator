@@ -71,6 +71,7 @@ gffExpRunner::gffExpRunner()
 					 addFunc("gffRenameChroms", gffRenameChroms, false),
 					 addFunc("gffToBedByID", gffToBedByID, false),
 					 addFunc("combineGffs", combineGffs, false),
+					 addFunc("extractProteinsFromGff", extractProteinsFromGff, false),
            },//
           "gffExp") {}
 class AminoAcidPositionInfo {

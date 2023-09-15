@@ -28,7 +28,7 @@
 #include "elucidatorPrograms/fileFormatExp.hpp"
 #include "elucidatorPrograms/genExp/genExp.hpp"
 #include "elucidatorPrograms/geneExp.hpp"
-#include "elucidatorPrograms/gffExp.hpp"
+#include "elucidatorPrograms/gffExp/gffExp.hpp"
 #include "elucidatorPrograms/graphicsUtils.h"
 #include "elucidatorPrograms/kmerExp/kmerExp.hpp"
 #include "elucidatorPrograms/jsonExp.hpp"

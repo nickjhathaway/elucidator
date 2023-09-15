@@ -9,7 +9,7 @@
 
 
 
-#include "gffExp.hpp"
+#include "elucidatorPrograms/gffExp/gffExp.hpp"
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/seqToolsUtils/seqToolsUtils.hpp"
 

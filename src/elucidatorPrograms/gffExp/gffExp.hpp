@@ -85,6 +85,7 @@ class gffExpRunner : public njh::progutils::ProgramRunner {
 
 	static int revCompGff(const njh::progutils::CmdArgs & inputCommands);
 
+	static int extractProteinsFromGff(const njh::progutils::CmdArgs & inputCommands);
 
 
 
