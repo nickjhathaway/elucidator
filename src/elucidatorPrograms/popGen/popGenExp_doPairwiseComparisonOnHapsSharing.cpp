@@ -23,12 +23,17 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	bfs::path metaFnp;
 	VecStr metaFieldsToCalcPopDiffs{};
 	HapsEncodedMatrix::SetWithExternalPars pars;
+	bool onlyPloidy2 = false;
+	bool writeOutTarsAbsoluteShared = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.setOption(writeOutDistMatrices, "--writeOutDistMatrices", "write Out Dist Matrices");
 	setUp.setOption(metaFnp, "--metaFnp", "Table of meta data for samples, needs a column named sample and each additonal column will be the meta data associated with that sample");
 	setUp.setOption(metaFieldsToCalcPopDiffs, "--metaFieldsToCalcPopDiffs", "Meta Fields To Calc Pop Diffs");
+	setUp.setOption(onlyPloidy2, "--onlyPloidy2", "only calculate Ploidy 2 probability");
+	setUp.setOption(writeOutTarsAbsoluteShared, "--writeOutTarsAbsoluteShared", "write Out Tars Absolute Shared");
+
   pars.setDefaults(setUp);
 
   setUp.processDirectoryOutputName(bfs::path(bfs::basename(pars.tableFnp)).string() + "_doPairwiseComparisonOnHapsSharing_TODAY", true);
@@ -40,7 +45,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	setUp.timer_.setLapName("initial");
 	setUp.timer_.startNewLap("encode haplotypes");
   HapsEncodedMatrix haps(pars);
-  if ("" != metaFnp) {
+  if (!metaFnp.empty()) {
     haps.addMeta(metaFnp);
     if (!metaFieldsToCalcPopDiffs.empty()) {
       haps.meta_->checkForFieldsThrow(metaFieldsToCalcPopDiffs);
@@ -96,6 +101,11 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		}
 	}
 
+	if(writeOutTarsAbsoluteShared){
+		OutOptions hapsAbsoluteSharedBetweenSampsBetweenTargetsOutopts(njh::files::make_path(setUp.pars_.directoryName_, "hapsAbsoluteSharedBetweenSampsBetweenTargetsOut.tab.txt.gz"));
+		haps.writeAbsoluteHapSharedPerSamplePerTar(hapsAbsoluteSharedBetweenSampsBetweenTargetsOutopts, setUp.pars_.verbose_);
+	}
+
 	{
 		setUp.timer_.startNewLap("get population pairwise measures");
 		std::vector<uint32_t> tarKeys(haps.tarNamesVec_.size());
@@ -104,10 +114,11 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		OutputStream diversityMeasuresOut(njh::files::make_path(setUp.pars_.directoryName_, "diversityMeasuresPerTarget.tab.txt"));
 		diversityMeasuresOut << "loci\tsampCount\ttotalHaps\tuniqueHaps\tSimpsonI\the\tExpP3\tExpP4\tExpP5\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE" << '\n';
 		std::mutex divOutMut;
-		std::function<void()> getTargetInfo = [&tarQueue,&haps,&diversityMeasuresOut,&divOutMut](){
-
+		std::function<void()> getTargetInfo = [&tarQueue,&haps,&diversityMeasuresOut,&divOutMut, &onlyPloidy2](){
 			uint32_t tarKey = std::numeric_limits<uint32_t>::max();
 			while(tarQueue.getVal(tarKey)){
+
+
 				std::vector<PopGenCalculator::PopHapInfo> hapsForTarget;
 				for(const auto tarpos : iter::range(haps.numberOfHapsPerTarget_[tarKey])){
 					hapsForTarget.emplace_back(PopGenCalculator::PopHapInfo(tarpos, 0));
@@ -123,7 +134,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 						}
 					}
 				}
-				auto diversityForTar = PopGenCalculator::getGeneralMeasuresOfDiversity(hapsForTarget);
+				auto diversityForTar = PopGenCalculator::getGeneralMeasuresOfDiversity(hapsForTarget, onlyPloidy2);
 				auto totalHaps = PopGenCalculator::PopHapInfo::getTotalPopCount(hapsForTarget);
 				{
 					std::lock_guard<std::mutex> lock(divOutMut);
@@ -133,9 +144,9 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 															<< "\t" << diversityForTar.alleleNumber_
 															<< "\t" << diversityForTar.simpsonIndex_
 															<< "\t" << diversityForTar.heterozygostiy_
-															<< "\t" << diversityForTar.ploidy3_.expectedCOIForPloidy_.at(3)
-															<< "\t" << diversityForTar.ploidy4_.expectedCOIForPloidy_.at(4)
-															<< "\t" << diversityForTar.ploidy5_.expectedCOIForPloidy_.at(5)
+															<< "\t" << (std::numeric_limits<long double>::max() == diversityForTar.ploidy3_.expectedCOIForPloidy_.at(3) ? "NA": estd::to_string(diversityForTar.ploidy3_.expectedCOIForPloidy_.at(3)))
+															<< "\t" << (std::numeric_limits<long double>::max() == diversityForTar.ploidy4_.expectedCOIForPloidy_.at(4) ? "NA": estd::to_string(diversityForTar.ploidy4_.expectedCOIForPloidy_.at(4)))
+															<< "\t" << (std::numeric_limits<long double>::max() == diversityForTar.ploidy5_.expectedCOIForPloidy_.at(5) ? "NA": estd::to_string(diversityForTar.ploidy5_.expectedCOIForPloidy_.at(5)))
 															<< "\t" << diversityForTar.singlets_
 															<< "\t" << diversityForTar.doublets_
 															<< "\t" << diversityForTar.effectiveNumOfAlleles_
@@ -143,8 +154,9 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 															<< '\n';
 				}
 			}
-		};
 
+
+		};
 		njh::concurrent::runVoidFunctionThreaded(getTargetInfo, pars.numThreads);
 	}
 
@@ -153,7 +165,9 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	if(!metaFieldsToCalcPopDiffs.empty()){
 		setUp.timer_.startNewLap("get population pairwise measures");
 
+
 		auto popMeasuresDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{"popDiffMeasures"});
+
 
 
 		std::vector<uint32_t> tarKeys(haps.tarNamesVec_.size());
@@ -227,7 +241,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 				sampleToMeta.emplace_back(haps.meta_->groupData_[field]->getGroupForSample(haps.sampNamesVec_[sampPos]));
 				subFields.emplace(sampleToMeta.back());
 			}
-			std::function<void()> getPopDiffMeasures = [&tarQueue,&haps, &diversityMeasuresOut,&diffMeasuresOut,&pairwiseDiffMeasuresOut,&divOutMut,&sampleToMeta,&subFields,&field](){
+			std::function<void()> getPopDiffMeasures = [&tarQueue,&haps, &diversityMeasuresOut,&diffMeasuresOut,&pairwiseDiffMeasuresOut,&divOutMut,&sampleToMeta,&subFields,&field, &onlyPloidy2](){
 
 				uint32_t tarKey = std::numeric_limits<uint32_t>::max();
 				while(tarQueue.getVal(tarKey)){
@@ -269,7 +283,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 					}
 					std::unordered_map<std::string, PopGenCalculator::DiversityMeasures> divMeausresPerPop;
 					for(const auto & hapsForPop : hapsForTargetPerPopulation){
-						divMeausresPerPop[hapsForPop.first] = PopGenCalculator::getGeneralMeasuresOfDiversity(hapsForPop.second);
+						divMeausresPerPop[hapsForPop.first] = PopGenCalculator::getGeneralMeasuresOfDiversity(hapsForPop.second, onlyPloidy2);
 					}
 					{
 						std::lock_guard<std::mutex> lock(divOutMut);
@@ -289,9 +303,9 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 																	<< "\t" << popDiv.second.alleleNumber_
 																	<< "\t" << popDiv.second.simpsonIndex_
 																	<< "\t" << popDiv.second.heterozygostiy_
-																	<< "\t" << popDiv.second.ploidy3_.expectedCOIForPloidy_.at(3)
-																	<< "\t" << popDiv.second.ploidy4_.expectedCOIForPloidy_.at(4)
-																	<< "\t" << popDiv.second.ploidy5_.expectedCOIForPloidy_.at(5)
+																	<< "\t" << (std::numeric_limits<long double>::max() == popDiv.second.ploidy3_.expectedCOIForPloidy_.at(3) ? "NA": estd::to_string(popDiv.second.ploidy3_.expectedCOIForPloidy_.at(3)))
+																	<< "\t" << (std::numeric_limits<long double>::max() == popDiv.second.ploidy4_.expectedCOIForPloidy_.at(4) ? "NA": estd::to_string(popDiv.second.ploidy4_.expectedCOIForPloidy_.at(4)))
+																	<< "\t" << (std::numeric_limits<long double>::max() == popDiv.second.ploidy5_.expectedCOIForPloidy_.at(5) ? "NA": estd::to_string(popDiv.second.ploidy5_.expectedCOIForPloidy_.at(5)))
 																	<< "\t" << popDiv.second.singlets_
 																	<< "\t" << popDiv.second.doublets_
 																	<< "\t" << popDiv.second.effectiveNumOfAlleles_
@@ -371,9 +385,13 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 				}
 			};
 
+
 			njh::concurrent::runVoidFunctionThreaded(getPopDiffMeasures, pars.numThreads);
+
+
 		}
 	}
+
 
 
 
