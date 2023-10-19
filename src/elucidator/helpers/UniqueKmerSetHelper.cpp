@@ -2,6 +2,7 @@
 // Created by Nicholas Hathaway on 5/25/23.
 //
 
+#include <njhseq/readVectorManipulation/readVectorHelpers/readVecChecker.hpp>
 #include "UniqueKmerSetHelper.hpp"
 
 
@@ -365,6 +366,8 @@ UniqueKmerSetHelper::readInUniqueKmerTableSetsCollapsed(const bfs::path &uniqueK
 void
 UniqueKmerSetHelper::ProcessReadForExtractingCounts::addOtherCounts(const ProcessReadForExtractingCounts &otherCounts) {
 	smallLenCutOffCount += otherCounts.smallLenCutOffCount;
+	poorQualityCount += otherCounts.poorQualityCount;
+	containsNs += otherCounts.containsNs;
 	filteredDissimilarCount += otherCounts.filteredDissimilarCount;
 	for (const auto &readsPerSetCount: otherCounts.readCountsPerSet.at(false)) {
 		readCountsPerSet[false][readsPerSetCount.first] += readsPerSetCount.second;
@@ -428,6 +431,30 @@ VecStr UniqueKmerSetHelper::ProcessReadForExtractingCounts::genOutCountsHeader(
 							, smallLenCutOffCount
 							, 0
 			));
+
+			content.emplace_back(toVecStr( iterName
+							, extractingPars.compPars.sampleName
+							, totalReads
+							, "poorQualityCount"
+							, poorQualityCount
+							, static_cast<double>(poorQualityCount) / static_cast<double>(totalReads)
+							, poorQualityCount
+							, 0
+			));
+
+			content.emplace_back(toVecStr( iterName
+							, extractingPars.compPars.sampleName
+							, totalReads
+							, "containsNs"
+							, containsNs
+							, static_cast<double>(containsNs) / static_cast<double>(totalReads)
+							, containsNs
+							, 0
+			));
+
+
+
+
 		}
 	} else {
 		auto setNames = njh::getVecOfMapKeys(uniqueKmersPerSet);
@@ -458,6 +485,22 @@ VecStr UniqueKmerSetHelper::ProcessReadForExtractingCounts::genOutCountsHeader(
 							, smallLenCutOffCount
 							, static_cast<double>(smallLenCutOffCount) / static_cast<double>(totalReads)
 			));
+
+			content.emplace_back(toVecStr( iterName
+							, extractingPars.compPars.sampleName
+							, totalReads
+							, "poorQualityCount"
+							, poorQualityCount
+							, static_cast<double>(poorQualityCount) / static_cast<double>(totalReads)
+			));
+
+			content.emplace_back(toVecStr( iterName
+							, extractingPars.compPars.sampleName
+							, totalReads
+							, "containsNs"
+							, containsNs
+							, static_cast<double>(containsNs) / static_cast<double>(totalReads)
+			));
 		}
 	}
 	return content;
@@ -487,7 +530,7 @@ void UniqueKmerSetHelper::ProcessReadForExtractingCounts::writeOutCountsHeader(s
 
 
 uint64_t UniqueKmerSetHelper::ProcessReadForExtractingCounts::getTotalCounts() const {
-	uint64_t totalReads = smallLenCutOffCount + genTotalUndeterminedCount() + genTotalDeterminedCount();
+	uint64_t totalReads = poorQualityCount + containsNs + smallLenCutOffCount + genTotalUndeterminedCount() + genTotalDeterminedCount();
 	return totalReads;
 }
 
@@ -532,10 +575,23 @@ void UniqueKmerSetHelper::processReadForExtractingPairsSeparate(PairedRead &pseq
 																																const SimpleKmerHash &hasher,
 																																MultiSeqIO &seqOut, ProcessReadForExtractingCounts &counts,
 																																const std::string & iterationName) {
+
 	if(len(pseq.seqBase_.seq_) < extractingPars.smallLenCutOff && len(pseq.mateSeqBase_.seq_) < extractingPars.smallLenCutOff){
 		++counts.smallLenCutOffCount;
 		return;
 	}
+	ReadCheckerQualCheck checker(extractingPars.qPars.qualCheck_, extractingPars.qPars.qualCheckCutOff_, false);
+
+	if(extractingPars.qPars.checkingQFrac_ && !checker.checkRead(pseq)){
+		++counts.poorQualityCount;
+		return;
+	}
+
+	if(extractingPars.filterOnNs && (std::string::npos != pseq.seqBase_.seq_.find('N') || std::string::npos != pseq.mateSeqBase_.seq_.find('N')) ){
+		++counts.containsNs;
+		return;
+	}
+
 	MetaDataInName meta;
 	if(extractingPars.markReadsPerIteration){
 		if(MetaDataInName::nameHasMetaData(pseq.seqBase_.name_)){
@@ -561,8 +617,13 @@ void UniqueKmerSetHelper::processReadForExtractingPairsSeparate(PairedRead &pseq
 			}
 		}
 	} else {
+
 		if (len(pseq.seqBase_.seq_) < extractingPars.smallLenCutOff) {
 			++counts.smallLenCutOffCount;
+		} else if (extractingPars.qPars.checkingQFrac_ && !checker.checkRead(pseq.seqBase_)) {
+			++counts.poorQualityCount;
+		} else if (extractingPars.filterOnNs && (std::string::npos != pseq.seqBase_.seq_.find('N'))) {
+			++counts.containsNs;
 		} else {
 			pseq.seqBase_.name_.append("_firstMate");
 			++counts.readCountsPerSet[compResFirstMate.winnerRevComp][compResFirstMate.winnerSet];
@@ -576,6 +637,10 @@ void UniqueKmerSetHelper::processReadForExtractingPairsSeparate(PairedRead &pseq
 
 		if (len(pseq.mateSeqBase_.seq_) < extractingPars.smallLenCutOff) {
 			++counts.smallLenCutOffCount;
+		} else if (extractingPars.qPars.checkingQFrac_ && !checker.checkRead(pseq.mateSeqBase_)) {
+			++counts.poorQualityCount;
+		} else if (extractingPars.filterOnNs && (std::string::npos != pseq.mateSeqBase_.seq_.find('N'))) {
+			++counts.containsNs;
 		} else {
 			pseq.mateSeqBase_.name_.append("_secondMate");
 			++counts.readCountsPerSet[compResSecondMate.winnerRevComp][compResSecondMate.winnerSet];
@@ -724,6 +789,20 @@ void UniqueKmerSetHelper::processReadForExtractingPairsTogether(PairedRead &pseq
 		++counts.smallLenCutOffCount;
 		return;
 	}
+
+	ReadCheckerQualCheck checker(extractingPars.qPars.qualCheck_, extractingPars.qPars.qualCheckCutOff_, false);
+
+	if(extractingPars.qPars.checkingQFrac_ && !checker.checkRead(pseq)){
+		++counts.poorQualityCount;
+		return;
+	}
+
+	if(extractingPars.filterOnNs && (std::string::npos != pseq.seqBase_.seq_.find('N') || std::string::npos != pseq.mateSeqBase_.seq_.find('N')) ){
+		++counts.containsNs;
+		return;
+	}
+
+
 	MetaDataInName meta;
 	if(extractingPars.markReadsPerIteration){
 		if(MetaDataInName::nameHasMetaData(pseq.seqBase_.name_)){
@@ -752,6 +831,18 @@ void UniqueKmerSetHelper::processReadForExtracting(seqInfo &seq,
 		++counts.smallLenCutOffCount;
 		return;
 	}
+	ReadCheckerQualCheck checker(extractingPars.qPars.qualCheck_, extractingPars.qPars.qualCheckCutOff_, false);
+
+	if(extractingPars.qPars.checkingQFrac_ && !checker.checkRead(seq)){
+		++counts.poorQualityCount;
+		return;
+	}
+
+	if(extractingPars.filterOnNs && (std::string::npos != seq.seq_.find('N')) ){
+		++counts.containsNs;
+		return;
+	}
+
 	MetaDataInName meta;
 	if(extractingPars.markReadsPerIteration){
 		if(MetaDataInName::nameHasMetaData(seq.name_)){

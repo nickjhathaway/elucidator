@@ -211,6 +211,13 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 	setUp.setOption(extractingPars.compPars.hardCountOff, "--hardCountOff", "hard Count Off, do not count sets unless greater thant his number");
 	extractingPars.smallLenCutOff = extractingPars.compPars.hardCountOff + extractingPars.compPars.klen + 11;
 	setUp.setOption(extractingPars.smallLenCutOff, "--smallLenCutOff", "small Len Cut Off of input sequences, if less than this size will skip over");
+	setUp.setOption(extractingPars.qPars.qualCheck_, "--qualCheck", "quality score for filtering");
+	extractingPars.qPars.qualCheckCutOff_ = 0.50;
+	setUp.setOption(extractingPars.qPars.qualCheckCutOff_, "--qualCheckCutOff", "the fraction of bases that have to be above the qualCheck check");
+	setUp.setOption(extractingPars.qPars.checkingQFrac_, "--checkingQFrac", "filtering on quality");
+	setUp.setOption(extractingPars.filterOnNs, "--filterOnNs", "filter reads containing Ns");
+
+
 
 	setUp.setOption(extractingPars.markReadsPerIteration, "--markReadsPerIteration", "mark Reads Per Iteration");
 	setUp.setOption(extractingPars.writeOutFinalKmerSets, "--writeOutFinalKmerSets", "write Out Final Kmer Sets");
@@ -436,6 +443,12 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 							<< "%)" << std::endl;
 		std::cout << "Total Initial Less Than Small Len Cut Off Count: " << initialCounts.smallLenCutOffCount << " ("
 							<< initialCounts.smallLenCutOffCount * 100 / static_cast<double>(initialCounts.getTotalCounts()) << "%)"
+							<< std::endl;
+		std::cout << "Total Initial Contains Ns Count: " << initialCounts.containsNs << " ("
+							<< initialCounts.containsNs * 100 / static_cast<double>(initialCounts.getTotalCounts()) << "%)"
+							<< std::endl;
+		std::cout << "Total Initial Poor Quality Count: " << initialCounts.poorQualityCount << " ("
+							<< initialCounts.poorQualityCount * 100 / static_cast<double>(initialCounts.getTotalCounts()) << "%)"
 							<< std::endl;
 		std::cout << watch.getLapName() << "\t" << watch.timeLapFormatted() << std::endl;
 	}
@@ -770,6 +783,10 @@ int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdA
 			std::cout << "\tTotal Undetermined Reads: " << currentTotalUndeterminedReads << " (" << currentTotalUndeterminedReads * 100 /static_cast<double>(currentTotalReads)<< "%)" << std::endl;
 			std::cout << "\tTotal Determined Reads: " << currentTotalDeterminedReads << " (" << currentTotalDeterminedReads * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
 			std::cout << "\tTotal Less Than Small Len Cut Off Count: " << initialCounts.smallLenCutOffCount << " (" << initialCounts.smallLenCutOffCount * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
+			std::cout << "\tTotal Contains Ns Count: " << initialCounts.containsNs << " (" << initialCounts.containsNs * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
+			std::cout << "\tTotal Poor Quality Count: " << initialCounts.poorQualityCount << " (" << initialCounts.poorQualityCount * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
+
+
 			std::cout << "\tDissimilar Filter: " << initialCounts.filteredDissimilarCount << " (" << initialCounts.filteredDissimilarCount * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
 			std::cout << std::endl;
 		}

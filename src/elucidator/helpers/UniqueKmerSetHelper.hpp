@@ -104,6 +104,10 @@ public:
 
 	struct ProcessReadForExtractingPars {
 		CompareReadToSetPars compPars;
+
+		bool filterOnNs = false;
+		QualFilteringPars qPars;
+
 		uint32_t smallLenCutOff = 0;
 		bool writeOutExclude = false;
 		bool doNotWriteUndetermined = false;
@@ -123,6 +127,8 @@ public:
 		}
 		std::unordered_map<bool, std::unordered_map<std::string, uint32_t>> readCountsPerSet;
 		uint32_t smallLenCutOffCount = 0;
+		uint32_t poorQualityCount = 0;
+		uint32_t containsNs = 0;
 
 		uint32_t filteredDissimilarCount = 0;//not to be included final counts
 
