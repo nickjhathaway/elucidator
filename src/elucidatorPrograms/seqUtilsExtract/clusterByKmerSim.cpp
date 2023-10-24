@@ -131,6 +131,7 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 					};
 	watch.startNewLap("Distance");
 
+
 	auto dist = getDistance(reads, numThreads, disFun);
 	readDistGraph<double> distGraph(dist, reads);
 

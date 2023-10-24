@@ -576,7 +576,7 @@ int metaExpRunner::excludeSeqsFileWithNumericMetaCutOff(const njh::progutils::Cm
 	setUp.processDebug();
 	setUp.processVerbose();
 	setUp.pars_.ioOptions_.out_.outFilename_ = "out";
-	setUp.processDefaultReader(VecStr { "-fastq", "-fasta", "--fastq1" }, true);
+	setUp.processDefaultReader(VecStr { "-fastq", "-fasta", "-fastqgz", "-fastagz", "--fastq1", "--fastq1gz" }, true);
 	setUp.setOption(metaField, "--metaField",
 			"Meta Field compare", true);
 	setUp.setOption(metaValue, "--metaValue",
