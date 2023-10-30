@@ -1796,7 +1796,7 @@ int gffExpRunner::bedGetIntersectingGenesInGff(const njh::progutils::CmdArgs & i
 	intersectBedLocsWtihGffRecordsPars pars;
 	OutOptions outOpts("out", ".bed");
 	bfs::path bedFnp = "";
-	pars.selectFeatures_ = VecStr{"gene"};
+//	pars.selectFeatures_ = VecStr{"gene"};
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(pars.extraAttributes_, "--extraAttributes", "Extra Attributes to output");
 	setUp.setOption(pars.selectFeatures_, "--selectFeatures", "Gff Features to consider");
@@ -1806,7 +1806,6 @@ int gffExpRunner::bedGetIntersectingGenesInGff(const njh::progutils::CmdArgs & i
 	setUp.finishSetUp(std::cout);
 	auto beds = getBed3s(bedFnp);
 	njh::files::checkExistenceThrow(pars.gffFnp_, __PRETTY_FUNCTION__);
-
 	OutputStream out(outOpts);
 	OutOptions outOptsJson(outOpts.outFilename_);
 	outOptsJson.outExtention_ = ".json";

@@ -36,6 +36,7 @@ class jsonExpRunner : public njh::progutils::ProgramRunner {
 	jsonExpRunner();
 	static int jsonPrintFieldInArray(const njh::progutils::CmdArgs & inputCommands);
 	static int jsonExtractInArrayMatchingField(const njh::progutils::CmdArgs & inputCommands);
+  static int jsonPrintFirstLevelNames(const njh::progutils::CmdArgs & inputCommands);
 
 };
 } /* namespace njhseq */

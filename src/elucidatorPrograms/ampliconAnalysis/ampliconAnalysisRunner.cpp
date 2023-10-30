@@ -38,6 +38,8 @@ ampliconAnalysisRunner::ampliconAnalysisRunner()
                      addFunc("greedyCluster", greedyCluster, false),
 										 addFunc("singleLinkageClusteringOnPerId", singleLinkageClusteringOnPerId, false),
 										 addFunc("processRawExtractByKmerPathWeaverResults", processRawExtractByKmerPathWeaverResults, false),
+                     addFunc("extractedTarAmpInfoFileToJson", extractedTarAmpInfoFileToJson, false),
+                     addFunc("finalClustersFileToJson", finalClustersFileToJson, false),
 										 },
                     "ampliconAnalysis") {}
 
