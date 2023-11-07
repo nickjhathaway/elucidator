@@ -27,8 +27,11 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	uint32_t extendSubRegions = 0;
 	std::string defaultParameters = "--nonull2 --incT 50 --incdomT 50 -T 50 --notextw";
 	bfs::path hmmModel;
+
+  double fullDomainTrimHmmCoverageCutOff = 0.90;
+
 	nhmmscanOutput::PostProcessHitsPars postProcessPars;
-	postProcessPars.accCutOff = 0.80;
+  postProcessPars.accCutOff = 0.80;
 	postProcessPars.scoreCutOff = 200;
 	postProcessPars.evalueCutOff = 1e-100;
 	postProcessPars.scoreNormCutOff = 0.50;
@@ -37,6 +40,8 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.processDefaultReader(VecStr{"fasta", "fastagz", "fastq", "fastqgz"}, true);
+  setUp.setOption(fullDomainTrimHmmCoverageCutOff, "--fullDomainTrimHmmCoverageCutOff", "full Domain Trim Hmm Coverage Cut Off for when trimming from first to last determined region");
+
 	setUp.setOption(defaultParameters, "--defaultParameters", "The default parameters given to hmmsearch");
 	setUp.setOption(extendSubRegions, "--extendSubRegions", "Extend the sub regions by this much in both directions");
 
@@ -73,7 +78,11 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	//convert to fasta and non-gz hmm model
 
 	auto inputSeqFnp = njh::files::make_path(setUp.pars_.directoryName_, "inputSeqs.fasta");
-	auto noOverlapFiltFnp = njh::files::make_path(setUp.pars_.directoryName_, "noOverlapFiltHits.fasta");
+
+  auto noOverlapFiltAllModelsTrimFnp = njh::files::make_path(setUp.pars_.directoryName_, "noOverlapFiltAllModelsTrim.fasta");
+  auto noOverlapFiltFnp = njh::files::make_path(setUp.pars_.directoryName_, "noOverlapFiltHits.fasta");
+
+  auto noOverlapMergedFiltAllModelsTrimFnp = njh::files::make_path(setUp.pars_.directoryName_, "noOverlapMergedFiltAllModelsTrim.fasta");
 	auto noOverlapMergedFiltFnp = njh::files::make_path(setUp.pars_.directoryName_, "noOverlapMergedFiltHits.fasta");
 	auto hmmModelFnp = njh::files::make_path(setUp.pars_.directoryName_, "hmmModel.txt");
 
@@ -192,17 +201,36 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 		VecStr seqsWithNoDomains;
 		seqInfo seq;
 		SeqInput reader(setUp.pars_.ioOptions_);
+
 		SeqOutput noOverlapFiltWriter(SeqIOOptions::genFastaOut(noOverlapFiltFnp));
-		SeqOutput noOverlapMergedFiltWriter(SeqIOOptions::genFastaOut(noOverlapMergedFiltFnp));
+    SeqOutput noOverlapFiltAllModelsTrimWriter(SeqIOOptions::genFastaOut(noOverlapFiltAllModelsTrimFnp));
+
+    SeqOutput noOverlapMergedFiltWriter(SeqIOOptions::genFastaOut(noOverlapMergedFiltFnp));
+    SeqOutput noOverlapMergedFiltAllModelsTrimWriter(SeqIOOptions::genFastaOut(noOverlapMergedFiltAllModelsTrimFnp));
+
 
 		reader.openIn();
 		noOverlapFiltWriter.openOut();
 		noOverlapMergedFiltWriter.openOut();
+    noOverlapFiltAllModelsTrimWriter.openOut();
+    noOverlapMergedFiltAllModelsTrimWriter.openOut();
 
 		while(reader.readNextRead(seq)){
+
 			if(njh::in(seq.name_, postProcessResults.filteredHitsMergedNonOverlapByQuery_)){
+        std::vector<Bed6RecordCore> allRegions;
+
 				for(const auto & hitGroup : postProcessResults.filteredHitsMergedNonOverlapByQuery_[seq.name_]){
-					Bed6RecordCore region = hitGroup.region_.genBedRecordCore();
+
+
+          Bed6RecordCore region = hitGroup.region_.genBedRecordCore();
+          for(const auto & hit : hitGroup.hits_){
+            if(hit.modelCoverage() >= fullDomainTrimHmmCoverageCutOff){
+              allRegions.emplace_back(region);
+              allRegions.back().name_ = hit.targetName_;
+              break;
+            }
+          }
 					auto subSeq = seq.getSubRead(region.chromStart_, region.length());
 					if(region.reverseStrand()){
 						subSeq.reverseComplementRead(false, true);
@@ -216,10 +244,47 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 					meta.resetMetaInName(subSeq.name_);
 					noOverlapMergedFiltWriter.write(subSeq);
 				}
+
+        if(!allRegions.empty()){
+          BedUtility::coordSort(allRegions);
+          auto start = allRegions.front().chromStart_;
+          auto end = allRegions.back().chromEnd_;
+          auto outSeq = seq.getSubRead(start, end - start);
+          std::string models;
+          for(const auto & r : allRegions){
+            if(!models.empty()){
+              models += "--";
+            }
+            models += r.name_;
+          }
+          MetaDataInName meta;
+          if(MetaDataInName::nameHasMetaData(outSeq.name_)){
+            meta = MetaDataInName(outSeq.name_);
+          }
+          meta.addMeta("models", models);
+          if(meta.containsMeta("length")){
+            meta.addMeta("length", len(outSeq), true);
+          }
+          meta.resetMetaInName(outSeq.name_);
+          noOverlapMergedFiltAllModelsTrimWriter.write(outSeq);
+        }
 			}
+
 			if(njh::in(seq.name_, postProcessResults.filteredNonOverlapHitsByQuery_)){
+        std::vector<Bed6RecordCore> allRegions;
+//        std::cout << seq.name_ << std::endl;
+//        std::cout << "\tpostProcessResults.filteredHitsByQuery_[seq.name_].size():                 " << postProcessResults.filteredHitsByQuery_[seq.name_].size() << std::endl;
+//        std::cout << "\tpostProcessResults.filteredNonOverlapHitsByQuery_[seq.name_].size():       " << postProcessResults.filteredNonOverlapHitsByQuery_[seq.name_].size() << std::endl;
+//        std::cout << "\tpostProcessResults.filteredHitsMergedByQuery_[seq.name_].size():           " << postProcessResults.filteredHitsMergedByQuery_[seq.name_].size() << std::endl;
+//        std::cout << "\tpostProcessResults.filteredHitsMergedNonOverlapByQuery_[seq.name_].size(): " << postProcessResults.filteredHitsMergedNonOverlapByQuery_[seq.name_].size() << std::endl;
+
 				for(const auto & hit : postProcessResults.filteredNonOverlapHitsByQuery_[seq.name_]){
 					Bed6RecordCore region = hit.genBed6_env();
+          if(hit.modelCoverage() >=fullDomainTrimHmmCoverageCutOff){
+            allRegions.emplace_back(region);
+            allRegions.back().name_ = hit.targetName_;
+          }
+
 					auto subSeq = seq.getSubRead(region.chromStart_, region.length());
 					if(region.reverseStrand()){
 						subSeq.reverseComplementRead(false, true);
@@ -242,6 +307,29 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 					meta.resetMetaInName(subSeq.name_);
 					noOverlapFiltWriter.write(subSeq);
 				}
+        if(!allRegions.empty()){
+          BedUtility::coordSort(allRegions);
+          auto start = allRegions.front().chromStart_;
+          auto end = allRegions.back().chromEnd_;
+          auto outSeq = seq.getSubRead(start, end - start);
+          std::string models;
+          for(const auto & r : allRegions){
+            if(!models.empty()){
+              models += "--";
+            }
+            models += r.name_;
+          }
+          MetaDataInName meta;
+          if(MetaDataInName::nameHasMetaData(outSeq.name_)){
+            meta = MetaDataInName(outSeq.name_);
+          }
+          meta.addMeta("models", models);
+          if(meta.containsMeta("length")){
+            meta.addMeta("length", len(outSeq), true);
+          }
+          meta.resetMetaInName(outSeq.name_);
+          noOverlapFiltAllModelsTrimWriter.write(outSeq);
+        }
 			} else {
 				seqsWithNoDomains.emplace_back(seq.name_);
 			}

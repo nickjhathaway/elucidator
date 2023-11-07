@@ -34,10 +34,22 @@ jsonExpRunner::jsonExpRunner()
           {
 					 addFunc("jsonPrintFieldInArray", jsonPrintFieldInArray, false),
 					 addFunc("jsonExtractInArrayMatchingField", jsonExtractInArrayMatchingField, false),
+           addFunc("jsonPrintFirstLevelNames", jsonPrintFirstLevelNames, false),
            },
           "jsonExp") {}
 
 
+int jsonExpRunner::jsonPrintFirstLevelNames(const njh::progutils::CmdArgs & inputCommands) {
+  bfs::path jsonFnp = "";
+  seqSetUp setUp(inputCommands);
+  setUp.setOption(jsonFnp, "--jsonFnp", "JSON file to read from", true);
+  setUp.finishSetUp(std::cout);
+
+  auto inputValues = njh::json::parseFile(jsonFnp.string());
+  std::cout << njh::conToStr(inputValues.getMemberNames(), ",") << std::endl;
+
+  return 0;
+}
 
 int jsonExpRunner::jsonPrintFieldInArray(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path jsonFnp = "";

@@ -39,6 +39,9 @@ class ampliconAnalysisRunner : public njh::progutils::ProgramRunner {
 
 	static int processRawExtractByKmerPathWeaverResults(const njh::progutils::CmdArgs & inputCommands);
 
+
+  static int extractedTarAmpInfoFileToJson(const njh::progutils::CmdArgs & inputCommands);
+  static int finalClustersFileToJson(const njh::progutils::CmdArgs & inputCommands);
 };
 }  // namespace njhseq
 
