@@ -31,6 +31,7 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 	uint32_t unspecificInsertMinLen = 500;
 	uint32_t unspecificPrimerPortionSize = 15;
 
+	std::string diversityMeasurement = "ExpP5";
 	uint32_t testIterMax = 0;
 
 	double defaultExpP5 = 0.80;
@@ -47,6 +48,8 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 
 	uint32_t hardUnspecAmpCutOff = 20;
 
+	bool filterPairsWithSamePrimers = false;
+
 	bfs::path genomeGff;
 	bfs::path genomeFnp;
 
@@ -56,7 +59,9 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 	setUp.processDebug();
 
 	setUp.setOption(additionalNonDiversityDirs, "--additionalNonDiversityDirs", "additional Non Diversity Dirs, could be vaccine, drug resistance, diagnostic etc");
-	setUp.setOption(defaultExpP5, "--defaultExpP5", "defaultExpP5");
+	setUp.setOption(defaultExpP5, njh::pasteAsStr("--default", diversityMeasurement), njh::pasteAsStr("--default", diversityMeasurement));
+	setUp.setOption(diversityMeasurement, "--diversityMeasurement", "diversity Measurement to use for optimization");
+	setUp.setOption(filterPairsWithSamePrimers, "--filterPairsWithSamePrimers", "filter Pairs With Same Primers");
 
 	bool gffSet = setUp.setOption(genomeGff, "--genomeGff", "A path to a genome annotation gff file to compare final panel against");
 	setUp.setOption(genomeFnp, "--genomeFnp", "A path to a genome annotation gff file to compare final panel against", gffSet);
@@ -235,9 +240,9 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 		//1-Expected ploidy 5
 		std::vector<double> OneMinusExpP5(primer3ResTab.nRow(), 0);
 		for(const auto & row : iter::enumerate(primer3ResTab.content_)){
-			OneMinusExpP5[row.index] = 1.0 - njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("ExpP5")]);
+			OneMinusExpP5[row.index] = 1.0 - njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos(""+diversityMeasurement+"")]);
 		}
-		primer3ResTab.addColumn(OneMinusExpP5, "1-ExpP5");
+		primer3ResTab.addColumn(OneMinusExpP5, "1-"+diversityMeasurement+"");
 		//norm primer penality
 		std::vector<double> normPairPenalty(primer3ResTab.nRow(), 0);
 		for(const auto & row : iter::enumerate(primer3ResTab.content_)){
@@ -249,9 +254,9 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 
 		std::vector<double> OneMinusExpP5PlusPairPenalty(primer3ResTab.nRow(), 0);
 		for(const auto & row : iter::enumerate(primer3ResTab.content_)){
-			OneMinusExpP5PlusPairPenalty[row.index] = njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("1-ExpP5")]) + njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("pair_penalty_noSize")]);
+			OneMinusExpP5PlusPairPenalty[row.index] = njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("1-"+diversityMeasurement+"")]) + njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("pair_penalty_noSize")]);
 		}
-		primer3ResTab.addColumn(OneMinusExpP5PlusPairPenalty, "1-ExpP5+pair_penalty_noSize");
+		primer3ResTab.addColumn(OneMinusExpP5PlusPairPenalty, "1-"+diversityMeasurement+"+pair_penalty_noSize");
 		//add in dimer scores for this pair
 		table dimerScoresTab = table(VecStr{"SeqIDPrimerPairName", "forwardPrimerSelfDimer", "reversePrimerSelfDimer", "forwardReverseDimer", "sumDimerScores", "forwardReverseDimerNormScore"});
 		for(const auto & row : iter::enumerate(primer3ResTab.content_)){
@@ -269,7 +274,7 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 							forwardReverseDimer + reversePrimerSelfDimer + forwardReverseDimer,
 							forwardReverseDimerNormScore
 							);
-			//OneMinusExpP5PlusPairPenalty[row.index] = njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("1-ExpP5")]) + njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("pair_penalty_noSize")]);
+			//OneMinusExpP5PlusPairPenalty[row.index] = njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("1-"+diversityMeasurement+"")]) + njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("pair_penalty_noSize")]);
 		}
 		primer3ResTab = table::cbind(std::vector<table>{primer3ResTab, dimerScoresTab}, "SeqIDPrimerPairName", false);
 		//primer3ResTab.cbind(dimerScoresTab, false);
@@ -277,24 +282,24 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 		std::vector<double> OneMinusExpP5PlusPairPenaltyPlusDimer(primer3ResTab.nRow(), 0);
 		for (const auto &row: iter::enumerate(primer3ResTab.content_)) {
 			OneMinusExpP5PlusPairPenaltyPlusDimer[row.index] =
-							njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("1-ExpP5")]) +
+							njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("1-"+diversityMeasurement+"")]) +
 							njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("pair_penalty_noSize")]) -
 							njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("forwardReverseDimerNormScore")]);
 
 		}
-		primer3ResTab.addColumn(OneMinusExpP5PlusPairPenaltyPlusDimer, "1-ExpP5+pair_penalty_noSize+normDimer");
+		primer3ResTab.addColumn(OneMinusExpP5PlusPairPenaltyPlusDimer, "1-"+diversityMeasurement+"+pair_penalty_noSize+normDimer");
 
 		//add in a score based on ExpP5+norm_pair_penalty_noSize+-normDimer
 		std::vector<double> ExpP5MinusNormPairPenaltyMinusDimer(primer3ResTab.nRow(), 0);
 		for (const auto &row: iter::enumerate(primer3ResTab.content_)) {
 			ExpP5MinusNormPairPenaltyMinusDimer[row.index] =
-							diversityFactor * njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("ExpP5")]) -
+							diversityFactor * njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos(""+diversityMeasurement+"")]) -
 							pairPenaltyFactor * njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("norm_pair_penalty_noSize")]) -
 							dimerFactor * njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("forwardReverseDimerNormScore")]);
 		}
-		primer3ResTab.addColumn(ExpP5MinusNormPairPenaltyMinusDimer, "ExpP5-norm_pair_penalty_noSize-normDimer");
+		primer3ResTab.addColumn(ExpP5MinusNormPairPenaltyMinusDimer, ""+diversityMeasurement+"-norm_pair_penalty_noSize-normDimer");
 
-		primer3ResTab.sortTable("ExpP5-norm_pair_penalty_noSize-normDimer","ExpP5", "negative_norm_pair_penalty_noSize", "forwardReverseDimerNormScore", true);
+		primer3ResTab.sortTable(""+diversityMeasurement+"-norm_pair_penalty_noSize-normDimer",""+diversityMeasurement+"", "negative_norm_pair_penalty_noSize", "forwardReverseDimerNormScore", true);
 		primer3ResTab.hasHeader_ = true;
 		primer3ResTab.addColumn(VecStr{"diversity"}, "class");
 		{
@@ -326,16 +331,16 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 			primerPairNameToTopRegionKey[primerPairName] = d.string();
 		}
 		//add in default ExpP5
-		primer3ResTab.addColumn(VecStr{estd::to_string(defaultExpP5)}, "ExpP5");
+		primer3ResTab.addColumn(VecStr{estd::to_string(defaultExpP5)}, ""+diversityMeasurement+"");
 		primer3ResTab.addColumn(VecStr{estd::to_string(defaultExpP5)}, "he");
 
 		//primer3ResTab.cbind(divResTab, false);
 		//1-Expected ploidy 5
 		std::vector<double> OneMinusExpP5(primer3ResTab.nRow(), 0);
 		for(const auto & row : iter::enumerate(primer3ResTab.content_)){
-			OneMinusExpP5[row.index] = 1.0 - njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("ExpP5")]);
+			OneMinusExpP5[row.index] = 1.0 - njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos(""+diversityMeasurement+"")]);
 		}
-		primer3ResTab.addColumn(OneMinusExpP5, "1-ExpP5");
+		primer3ResTab.addColumn(OneMinusExpP5, "1-"+diversityMeasurement+"");
 		//norm primer penality
 		std::vector<double> normPairPenalty(primer3ResTab.nRow(), 0);
 		for(const auto & row : iter::enumerate(primer3ResTab.content_)){
@@ -347,9 +352,9 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 
 		std::vector<double> OneMinusExpP5PlusPairPenalty(primer3ResTab.nRow(), 0);
 		for(const auto & row : iter::enumerate(primer3ResTab.content_)){
-			OneMinusExpP5PlusPairPenalty[row.index] = njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("1-ExpP5")]) + njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("pair_penalty_noSize")]);
+			OneMinusExpP5PlusPairPenalty[row.index] = njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("1-"+diversityMeasurement+"")]) + njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("pair_penalty_noSize")]);
 		}
-		primer3ResTab.addColumn(OneMinusExpP5PlusPairPenalty, "1-ExpP5+pair_penalty_noSize");
+		primer3ResTab.addColumn(OneMinusExpP5PlusPairPenalty, "1-"+diversityMeasurement+"+pair_penalty_noSize");
 		//add in dimer scores for this pair
 		table dimerScoresTab = table(VecStr{"SeqIDPrimerPairName", "forwardPrimerSelfDimer", "reversePrimerSelfDimer", "forwardReverseDimer", "sumDimerScores", "forwardReverseDimerNormScore"});
 		for(const auto & row : iter::enumerate(primer3ResTab.content_)){
@@ -367,7 +372,7 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 							forwardReverseDimer + reversePrimerSelfDimer + forwardReverseDimer,
 							forwardReverseDimerNormScore
 			);
-			//OneMinusExpP5PlusPairPenalty[row.index] = njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("1-ExpP5")]) + njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("pair_penalty_noSize")]);
+			//OneMinusExpP5PlusPairPenalty[row.index] = njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("1-"+diversityMeasurement+"")]) + njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("pair_penalty_noSize")]);
 		}
 		primer3ResTab = table::cbind(std::vector<table>{primer3ResTab, dimerScoresTab}, "SeqIDPrimerPairName", false);
 		//primer3ResTab.cbind(dimerScoresTab, false);
@@ -375,24 +380,24 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 		std::vector<double> OneMinusExpP5PlusPairPenaltyPlusDimer(primer3ResTab.nRow(), 0);
 		for (const auto &row: iter::enumerate(primer3ResTab.content_)) {
 			OneMinusExpP5PlusPairPenaltyPlusDimer[row.index] =
-							njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("1-ExpP5")]) +
+							njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("1-"+diversityMeasurement+"")]) +
 							njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("pair_penalty_noSize")]) -
 							njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("forwardReverseDimerNormScore")]);
 
 		}
-		primer3ResTab.addColumn(OneMinusExpP5PlusPairPenaltyPlusDimer, "1-ExpP5+pair_penalty_noSize+normDimer");
+		primer3ResTab.addColumn(OneMinusExpP5PlusPairPenaltyPlusDimer, "1-"+diversityMeasurement+"+pair_penalty_noSize+normDimer");
 
 		//add in a score based on ExpP5+norm_pair_penalty_noSize+-normDimer
 		std::vector<double> ExpP5MinusNormPairPenaltyMinusDimer(primer3ResTab.nRow(), 0);
 		for (const auto &row: iter::enumerate(primer3ResTab.content_)) {
 			ExpP5MinusNormPairPenaltyMinusDimer[row.index] =
-							diversityFactor * njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("ExpP5")]) -
+							diversityFactor * njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos(""+diversityMeasurement+"")]) -
 							pairPenaltyFactor * njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("norm_pair_penalty_noSize")]) -
 							dimerFactor * njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("forwardReverseDimerNormScore")]);
 		}
-		primer3ResTab.addColumn(ExpP5MinusNormPairPenaltyMinusDimer, "ExpP5-norm_pair_penalty_noSize-normDimer");
+		primer3ResTab.addColumn(ExpP5MinusNormPairPenaltyMinusDimer, ""+diversityMeasurement+"-norm_pair_penalty_noSize-normDimer");
 
-		primer3ResTab.sortTable("ExpP5-norm_pair_penalty_noSize-normDimer","ExpP5", "negative_norm_pair_penalty_noSize", "forwardReverseDimerNormScore", true);
+		primer3ResTab.sortTable(""+diversityMeasurement+"-norm_pair_penalty_noSize-normDimer",""+diversityMeasurement+"", "negative_norm_pair_penalty_noSize", "forwardReverseDimerNormScore", true);
 		primer3ResTab.hasHeader_ = true;
 		primer3ResTab.addColumn(VecStr{"diversity"}, "add");
 		primer3ResTab.outPutContents(TableIOOpts::genTabFileOut(
@@ -430,14 +435,19 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 	std::unordered_map<std::string,std::string> primerPairToReverse;
 
 	{
+		OutputStream topPrimerAmpExpectedRegions(njh::files::make_path(setUp.pars_.directoryName_, "topPrimers_ampLocs.bed"));
+
 		auto primerTab = top.getColumns(VecStr{"SeqIDPrimerPairName", "left_seq", "right_seq"});
 		primerTab.columnNames_ = VecStr {"target", "forward", "reverse"};
 		primerTab.setColNamePositions();
 		for(const auto & row : primerTab){
-			primerPairToForward[row[primerTab.getColPos("target")]] = row[primerTab.getColPos("forward")];
-			primerPairToReverse[row[primerTab.getColPos("target")]] = row[primerTab.getColPos("reverse")];
+			auto tarName = row[primerTab.getColPos("target")];
+			primerPairToForward[tarName] = row[primerTab.getColPos("forward")];
+			primerPairToReverse[tarName] = row[primerTab.getColPos("reverse")];
+			topPrimerAmpExpectedRegions << primerPairNameToAmpLoc[tarName]->toDelimStrWithExtra() << std::endl;
 		}
 		primerTab.outPutContents(TableIOOpts::genTabFileOut(njh::files::make_path(setUp.pars_.directoryName_, "topPrimers.tab.txt")));
+
 	}
 
 	std::unordered_map<std::string, uint32_t> numberOfIndvUnspecificAmps;
@@ -457,6 +467,7 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 			std::string cmd = njh::pasteAsStr("elucidator testWithBlastForUnspecificAmplification --errorAllowed ",
 																				unspecificPrimersErrors, " --primersFnp ",
 																				njh::files::make_path(setUp.pars_.directoryName_, "topPrimers.tab.txt"),
+																				" --expectedRegionsFnp ", njh::files::make_path(setUp.pars_.directoryName_, "topPrimers_ampLocs.bed"),
 																				" --genomeFnp ", genome,
 																				" --overWriteDir --dout ", outputDir,
 																				" --minTargetSize ", unspecificInsertMinLen, " --numThreads ",
@@ -534,19 +545,19 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 		std::vector<double> ExpP5MinusNormPairPenaltyMinusDimerMinusUnspecAmp(top.nRow(), 0);
 		for (const auto &row: iter::enumerate(top.content_)) {
 			ExpP5MinusNormPairPenaltyMinusDimerMinusUnspecAmp[row.index] =
-							diversityFactor * njh::StrToNumConverter::stoToNum<double>(row.element[top.getColPos("ExpP5")]) -
+							diversityFactor * njh::StrToNumConverter::stoToNum<double>(row.element[top.getColPos(""+diversityMeasurement+"")]) -
 							pairPenaltyFactor * njh::StrToNumConverter::stoToNum<double>(row.element[top.getColPos("norm_pair_penalty_noSize")]) -
 							dimerFactor * njh::StrToNumConverter::stoToNum<double>(row.element[top.getColPos("forwardReverseDimerNormScore")]) -
 							unspecificAmpFactor * njh::StrToNumConverter::stoToNum<double>(row.element[top.getColPos("unspecificAmpsCnt")]) ;
 		}
-		top.addColumn(ExpP5MinusNormPairPenaltyMinusDimerMinusUnspecAmp, "ExpP5-norm_pair_penalty_noSize-normDimer-unspecAmp");
+		top.addColumn(ExpP5MinusNormPairPenaltyMinusDimerMinusUnspecAmp, ""+diversityMeasurement+"-norm_pair_penalty_noSize-normDimer-unspecAmp");
 	}
 
 	for (const auto &row: top) {
 //		primerPairsToInvCost[row[top.getColPos("SeqIDPrimerPairName")]] = njh::StrToNumConverter::stoToNum<double>(
 //						row[top.getColPos("ExpP5-norm_pair_penalty_noSize-normDimer")]);
 		primerPairsToInvCost[row[top.getColPos("SeqIDPrimerPairName")]] = njh::StrToNumConverter::stoToNum<double>(
-						row[top.getColPos("ExpP5-norm_pair_penalty_noSize-normDimer-unspecAmp")]);
+						row[top.getColPos(""+diversityMeasurement+"-norm_pair_penalty_noSize-normDimer-unspecAmp")]);
 	}
 
 	OutputStream primerPairsPerTopRegionOut(njh::files::make_path(setUp.pars_.directoryName_, "primerPairsPerTopRegion.tsv"));
@@ -599,6 +610,17 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 				if(e->primerPairVsPrimerPairUnSpecAmpCnt_ > hardUnspecAmpCutOff){
 					e->on_ = false;
 				}
+				if(filterPairsWithSamePrimers){
+					//hard turn off any primers that exactly each other
+				if(p1_forwardPrimer == p2_forwardPrimer){
+					e->on_ = false;
+				}
+				if(p1_reversePrimer == p2_reversePrimer){
+					e->on_ = false;
+				}
+				}
+
+
 				pool.nodes_[pool.nodeIdx_[regionRow]].edges_.emplace_back(e);
 				pool.nodes_[pool.nodeIdx_[regionCol]].edges_.emplace_back(e);
 				pool.edges_.emplace_back(e);
@@ -614,7 +636,10 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 		}
 	}
 
-
+	if(setUp.pars_.debug_){
+		std::cout << "pool.nodes_.size(): " << pool.nodes_.size() << std::endl;
+		std::cout << "pool.edges_.size(): " << pool.edges_.size() << std::endl;
+	}
 	pool.greedyDetermineHeaviestPool();
 	auto determinedPoolDir = njh::files::make_path(setUp.pars_.directoryName_, "determinedPool");
 	njh::files::makeDir(njh::files::MkdirPar{determinedPoolDir});
@@ -644,7 +669,7 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 		});
 		finalTable.outPutContents(TableIOOpts::genTabFileOut(njh::files::make_path(determinedPoolDir, "primer3_and_diversity_measures.tab.txt")));
 		auto pair_penalty_noSize_vec = vecStrToVecNum<double>(finalTable.getColumn("pair_penalty_noSize"));
-		auto ExpP5_vec = vecStrToVecNum<double>(finalTable.getColumn("ExpP5"));
+		auto ExpP5_vec = vecStrToVecNum<double>(finalTable.getColumn(""+diversityMeasurement+""));
 		auto he_vec = vecStrToVecNum<double>(finalTable.getColumn("he"));
 
 		//unspecific anps
@@ -794,7 +819,7 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 				return njh::in(str, finalPrimerPairs);
 			});
 			auto norm_pair_penalty_noSize_vec = vecStrToVecNum<double>(finalTable.getColumn("pair_penalty_noSize"));
-			auto ExpP5_vec = vecStrToVecNum<double>(finalTable.getColumn("ExpP5"));
+			auto ExpP5_vec = vecStrToVecNum<double>(finalTable.getColumn(""+diversityMeasurement+""));
 			auto he_vec = vecStrToVecNum<double>(finalTable.getColumn("he"));
 			//unspecific amps for self unspecific amps
 			auto unspecificAmpsCnt_vec = vecStrToVecNum<double>(finalTable.getColumn("unspecificAmpsCnt"));

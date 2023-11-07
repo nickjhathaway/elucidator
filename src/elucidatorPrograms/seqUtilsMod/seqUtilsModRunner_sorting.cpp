@@ -34,44 +34,110 @@ int seqUtilsModRunner::sortReadsByNameNaturalSort(const njh::progutils::CmdArgs 
 	reader.openIn();
 	std::regex regPat{"([A-Za-z0-9\\.]+)"};
 	std::regex subPat{"([A-Za-z]*)([0-9\\.]*)"};
+	std::regex subPatDoubleFirst{"([0-9\\.]*)([A-Za-z]*)"};
 
 	struct SeqWithNameSplit {
-		SeqWithNameSplit(const seqInfo & seq, const std::regex & regPat, const std::regex & subPat):
-			seqBase_(seq),
-			subPat_(subPat),
-			nameToks_(njh::tokStrOnMatchRegex(seqBase_.name_, regPat))
-			{
-			for(const auto & name : nameToks_){
+		SeqWithNameSplit(const seqInfo &seq, const std::regex &regPat, const std::regex &subPat, const std::regex &subPatDoubleFirst) :
+						seqBase_(seq),
+						regPat_(regPat),
+						subPat_(subPat),
+						subPatDoubleFirst_(subPatDoubleFirst),
+						nameToks_(njh::tokStrOnMatchRegex(seqBase_.name_, regPat)) {
+			for (const auto &name: nameToks_) {
 				std::smatch nameMatch;
-				if(!std::regex_match(name.begin(), name.end(), nameMatch, subPat_)){
+				std::smatch secondNameMatch;
+
+				if (std::regex_match(name.begin(), name.end(), secondNameMatch, subPatDoubleFirst_)) {
+//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//					std::cout << njh::bashCT::red;
+//					std::cout << "name: " << name << std::endl;
+//					std::cout << "secondNameMatch[1]: " << secondNameMatch[1] << std::endl;
+//					std::cout << "secondNameMatch[2]: " << secondNameMatch[2] << std::endl;
+//					std::cout << njh::bashCT::reset << std::endl;
+					subNameToks_.emplace_back(std::make_pair(secondNameMatch[2],
+																									 ("" == secondNameMatch[1] ? std::numeric_limits<double>::min() : std::stod(
+																													 secondNameMatch[1]))));
+				} else if (!std::regex_match(name.begin(), name.end(), nameMatch, subPat_)) {
 //					std::stringstream ss;
 //					ss << __PRETTY_FUNCTION__ << ", error " << "name didn't match pattern"<< "\n";
 //					throw std::runtime_error{ss.str()};
-					subNameToks_.emplace_back(std::make_pair(name, std::numeric_limits<double>::min()) );
-				}else{
-					subNameToks_.emplace_back(std::make_pair(nameMatch[1], ("" == nameMatch[2] ? std::numeric_limits<double>::min() :std::stod(nameMatch[2]) ) ) );
+//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//					std::cout << njh::bashCT::purple;
+//					std::cout << "name: " << name << std::endl;
+//					std::cout << njh::bashCT::reset << std::endl;
+					subNameToks_.emplace_back(std::make_pair(name, std::numeric_limits<double>::min()));
+				} else {
+//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//					std::cout << njh::bashCT::blue;
+//					std::cout << "name: " << name << std::endl;
+//					std::cout << "nameMatch[1]: " << nameMatch[1] << std::endl;
+//					std::cout << "nameMatch[2]: " << nameMatch[2] << std::endl;
+//					std::cout << njh::bashCT::reset << std::endl;
+					subNameToks_.emplace_back(std::make_pair(nameMatch[1],
+																									 ("" == nameMatch[2] ? std::numeric_limits<double>::min() : std::stod(
+																													 nameMatch[2]))));
 				}
+//				std::smatch nameMatch;
+//				if (!std::regex_match(name.begin(), name.end(), nameMatch, subPat_)) {
+////					std::stringstream ss;
+////					ss << __PRETTY_FUNCTION__ << ", error " << "name didn't match pattern"<< "\n";
+////					throw std::runtime_error{ss.str()};
+//					subNameToks_.emplace_back(std::make_pair(name, std::numeric_limits<double>::min()));
+//				} else if (!std::regex_match(name.begin(), name.end(), nameMatch, subPatDoubleFirst_)) {
+//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//					std::cout << njh::bashCT::red;
+//					std::cout << nameMatch[1] << std::endl;
+//					std::cout << nameMatch[2] << std::endl;
+//					std::cout << njh::bashCT::reset << std::endl;
+//					subNameToks_.emplace_back(std::make_pair(nameMatch[2],
+//																									 ("" == nameMatch[1] ? std::numeric_limits<double>::min() : std::stod(
+//																													 nameMatch[1]))));
+//				} else {
+//					std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//					std::cout << njh::bashCT::blue;
+//					std::cout << nameMatch[1] << std::endl;
+//					std::cout << nameMatch[2] << std::endl;
+//					std::cout << njh::bashCT::reset << std::endl;
+//					subNameToks_.emplace_back(std::make_pair(nameMatch[1],
+//																									 ("" == nameMatch[2] ? std::numeric_limits<double>::min() : std::stod(
+//																													 nameMatch[2]))));
+//				}
+
 			}
+
+//			std::cout << seqBase_.name_ << std::endl;
+//			std::cout << "nameToks_.size():    " << nameToks_.size() << std::endl;
+//			for(const auto & tok : nameToks_){
+//				std::cout << "\t" << tok << std::endl;
+//			}
+//			std::cout << "subNameToks_.size(): " << subNameToks_.size() << std::endl;
+//			for(const auto & subtok : subNameToks_){
+//				std::cout << "\t" << subtok.first << ", " << subtok.second << std::endl;
+//			}
 		}
+
 		seqInfo seqBase_;
+		std::regex regPat_;
 		std::regex subPat_;
+		std::regex subPatDoubleFirst_;
 		VecStr nameToks_;
 		std::vector<std::pair<std::string, double>> subNameToks_;
 	};
 	std::vector<SeqWithNameSplit> seqs;
 	seqInfo seq;
 	while(reader.readNextRead(seq)){
-		seqs.emplace_back(seq, regPat, subPat);
+		seqs.emplace_back(seq, regPat, subPat, subPatDoubleFirst);
 	}
 
 	njh::sort(seqs, []( const SeqWithNameSplit & seq1,  const SeqWithNameSplit & seq2){
 		auto smallest = std::min(seq1.nameToks_.size(), seq2.nameToks_.size());
+
 		for(uint32_t pos = 0; pos < smallest; ++pos){
 			if(seq1.subNameToks_[pos].first == seq2.subNameToks_[pos].first){
 				if(seq1.subNameToks_[pos].second != seq2.subNameToks_[pos].second){
 					return seq1.subNameToks_[pos].second < seq2.subNameToks_[pos].second;
 				}
-			}else{
+			} else {
 				return seq1.subNameToks_[pos].first < seq2.subNameToks_[pos].first;
 			}
 		}

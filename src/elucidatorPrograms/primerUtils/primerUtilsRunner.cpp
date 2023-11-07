@@ -12,6 +12,7 @@
 #include <njhseq/objects/BioDataObject/BioDataFileIO.hpp>
 #include <njhseq/BamToolsUtils/ReAlignedSeq.hpp>
 #include <njhseq/GenomeUtils/GenomeExtraction/ParsingAlignmentInfo/GenomeExtractResult.hpp>
+#include <njhseq/objects/BioDataObject/reading.hpp>
 
 namespace njhseq {
 
@@ -35,15 +36,19 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 	uint32_t errorAllowed = 0;
 	uint32_t maxTargetSize = 6000;
 	uint32_t minTargetSize = 100;
+	uint32_t minExtendAmountOfEndAdjustment = 5;
 	bfs::path primersFnp;
 	bfs::path genomeFnp;
+	bfs::path expectedRegionsFnp;
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(numThreads, "--numThreads", "number of Threads");
 	setUp.setOption(minLen, "--minLen", "min length of the 3` end of the alignment, (inclusive)");
 	setUp.setOption(errorAllowed, "--errorAllowed", "errors allowed");
 	setUp.setOption(maxTargetSize, "--maxTargetSize", "max target size");
 	setUp.setOption(minTargetSize, "--minTargetSize", "min target size");
+	setUp.setOption(minExtendAmountOfEndAdjustment, "--minExtendAmountOfEndAdjustment", "min Extend Amount Of End Adjustment for when allowing errors in hits");
 
+	setUp.setOption(expectedRegionsFnp, "--expectedRegionsFnp", "expected Regions Fnp, to determine if a region is expected, supply the bed6 format of the region the primer should be amplifying, any region not matching this exact region (primer location included) will be marked as unspecific", true);
 	setUp.setOption(primersFnp, "--primersFnp", "Primers", true);
 	setUp.setOption(genomeFnp, "--genomeFnp", "genome", true);
 	setUp.processDirectoryOutputName(bfs::basename(primersFnp) + std::string("_testUnspecific_TODAY"), true);
@@ -67,6 +72,28 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 	std::unordered_map<std::string, std::string> forPrimerNameToTargetName;
 	std::unordered_map<std::string, std::string> revPrimerNameToTargetName;
 	std::unordered_map<std::string, std::string> primerNameToTargetName;
+
+	auto expectedRegions = getBeds(expectedRegionsFnp);
+
+	std::unordered_map<std::string, std::shared_ptr<Bed6RecordCore>> primerNameToExpectedRegion;
+	for(const auto & reg : expectedRegions){
+		primerNameToExpectedRegion[reg->name_] = reg;
+	}
+
+	{
+		VecStr warningsExpectedRegionsMissing;
+		for(const auto & primerInfo : ids.pDeterminator_->primers_) {
+			if(!njh::in(primerInfo.first, primerNameToExpectedRegion)){
+				warningsExpectedRegionsMissing.emplace_back(primerInfo.first);
+			}
+		}
+		if(!warningsExpectedRegionsMissing.empty()){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "missing the expected region for the following primer pairs: " << njh::conToStr(warningsExpectedRegionsMissing, ",") << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+	}
+
 
 	for(const auto & primerInfo : ids.pDeterminator_->primers_) {
 		uint32_t forwardCount = 0;
@@ -151,8 +178,13 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 		BioDataFileIO<BLASTHitTab> reader{IoOptions(InOptions(allPrimerBlastHitsTableFnp))};
 		reader.openIn();
 		BLASTHitTab hit;
+		uint32_t adjustmentLength = std::max(minExtendAmountOfEndAdjustment, errorAllowed);
+		if(0 == errorAllowed){
+			adjustmentLength = 0;
+		}
 		while(reader.readNextRecord(hit)){
-			if(hit.alignLen_ < minLen){
+//	  if(hit.alignLen_  < minLen){
+			if((hit.alignLen_ + adjustmentLength) < minLen){
 				continue;
 			}
 			//check if the 3` end matches, note if even allowing for mismatches, can't just check if the end equals, have to check if adding the amount of error is equal to or more than the expected end length
@@ -160,7 +192,8 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 //			std::cout << (hit.qEnd_ + errorAllowed) << std::endl;
 //			std::cout << njh::mapAt(primerLengths, hit.queryName_) << std::endl;
 //			std::cout << "hit.qEnd_ + errorAllowed) < njh::mapAt(primerLengths, hit.queryName_): " << njh::colorBool((hit.qEnd_ + errorAllowed) < njh::mapAt(primerLengths, hit.queryName_)) << std::endl << std::endl;
-			if((hit.qEnd_ + errorAllowed) < njh::mapAt(primerLengths, hit.queryName_)){
+			//if((hit.qEnd_ + errorAllowed) < njh::mapAt(primerLengths, hit.queryName_)){
+			if((hit.qEnd_ + adjustmentLength) < njh::mapAt(primerLengths, hit.queryName_)){
 				continue;
 			}
 			//check if the 3` end, if in plus strand, check the end, if in the reverseStrand first base
@@ -176,24 +209,63 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 
 			blastHits.emplace_back(hit);
 			//adjust for re-alignment
-
+//			std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//			std::cout << hit.toJson() << std::endl;
+//			std::cout << hit.genSubjectBed6().toDelimStrWithExtra() << std::endl;
 			if(allowableErrors.hqMismatches_ > 0){
 				if(hit.qEnd_ < njh::mapAt(primerLengths, hit.queryName_)){
 					auto endDiff = njh::mapAt(primerLengths, hit.queryName_) - hit.qEnd_;
-					if (hit.reverseStrand() && hit.sStart_ > endDiff) {
-						hit.sEnd_ -= endDiff;
+//					std::cout << "endDiff: " << endDiff << std::endl;
+
+					if (hit.reverseStrand()) {
+						if(hit.sEnd_ > (endDiff + 1)){
+							hit.sEnd_ -= endDiff;
+						}
 					} else if (hit.sEnd_ + endDiff <= chromLens.at(hit.subjectName_)) {
 						hit.sEnd_ += endDiff;
 					}
 				}
 			}
 
-
+//			std::cout << __FILE__ << " " << __LINE__ << std::endl;
+//			std::cout << hit.toJson() << std::endl;
+//			std::cout << hit.genSubjectBed6().toDelimStrWithExtra() << std::endl;
 			auto realignedSeq = ReAlignedSeq::genRealignment(hit, njh::mapAt(primerByName, hit.queryName_), alignerObj,
 																											 chromLens, genomeReader, reAlnPars);
-
+//			std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //			std::cout << "passed: " << njh::colorBool(allowableErrors.passErrorProfile(realignedSeq.comp_)) << std::endl;
-			if(allowableErrors.passErrorProfile(realignedSeq.comp_)){
+			//adjust for the new subsegment
+			uint32_t newQueryStart = std::numeric_limits<uint32_t>::max();
+			uint32_t newQueryEnd = std::numeric_limits<uint32_t>::max();
+
+			{
+				uint32_t start = 0;
+				uint32_t end = realignedSeq.alnQuerySeq_.seq_.size();
+				if(realignedSeq.alnRefSeq_.seq_.front() == '-'){
+					start = realignedSeq.alnRefSeq_.seq_.find_first_not_of('-');
+				}
+				if(realignedSeq.alnRefSeq_.seq_.back() == '-'){
+					end = realignedSeq.alnRefSeq_.seq_.find_last_not_of('-') + 1;
+				}
+				seqInfo subQuerySeqInfo = realignedSeq.alnQuerySeq_.getSubRead(start, end - start);
+				subQuerySeqInfo.removeGaps();
+
+//				std::cout << "subQuerySeq                             :        " << subQuerySeqInfo.seq_ << std::endl;
+				if(hit.reverseStrand()){
+					subQuerySeqInfo.reverseComplementRead();
+//					std::cout << "subQuerySeq                             :        " << subQuerySeqInfo.seq_ << std::endl;
+				}
+				newQueryStart = njh::mapAt(primerByName, hit.queryName_).rfind(subQuerySeqInfo.seq_);
+				newQueryEnd = newQueryStart + subQuerySeqInfo.seq_.size();
+//				std::cout << "newQueryStart                             :        " << newQueryStart << std::endl;
+//				std::cout << "newQueryStart+1                           :        " << newQueryStart+1 << std::endl;
+//				std::cout << "newQueryEnd                               :        " << newQueryEnd << std::endl;
+			}
+			//with re-alignment when allowing errors have to check to see if new query end still is all the way to the 3'
+			//end and that the minimum alignment length is right
+			if(allowableErrors.passErrorProfile(realignedSeq.comp_) &&
+			realignedSeq.gRegion_.getLen() >=minLen &&
+			newQueryEnd == njh::mapAt(primerByName, hit.queryName_).size()){
 //				std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //				realignedSeq.alnRefSeq_.outPutSeqAnsi(std::cout);
 //				realignedSeq.alnQuerySeq_.outPutSeqAnsi(std::cout);
@@ -203,7 +275,25 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 					auto hitCopy = hit;
 					auto realignedSeqCopy = realignedSeq;
 					hitCopy.queryName_ = primerName;
-					passingBlastHitsInfos << hitCopy.genSubjectBed6().toDelimStrWithExtra() << std::endl;
+					auto hitCopyBedReg = hitCopy.genSubjectBed6();
+					MetaDataInName meta;
+					if(!hitCopyBedReg.extraFields_.empty() && MetaDataInName::nameHasMetaData(hitCopyBedReg.extraFields_[0])){
+						meta = MetaDataInName(hitCopyBedReg.extraFields_[0]);
+					}
+					meta.addMeta("realignedQueryStart", newQueryStart + 1);
+					meta.addMeta("realignedQueryEnd", newQueryEnd);
+					meta.addMeta("realignedLen", realignedSeq.gRegion_.getLen());
+					meta.addMeta("realignedMismatches", realignedSeq.comp_.distances_.mismatches_.size());
+
+//					std::cout << hitCopyBedReg.toDelimStrWithExtra() << std::endl;
+//					std::cout << "njh::mapAt(primerByName, hit.queryName_).size(): " << njh::mapAt(primerByName, hit.queryName_).size() << std::endl;
+//					std::cout << "njh::mapAt(primerByName, hit.queryName_):        " << njh::mapAt(primerByName, hit.queryName_) << std::endl;
+//					std::cout << "realignedSeq.querySeq_.seq_             :        " << realignedSeq.querySeq_.seq_ << std::endl;
+//					std::cout << "realignedSeq.alnQuerySeq_.seq_          :        " << realignedSeq.alnQuerySeq_.seq_ << std::endl;
+//					std::cout << "realignedSeq.alnRefSeq_.seq_            :        " << realignedSeq.alnRefSeq_.seq_ << std::endl;
+
+					hitCopyBedReg.extraFields_[0] = meta.createMetaName();
+					passingBlastHitsInfos << hitCopyBedReg.toDelimStrWithExtra() << std::endl;
 					realignedSeqCopy.gRegion_.uid_ = primerName;
 					realignedSeqCopy.querySeq_.name_ = primerName;
 					realignedSeqCopy.alnQuerySeq_.name_ = primerName;
@@ -399,11 +489,18 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 			ligPrimerTarName = revPrimerNameToTargetName[extraction.extraction_.ligRegion_.uid_];
 			ligForwardPrimer = false;
 		}
-		//it's an expected amplification if the targets are the same and they are opposite primers
+		auto outRegion = extraction.extraction_.gRegion_->genBedRecordCore();
+		auto expectedRegion = njh::mapAt(primerNameToExpectedRegion, ligPrimerTarName);
+
+		//it's an expected amplification if the targets are the same and they are opposite primers && it matches the expected region perfectly
 		bool expected = ligPrimerTarName == extPrimerTarName && ligForwardPrimer != extForwardPrimer &&
 						primerByName[extraction.extraction_.extRegion_.uid_] == extraction.getP1PortionOriginal53().seq_ &&
-						primerByName[extraction.extraction_.ligRegion_.uid_] == extraction.getP2PortionOriginal53().seq_ ;
-		auto outRegion = extraction.extraction_.gRegion_->genBedRecordCore();
+						primerByName[extraction.extraction_.ligRegion_.uid_] == extraction.getP2PortionOriginal53().seq_ &&
+						(outRegion.genUIDFromCoordsWithStrand() == expectedRegion->genUIDFromCoordsWithStrand() ||
+										(outRegion.genUIDFromCoords() == expectedRegion->genUIDFromCoords() && outRegion.reverseStrand() != expectedRegion->reverseStrand()));
+						//outRegion.genUIDFromCoords() == expectedRegion->genUIDFromCoords();
+						//outRegion.genUIDFromCoordsWithStrand() == expectedRegion->genUIDFromCoordsWithStrand();
+
 		outRegion.extraFields_.emplace_back(outRegion.name_);
 		outRegion.name_ = outRegion.genUIDFromCoordsWithStrand();
 		if (expected) {

@@ -22,7 +22,7 @@ namespace njhseq {
 int genExpRunner::reOrientCirculateGenomeToRef(const njh::progutils::CmdArgs & inputCommands){
 
 	readVecTrimmer::trimCircularGenomeToRefPars trimPars;
-	auto outSeqOpts = SeqIOOptions::genFastaOut("");
+	//auto outSeqOpts = SeqIOOptions::genFastaOut("");
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -33,9 +33,14 @@ int genExpRunner::reOrientCirculateGenomeToRef(const njh::progutils::CmdArgs & i
 	setUp.setOption(trimPars.extend_, "--extend", "extend this amount by adding this length to the front from the back and to the back from the front");
 
 	setUp.setOption(trimPars.kmerLength_, "--kmerLength", "kmer Length");
-	setUp.processReadInNames(true);
-	outSeqOpts.out_.outFilename_ = njh::files::prependFileBasename(setUp.pars_.ioOptions_.firstName_, "trimmed_");;
-	setUp.processWritingOptions(outSeqOpts.out_);
+//	setUp.processReadInNames(true);
+//	outSeqOpts.out_.outFilename_ = njh::files::prependFileBasename(setUp.pars_.ioOptions_.firstName_, "trimmed_");;
+//	setUp.processWritingOptions(outSeqOpts.out_);
+
+	setUp.processDefaultReader(true);
+	if(setUp.pars_.ioOptions_.out_.outFilename_ == "out"){
+		setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(setUp.pars_.ioOptions_.firstName_, "trimmed_");
+	}
 
 	setUp.processSeq(trimPars.refSeq_, "--ref",   "reference circulate genome", true);
 	setUp.setOption(trimPars.doNotReOrientDirection_, "--doNotReOrientDirection", "do Not Re Orient Direction");
@@ -63,7 +68,7 @@ int genExpRunner::reOrientCirculateGenomeToRef(const njh::progutils::CmdArgs & i
   }
 	setUp.finishSetUp(std::cout);
 
-	SeqOutput writer(outSeqOpts);
+	SeqOutput writer(setUp.pars_.ioOptions_);
 	writer.openOut();
 
 	uint64_t maxSize = 0;
@@ -117,9 +122,9 @@ int genExpRunner::reOrientCirculateGenomeToRef(const njh::progutils::CmdArgs & i
 			//to adjust for seq len;
 			checkLenTo = std::min<uint32_t>(checkLenTo, len(seq));
 			uint32_t checkLenFrom = trimPars.extendSeqCheckLenFrom_;
-//			std::cout << __FILE__ << " " << __LINE__ << std::endl;
-//			std::cout << "checkLenFrom: " << checkLenFrom << std::endl;
-//			std::cout << "checkLenTo: " << checkLenTo << std::endl;
+			std::cout << __FILE__ << " " << __LINE__ << std::endl;
+			std::cout << "checkLenFrom: " << checkLenFrom << std::endl;
+			std::cout << "checkLenTo: " << checkLenTo << std::endl;
 
 			if(checkLenFrom >= checkLenTo){
 				checkLenFrom = checkLenTo - 1;
@@ -129,10 +134,10 @@ int genExpRunner::reOrientCirculateGenomeToRef(const njh::progutils::CmdArgs & i
 			for(const auto pos : iter::range(checkLenFrom, checkLenTo)){
 				if(std::equal(seq.seq_.begin(),                  seq.seq_.begin() + pos + 1,
 						          seq.seq_.begin() + len(seq) - pos - 1 )){
-//					std::cout << "pos: " << pos << std::endl;
-//					std::cout << "pos + 1: " << pos + 1 << std::endl;
-//					std::cout << seq.seq_.substr(0, pos + 1) << std::endl;;
-//					std::cout << seq.seq_.substr(len(seq)-pos - 1, pos + 1) << std::endl;;
+					std::cout << "pos: " << pos << std::endl;
+					std::cout << "pos + 1: " << pos + 1 << std::endl;
+					std::cout << seq.seq_.substr(0, pos + 1) << std::endl;;
+					std::cout << seq.seq_.substr(len(seq)-pos - 1, pos + 1) << std::endl;;
 					sameSeqFrontBack = true;
 					sameSeqSize = pos + 1;
 					break;

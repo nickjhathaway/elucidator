@@ -461,11 +461,12 @@ int seqUtilsSplitRunner::SeqSplitOnCount(const njh::progutils::CmdArgs & inputCo
 int seqUtilsSplitRunner::SeqSplitOnLenWithinMedianLen(const njh::progutils::CmdArgs & inputCommands) {
 	defaultSplitPars dSplitPars;
 	uint32_t within = 0;
-
+	double withinMultiplier = 0.15;
   seqSetUp setUp(inputCommands);
   defaultSplitSetUpOptions(setUp, dSplitPars);
 
 	setUp.setOption(within, "--within", "Within");
+	setUp.setOption(withinMultiplier, "--withinMultiplier", "withinMultiplier");
 
   setUp.finishSetUp(std::cout);
 
@@ -483,6 +484,11 @@ int seqUtilsSplitRunner::SeqSplitOnLenWithinMedianLen(const njh::progutils::CmdA
 	  }
 	  length = std::round(vectorMedianRef(readLengths));
 	}
+
+	if(0 == within){
+		within = withinMultiplier * length;
+	}
+
 	auto checker = std::make_unique<const ReadCheckerLenWithin>(within, length, dSplitPars.mark_);
 
 
