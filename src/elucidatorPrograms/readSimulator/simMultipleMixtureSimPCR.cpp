@@ -29,17 +29,18 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 	bfs::path referenceFile = "";
 	bfs::path librarySetUpFile = "";
 	bfs::path illuminaProfileDir = "";
-	uint32_t pcrRounds = 30;
+	uint32_t defaultPcrRounds = 30;
 	uint32_t initialPcrRounds = 10;
 	std::map<uint32_t, uint32_t> initialPcrRoundsMap;
 	bfs::path initialPcrRoundsMapFnp;
 	long double errorRate = 3.5e-06;
-	double pcrEfficiency = 0.95;
+	double pcrEfficiency = 0.85;
 	bool keepPCRSeqs = false;
 	uint32_t chimeraBasesIn = 5;
 	uint32_t templateCap = 500000000;
 	bool noChimeras = false;
-	double finalReadAmountSDFrac = std::numeric_limits<double>::max();
+	double finalReadAmountSDFrac = 0.1;
+
 	uint32_t pairedEndLength = std::numeric_limits<uint32_t>::max();
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -53,7 +54,7 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 	setUp.setOption(keepPCRSeqs, "--keepPCRSeqs", "Keep PCR Seqs");
 	setUp.setOption(errorRate, "--errorRate", "Polymerase Error Rate");
 	setUp.setOption(pcrEfficiency, "--pcrEfficiency", "PCR Efficiency, between 0-1, chance a product gets amplified");
-	setUp.setOption(pcrRounds, "--pcrRounds", "Number of PCR rounds");
+	setUp.setOption(defaultPcrRounds, "--pcrRounds", "Number of PCR rounds");
 	setUp.setOption(initialPcrRounds, "--initialPcrRounds", "Number of Initial rounds of PCR before sampling");
 	setUp.setOption(initialPcrRoundsMapFnp, "--initialPcrRoundsTable", "Number of Initial rounds of PCR before sampling per starting template amount, columns 1)template, 2) rounds");
 
@@ -166,7 +167,7 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 
 	std::function<void()> simSample = [&samplesQueue,&extension,&sampleCountAtom,&fastqDirectory,
 										&lSetup,&illuminaProfileDir,&singleEnd,&refSeqs,
-										&intErrorRate, &pcrRounds, &initialPcrRounds,&verbose,
+										&intErrorRate, &defaultPcrRounds, &initialPcrRounds,&verbose,
 										&keepPCRSeqs, &pcrNumThreads,&pcrEfficiency,&simAmountsDir,
 										&chimeraDirectory,&templateCap,&noChimeras,&chimeraBasesIn,&initialPcrRoundsMap,
 										&finalReadAmountSDFrac](){
@@ -303,7 +304,11 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 					}
 					readSimAmount = newReadSimAmount;
 				}
-				auto pcrSimAmounts = pcrSim.simLibFast(seqGCounts, pcrReadsOpts, readSimAmount, pcrRounds, currentInitial, pcrNumThreads);
+				uint32_t pcrRoundsForMixture = defaultPcrRounds;
+				if(std::numeric_limits<uint32_t>::max() != mixture.second->pcrRounds_) {
+					pcrRoundsForMixture = mixture.second->pcrRounds_;
+				}
+				auto pcrSimAmounts = pcrSim.simLibFast(seqGCounts, pcrReadsOpts, readSimAmount, pcrRoundsForMixture, currentInitial, pcrNumThreads);
 				//PrimerPair	experiment	runNumber	sampName_
 				std::string PrimerPair = mixture.second->meta_->getMeta("PrimerPair");
 				std::string experiment = mixture.second->meta_->getMeta("experiment");
