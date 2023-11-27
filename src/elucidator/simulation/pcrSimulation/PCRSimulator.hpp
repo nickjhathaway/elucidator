@@ -97,15 +97,15 @@ public:
 		for(const auto & seq : seqs){
 			segsForSeqs_[getSeqBase(seq).name_] = std::make_shared<SegmentsForSeqs>(getSeqBase(seq));
 		}
-		auto debugOut = SeqIOOptions::genFastaOut("temp.fasta");
-		debugOut.out_.overWriteFile_ = true;
-		SeqOutput writer(debugOut);
+		// auto debugOut = SeqIOOptions::genFastaOut("temp.fasta");
+		// debugOut.out_.overWriteFile_ = true;
+		// SeqOutput writer(debugOut);
 		for (auto pos1 : iter::range(seqs.size())) {
 			for (auto pos2 : iter::range(pos1 + 1, seqs.size())) {
 				alignerObj.alignCacheGlobal(getSeqBase(seqs[pos1]), getSeqBase(seqs[pos2]));
 				alignerObj.profileAlignment(getSeqBase(seqs[pos1]), getSeqBase(seqs[pos2]), false, false, false);
-				writer.openWrite(alignerObj.alignObjectA_.seqBase_);
-				writer.openWrite(alignerObj.alignObjectB_.seqBase_);
+				// writer.openWrite(alignerObj.alignObjectA_.seqBase_);
+				// writer.openWrite(alignerObj.alignObjectB_.seqBase_);
 
 				segsForSeqs_[getSeqBase(seqs[pos1]).name_]->addSegments(alignerObj.alignObjectA_.seqBase_,
 						alignerObj.alignObjectB_.seqBase_, padding);
