@@ -252,34 +252,141 @@ int readSimulatorRunner::createRandomSequenceMixtures(const njh::progutils::CmdA
 }
 
 int readSimulatorRunner::chimeraSim(const njh::progutils::CmdArgs & inputCommands) {
-	seqSetUp setUp(inputCommands);
-	uint32_t kLength = 10;
-	setUp.setOption(kLength, "-kLenth,-k", "kLength");
-	setUp.processDefaultReader(true);
 
+	uint64_t simTestAmount = 5000;
+	OutOptions chimeraTableOutOpts("out", ".tsv");
+	OutOptions chimeraSimTableOutOpts("chimeraSimCounts", ".tsv");
+
+	seqSetUp setUp(inputCommands);
+	setUp.processDebug();
+	setUp.processVerbose();
+	uint32_t chimeraPad = 5; /**< number of bases needed for a partial template to lay down */
+	setUp.setOption(chimeraPad, "--chimeraPad", "chimera pad");
+	setUp.setOption(simTestAmount, "--simTestAmount", "sim Test Amount per seq");
+
+	setUp.processDefaultReader(true);
+	setUp.setOption(chimeraTableOutOpts.outFilename_, "--chimeraTableOut", "Name of the info table for the chimeras generated");
+	chimeraTableOutOpts.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
+
+	setUp.setOption(chimeraSimTableOutOpts.outFilename_, "--chimeraSimTableOut", "Name of the sim amount info table for the chimeras generated");
+	chimeraSimTableOutOpts.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
 	setUp.finishSetUp(std::cout);
 
 	SeqInput reader(setUp.pars_.ioOptions_);
 	reader.openIn();
 	auto inReads = reader.readAllReads<readObject>();
-
-	std::string seq1 = inReads[0].seqBase_.seq_;
-	std::string seq2 = inReads[1].seqBase_.seq_;
-
-	std::vector<uint32_t> positions;
-	uint64_t maxLength = 0;
-	if(seq1.size() > maxLength){
-		maxLength = seq1.size();
+	if(inReads.size() < 2) {
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << "there should be at least 2 sequences, only read in " << inReads.size() << " sequences" << "\n";
+		throw std::runtime_error{ss.str()};
 	}
-	if(seq2.size() > maxLength){
-		maxLength = seq2.size();
+	auto maxLen = readVec::getMaxLength(inReads);
+	ChimeraProfiler chiProf;
+	aligner alignerObj(maxLen, gapScoringParameters(5,1,0,0,0,0));
+	chiProf.addSegsForSeqs(inReads, alignerObj, chimeraPad);
+
+	if(setUp.pars_.debug_) {
+		std::cout << njh::json::toJson(chiProf) << std::endl;
 	}
-	for(const auto pos : iter::range(maxLength - kLength)){
-		if(std::equal(seq1.begin() + pos, seq1.begin() + pos + kLength, seq2.begin() + pos)){
-			positions.emplace_back(pos);
+
+	{
+		SeqOutput writer(setUp.pars_.ioOptions_);
+		writer.openOut();
+		OutputStream chimeraTableOut(chimeraTableOutOpts);
+		chimeraTableOut << "seq1_name\tseq2_name\tseq1_len\tseq2_len\tchimera_len\tseq1_sharedSegmentStart\tseq2_sharedSegmentStart\tsharedSegmentLen" << std::endl;
+		for(const auto & pos1 : iter::range(inReads.size())) {
+			for(const auto & pos2 : iter::range( inReads.size())) {
+				if(pos1 == pos2) {
+					continue;
+				}
+				if(njh::in(inReads[pos2].seqBase_.name_, chiProf.segsForSeqs_[inReads[pos1].seqBase_.name_]->sharedSegs_)) {
+					for(const auto & seg : chiProf.segsForSeqs_[inReads[pos1].seqBase_.name_]->sharedSegs_.at(inReads[pos2].seqBase_.name_).segs_){
+						seqInfo chimera = chiProf.segsForSeqs_[chiProf.segsForSeqs_[inReads[pos1].seqBase_.name_]->sharedSegs_.at(inReads[pos2].seqBase_.name_).seqNameA_]->seqBase_.getSubRead(0, seg.starta_);
+						chimera.append(chiProf.segsForSeqs_[chiProf.segsForSeqs_[inReads[pos1].seqBase_.name_]->sharedSegs_.at(inReads[pos2].seqBase_.name_).seqNameB_]->seqBase_.getSubRead(seg.startb_));
+						chimera.name_ =
+							  chiProf.segsForSeqs_[chiProf.segsForSeqs_[inReads[pos1].seqBase_.name_]->sharedSegs_.at(inReads[pos2].seqBase_.name_).seqNameA_]->seqBase_.name_ +
+							  "--" +
+								chiProf.segsForSeqs_[chiProf.segsForSeqs_[inReads[pos1].seqBase_.name_]->sharedSegs_.at(inReads[pos2].seqBase_.name_).seqNameB_]->seqBase_.name_;
+						chimeraTableOut << chiProf.segsForSeqs_[inReads[pos1].seqBase_.name_]->sharedSegs_.at(inReads[pos2].seqBase_.name_).seqNameA_
+						<< "\t" << chiProf.segsForSeqs_[inReads[pos1].seqBase_.name_]->sharedSegs_.at(inReads[pos2].seqBase_.name_).seqNameB_
+						<< "\t" << len(chiProf.segsForSeqs_[chiProf.segsForSeqs_[inReads[pos1].seqBase_.name_]->sharedSegs_.at(inReads[pos2].seqBase_.name_).seqNameA_]->seqBase_)
+						<< "\t" << len(chiProf.segsForSeqs_[chiProf.segsForSeqs_[inReads[pos1].seqBase_.name_]->sharedSegs_.at(inReads[pos2].seqBase_.name_).seqNameB_]->seqBase_)
+						<< "\t" << len(chimera)
+						<< "\t" << seg.starta_
+						<< "\t" << seg.startb_
+						<< "\t" << seg.size_
+						<< std::endl;
+						writer.write(chimera);
+					}
+				}
+			}
 		}
 	}
-	printVector(positions);
+	OutputStream chimeraSimTableOut(chimeraSimTableOutOpts);
+	chimeraSimTableOut << "seq1_name\tseq2_name\tchimera\tchimera_len\tcount" << std::endl;
+
+	njh::randomGenerator ranGen;
+	for(const auto & pos1 : iter::range(inReads.size()) ) {
+		std::unordered_map<std::string,std::unordered_map<std::string, uint64_t>> threadChimeras;
+		auto chiStart = chiProf.segsForSeqs_[inReads[pos1].seqBase_.name_]->minSegmentStart();
+		auto chiStop = chiProf.segsForSeqs_[inReads[pos1].seqBase_.name_]->maxSegmentEnd();
+		for(uint64_t sim = 0; sim < simTestAmount; ++sim) {
+			auto partLength = ranGen.unifRand<uint32_t>(0, inReads[pos1].seqBase_.seq_.size());
+			if (partLength >= chiStart && partLength < chiStop) {
+				auto posChis = chiProf.segsForSeqs_[inReads[pos1].seqBase_.name_]->genPosChimeras(partLength);
+				VecStr names;
+				names.emplace_back(inReads[pos1].seqBase_.name_);
+				//												std::cout << "Pos chis" << std::endl;
+				std::unordered_map<std::string, uint32_t> otherTempPos;
+				for (const auto& posChi: posChis) {
+					names.emplace_back(posChi.name_);
+					//													std::cout << posChi.name_ << " " << posChi.pos_ << std::endl;
+					otherTempPos[posChi.name_] = posChi.pos_;
+				}
+				std::vector<double> fracs;
+				for (uint32_t nameNumber = 0; nameNumber < names.size(); ++nameNumber) {
+					//fracs.emplace_back(finishedAmount[name]);
+					fracs.emplace_back(1.0);
+				}
+				njh::randObjectGen gen(names, fracs);
+				std::string templatedLandedOn = gen.genObj();
+				//												std::cout << "templatedLandedOn different? " << njh::colorBool(templatedLandedOn != seqSampled.seqBase_.name_) << std::endl;
+				if (templatedLandedOn != inReads[pos1].seqBase_.name_) {
+					++threadChimeras[templatedLandedOn][
+						inReads[pos1].seqBase_.seq_.substr(0, partLength) +
+						chiProf.segsForSeqs_[templatedLandedOn]->seqBase_.seq_.substr(otherTempPos[templatedLandedOn])];
+				}
+			}
+		}
+		for(const auto & chimerasFormed : threadChimeras) {
+			for(const auto & chimera : chimerasFormed.second) {
+				chimeraSimTableOut << inReads[pos1].seqBase_.name_
+				<< "\t" << chimerasFormed.first
+				<< "\t" << chimera.first
+				<< "\t" << chimera.first.size()
+				<< "\t" << chimera.second
+				<< std::endl;
+			}
+		}
+	}
+
+	// std::string seq1 = inReads[0].seqBase_.seq_;
+	// std::string seq2 = inReads[1].seqBase_.seq_;
+	//
+	// std::vector<uint32_t> positions;
+	// uint64_t maxLength = 0;
+	// if(seq1.size() > maxLength){
+	// 	maxLength = seq1.size();
+	// }
+	// if(seq2.size() > maxLength){
+	// 	maxLength = seq2.size();
+	// }
+	// for(const auto pos : iter::range(maxLength - kLength)){
+	// 	if(std::equal(seq1.begin() + pos, seq1.begin() + pos + kLength, seq2.begin() + pos)){
+	// 		positions.emplace_back(pos);
+	// 	}
+	// }
+	// printVector(positions);
 
 	return 0;
 }
