@@ -145,6 +145,7 @@ class bamExpRunner : public njh::progutils::ProgramRunner {
 	static int BamGetImproperPairCounts(const njh::progutils::CmdArgs & inputCommands);
 
 
+	static int mergeImproperMatePositions(const njh::progutils::CmdArgs & inputCommands);
 
 };
 
