@@ -40,6 +40,7 @@ class geneExpRunner : public njh::progutils::ProgramRunner {
 	static int cDNAPosTogDNAPos(const njh::progutils::CmdArgs & inputCommands);
 
 	static int getBedOfAminoAcidPositions(const njh::progutils::CmdArgs & inputCommands);
+	static int getBedOfAminoAcidPositionsFromGff(const njh::progutils::CmdArgs & inputCommands);
 
 	static int getBedOfCDnaPositions(const njh::progutils::CmdArgs & inputCommands);
 
