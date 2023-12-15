@@ -8,11 +8,137 @@
  */
 
 
+#include <njhseq/alignment/aligner/aligner.hpp>
+#include <njhseq/IO/SeqIO/SeqOutput.hpp>
+
 #include "elucidator/common.h"
 #include <njhseq/objects/seqObjects/BaseObjects/seqInfo.hpp>
 
 
 namespace njhseq {
+
+
+class ChimeraProfiler {
+	/**
+ *@todo take into account all sub-segment matches
+ *
+ *@todo take into account matches between forward and reverse strands
+ *
+ *
+ */
+public:
+	struct SharedSegments {
+
+		struct Segment {
+			Segment(const uint32_t starta, const uint32_t startb, uint32_t size);
+			uint32_t starta_;
+			uint32_t startb_;
+			uint32_t size_;
+			uint32_t enda() const;
+			uint32_t endb() const;
+
+			bool doesSegsOverLapInA(const Segment & otherSeg);
+			bool doesSegsOverLapInB(const Segment & otherSeg);
+
+			Json::Value toJson() const;
+		};
+
+		SharedSegments(const std::string & namea, const std::string & nameb) ;
+
+		void addSegment(Segment newSeg);
+		void addSegment(uint32_t starta, uint32_t startb, uint32_t size);
+
+		std::string seqNameA_;
+		std::string seqNameB_;
+
+		std::vector<Segment> segs_;
+
+		[[nodiscard]] Json::Value toJson() const;
+	};
+
+	struct SegmentsForSeqs {
+		explicit SegmentsForSeqs(const seqInfo& seqBase);
+
+		seqInfo seqBase_;
+		std::unordered_map<std::string, SharedSegments> sharedSegs_;
+
+		uint32_t minSegmentStart();
+
+		uint32_t maxSegmentEnd();
+
+		/**
+		 * \brief Find internal segments of at least the size of padding that if a half finished template would lay down would create a chimera between two seqs
+		 * \param alnA alignment of seq a
+		 * \param alnB alignment of seq b
+		 * \param padding the minimum size to allow for therorical template annealing
+		 */
+		void addSegments(const seqInfo& alnA, const seqInfo& alnB, uint32_t padding);
+
+		struct SeqNameSeg {
+			SeqNameSeg(const std::string& name, uint32_t pos);
+
+			std::string name_;
+			uint32_t pos_;
+
+			[[nodiscard]] Json::Value toJson() const;
+		};
+
+		std::vector<SeqNameSeg> genPosChimeras(uint32_t pos);
+
+		[[nodiscard]] Json::Value toJson() const;
+	};
+
+	std::unordered_map<std::string, std::shared_ptr<SegmentsForSeqs>> segsForSeqs_;
+
+
+	template<typename T>
+	void addSegsForSeqs(const std::vector<T> & seqs, aligner & alignerObj, uint32_t padding){
+		segsForSeqs_.clear();
+		for(const auto & seq : seqs){
+			segsForSeqs_[getSeqBase(seq).name_] = std::make_shared<SegmentsForSeqs>(getSeqBase(seq));
+		}
+		// auto debugOut = SeqIOOptions::genFastaOut("temp.fasta");
+		// debugOut.out_.overWriteFile_ = true;
+		// SeqOutput writer(debugOut);
+		for (auto pos1 : iter::range(seqs.size())) {
+			for (auto pos2 : iter::range(pos1 + 1, seqs.size())) {
+				alignerObj.alignCacheGlobal(getSeqBase(seqs[pos1]), getSeqBase(seqs[pos2]));
+				alignerObj.profileAlignment(getSeqBase(seqs[pos1]), getSeqBase(seqs[pos2]), false, false, false);
+				// writer.openWrite(alignerObj.alignObjectA_.seqBase_);
+				// writer.openWrite(alignerObj.alignObjectB_.seqBase_);
+
+				segsForSeqs_[getSeqBase(seqs[pos1]).name_]->addSegments(alignerObj.alignObjectA_.seqBase_,
+						alignerObj.alignObjectB_.seqBase_, padding);
+				segsForSeqs_[getSeqBase(seqs[pos2]).name_]->addSegments(alignerObj.alignObjectB_.seqBase_,
+						alignerObj.alignObjectA_.seqBase_, padding);
+			}
+		}
+	}
+
+	template<typename T>
+	void addSegsForSeq(const T & seq, aligner & alignerObj, uint32_t padding){
+		if(njh::in(getSeqBase(seq).name_, segsForSeqs_)){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << " already have seq with name " << getSeqBase(seq).name_ << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		segsForSeqs_[getSeqBase(seq).name_] = std::make_shared<SegmentsForSeqs>(getSeqBase(seq));
+		for (const auto & otherSeq : segsForSeqs_) {
+			if(otherSeq.first == getSeqBase(seq).name_){
+				continue;
+			}
+			alignerObj.alignCacheGlobal(otherSeq.second->seqBase_, getSeqBase(seq));
+			alignerObj.profileAlignment(otherSeq.second->seqBase_, getSeqBase(seq), false, false, false);
+			segsForSeqs_[otherSeq.second->seqBase_.name_]->addSegments(alignerObj.alignObjectA_.seqBase_,
+					alignerObj.alignObjectB_.seqBase_, padding);
+			segsForSeqs_[getSeqBase(seq).name_]->addSegments(alignerObj.alignObjectB_.seqBase_,
+					alignerObj.alignObjectA_.seqBase_, padding);
+		}
+	}
+
+	Json::Value toJson() const;
+
+};
 
 class PCRSimulator {
 public:
@@ -85,7 +211,7 @@ public:
 
 	void runPcr(uint32_t numThreads,
 			uint32_t pcrRounds,
-			std::string currentSeq,
+			const std::string& currentSeq,
 			uint64_t currentStartingTemplate,
 			std::unordered_map<std::string, uint64_t> & currentSeqMap,
 			std::mutex & currentSeqMapLock) const ;

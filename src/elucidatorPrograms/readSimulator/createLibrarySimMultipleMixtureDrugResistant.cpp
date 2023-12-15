@@ -28,9 +28,9 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	bool rawPatientSetupFile = false;
 	PCRAmountPars pcrNumbers;
 	std::vector<uint32_t> timePoints;
-	double adjustAroundGivenFrac = 0.5;
-	double twoSdFrac = std::numeric_limits<double>::max();
-
+	double adjustAroundGivenFrac = 0.99;
+	//double twoSdFrac = std::numeric_limits<double>::max();
+	double twoSdFrac = 0.3;
 	readSimulatorSetUp setUp(inputCommands);
 	setUp.processDebug();
 	setUp.processVerbose();
@@ -45,7 +45,8 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	setUp.setOption(rawPatientSetupFile, "--rawPatientSetupFile", "Patient Setup File designates individual samples");
 
 	setUp.setOption(patientSetupFile, "--patientSetupFile", "Patient Setup File", true);
-	setUp.setOption(coiTableFnp, "--coiTable", "COI Table", true);
+
+	setUp.setOption(coiTableFnp, "--coiTable", "COI Table", !rawPatientSetupFile);
 	setUp.setOption(haplotypeInfo, "--haplotypeInfo", "Haplotype Info", true);
 	setUp.setOption(primerMidFnp, "--primerMidFnp", "Primer MID Fnp", true);
 	setUp.setOption(libraryName, "--libraryName", "Library Name", true);
@@ -68,7 +69,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	}
 	LibrarySetup lSetup(libraryName, simPars);
 
-	table coiTable;;
+	table coiTable;
 	table haplotypeInfoTable(haplotypeInfo, "\t", true);
 	table patientSetupTable(patientSetupFile, "\t", true);
 	lSetup.ids_ = std::make_unique<PrimersAndMids>(primerMidFnp);
@@ -90,6 +91,11 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 		}
 	}
 	if(!patientSetUpHasCOICol){
+		if(coiTableFnp.empty()) {
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << " need to supply COI table if COI not in patient set up file" << "\n";
+			throw std::runtime_error{ss.str()};
+		}
 		coiTable = table(coiTableFnp, "\t", true);
 	}
 
@@ -108,6 +114,9 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
     if(njh::in(std::string("startingTemplate"), metaLevels ) ){
       removeElement<std::string>(metaLevels, "startingTemplate");
     }
+		if(njh::in(std::string("pcrRounds"), metaLevels ) ){
+			removeElement<std::string>(metaLevels, "pcrRounds");
+		}
 	}else{
 		removeElement<std::string>(metaLevels, "number");
 	}
@@ -312,6 +321,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 		bool replicate_{false};
 		uint32_t initalCOI_{1};
     uint32_t initialStartingTemplate_{std::numeric_limits<uint32_t>::max()};
+		uint32_t pcrRounds_{std::numeric_limits<uint32_t>::max()};
 		Json::Value toJson() const{
 			Json::Value ret;
 			ret["class"] = njh::json::toJson(njh::getTypeName(*this));
@@ -321,6 +331,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 			ret["replicate_"] = njh::json::toJson(replicate_);
 			ret["initalCOI_"] = njh::json::toJson(initalCOI_);
       ret["initialStartingTemplate_"] = njh::json::toJson(initialStartingTemplate_);
+			ret["pcrRounds_"] = njh::json::toJson(pcrRounds_);
 			return ret;
 		}
 	};
@@ -344,6 +355,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 		bool hasNameCol = njh::in<std::string>("name", patientSetupTable.columnNames_);
 		bool hasReplicateCol = njh::in<std::string>("replicate", patientSetupTable.columnNames_);
     bool hasStartingTemplateCol = njh::in<std::string>("startingTemplate", patientSetupTable.columnNames_);
+		bool hasPcrRounds = njh::in<std::string>("pcrRounds", patientSetupTable.columnNames_);
 
     if(hasStartingTemplateCol){
       pcrNumbers.startingTemplateAmounts_ = {2048};
@@ -365,6 +377,7 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 				}
 				alreadyAddedNames.emplace(currentPatient.name_);
 			}
+
 			auto currentLevel = currentPatient.meta_.pasteLevels(metaLevels);
 			uint32_t initalCOI;
 			if(patientSetUpHasCOICol){
@@ -386,6 +399,9 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
       if(hasStartingTemplateCol){
         currentPatient.initialStartingTemplate_ = njh::StrToNumConverter::stoToNum<uint32_t>(row[patientSetupTable.getColPos("startingTemplate")]);
       }
+			if(hasPcrRounds){
+				currentPatient.pcrRounds_ = njh::StrToNumConverter::stoToNum<uint32_t>(row[patientSetupTable.getColPos("pcrRounds")]);
+			}
 			patientSetUpPars.emplace_back(currentPatient);
 			++patientCount;
 		}
@@ -578,7 +594,11 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 									+ genFinalReadNameSection(finalReadAmount),
 							ControlPopulation::SeqSampledAmounts { finalReadAmount,
 						startingTemplateAmountForSamp }, numRuns);
-
+					for(auto & runTop : currentSamp.expRuns_) {
+						for(auto & run : runTop.second) {
+							run.meta_.addMeta("pcrRounds", patient.pcrRounds_);
+						}
+					}
 				}
 			}
 			lSetup.pop_.addSample(currentSamp);
@@ -615,7 +635,9 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 						mixtures[primerPair]->meta_->addMeta("sampName_", sample.sampName_);
 						mixtures[primerPair]->meta_->addMeta("experiment", experiment.first );
 						mixtures[primerPair]->meta_->addMeta("runNumber", runNumber);
-
+						if(run.meta_.containsMeta("pcrRounds")) {
+							mixtures[primerPair]->pcrRounds_ = run.meta_.getMeta<uint32_t>("pcrRounds");
+						}
 						mixtures[primerPair]->startingTemplateAmount_ = run.expAmounts_.totalGenomesSampled_;
 						mixtures[primerPair]->finalReadAmount_ = run.expAmounts_.sequencedReadAmount_;
 						mixtures[primerPair]->setPrimers(primerPair,
@@ -706,7 +728,9 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 						mixtures[primerPair]->meta_->addMeta("sampName_", sample.sampName_);
 						mixtures[primerPair]->meta_->addMeta("experiment", experiment.first );
 						mixtures[primerPair]->meta_->addMeta("runNumber", runNumber);
-
+						if(run.meta_.containsMeta("pcrRounds")) {
+							mixtures[primerPair]->pcrRounds_ = run.meta_.getMeta<uint32_t>("pcrRounds");
+						}
 						mixtures[primerPair]->startingTemplateAmount_ = run.expAmounts_.totalGenomesSampled_;
 						mixtures[primerPair]->finalReadAmount_ = run.expAmounts_.sequencedReadAmount_;
 						mixtures[primerPair]->setPrimers(primerPair,
@@ -784,6 +808,10 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 	}
 	metaHeader.emplace_back("PCRStartingTemplate");
 	metaHeader.emplace_back("FinalSamplingReadAmount");
+	if(std::numeric_limits<uint32_t>::max() != patientSetUpPars.front().pcrRounds_) {
+		metaHeader.emplace_back("PCR_Rounds");
+	}
+
 	addOtherVec(metaHeader, metaLevels);
 	table metaTable(metaHeader);
 	for(const auto & patient : patientSetUpPars){
@@ -812,8 +840,14 @@ int readSimulatorRunner::createLibrarySimMultipleMixtureDrugResistant(
 					}
 					sampMeta.addMeta("PCRStartingTemplate", startingTemplateAmount);
 					sampMeta.addMeta("FinalSamplingReadAmount", finalReadAmount);
+					if(std::numeric_limits<uint32_t>::max() != patient.pcrRounds_) {
+						sampMeta.addMeta("PCR_Rounds", patient.pcrRounds_);
+					}
 					row.emplace_back(estd::to_string(startingTemplateAmount));
 					row.emplace_back(estd::to_string(finalReadAmount));
+					if(std::numeric_limits<uint32_t>::max() != patient.pcrRounds_) {
+						row.emplace_back(estd::to_string(patient.pcrRounds_));
+					}
 					for(const auto & head : metaLevels){
 						row.emplace_back(sampMeta.getMeta(head));
 					}

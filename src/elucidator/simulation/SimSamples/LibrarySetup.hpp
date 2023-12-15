@@ -529,6 +529,7 @@ public:
 
 	std::map<std::string, uint64_t> genomeCounts_;
 
+	uint32_t pcrRounds_{std::numeric_limits<uint32_t>::max()};
 	uint32_t startingTemplateAmount_{3000};
 	uint32_t finalReadAmount_{1000};
 
@@ -549,7 +550,7 @@ public:
 		ret["name"] = njh::json::toJson(name_);
 		ret["expectedAbundances_"] = njh::json::toJson(expectedAbundances_);
 		ret["genomeCounts_"] = njh::json::toJson(genomeCounts_);
-
+		ret["pcrRounds_"] = njh::json::toJson(pcrRounds_);
 		ret["startingTemplateAmount_"] = njh::json::toJson(startingTemplateAmount_);
 		ret["finalReadAmount_"] = njh::json::toJson(finalReadAmount_);
 		if(nullptr != meta_){
@@ -823,6 +824,9 @@ public:
 					if(mixture["primers"].isMember("reverse_randomPrecedingBases")){
 						mixtureSet->primers_->reverse_randomPrecedingBases_ = mixture["primers"]["reverse_randomPrecedingBases"].asUInt();
 					}
+				}
+				if(mixture.isMember("pcrRounds_")) {
+					mixtureSet->pcrRounds_ = mixture["pcrRounds_"].asUInt();
 				}
 				mixtureSet->startingTemplateAmount_ = mixture["startingTemplateAmount_"].asUInt();
 				mixtureSet->finalReadAmount_ = mixture["finalReadAmount_"].asUInt();
