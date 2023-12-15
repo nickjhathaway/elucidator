@@ -67,7 +67,7 @@ int gffExpRunner::combineGffs(const njh::progutils::CmdArgs & inputCommands){
 		{
 			BioDataFileIO<GFFCore> reader{(IoOptions(InOptions(inputFile)))};
 			reader.openIn();
-			uint32_t count = 0;
+			// uint32_t count = 0;
 			std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 
 			while(nullptr != gRecord) {
@@ -91,7 +91,7 @@ int gffExpRunner::combineGffs(const njh::progutils::CmdArgs & inputCommands){
 					break;
 				}
 				gRecord = reader.readNextRecord();
-				++count;
+				// ++count;
 			}
 		}
 	}
@@ -160,7 +160,7 @@ int gffExpRunner::appendGff(const njh::progutils::CmdArgs & inputCommands){
 	{
 		BioDataFileIO<GFFCore> reader{(IoOptions(InOptions(inputFile)))};
 		reader.openIn();
-		uint32_t count = 0;
+		// uint32_t count = 0;
 		std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 
 		while(nullptr != gRecord) {
@@ -184,13 +184,13 @@ int gffExpRunner::appendGff(const njh::progutils::CmdArgs & inputCommands){
 				break;
 			}
 			gRecord = reader.readNextRecord();
-			++count;
+			// ++count;
 		}
 	}
 	{
 		BioDataFileIO<GFFCore> reader{(IoOptions(InOptions(appendingFile)))};
 		reader.openIn();
-		uint32_t count = 0;
+		// uint32_t count = 0;
 		std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 
 		while(nullptr != gRecord) {
@@ -212,7 +212,7 @@ int gffExpRunner::appendGff(const njh::progutils::CmdArgs & inputCommands){
 				break;
 			}
 			gRecord = reader.readNextRecord();
-			++count;
+			// ++count;
 		}
 	}
 

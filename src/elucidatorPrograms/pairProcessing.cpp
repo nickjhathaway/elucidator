@@ -270,7 +270,7 @@ int pairProcessingRunner::detectPossiblePrimers(
 
 
 
-	uint32_t totalAligned = 0;
+	// uint32_t totalAligned = 0;
 	while(reader.readNextRead(seq)){
 		++total;
 		if(total % 25000 == 0 && setUp.pars_.verbose_){
@@ -289,7 +289,7 @@ int pairProcessingRunner::detectPossiblePrimers(
 			continue;
 		}
 		/**@todo check to see if the sequence is mostly must tandem repeat */
-		++totalAligned;
+		// ++totalAligned;
 		alignerObj.alignRegGlobalNoInternalGaps(seq.seqBase_, seq.mateSeqBase_);
 		alignerObj.profileAlignment(seq.seqBase_, seq.mateSeqBase_, false, true, true);
 

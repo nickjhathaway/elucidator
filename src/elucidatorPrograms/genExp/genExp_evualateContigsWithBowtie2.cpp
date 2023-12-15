@@ -268,7 +268,7 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 		for (const auto & bamAlignKey : bamAlignKeys) {
 			const auto & alnForRead = bamAligns[bamAlignKey];
 			++mapCounts[alnForRead.size()];
-			uint32_t extractionCount = 0;
+			// uint32_t extractionCount = 0;
 			for (const auto & aln : alnForRead) {
 
 				auto results = std::make_shared<AlignmentResults>(aln, refData);
@@ -316,7 +316,7 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 						<< '\t' << results->comp_.lqMismatches_
 						<< '\t' << results->comp_.hqMismatches_ << std::endl;
 				allAlnResults[aln.Name][genome.first].emplace_back(results);
-				++extractionCount;
+				// ++extractionCount;
 			}
 			++readNumber;
 		}
@@ -1391,7 +1391,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 		for (const auto & bamAlignKey : bamAlignKeys) {
 			const auto & alnForRead = bamAligns[bamAlignKey];
 			++mapCounts[alnForRead.size()];
-			uint32_t extractionCount = 0;
+			// uint32_t extractionCount = 0;
 			for (const auto & aln : alnForRead) {
 				auto results = std::make_shared<AlignmentResults>(aln, refData);
 				results->setRefSeq(twobitReader);
@@ -1435,7 +1435,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 						<< '\t' << results->comp_.lqMismatches_
 						<< '\t' << results->comp_.hqMismatches_ << std::endl;
 				allAlnResults[aln.Name][genome.first].emplace_back(results);
-				++extractionCount;
+				// ++extractionCount;
 			}
 			++readNumber;
 		}

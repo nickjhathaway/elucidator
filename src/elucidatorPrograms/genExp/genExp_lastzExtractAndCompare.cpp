@@ -188,7 +188,7 @@ int genExpRunner::lastzExtractAndCompare(const njh::progutils::CmdArgs & inputCo
 		for (const auto & bamAlignKey : bamAlignKeys) {
 			const auto & alnForRead = bamAligns[bamAlignKey];
 			++mapCounts[alnForRead.size()];
-			uint32_t extractionCount = 0;
+			// uint32_t extractionCount = 0;
 			for (const auto & aln : alnForRead) {
 
 				auto results = std::make_shared<AlignmentResults>(aln, refData);
@@ -235,7 +235,7 @@ int genExpRunner::lastzExtractAndCompare(const njh::progutils::CmdArgs & inputCo
 						<< '\t' << results->comp_.lqMismatches_
 						<< '\t' << results->comp_.hqMismatches_ << std::endl;
 				allAlnResults[aln.Name][genome.first].emplace_back(results);
-				++extractionCount;
+				// ++extractionCount;
 			}
 			++readNumber;
 		}

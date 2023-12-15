@@ -125,10 +125,10 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 
 		SeqOutput writer(regionsOutOpts);
 		writer.openOut();
-		uint32_t regionCount = 0;
+		// uint32_t regionCount = 0;
 		for(const auto & region : regions){
 			regionsByName[region.uid_] = region;
-			++regionCount;
+			// ++regionCount;
 			auto subRegion = region.extractSeq(tReader);
 			subRegion.name_ = region.uid_;
 			writer.write(subRegion);

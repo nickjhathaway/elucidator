@@ -907,7 +907,7 @@ int bamCountingExpRunner::readGzIndex(const njh::progutils::CmdArgs & inputComma
 
 	GzSimpleBinFile<uint64_t, SlimCounterRef::IndexNumOfElements> gzReader(filename);
 	auto datcon = gzReader.genDataContainer();
-	uint32_t count = 0;
+	// uint32_t count = 0;
 	std::ofstream outfile;
 	openTextFile(outfile, outOpts.out_);
 	while(gzReader.read(datcon) ){
@@ -915,7 +915,7 @@ int bamCountingExpRunner::readGzIndex(const njh::progutils::CmdArgs & inputComma
 		auto cov = datcon.data_[1];
 		auto fileLoc = datcon.data_[2];
 		outfile << refPos << "\t" << cov << '\t' << fileLoc << std::endl;
-		++count;
+		// ++count;
 	}
 
 	return 0;
@@ -931,11 +931,11 @@ int bamCountingExpRunner::coverageInfo(const njh::progutils::CmdArgs & inputComm
 
 	GzSimpleBinFile<uint64_t, SlimCounterRef::IndexNumOfElements> gzReader(filename);
 	auto datcon = gzReader.genDataContainer();
-	uint32_t count = 0;
+	// uint32_t count = 0;
 	std::vector<uint32_t> coverage;
 	while(gzReader.read(datcon) ){
 		coverage.push_back(datcon.data_[1]);
-		++count;
+		// ++count;
 	}
 
 	auto stats = getStatsOnVec(coverage);

@@ -636,7 +636,7 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 											finishedAmount](const uint32_t threadNum) {
 									njh::randomGenerator ranGen;
 									std::unordered_map<std::string, uint32_t> threadChimeras;
-									uint32_t chisGenerated = 0;
+									// uint32_t chisGenerated = 0;
 									for (uint64_t temp = 0; temp < partials[threadNum]; ++temp) {
 										//ranGen.unifRand();
 										auto partLength = ranGen.unifRand<uint32_t>(0, seqSampled.seqBase_.seq_.size());
@@ -661,7 +661,7 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 											std::string templatedLandedOn = gen.genObj();
 											//												std::cout << "templatedLandedOn different? " << njh::colorBool(templatedLandedOn != seqSampled.seqBase_.name_) << std::endl;
 											if (templatedLandedOn != seqSampled.seqBase_.name_) {
-												++chisGenerated;
+												// ++chisGenerated;
 												++threadChimeras[seqSampled.seqBase_.seq_.substr(0, partLength) + chiProf.segsForSeqs_[templatedLandedOn]->seqBase_.seq_.substr(otherTempPos[templatedLandedOn])];
 											}
 										}
@@ -734,7 +734,7 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 									//std::unordered_map<std::string, uint32_t> chimeras;
 									njh::randomGenerator ranGen;
 									std::unordered_map<std::string, uint32_t> threadChimeras;
-									uint32_t chisGenerated = 0;
+									// uint32_t chisGenerated = 0;
 									for (uint64_t temp = 0; temp < partials[threadNum]; ++temp) {
 										//ranGen.unifRand();
 										auto partLength = ranGen.unifRand<uint32_t>(0, chiSeq.seq_.size());
@@ -759,7 +759,7 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 											std::string templatedLandedOn = gen.genObj();
 											//												std::cout << "templatedLandedOn different? " << njh::colorBool(templatedLandedOn != seqSampled.seqBase_.name_) << std::endl;
 											if (templatedLandedOn != chiSeq.name_) {
-												++chisGenerated;
+												// ++chisGenerated;
 												++threadChimeras[chiSeq.seq_.substr(0, partLength) + chiProf.segsForSeqs_[templatedLandedOn]->
 												                 seqBase_.seq_.substr(otherTempPos[templatedLandedOn])];
 											}
@@ -877,10 +877,10 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 						//							std::cout << njh::bashCT::reset << std::endl;
 						//						}
 					}
-					uint64_t all_finishedAmount = 0;
-					for (const auto& finised: finishedAmount) {
-						all_finishedAmount += finised.second;
-					}
+					// uint64_t all_finishedAmount = 0;
+					// for (const auto& finised: finishedAmount) {
+					// 	all_finishedAmount += finised.second;
+					// }
 					//					std::cout << "chiTotal: " << intialRoundChiTotal << " " << static_cast<double>(intialRoundChiTotal)/(all_finishedAmount + intialRoundChiTotal) << std::endl;
 					//exit(1);
 				} {
@@ -992,7 +992,7 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 									finalChimeras,&roundGen,&finalChimerasPerRound](const uint32_t threadNum) {
 							njh::randomGenerator ranGen;
 							std::unordered_map<std::string, uint32_t> threadChimeras;
-							uint32_t chisGenerated = 0;
+							// uint32_t chisGenerated = 0;
 							for (uint64_t temp = 0; temp < partials[threadNum]; ++temp) {
 								//ranGen.unifRand();
 								auto partLength = ranGen.unifRand<uint32_t>(
@@ -1019,7 +1019,7 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 									std::string templatedLandedOn = gen.genObj();
 									//												std::cout << "templatedLandedOn different? " << njh::colorBool(templatedLandedOn != chiProf.segsForSeqs_[finalPartial.first]->seqBase_.name_) << std::endl;
 									if (templatedLandedOn != chiProf.segsForSeqs_[finalPartial.first]->seqBase_.name_) {
-										++chisGenerated;
+										// ++chisGenerated;
 										++threadChimeras[chiProf.segsForSeqs_[finalPartial.first]->seqBase_.seq_.substr(0, partLength) +
 										                 chiProf.segsForSeqs_[templatedLandedOn]->seqBase_.seq_.substr(
 											                 otherTempPos[templatedLandedOn])];

@@ -107,7 +107,7 @@ int gffExpRunner::extractProteinsFromGff(const njh::progutils::CmdArgs & inputCo
 	BioDataFileIO<GFFCore> reader{IoOptions(InOptions(gffFnp))};
 	std::vector<std::shared_ptr<GFFCore>> cache;
 	reader.openIn();
-	uint32_t count = 0;
+	// uint32_t count = 0;
 	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	while (nullptr != gRecord) {
@@ -161,7 +161,7 @@ int gffExpRunner::extractProteinsFromGff(const njh::progutils::CmdArgs & inputCo
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 
 	auto allGeneIds = njh::getVecOfMapKeys(gffRecs);

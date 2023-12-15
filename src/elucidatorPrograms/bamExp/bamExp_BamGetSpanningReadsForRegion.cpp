@@ -65,10 +65,10 @@ int bamExpRunner::MultipleBamGetPileupForRegion(
 			std::set<std::string> subCounts;
 			njh::addVecToSet(getVectorOfMapKeys(counts[regionPos]), subCounts);
 			subCounts.emplace(prep.inputRegionSeqs[regionPos].seq_);
-			uint64_t total = 0;
-			for(const auto & seq : subCounts){
-				total += counts[regionPos][seq];
-			}
+			// uint64_t total = 0;
+			// for(const auto & seq : subCounts){
+			// 	total += counts[regionPos][seq];
+			// }
 			for(const auto & seq : subCounts){
 				outCounts << prep.inputRegions[regionPos].uid_
 						<< "\t" << prep.inputRegionSeqs[regionPos].seq_
@@ -113,10 +113,10 @@ int bamExpRunner::BamGetPileupForRegion(
 		std::set<std::string> subCounts;
 		njh::addVecToSet(getVectorOfMapKeys(counts[regionPos]), subCounts);
 		subCounts.emplace(prep.inputRegionSeqs[regionPos].seq_);
-		uint64_t total = 0;
-		for(const auto & seq : subCounts){
-			total += counts[regionPos][seq];
-		}
+		// uint64_t total = 0;
+		// for(const auto & seq : subCounts){
+		// 	total += counts[regionPos][seq];
+		// }
 		for(const auto & seq : subCounts){
 			outCounts << prep.inputRegions[regionPos].uid_
 					<< "\t" << prep.inputRegionSeqs[regionPos].seq_
@@ -222,13 +222,13 @@ int bamExpRunner::BamGetSpanningReadsForRegionLongReads(
 				}
 
 				setBamFileRegionThrow(*currentBReader, setterRegion);
-				uint32_t count = 0;
+				// uint32_t count = 0;
 				while(currentBReader->GetNextAlignment(bAln)){
 //				std::cout << "count:" << count << std::endl;
 //				std::cout << "\tbAln.Name: " << bAln.Name << std::endl;
 //				std::cout << "\tbAln.IsPrimaryAlignment(): " << njh::colorBool(bAln.IsPrimaryAlignment()) << std::endl;
 //				std::cout << "\tbAln.IsMapped(): " << njh::colorBool(bAln.IsMapped()) << std::endl;
-					++count;
+					// ++count;
 					if(bAln.IsPrimaryAlignment() && bAln.IsMapped()){
 						++currentTotalReadCounts[currentRegion.uid_];
 						if(bAln.Position <= currentRegion.start_ && bAln.GetEndPosition() >= currentRegion.end_){

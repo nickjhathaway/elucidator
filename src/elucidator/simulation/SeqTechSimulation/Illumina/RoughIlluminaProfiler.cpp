@@ -245,12 +245,12 @@ void RoughIlluminaProfiler::Counts::writeProfiles(const std::string & prefix, bo
 		OutputStream base_substitution_ratesOut(base_substitution_ratesOpts);
 		base_substitution_ratesOut << "ref\tseq\tcount" << std::endl;
 		for(const auto & refBase : bases){
-			double total = 0;
+			// double total = 0;
 			for(const auto & seqBase : bases){
 				if(seqBase == refBase){
 					continue;
 				}
-				total += baseChangeCounts[refBase][seqBase];
+				// total += baseChangeCounts[refBase][seqBase];
 			}
 			for(const auto & seqBase : bases){
 				if(seqBase == refBase){
@@ -364,12 +364,12 @@ void RoughIlluminaProfiler::Counts::writeProfiles(const std::string & prefix, bo
 	njh::sort(allPositions);
 	for(const auto & pos :  allPositions){
 		for(const auto & refBase : bases){
-			double total = 0;
+			// double total = 0;
 			for(const auto & seqBase : bases){
 				if(seqBase == refBase){
 					continue;
 				}
-				total += baseChangeCountsPerPosition[pos][refBase][seqBase];
+				// total += baseChangeCountsPerPosition[pos][refBase][seqBase];
 			}
 			for(const auto & seqBase : bases){
 				if(seqBase == refBase){

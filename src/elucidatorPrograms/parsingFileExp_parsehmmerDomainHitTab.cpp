@@ -50,11 +50,11 @@ int parsingFileExpRunner::parsehmmerDomainHitTab(
 	BioDataFileIO<HmmerDomainHitTab> reader{IoOptions(InOptions(fnp))};
 	HmmerDomainHitTab domain;
 	reader.openIn();
-	uint32_t count = 0;
+	// uint32_t count = 0;
 	out << njh::conToStr(HmmerDomainHitTab::toDelimStrHeader(), "\t") << std::endl;
 	while(reader.readNextRecord(domain)){
 		out << domain.toDelimStr() << std::endl;
-		++count;
+		// ++count;
 	}
 
 

@@ -471,13 +471,13 @@ std::vector<std::vector<int>> getPossibleProteinsForSpectrum(
   }
   bool keepGrowing = true;
   std::vector<std::vector<int>> matchesSpectrum;
-  int count = 0;
+  // int count = 0;
   while (keepGrowing) {
     initialCycle = growNextCycle(initialCycle, possibleWeights);
     keepGrowing =
         trimCycle(initialCycle, matchesSpectrum, spectrumToWeights, specVec);
     std::sort(initialCycle.begin(), initialCycle.end());
-    ++count;
+    // ++count;
   }
   return matchesSpectrum;
 }

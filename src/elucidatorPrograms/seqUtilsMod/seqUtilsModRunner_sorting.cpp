@@ -272,7 +272,7 @@ int seqUtilsModRunner::sortReadsByKCompToTop(
 	// parameters
 
 	uint32_t klen = 4;
-	bool decending = true;
+	// bool decending = true;
 	seqUtilsModSetUp setUp(inputCommands);
   // input file info
 	setUp.processDefaultReader(true);
@@ -280,9 +280,9 @@ int seqUtilsModRunner::sortReadsByKCompToTop(
   	setUp.pars_.ioOptions_.out_.outFilename_ = njh::files::prependFileBasename(njh::files::removeExtension(setUp.pars_.ioOptions_.firstName_), "sorted_");
   }
   setUp.setOption(klen, "--klen", "klen");
-  bool ascending = false;
-  setUp.setOption(ascending, "--ascending", "Ascending Sort");
-  decending = !ascending;
+  // bool ascending = false;
+  // setUp.setOption(ascending, "--ascending", "Ascending Sort");
+  // decending = !ascending;
   setUp.finishSetUp(std::cout);
 
 	std::vector<std::shared_ptr<seqWithKmerInfo>> allInputReads;

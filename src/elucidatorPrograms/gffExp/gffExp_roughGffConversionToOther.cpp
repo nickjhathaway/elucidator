@@ -66,7 +66,7 @@ int gffExpRunner::roughGffConversionToOther(const njh::progutils::CmdArgs & inpu
 
 	BioDataFileIO<GFFCore> reader{(IoOptions(InOptions(inputFile)))};
 	reader.openIn();
-	uint32_t count = 0;
+	// uint32_t count = 0;
 	std::string line = "";
 
 	OutputStream outFile(outOpts);
@@ -96,7 +96,7 @@ int gffExpRunner::roughGffConversionToOther(const njh::progutils::CmdArgs & inpu
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 
 

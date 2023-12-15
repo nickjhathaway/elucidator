@@ -37,9 +37,9 @@ int seqUtilsTrimRunner::trimFrontForTandemRepeat(const njh::progutils::CmdArgs &
 
 	seqInfo seq;
 
-	uint32_t count = 0;
+	// uint32_t count = 0;
 	while(reader.readNextRead(seq)){
-		++count;
+		// ++count;
 //		std::cout << "count: " << count << std::endl;
 		if(len(seq) > tandem.size()){
 			const std::string front = seq.seq_.substr(0, tandem.size());

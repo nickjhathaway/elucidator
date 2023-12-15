@@ -48,14 +48,14 @@ int primerUtilsRunner::testForPrimerDimers(const njh::progutils::CmdArgs &inputC
 	}
 	ids.initPrimerDeterminator();
 	uint64_t maxSize = ids.pDeterminator_->getMaxPrimerSize();
-	uint32_t totalReads = 0;
+	// uint32_t totalReads = 0;
 	{
 		seqInfo seq;
 		SeqInput reader(setUp.pars_.ioOptions_);
 		reader.openIn();
 		while(reader.readNextRead(seq)){
 			readVec::getMaxLength(seq, maxSize);
-			++totalReads;
+			// ++totalReads;
 		}
 	}
 

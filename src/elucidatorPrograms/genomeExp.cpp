@@ -187,7 +187,7 @@ int genomeExpRunner::reorientToRefGenome(const njh::progutils::CmdArgs & inputCo
 		OutputStream outGffOut(outGffFnp);
 		BioDataFileIO<GFFCore> reader{(IoOptions(InOptions(genomeGff)))};
 		reader.openIn();
-		uint32_t count = 0;
+		// uint32_t count = 0;
 		std::string line = "";
 		TwoBit::TwoBitFile tReader(genomeTwobit);
 		auto chromLens = tReader.getSeqLens();
@@ -224,7 +224,7 @@ int genomeExpRunner::reorientToRefGenome(const njh::progutils::CmdArgs & inputCo
 				break;
 			}
 			gRecord = reader.readNextRecord();
-			++count;
+			// ++count;
 		}
 	}
 

@@ -126,7 +126,7 @@ int programWrapperRunner::runHmmsearch(const njh::progutils::CmdArgs & inputComm
 		BioDataFileIO<HmmerDomainHitTab> reader{IoOptions(InOptions(rawDomainHitsFnp))};
 		HmmerDomainHitTab domain;
 		reader.openIn();
-		uint32_t count = 0;
+		// uint32_t count = 0;
 		out << "#" << njh::conToStr(HmmerDomainHitTab::toDelimStrHeader(), "\t") << std::endl;
 		outFilt << "#" << njh::conToStr(HmmerDomainHitTab::toDelimStrHeader(), "\t") << std::endl;
 
@@ -139,7 +139,7 @@ int programWrapperRunner::runHmmsearch(const njh::progutils::CmdArgs & inputComm
 			if(passHmmStart && passHmmEnd && passTargetStart && passTargetEnd) {
 				outFilt << domain.toDelimStr() << std::endl;
 			}
-			++count;
+			// ++count;
 		}
 	}
 	//get best non-overlapping positions

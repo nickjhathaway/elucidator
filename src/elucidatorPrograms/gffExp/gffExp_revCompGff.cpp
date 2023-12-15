@@ -41,7 +41,7 @@ int gffExpRunner::revCompGff(const njh::progutils::CmdArgs & inputCommands){
 
 	BioDataFileIO<GFFCore> reader{(IoOptions(InOptions(inputFile)))};
 	reader.openIn();
-	uint32_t count = 0;
+	// uint32_t count = 0;
 	std::string line = "";
 	TwoBit::TwoBitFile tReader(genomeTwobit);
 	auto chromLens = tReader.getSeqLens();
@@ -76,7 +76,7 @@ int gffExpRunner::revCompGff(const njh::progutils::CmdArgs & inputCommands){
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 
 	return 0;

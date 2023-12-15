@@ -27,7 +27,7 @@
 
 
 #include "gffExp.hpp"
-#include "elucidator/objects/BioDataObject.h"
+// #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/seqToolsUtils/seqToolsUtils.hpp"
 #include <njhseq/objects/helperObjects/AminoAcidPositionInfo.hpp>
 
@@ -132,12 +132,14 @@ int gffExpRunner::aaPositionsToBed(const njh::progutils::CmdArgs & inputCommands
 											row[aaInfos.infoTab_.getColPos("aastart")]) :
 							njh::StrToNumConverter::stoToNum<uint32_t>(
 											row[aaInfos.infoTab_.getColPos("aastart")]) - 1;
-			auto aastop =
-							aaInfos.zeroBased_ ?
-							njh::StrToNumConverter::stoToNum<uint32_t>(
-											row[aaInfos.infoTab_.getColPos("aastop")]) :
-							njh::StrToNumConverter::stoToNum<uint32_t>(
+			auto aastop =njh::StrToNumConverter::stoToNum<uint32_t>(
 											row[aaInfos.infoTab_.getColPos("aastop")]);
+			// auto aastop =
+			// 				aaInfos.zeroBased_ ?
+			// 				njh::StrToNumConverter::stoToNum<uint32_t>(
+			// 								row[aaInfos.infoTab_.getColPos("aastop")]) :
+			// 				njh::StrToNumConverter::stoToNum<uint32_t>(
+			// 								row[aaInfos.infoTab_.getColPos("aastop")]);
 
 			std::vector<uint32_t> aaPositions(aastop - aaStart);
 			njh::iota(aaPositions, aaStart);
@@ -197,13 +199,13 @@ int gffExpRunner::aaPositionsToBed(const njh::progutils::CmdArgs & inputCommands
 		}
 
 		for (const auto & positions : aaInfos.aminoPositionsPerId_) {
-			bool byTranscript = false;
-			std::string geneID = positions.first;
+			// bool byTranscript = false;
+			// std::string geneID = positions.first;
 			for(const auto & gene : genes){
 				for(const auto & mRNA : gene.second->mRNAs_){
 					if(mRNA->getIDAttr() == positions.first){
-						byTranscript = true;
-						geneID = gene.first;
+						// byTranscript = true;
+						// geneID = gene.first;
 						break;
 					}
 				}
@@ -369,7 +371,7 @@ int gffExpRunner::gffGetNumOfTranscriptsForGenes(const njh::progutils::CmdArgs &
 	reader.openIn();
 	OutputStream out(outOpts);
 	out << "GeneID\tTranscripts" << std::endl;
-	uint32_t count = 0;
+	// uint32_t count = 0;
 	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 
@@ -406,7 +408,7 @@ int gffExpRunner::gffGetNumOfTranscriptsForGenes(const njh::progutils::CmdArgs &
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 
 	return 0;
@@ -424,7 +426,7 @@ int gffExpRunner::removeFastaFromGffFile(const njh::progutils::CmdArgs & inputCo
 
 	BioDataFileIO<GFFCore> reader{(IoOptions(InOptions(inputFile)))};
 	reader.openIn();
-	uint32_t count = 0;
+	// uint32_t count = 0;
 	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	std::ofstream outFile;
@@ -452,7 +454,7 @@ int gffExpRunner::removeFastaFromGffFile(const njh::progutils::CmdArgs & inputCo
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 	return 0;
 }
@@ -477,7 +479,7 @@ int gffExpRunner::gffToBedByID(const njh::progutils::CmdArgs & inputCommands) {
 	gffIo.openOut();
 	gffIo.openIn();
 	GFFCore gff;
-	std::string line = "";
+	std::string line;
 	while(gffIo.readNextRecord(gff)){
 		if(gff.hasAttr("ID") && njh::in(gff.getAttr("ID") , ids )){
 			gffIo.write(gff, [](const GFFCore & g, std::ostream & out){
@@ -502,7 +504,7 @@ int gffExpRunner::gffToBedByID(const njh::progutils::CmdArgs & inputCommands) {
 int gffExpRunner::gffToBedByName(const njh::progutils::CmdArgs & inputCommands) {
 
 	bfs::path filename = "";
-	std::string name = "";
+	std::string name ;
 	OutOptions outOpts(bfs::path(""), ".bed");
 
 	seqSetUp setUp(inputCommands);
@@ -516,7 +518,7 @@ int gffExpRunner::gffToBedByName(const njh::progutils::CmdArgs & inputCommands) 
 	gffIo.openOut();
 	gffIo.openIn();
 	GFFCore gff;
-	std::string line = "";
+	std::string line;
 	while(gffIo.readNextRecord(gff)){
 		if(gff.hasAttr("Name") && gff.getAttr("Name") == name){
 			gffIo.write(gff, [](const GFFCore & g, std::ostream & out){
@@ -541,7 +543,7 @@ int gffExpRunner::gffToBedByName(const njh::progutils::CmdArgs & inputCommands) 
 int gffExpRunner::gffToJsonByID(const njh::progutils::CmdArgs & inputCommands) {
 
 	bfs::path filename = "";
-	std::string ID = "";
+	std::string ID;
 	OutOptions outOpts(bfs::path(""), ".json");
 
 	seqSetUp setUp(inputCommands);
@@ -555,7 +557,7 @@ int gffExpRunner::gffToJsonByID(const njh::progutils::CmdArgs & inputCommands) {
 	gffIo.openIn();
 	OutputStream out(outOpts);
 	GFFCore gff;
-	std::string line = "";
+	std::string line;
 	while(gffIo.readNextRecord(gff)){
 		if(gff.hasAttr("ID") && gff.getAttr("ID") == ID){
 			out << gff.toJson() << std::endl;
@@ -585,8 +587,8 @@ int gffExpRunner::testingGffReading(const njh::progutils::CmdArgs & inputCommand
 	std::vector<std::shared_ptr<GFFCore>> ret;
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	while (nullptr != gRecord) {
 		ret.emplace_back(std::move(gRecord));
@@ -602,7 +604,7 @@ int gffExpRunner::testingGffReading(const njh::progutils::CmdArgs & inputCommand
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 
 	}
 	for(const auto & g : ret){
@@ -626,8 +628,8 @@ int gffExpRunner::gffFeatureCount(const njh::progutils::CmdArgs & inputCommands)
 
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	std::unordered_map<std::string, uint32_t> featureCounts;
 	while (nullptr != gRecord) {
@@ -644,7 +646,7 @@ int gffExpRunner::gffFeatureCount(const njh::progutils::CmdArgs & inputCommands)
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 
 	}
 
@@ -666,8 +668,8 @@ int gffExpRunner::gffDescriptionsCount(const njh::progutils::CmdArgs & inputComm
 
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	std::unordered_map<std::string, uint32_t> descriptionCounts;
 	while (nullptr != gRecord) {
@@ -690,7 +692,7 @@ int gffExpRunner::gffDescriptionsCount(const njh::progutils::CmdArgs & inputComm
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 
 	}
 
@@ -703,7 +705,7 @@ int gffExpRunner::gffDescriptionsCount(const njh::progutils::CmdArgs & inputComm
 
 int gffExpRunner::gffCountAttribute(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path inputFile = "";
-	std::string attribute = "";
+	std::string attribute;
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(inputFile, "--gff", "Input gff file", true);
 	setUp.setOption(attribute, "--attribute", "Attribute to count", true);
@@ -711,8 +713,8 @@ int gffExpRunner::gffCountAttribute(const njh::progutils::CmdArgs & inputCommand
 
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	std::unordered_map<std::string, uint32_t> descriptionCounts;
 	while (nullptr != gRecord) {
@@ -733,7 +735,7 @@ int gffExpRunner::gffCountAttribute(const njh::progutils::CmdArgs & inputCommand
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 
 	}
 
@@ -752,8 +754,8 @@ int gffExpRunner::gffAttributesCount(const njh::progutils::CmdArgs & inputComman
 
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	std::unordered_map<std::string, uint32_t> descriptionCounts;
 	while (nullptr != gRecord) {
@@ -773,7 +775,7 @@ int gffExpRunner::gffAttributesCount(const njh::progutils::CmdArgs & inputComman
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 
 	}
 
@@ -794,8 +796,8 @@ int gffExpRunner::gffToBedByAttributeIncludeExonInfo(const njh::progutils::CmdAr
 	bfs::path inputFile = "";
 	OutOptions outOpts(bfs::path(""));
 	outOpts.outExtention_ = ".bed";
-	std::string attribute = "";
-	std::string attributeLevel = "";
+	std::string attribute;
+	std::string attributeLevel;
 
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(inputFile, "--gff", "Input gff file", true);
@@ -807,8 +809,8 @@ int gffExpRunner::gffToBedByAttributeIncludeExonInfo(const njh::progutils::CmdAr
 
 	BioDataFileIO<GFFCore> reader{IoOptions(InOptions(inputFile))};
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	OutOptions outOptsJson(outOpts.outFilename_);
 	outOptsJson.outExtention_ = ".json";
@@ -845,7 +847,7 @@ int gffExpRunner::gffToBedByAttributeIncludeExonInfo(const njh::progutils::CmdAr
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 	std::unordered_map<std::string, std::shared_ptr<GeneFromGffs>> gffGenes;
 	for(const auto & gffRec : gffRecs){
@@ -889,8 +891,8 @@ int gffExpRunner::gffPrintIds(const njh::progutils::CmdArgs & inputCommands){
 
 	BioDataFileIO<GFFCore> reader{IoOptions(InOptions(inputFile))};
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	OutputStream out(outOpts);
 
@@ -910,7 +912,7 @@ int gffExpRunner::gffPrintIds(const njh::progutils::CmdArgs & inputCommands){
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 
 	return 0;
@@ -923,7 +925,7 @@ int gffExpRunner::gffPrintIds(const njh::progutils::CmdArgs & inputCommands){
 int gffExpRunner::extractGffRecordWithChildren(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path inputFile;
 	OutOptions outOpts(bfs::path("out.gff"));
-	std::string id = "";
+	std::string id;
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(inputFile, "--gff", "Input gff file", true);
 	setUp.setOption(id, "--id", "Id to extract", true);
@@ -933,8 +935,8 @@ int gffExpRunner::extractGffRecordWithChildren(const njh::progutils::CmdArgs & i
 
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	std::ofstream outFile;
 	outOpts.openFile(outFile);
@@ -948,10 +950,9 @@ int gffExpRunner::extractGffRecordWithChildren(const njh::progutils::CmdArgs & i
 	}
 	std::set<std::string> parents;
 	while (nullptr != gRecord) {
-		if(gRecord->hasAttr("ID") && gRecord->getAttr("ID") == id){
-			parents.insert(gRecord->getAttr("ID"));
-			gRecord->writeGffRecord(outFile);
-		}else if(gRecord->hasAttr("Parent") && njh::in(gRecord->getAttr("Parent"), parents)){
+		if((gRecord->hasAttr("ID") && gRecord->getAttr("ID") == id )||
+			(gRecord->hasAttr("Parent") && njh::in(gRecord->getAttr("Parent"), parents) )
+			){
 			parents.insert(gRecord->getAttr("ID"));
 			gRecord->writeGffRecord(outFile);
 		}
@@ -967,7 +968,7 @@ int gffExpRunner::extractGffRecordWithChildren(const njh::progutils::CmdArgs & i
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 	return 0;
 }
@@ -985,8 +986,8 @@ int gffExpRunner::extractGffChrom(const njh::progutils::CmdArgs & inputCommands)
 
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	std::unordered_map<std::string, std::unordered_map<std::string, uint32_t>> chromCounts;
 	std::ofstream outFile;
@@ -1018,7 +1019,7 @@ int gffExpRunner::extractGffChrom(const njh::progutils::CmdArgs & inputCommands)
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 	if (setUp.pars_.verbose_) {
 		table out(chromCounts, VecStr {"chrom", "feature", "count" });
@@ -1031,7 +1032,7 @@ int gffExpRunner::extractGffChrom(const njh::progutils::CmdArgs & inputCommands)
 int gffExpRunner::extractGffFeature(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path inputFile;
 	OutOptions outOpts(bfs::path("out.gff"));
-	std::string feature = "";
+	std::string feature;
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(inputFile, "--gff", "Input gff file", true);
 	setUp.setOption(feature, "--feature", "Feature to extract", true);
@@ -1041,8 +1042,8 @@ int gffExpRunner::extractGffFeature(const njh::progutils::CmdArgs & inputCommand
 
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	std::unordered_map<std::string, uint32_t> featureCounts;
 	std::ofstream outFile;
@@ -1072,7 +1073,7 @@ int gffExpRunner::extractGffFeature(const njh::progutils::CmdArgs & inputCommand
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 
 	if (setUp.pars_.verbose_) {
@@ -1096,8 +1097,8 @@ int gffExpRunner::gffToBed(const njh::progutils::CmdArgs & inputCommands){
 
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	std::ofstream outFile;
 	outOpts.openFile(outFile);
@@ -1125,7 +1126,7 @@ int gffExpRunner::gffToBed(const njh::progutils::CmdArgs & inputCommands){
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 	outJsonFile << outJson << std::endl;
 	return 0;
@@ -1153,8 +1154,8 @@ int gffExpRunner::gffToBedByFeature(
 
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	std::ofstream outFile;
 	outOpts.openFile(outFile);
@@ -1202,7 +1203,7 @@ int gffExpRunner::gffToBedByFeature(
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 	outJsonFile << outJson << std::endl;
 	return 0;
@@ -1227,7 +1228,7 @@ int gffExpRunner::gffToBedByDescription(const njh::progutils::CmdArgs & inputCom
 
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
 	reader.openIn();
-	uint32_t count = 0;
+	// uint32_t count = 0;
 	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	std::ofstream outFile;
@@ -1265,7 +1266,7 @@ int gffExpRunner::gffToBedByDescription(const njh::progutils::CmdArgs & inputCom
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 	outJsonFile << outJson << std::endl;
 	return 0;
@@ -1276,7 +1277,7 @@ int gffExpRunner::gffToBedByAttribute(const njh::progutils::CmdArgs & inputComma
 	bfs::path inputFile;
 	OutOptions outOpts(bfs::path("out"));
 	outOpts.outExtention_ = ".bed";
-	std::string attribute = "";
+	std::string attribute;
     VecStr attributeLevels;
     VecStr features;
 
@@ -1291,8 +1292,8 @@ int gffExpRunner::gffToBedByAttribute(const njh::progutils::CmdArgs & inputComma
 
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	std::ofstream outFile;
 	outOpts.openFile(outFile);
@@ -1323,7 +1324,7 @@ int gffExpRunner::gffToBedByAttribute(const njh::progutils::CmdArgs & inputComma
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 	outJsonFile << outJson << std::endl;
 	return 0;
@@ -1334,7 +1335,7 @@ int gffExpRunner::gffToBedByChrom(const njh::progutils::CmdArgs & inputCommands)
 	bfs::path inputFile;
 	OutOptions outOpts(bfs::path("out"));
 	outOpts.outExtention_ = ".bed";
-	std::string chrom = "";
+	std::string chrom;
 	VecStr features;
 
 	seqSetUp setUp(inputCommands);
@@ -1349,8 +1350,8 @@ int gffExpRunner::gffToBedByChrom(const njh::progutils::CmdArgs & inputCommands)
 
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	std::ofstream outFile;
 	outOpts.openFile(outFile);
@@ -1383,7 +1384,7 @@ int gffExpRunner::gffToBedByChrom(const njh::progutils::CmdArgs & inputCommands)
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 	outJsonFile << outJson << std::endl;
 	return 0;
@@ -1396,7 +1397,7 @@ int gffExpRunner::gffToBedByBedLoc(const njh::progutils::CmdArgs & inputCommands
 	bfs::path bedFnp = "";
 	size_t overlapMin = 1;
 	VecStr features;
-	std::string extraAttributesStr = "";
+	std::string extraAttributesStr;
 
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(extraAttributesStr, "--extraAttributes", "Extra Attributes to output");
@@ -1410,8 +1411,8 @@ int gffExpRunner::gffToBedByBedLoc(const njh::progutils::CmdArgs & inputCommands
 	auto inputRegions = gatherRegions(bedFnp.string(), "", setUp.pars_.verbose_);
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	std::ofstream outFile;
 	outOpts.openFile(outFile);
@@ -1439,13 +1440,13 @@ int gffExpRunner::gffToBedByBedLoc(const njh::progutils::CmdArgs & inputCommands
 				}
 				outJson[gRecord->getAttr("ID")] = gRecord->toJson();
 				auto outRegion = GenomicRegion(*gRecord).genBedRecordCore();
-				std::string extra = "";
+				std::string extra;
 				extra.append("[");
 				extra.append("overlapUID=" + inputRegion.uid_ + ";");
 				extra.append("overlapGenomicUID=" + inputRegion.createUidFromCoords() + ";");
 				extra.append("feature=" + gRecord->type_ + ";");
 
-				if("" != extraAttributesStr){
+				if(!extraAttributesStr.empty()){
 
 					for(const auto & attr : extraAttributes){
 						if(gRecord->hasAttr(attr)){
@@ -1473,7 +1474,7 @@ int gffExpRunner::gffToBedByBedLoc(const njh::progutils::CmdArgs & inputCommands
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 	outJsonFile << outJson << std::endl;
 	return 0;
@@ -1501,8 +1502,8 @@ int gffExpRunner::setBedPositionsToIntersectingGeneInGff(const njh::progutils::C
 
 	BioDataFileIO<GFFCore> reader{IoOptions(InOptions(inputFile))};
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	OutputStream out(outOpts);
 
@@ -1552,7 +1553,7 @@ int gffExpRunner::setBedPositionsToIntersectingGeneInGff(const njh::progutils::C
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 	for(const auto & bed : beds){
 		out << bed->toDelimStrWithExtra() << std::endl;
@@ -1583,8 +1584,8 @@ int gffExpRunner::reorientBedToIntersectingGeneInGff(const njh::progutils::CmdAr
 
 	BioDataFileIO<GFFCore> reader{IoOptions(InOptions(inputFile))};
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	OutputStream out(outOpts);
 
@@ -1614,7 +1615,7 @@ int gffExpRunner::reorientBedToIntersectingGeneInGff(const njh::progutils::CmdAr
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 	for(const auto & bed : beds){
 		out << bed->toDelimStrWithExtra() << std::endl;
@@ -1632,8 +1633,8 @@ std::vector<BEDREC> getBedsCompletelyInGenesInGFf(
 
 	BioDataFileIO<GFFCore> reader { IoOptions(InOptions(pars.gffFnp_)) };
 	reader.openIn();
-	uint32_t count = 0;
-	std::string line = "";
+	// uint32_t count = 0;
+	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 	for (const auto bPos : iter::range(beds.size())) {
 		bedsByChrome[getRef(beds[bPos]).chrom_].emplace_back(bPos);
@@ -1659,7 +1660,7 @@ std::vector<BEDREC> getBedsCompletelyInGenesInGFf(
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 	return ret;
 }

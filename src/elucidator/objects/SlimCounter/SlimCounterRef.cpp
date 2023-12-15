@@ -143,7 +143,7 @@ void SlimCounterRef::indexFile(){
 	}
 
 	bgzOutFile_ = std::make_unique<BGZFCPP>(outputFile_, "r");
-	uint32_t count = 0;
+	// uint32_t count = 0;
 	auto outFile = njh::appendAsNeededRet(outputFile_.string(), ".idx.gz");
 	if (bfs::exists(outFile)) {
 		bfs::remove(outFile);
@@ -163,7 +163,7 @@ void SlimCounterRef::indexFile(){
 		long long int cov = pos.getHqBaseTotal();
 		std::vector<long long int> outVec { refPos, cov, fileLoc };
 		gzwrite(gzFileOut, outVec.data(), sizeof(long long int) * IndexNumOfElements);
-		++count;
+		// ++count;
 	}
 	gzclose(gzFileOut);
 }

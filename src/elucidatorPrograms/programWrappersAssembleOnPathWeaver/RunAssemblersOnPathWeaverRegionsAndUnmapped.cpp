@@ -310,12 +310,12 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegionsAndUnma
 		auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(MIRAFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
 		SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
 
-		uint32_t belowCutOff = 0;
+		// uint32_t belowCutOff = 0;
 		uint32_t aboveCutOff = 0;
 		bool allPassTrim = true;
 		for (const auto & contigsKmerRead : finalSeqs) {
 			if (len(contigsKmerRead->seqBase_) < utility.inputPars_.minFinalLength_) {
-				++belowCutOff;
+				// ++belowCutOff;
 				belowCutOffOutputWriter.openWrite(contigsKmerRead);
 				contigsKmerRead->seqBase_.on_ = false;
 			} else {
@@ -520,12 +520,12 @@ int programWrappersAssembleOnPathWeaverRunner::runFermiLiteOnPathWeaverRegionsAn
 		auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(fermiLiteFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
 		SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
 
-		uint32_t belowCutOff = 0;
+		// uint32_t belowCutOff = 0;
 		uint32_t aboveCutOff = 0;
 		bool allPassTrim = true;
 		for (const auto & contigsKmerRead : finalSeqs) {
 			if (len(contigsKmerRead->seqBase_) < utility.inputPars_.minFinalLength_) {
-				++belowCutOff;
+				// ++belowCutOff;
 				belowCutOffOutputWriter.openWrite(contigsKmerRead);
 				contigsKmerRead->seqBase_.on_ = false;
 			} else {
@@ -758,12 +758,12 @@ int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnPathWeaverRegionsAn
 		auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(unicyclerFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
 		SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
 
-		uint32_t belowCutOff = 0;
+		// uint32_t belowCutOff = 0;
 		uint32_t aboveCutOff = 0;
 		bool allPassTrim = true;
 		for (const auto & contigsKmerRead : finalSeqs) {
 			if (len(contigsKmerRead->seqBase_) < utility.inputPars_.minFinalLength_) {
-				++belowCutOff;
+				// ++belowCutOff;
 				belowCutOffOutputWriter.openWrite(contigsKmerRead);
 				contigsKmerRead->seqBase_.on_ = false;
 			} else {
@@ -973,12 +973,12 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegionsAndUn
 		auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(spadesFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
 		SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
 
-		uint32_t belowCutOff = 0;
+		// uint32_t belowCutOff = 0;
 		uint32_t aboveCutOff = 0;
 		bool allPassTrim = true;
 		for (const auto & contigsKmerRead : finalSeqs) {
 			if (len(contigsKmerRead->seqBase_) < utility.inputPars_.minFinalLength_) {
-				++belowCutOff;
+				// ++belowCutOff;
 				belowCutOffOutputWriter.openWrite(contigsKmerRead);
 				contigsKmerRead->seqBase_.on_ = false;
 			} else {
@@ -1225,12 +1225,12 @@ int programWrappersAssembleOnPathWeaverRunner::runRayOnPathWeaverRegionsAndUnmap
 		auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(RayFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
 		SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
 
-		uint32_t belowCutOff = 0;
+		// uint32_t belowCutOff = 0;
 		uint32_t aboveCutOff = 0;
 		bool allPassTrim = true;
 		for (const auto & contigsKmerRead : finalSeqs) {
 			if (len(contigsKmerRead->seqBase_) < utility.inputPars_.minFinalLength_) {
-				++belowCutOff;
+				// ++belowCutOff;
 				belowCutOffOutputWriter.openWrite(contigsKmerRead);
 				contigsKmerRead->seqBase_.on_ = false;
 			} else {
@@ -1465,12 +1465,12 @@ int programWrappersAssembleOnPathWeaverRunner::runIDBAUDOnPathWeaverRegionsAndUn
 		auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(IDBAUDFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
 		SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
 
-		uint32_t belowCutOff = 0;
+		// uint32_t belowCutOff = 0;
 		uint32_t aboveCutOff = 0;
 		bool allPassTrim = true;
 		for (const auto & contigsKmerRead : finalSeqs) {
 			if (len(contigsKmerRead->seqBase_) < utility.inputPars_.minFinalLength_) {
-				++belowCutOff;
+				// ++belowCutOff;
 				belowCutOffOutputWriter.openWrite(contigsKmerRead);
 				contigsKmerRead->seqBase_.on_ = false;
 			} else {
@@ -1673,12 +1673,12 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnPathWeaverRegionsAndU
 		auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(TrinityFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
 		SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
 
-		uint32_t belowCutOff = 0;
+		// uint32_t belowCutOff = 0;
 		uint32_t aboveCutOff = 0;
 		bool allPassTrim = true;
 		for (const auto & contigsKmerRead : finalSeqs) {
 			if (len(contigsKmerRead->seqBase_) < utility.inputPars_.minFinalLength_) {
-				++belowCutOff;
+				// ++belowCutOff;
 				belowCutOffOutputWriter.openWrite(contigsKmerRead);
 				contigsKmerRead->seqBase_.on_ = false;
 			} else {
@@ -1876,12 +1876,12 @@ int programWrappersAssembleOnPathWeaverRunner::runMegahitOnPathWeaverRegionsAndU
 		auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(megahitFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
 		SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
 
-		uint32_t belowCutOff = 0;
+		// uint32_t belowCutOff = 0;
 		uint32_t aboveCutOff = 0;
 		bool allPassTrim = true;
 		for (const auto & contigsKmerRead : finalSeqs) {
 			if (len(contigsKmerRead->seqBase_) < utility.inputPars_.minFinalLength_) {
-				++belowCutOff;
+				// ++belowCutOff;
 				belowCutOffOutputWriter.openWrite(contigsKmerRead);
 				contigsKmerRead->seqBase_.on_ = false;
 			} else {
@@ -2091,12 +2091,12 @@ int programWrappersAssembleOnPathWeaverRunner::runSavageOnPathWeaverRegionsAndUn
 		auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(savageFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
 		SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
 
-		uint32_t belowCutOff = 0;
+		// uint32_t belowCutOff = 0;
 		uint32_t aboveCutOff = 0;
 		bool allPassTrim = true;
 		for (const auto & contigsKmerRead : finalSeqs) {
 			if (len(contigsKmerRead->seqBase_) < utility.inputPars_.minFinalLength_) {
-				++belowCutOff;
+				// ++belowCutOff;
 				belowCutOffOutputWriter.openWrite(contigsKmerRead);
 				contigsKmerRead->seqBase_.on_ = false;
 			} else {
@@ -2340,12 +2340,12 @@ int programWrappersAssembleOnPathWeaverRunner::runPolyteOnPathWeaverRegionsAndUn
 		auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(polyteFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
 		SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
 
-		uint32_t belowCutOff = 0;
+		// uint32_t belowCutOff = 0;
 		uint32_t aboveCutOff = 0;
 		bool allPassTrim = true;
 		for (const auto & contigsKmerRead : finalSeqs) {
 			if (len(contigsKmerRead->seqBase_) < utility.inputPars_.minFinalLength_) {
-				++belowCutOff;
+				// ++belowCutOff;
 				belowCutOffOutputWriter.openWrite(contigsKmerRead);
 				contigsKmerRead->seqBase_.on_ = false;
 			} else {
@@ -2600,12 +2600,12 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnPathWeaverRegionsAndUnm
 		auto trimmedReOrientedContigsFnp_belowCutOff = njh::files::make_path(PRICEFullOutputDir, "trimmed_reOriented_contigs_belowCutOff.fasta");
 		SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
 
-		uint32_t belowCutOff = 0;
+		// uint32_t belowCutOff = 0;
 		uint32_t aboveCutOff = 0;
 		bool allPassTrim = true;
 		for (const auto & contigsKmerRead : finalSeqs) {
 			if (len(contigsKmerRead->seqBase_) < utility.inputPars_.minFinalLength_) {
-				++belowCutOff;
+				// ++belowCutOff;
 				belowCutOffOutputWriter.openWrite(contigsKmerRead);
 				contigsKmerRead->seqBase_.on_ = false;
 			} else {
@@ -2988,12 +2988,12 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 																																					 "trimmed_reOriented_contigs_belowCutOff.fasta");
 			SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
 
-			uint32_t belowCutOff = 0;
+			// uint32_t belowCutOff = 0;
 			uint32_t aboveCutOff = 0;
 			bool allPassTrim = true;
 			for (const auto &contigsKmerRead: finalSeqs) {
 				if (len(contigsKmerRead->seqBase_) < utility.inputPars_.minFinalLength_) {
-					++belowCutOff;
+					// ++belowCutOff;
 					belowCutOffOutputWriter.openWrite(contigsKmerRead);
 					contigsKmerRead->seqBase_.on_ = false;
 				} else {
@@ -3257,12 +3257,12 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 																																					 "trimmed_reOriented_contigs_belowCutOff.fasta");
 			SeqOutput belowCutOffOutputWriter(SeqIOOptions::genFastaOut(trimmedReOrientedContigsFnp_belowCutOff));
 
-			uint32_t belowCutOff = 0;
+			// uint32_t belowCutOff = 0;
 			uint32_t aboveCutOff = 0;
 			bool allPassTrim = true;
 			for (const auto &contigsKmerRead: finalSeqs) {
 				if (len(contigsKmerRead->seqBase_) < utilityMetaVelvet.inputPars_.minFinalLength_) {
-					++belowCutOff;
+					// ++belowCutOff;
 					belowCutOffOutputWriter.openWrite(contigsKmerRead);
 					contigsKmerRead->seqBase_.on_ = false;
 				} else {

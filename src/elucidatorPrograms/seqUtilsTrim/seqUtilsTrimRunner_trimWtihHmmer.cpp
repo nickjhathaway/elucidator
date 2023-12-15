@@ -349,7 +349,7 @@ int seqUtilsTrimRunner::trimBetweenHmmViaHmmsearch(const njh::progutils::CmdArgs
 			BioDataFileIO<HmmerDomainHitTab> reader{IoOptions(InOptions(rawDomainHitsFnp))};
 			HmmerDomainHitTab domain;
 			reader.openIn();
-			uint32_t count = 0;
+			// uint32_t count = 0;
 			out << "#" << njh::conToStr(HmmerDomainHitTab::toDelimStrHeader(), "\t") << std::endl;
 			outFilt << "#" << njh::conToStr(HmmerDomainHitTab::toDelimStrHeader(), "\t") << std::endl;
 
@@ -360,7 +360,7 @@ int seqUtilsTrimRunner::trimBetweenHmmViaHmmsearch(const njh::progutils::CmdArgs
 				if(passHmmStart && passHmmEnd) {
 					outFilt << domain.toDelimStr() << std::endl;
 				}
-				++count;
+				// ++count;
 			}
 		}
 		//get best non-overlapping positions
@@ -551,7 +551,7 @@ int seqUtilsTrimRunner::trimBetweenHmmViaHmmsearch(const njh::progutils::CmdArgs
 			BioDataFileIO<HmmerDomainHitTab> reader{IoOptions(InOptions(rawDomainHitsFnp))};
 			HmmerDomainHitTab domain;
 			reader.openIn();
-			uint32_t count = 0;
+			// uint32_t count = 0;
 			out << "#" << njh::conToStr(HmmerDomainHitTab::toDelimStrHeader(), "\t") << std::endl;
 			outFilt << "#" << njh::conToStr(HmmerDomainHitTab::toDelimStrHeader(), "\t") << std::endl;
 
@@ -562,7 +562,7 @@ int seqUtilsTrimRunner::trimBetweenHmmViaHmmsearch(const njh::progutils::CmdArgs
 				if(passHmmStart && passHmmEnd) {
 					outFilt << domain.toDelimStr() << std::endl;
 				}
-				++count;
+				// ++count;
 			}
 		}
 		//get best non-overlapping positions
@@ -845,10 +845,10 @@ int seqUtilsTrimRunner::trimBetweenHmmViaNhmmscan(const njh::progutils::CmdArgs 
 
 			SeqOutput writer(regionsOutOpts);
 			writer.openOut();
-			uint32_t regionCount = 0;
+			// uint32_t regionCount = 0;
 			for(const auto & region : regions){
 				regionsByName[region.uid_] = region;
-				++regionCount;
+				// ++regionCount;
 				auto subRegion = region.extractSeq(tReader);
 				subRegion.name_ = region.uid_;
 				writer.write(subRegion);
@@ -1030,10 +1030,10 @@ int seqUtilsTrimRunner::trimBetweenHmmViaNhmmscan(const njh::progutils::CmdArgs 
 
 			SeqOutput writer(regionsOutOpts);
 			writer.openOut();
-			uint32_t regionCount = 0;
+			// uint32_t regionCount = 0;
 			for(const auto & region : regions){
 				regionsByName[region.uid_] = region;
-				++regionCount;
+				// ++regionCount;
 				auto subRegion = region.extractSeq(tReader);
 				subRegion.name_ = region.uid_;
 				writer.write(subRegion);

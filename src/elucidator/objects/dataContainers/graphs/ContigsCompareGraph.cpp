@@ -722,7 +722,7 @@ std::unordered_map<std::string, std::string> ContigsCompareGraphDev::writeRectan
 			continue;
 		}
 
-		uint32_t colorGroup = 0;
+		// uint32_t colorGroup = 0;
 		std::unordered_set<std::string> sampleNames;
 		for(const auto & name : node->inReadNamesIdx_){
 			if(MetaDataInName::nameHasMetaData(name)){
@@ -732,7 +732,7 @@ std::unordered_map<std::string, std::string> ContigsCompareGraphDev::writeRectan
 				}
 			}
 		}
-		colorGroup = sampleNames.size();
+		// colorGroup = sampleNames.size();
 		std::string nodeColor = "";
 		nodeColor = moreColors.at(sampleComboToIndex.at(njh::conToStr(node->inReadNamesIdx_, ",")));
 
@@ -1127,12 +1127,12 @@ bool ContigsCompareGraphDev::collapseLowFreqNodes(const comparison & allowableEr
 	}
 	bool modifiedNodes = false;
 	//iterate over the groups
-	uint32_t groupCount = 0;
+	// uint32_t groupCount = 0;
 	for(auto & group : groupedNodes){
 		resetNodeVisitCounts();
 		// if there are only two nodes in the group, process them
 		if(2 == group.second.size()){
-			++groupCount;
+			// ++groupCount;
 			if(uAbsdiff(group.second.front()->k_.length(), group.second.back()->k_.length()) > 20){
 				continue;
 			}

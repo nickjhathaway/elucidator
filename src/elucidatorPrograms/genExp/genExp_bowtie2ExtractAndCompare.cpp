@@ -190,7 +190,7 @@ int genExpRunner::bowtie2ExtractAndCompareMultiple(const njh::progutils::CmdArgs
 		for (const auto & bamAlignKey : bamAlignKeys) {
 			const auto & alnForRead = bamAligns[bamAlignKey];
 			++mapCounts[alnForRead.size()];
-			uint32_t extractionCount = 0;
+			// uint32_t extractionCount = 0;
 			for (const auto & aln : alnForRead) {
 
 				auto results = std::make_shared<AlignmentResults>(aln, refData);
@@ -237,7 +237,7 @@ int genExpRunner::bowtie2ExtractAndCompareMultiple(const njh::progutils::CmdArgs
 						<< '\t' << results->comp_.lqMismatches_
 						<< '\t' << results->comp_.hqMismatches_ << std::endl;
 				allAlnResults[aln.Name][genome.first].emplace_back(results);
-				++extractionCount;
+				// ++extractionCount;
 			}
 			++readNumber;
 		}
@@ -516,7 +516,7 @@ int genExpRunner::bowtie2ExtractAndCompare(const njh::progutils::CmdArgs & input
 	std::unordered_map<std::string, VecStr> readNamesToRefSeqs;
 	for (const auto & alnForRead : bamAligns) {
 		++mapCounts[alnForRead.second.size()];
-		uint32_t extractionCount = 0;
+		// uint32_t extractionCount = 0;
 		for (const auto & aln : alnForRead.second) {
 			auto results = std::make_shared<AlignmentResults>(aln, refData);
 			results->setRefSeq(twobitReader);
@@ -545,7 +545,7 @@ int genExpRunner::bowtie2ExtractAndCompare(const njh::progutils::CmdArgs & input
 					<< '\t' << results->comp_.largeBaseIndel_
 					<< '\t' << results->comp_.lqMismatches_
 					<< '\t' << results->comp_.hqMismatches_ << std::endl;
-			++extractionCount;
+			// ++extractionCount;
 		}
 		++readNumber;
 	}

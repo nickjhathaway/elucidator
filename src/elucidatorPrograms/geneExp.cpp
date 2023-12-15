@@ -305,12 +305,12 @@ int geneExpRunner::getBedOfAminoAcidPositionsFromGff(const njh::progutils::CmdAr
 		}
 
 		for (const auto & positions : aaInfos.aminoPositionsPerId_) {
-			bool byTranscript = false;
+			// bool byTranscript = false;
 			std::string geneID = positions.first;
 			for(const auto & gene : genes){
 				for(const auto & mRNA : gene.second->mRNAs_){
 					if(mRNA->getIDAttr() == positions.first){
-						byTranscript = true;
+						// byTranscript = true;
 						geneID = gene.first;
 						break;
 					}

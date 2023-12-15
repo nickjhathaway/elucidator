@@ -255,13 +255,13 @@ int kmerExpRunner::profileSharedKmerBlocks(const njh::progutils::CmdArgs & input
 		for(const auto & g : seqs){
 			auto keys = getVectorOfMapKeys(g.second.kComps_);
 			njh::sort(keys);
-			uint32_t matchCount = 0;
+			// uint32_t matchCount = 0;
 			for (const auto & compKey : keys) {
 				std::cout << g.first << std::endl;
 				std::cout << "\t" << g.second.kComps_.at(compKey).refStart_ << std::endl;
 				std::cout << "\t" << g.second.kComps_.at(compKey).start_ << std::endl;
 				std::cout << "\t" << g.second.kComps_.at(compKey).size_ << std::endl;
-				++matchCount;
+				// ++matchCount;
 			}
 		}
 	}

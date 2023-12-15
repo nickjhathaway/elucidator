@@ -254,7 +254,7 @@ int seqUtilsTrimRunner::trimToSimilarSeq(const njh::progutils::CmdArgs & inputCo
   }
 
   profile.updateProfile();
-  uint32_t count = 0;
+  // uint32_t count = 0;
   reader.closeIn();
   reader.openIn();
   while(reader.readNextRead(seq)){
@@ -264,7 +264,7 @@ int seqUtilsTrimRunner::trimToSimilarSeq(const njh::progutils::CmdArgs & inputCo
   		seq.on_ = false;
   		continue;
   	}
-  	++count;
+  	// ++count;
   	uint32_t startPos = pars.maxLength - pars.windowLength;
   	uint32_t stopPos = std::min<uint32_t>(len(seq) - pars.kmerLength + 1, pars.maxLength + pars.windowLength + 1);
   	double bestProb = 0;
@@ -738,7 +738,7 @@ int seqUtilsTrimRunner::trimToMostProbableSharedKmer(const njh::progutils::CmdAr
   if(setUp.pars_.debug_){
   	profile.printProfile(std::cout, "\t");
   }
-  uint32_t count = 0;
+  // uint32_t count = 0;
 
   std::unordered_map<std::string, std::vector<double>> kBestCount;
   for(auto & read : inReads){
@@ -746,7 +746,7 @@ int seqUtilsTrimRunner::trimToMostProbableSharedKmer(const njh::progutils::CmdAr
   	if(!read.seqBase_.on_){
   		continue;
   	}
-		++count;
+		// ++count;
 		uint32_t startPos = len(read) - pars.windowLength;
 		uint32_t stopPos = len(read) - pars.kmerLength + 1;
   	double bestProb = 0;
@@ -855,7 +855,7 @@ int seqUtilsTrimRunner::trimFromMostProbableSharedKmer(const njh::progutils::Cmd
   if(setUp.pars_.debug_){
   	profile.printProfile(std::cout, "\t");
   }
-  uint32_t count = 0;
+  // uint32_t count = 0;
 
   std::unordered_map<std::string, std::vector<double>> kBestCount;
   for(auto & read : inReads){
@@ -863,7 +863,7 @@ int seqUtilsTrimRunner::trimFromMostProbableSharedKmer(const njh::progutils::Cmd
   	if(!read.seqBase_.on_){
   		continue;
   	}
-		++count;
+		// ++count;
   	uint32_t startPos = 0;
   	uint32_t stopPos = pars.windowLength - pars.kmerLength + 1;
   	double bestProb = 0;

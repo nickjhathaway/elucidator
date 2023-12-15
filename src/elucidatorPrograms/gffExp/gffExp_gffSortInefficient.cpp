@@ -55,7 +55,7 @@ int gffExpRunner::gffSortInefficient(const njh::progutils::CmdArgs & inputComman
 
 	BioDataFileIO<GFFCore> reader{(IoOptions(InOptions(inputFile)))};
 	reader.openIn();
-	uint32_t count = 0;
+	// uint32_t count = 0;
 	std::string line = "";
 
 	std::ofstream outFile;
@@ -90,7 +90,7 @@ int gffExpRunner::gffSortInefficient(const njh::progutils::CmdArgs & inputComman
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 
 	//now sort records by utilizing parents
@@ -250,7 +250,7 @@ int gffExpRunner::gffRenameChroms(const njh::progutils::CmdArgs & inputCommands)
 	}
 	BioDataFileIO<GFFCore> reader{(IoOptions(InOptions(inputFile)))};
 	reader.openIn();
-	uint32_t count = 0;
+	// uint32_t count = 0;
 	std::string line = "";
 
 	std::ofstream outFile;
@@ -292,7 +292,7 @@ int gffExpRunner::gffRenameChroms(const njh::progutils::CmdArgs & inputCommands)
 			break;
 		}
 		gRecord = reader.readNextRecord();
-		++count;
+		// ++count;
 	}
 
 

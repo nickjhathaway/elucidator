@@ -638,7 +638,7 @@ int genExpRunner::extractExpectedRefSeqsFromGenomes(
 			{
 				BioDataFileIO<GFFCore> reader((IoOptions(InOptions(gMapper->genomes_.at(genome)->gffFnp_))));
 				reader.openIn();
-				uint32_t count = 0;
+				// uint32_t count = 0;
 				std::string line = "";
 				std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 				while (nullptr != gRecord) {
@@ -664,7 +664,7 @@ int genExpRunner::extractExpectedRefSeqsFromGenomes(
 						break;
 					}
 					gRecord = reader.readNextRecord();
-					++count;
+					// ++count;
 				}
 			}
 
@@ -694,7 +694,7 @@ int genExpRunner::extractExpectedRefSeqsFromGenomes(
 				if(!idsNotPreviouslyFound.empty()){
 					BioDataFileIO<GFFCore> reader((IoOptions(InOptions(gMapper->genomes_.at(genome)->gffFnp_))));
 					reader.openIn();
-					uint32_t count = 0;
+					// uint32_t count = 0;
 					std::string line = "";
 					std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
 					while (nullptr != gRecord) {
@@ -720,7 +720,7 @@ int genExpRunner::extractExpectedRefSeqsFromGenomes(
 							break;
 						}
 						gRecord = reader.readNextRecord();
-						++count;
+						// ++count;
 					}
 				}
 			}

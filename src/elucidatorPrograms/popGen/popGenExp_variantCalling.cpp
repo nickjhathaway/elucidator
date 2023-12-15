@@ -77,7 +77,7 @@ int popGenExpRunner::quickHaplotypeVariantsWithRegion(const njh::progutils::CmdA
 	std::unordered_map<std::string, std::shared_ptr<std::vector<identicalCluster>>> uniqueSeqsByMeta;
 	std::vector<identicalCluster> clusters;
 	seqInfo seq;
-	uint32_t totalInput = 0;
+	// uint32_t totalInput = 0;
 	bool calculatingFst = "" != fstMeta;
 	std::set<std::string> samples;
 	std::set<std::string> allMetaKeys;
@@ -103,7 +103,7 @@ int popGenExpRunner::quickHaplotypeVariantsWithRegion(const njh::progutils::CmdA
 				samples.emplace(seqMeta.getMeta("sample"));
 			}
 		}
-		++totalInput;
+		// ++totalInput;
 		bool found = false;
 		for (auto &cIter : clusters) {
 			if (cIter.seqBase_.seq_ == seq.seq_) {
@@ -141,10 +141,10 @@ int popGenExpRunner::quickHaplotypeVariantsWithRegion(const njh::progutils::CmdA
 
 	VecStr allMetaKeysVec(allMetaKeys.begin(), allMetaKeys.end());
 
-	uint32_t samplesCalled = totalInput;
-	if(!samples.empty()){
-		samplesCalled = samples.size();
-	}
+	// uint32_t samplesCalled = totalInput;
+	// if(!samples.empty()){
+	// 	samplesCalled = samples.size();
+	// }
 	auto beds = getBeds(bedFnp);
 	if(beds.empty()){
 		std::stringstream ss;
@@ -289,10 +289,10 @@ int popGenExpRunner::quickHaplotypeVariantsWithRegion(const njh::progutils::CmdA
 					positionsSet.emplace(del.first);
 				}
 				std::vector<uint32_t> positions(positionsSet.begin(), positionsSet.end());
-				uint32_t samplesCalledForField = seqCount;
-				if(!samplesByMeta[field.first].empty()){
-					samplesCalledForField = samplesByMeta[field.first].size();
-				}
+				// uint32_t samplesCalledForField = seqCount;
+				// if(!samplesByMeta[field.first].empty()){
+				// 	samplesCalledForField = samplesByMeta[field.first].size();
+				// }
 				njh::sort(positions);
 				if(refRegion.reverseSrand_){
 					njh::reverse(positions);
