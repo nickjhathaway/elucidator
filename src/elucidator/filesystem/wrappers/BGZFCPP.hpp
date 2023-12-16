@@ -28,6 +28,7 @@
 
 
 //due to a macro define clash with bamtools, htslib/bgzf.h must always come first in include orders
+#include <htslib/kstring.h>
 #include <htslib/bgzf.h>
 #include "elucidator/common.h"
 
