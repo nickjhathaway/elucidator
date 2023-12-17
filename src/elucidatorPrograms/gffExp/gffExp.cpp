@@ -32,7 +32,7 @@
 #include <njhseq/objects/helperObjects/AminoAcidPositionInfo.hpp>
 
 #include <njhseq/objects/Gene.h>
-#include <TwoBit.h>
+
 
 namespace njhseq {
 gffExpRunner::gffExpRunner()
@@ -81,7 +81,7 @@ gffExpRunner::gffExpRunner()
 
 int gffExpRunner::aaPositionsToBed(const njh::progutils::CmdArgs & inputCommands) {
 
-	GetGenomicLocationsForAminoAcidPositionsPars pars;
+	TranslatorByAlignment::GetGenomicLocationsForAminoAcidPositionsPars pars;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.setOption(pars.proteinMutantTypingFnp, "--aaPositionsFile", "Amino Acid positions file, must have at least two columns; ID and aaPosition", true);
@@ -94,7 +94,7 @@ int gffExpRunner::aaPositionsToBed(const njh::progutils::CmdArgs & inputCommands
 
 	setUp.finishSetUp(std::cout);
 
-	getGenomicLocationsForAminoAcidPositions(pars);
+	TranslatorByAlignment::getGenomicLocationsForAminoAcidPositions(pars);
 
 	return 0;
 }
