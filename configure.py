@@ -7,7 +7,7 @@ from utils import Utils
 from genFuncs import genHelper
 def main():
     name = "elucidator"
-    libs = "hts:1.19,seekdeep:develop,pathweaver:develop"
+    libs = "hts:1.3.1,seekdeep:develop,pathweaver:develop"
     args = genHelper.parseNjhConfigureArgs()
     cmd = genHelper.mkConfigCmd(name, libs, sys.argv)
     Utils.run(cmd)
