@@ -109,6 +109,7 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("countingUniqKmersFromSetsInUnmappedAlnsBestSet", countingUniqKmersFromSetsInUnmappedAlnsBestSet, false),
 					 addFunc("getUniqueSequenceRegions", getUniqueSequenceRegions, false),
 					 addFunc("countingUniqKmersFromSetsInRegionsAlnsBestSet", countingUniqKmersFromSetsInRegionsAlnsBestSet, false),
+          	addFunc("getBestKmerDetailedKmerDistAgainstRef", getBestKmerDetailedKmerDistAgainstRef, false),
 
 //,
 									//

@@ -46,6 +46,9 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	setUp.setOption(extendSubRegions, "--extendSubRegions", "Extend the sub regions by this much in both directions");
 
 	setUp.setOption(hmmModel, "--hmmModel", "hmm model database, created by hmmbuild", true);
+	postProcessPars.minOverlapFilt_ = 60;
+	setUp.setOption(postProcessPars.minOverlapFilt_, "--minOverlapLenForFilt", "minimum Overlap length for the non-overlapping regions");
+
 	setUp.setOption(postProcessPars.hmmStartFilter, "--hmmStartFilter", "Filter partial hmms domain hits if they start or end this far into the model");
 	setUp.setOption(postProcessPars.minLength, "--minLength", "Minimum output domain hit length");
 	setUp.setOption(subRegions, "--subRegions", "Run on the subregions as defined by this bed file, needs to have a 2bit file named with same prefix as the input file");
