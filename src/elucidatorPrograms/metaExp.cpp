@@ -462,7 +462,7 @@ int metaExpRunner::splitSeqFileWithMeta(const njh::progutils::CmdArgs & inputCom
 	setUp.processDebug();
 	setUp.processVerbose();
 	setUp.pars_.ioOptions_.out_.outFilename_ = "";
-	setUp.processDefaultReader(VecStr { "-fastq", "-fasta", "--fastq1" }, true);
+	setUp.processDefaultReader(VecStr { "--fastq", "--fasta", "--fastq1", "--fastqgz", "--fastagz", "--fastq1gz" }, true);
 	setUp.setOption(metaField, "--metaField",
 			"Meta Field to split on, could be multiple separated by a comma", true);
 
@@ -527,6 +527,9 @@ int metaExpRunner::splitSeqFileWithMeta(const njh::progutils::CmdArgs & inputCom
 			}
 			if(!writers.containsReader(uid)){
 				auto seqOpts = SeqIOOptions(setUp.pars_.ioOptions_.out_.outFilename_.string() + "_" + uid, setUp.pars_.ioOptions_.outFormat_) ;
+				if(setUp.pars_.ioOptions_.out_.outFilename_.empty()){
+					seqOpts = SeqIOOptions(uid, setUp.pars_.ioOptions_.outFormat_);
+				}
 				seqOpts.out_.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
 				writers.addReader(uid, seqOpts);
 			}
@@ -554,7 +557,7 @@ int metaExpRunner::splitSeqFileWithMeta(const njh::progutils::CmdArgs & inputCom
 			}
 			if(!writers.containsReader(uid)){
 				auto opts = SeqIOOptions(setUp.pars_.ioOptions_.out_.outFilename_.string() + "_" + uid, setUp.pars_.ioOptions_.outFormat_);
-				if("" == setUp.pars_.ioOptions_.out_.outFilename_){
+				if(setUp.pars_.ioOptions_.out_.outFilename_.empty()){
 					opts = SeqIOOptions(uid, setUp.pars_.ioOptions_.outFormat_);
 				}
 				opts.out_.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
