@@ -27,7 +27,7 @@ int kmerExpRunner::getBestKmerDetailedKmerDistAgainstRef(const njh::progutils::C
 	OutOptions outOpts(bfs::path(""), ".tab.txt");
 	uint32_t numThreads = 1;
 	uint32_t kmerLength = 7;
-
+	bool doNotSkipSameName = false;
 	bool getRevComp = false;
 	VecStr measureOpts{"similarity", "similarityLenAdjust", "uniqSimilarity", "uniqSimilarityLenAdjust"};
 	std::string measureOpt = measureOpts.front();
@@ -38,6 +38,8 @@ int kmerExpRunner::getBestKmerDetailedKmerDistAgainstRef(const njh::progutils::C
 	setUp.processReadInNames(true);
 	setUp.processRefFilename(true);
 	setUp.processWritingOptions(outOpts);
+	setUp.setOption(doNotSkipSameName, "--doNotSkipSameName", "do Not Skip Same Name");
+
 	setUp.setOption(measureOpt, "--measureOpt", "Measure option to compare on, options are: " + njh::conToStrEndSpecial(measureOpts, ", ", " or "));
 	if(njh::notIn(measureOpt, measureOpts)) {
 		setUp.addWarning(njh::pasteAsStr("Measure opts must be one of the following ", njh::conToStrEndSpecial(measureOpts, ", ", " or "), ", not: ", measureOpt));
@@ -99,7 +101,8 @@ int kmerExpRunner::getBestKmerDetailedKmerDistAgainstRef(const njh::progutils::C
 	std::mutex outMut;
 	std::function<void()> getBestSimilarity = [&reader,&out,&outMut,
 																			 &getRevComp,&kmerLength,
-																			 &refSeqs, &compToBest](){
+																			 &refSeqs, &compToBest,
+																			 &doNotSkipSameName](){
 		seqInfo seq;
 
 		while(reader.readNextReadLock(seq)){
@@ -110,6 +113,9 @@ int kmerExpRunner::getBestKmerDetailedKmerDistAgainstRef(const njh::progutils::C
 			kmerInfo kInfo(seq.seq_, kmerLength, false);
 			for(const auto pos : iter::range(refSeqs.size())){
 				const auto & refSeq = refSeqs[pos];
+				if(!doNotSkipSameName && refSeq->seqBase_.name_ == seq.name_) {
+					continue;
+				}
 				{
 					auto similarity = kInfo.compareKmersDetailed(refSeq->kInfo_);
 					if(compToBest(bestSimilarityScore, similarity)) {
