@@ -56,7 +56,7 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
   setUp.setOption(genomesStr, "--genomes", "Names of the genomes to extract from (should not have extension, e.g. Pf3d7 for Pf3d7.fasta");
   setUp.setOption(mapperPars.genomeDir_, "--genomeDir", "Names of the genome directory where the genomes are stored", true);
   setUp.setOption(mapperPars.gffDir_, "--gffDir", "A directory of gffs that go with the genomes");
-  setUp.setOption(mapperPars.gffIntersectPars_.extraAttributes_, "--gffExtraAttributes", "gff Extra Attributes");
+  setUp.setOption(mapperPars.gffIntersectPars_.extraAttributes_, "--gffExtraAttributes", "gff Extra Attributes");
 
   setUp.processReadInNames();
   setUp.processDirectoryOutputName(true);
@@ -475,8 +475,7 @@ int genExpRunner::extractFromGenomesAndCompare(const njh::progutils::CmdArgs & i
 		}
 		++readNumber;
 	}
-
-
+	
 
 	for(auto & best : bestRegionsByGenome){
 		OutOptions bestRegionsBedOpts(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr("bestRegions_", best.first, ".bed")));
@@ -1602,12 +1601,15 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 	{
 		std::unordered_map<std::string, std::set<std::string>> interceptedIDs;
 		OutputStream allBestRegionsBedOut(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr("bestRegions_", "all", ".bed")));
+
 		for(auto & best : bestRegionsByGenome){
+
 			OutOptions bestRegionsBedOpts(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr("bestRegions_", best.first, ".bed")));
 			OutputStream bestRegionsBedOut(bestRegionsBedOpts);
 			if(bfs::exists(gMapper.genomes_.at(best.first)->gffFnp_)){
 				intersectBedLocsWtihGffRecordsPars gffPars = gMapper.pars_.gffIntersectPars_;
 				gffPars.gffFnp_ = gMapper.genomes_.at(best.first)->gffFnp_;
+
 				intersectBedLocsWtihGffRecords(best.second, gffPars);
 				for(const auto & region : best.second){
 					if(!region.extraFields_.empty() && MetaDataInName::nameHasMetaData(region.extraFields_[0])){
