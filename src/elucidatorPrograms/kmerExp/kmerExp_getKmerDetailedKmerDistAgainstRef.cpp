@@ -137,7 +137,7 @@ int kmerExpRunner::getBestKmerDetailedKmerDistAgainstRef(const njh::progutils::C
 
 			kmerInfo::DetailedKmerDist bestSimilarityScore;
 			bool bestSimSocreRevComp = false;
-			uint32_t bestRefPos;
+			uint32_t bestRefPos = std::numeric_limits<uint32_t>::max();
 			kmerInfo kInfo(seq.seq_, kmerLength, false);
 			for(const auto pos : iter::range(refSeqs.size())){
 				const auto & refSeq = refSeqs[pos];
