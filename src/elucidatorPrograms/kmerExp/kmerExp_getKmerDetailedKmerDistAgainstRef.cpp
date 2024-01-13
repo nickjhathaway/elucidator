@@ -31,7 +31,7 @@ int kmerExpRunner::getBestKmerDetailedKmerDistAgainstRef(const njh::progutils::C
 	bool getRevComp = false;
 	VecStr measureOpts{"similarity", "similarityLenAdjust", "uniqSimilarity", "uniqSimilarityLenAdjust"};
 	std::string measureOpt = measureOpts.front();
-
+	bool alignBest = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -39,7 +39,10 @@ int kmerExpRunner::getBestKmerDetailedKmerDistAgainstRef(const njh::progutils::C
 	setUp.processRefFilename(true);
 	setUp.processWritingOptions(outOpts);
 	setUp.setOption(doNotSkipSameName, "--doNotSkipSameName", "do Not Skip Same Name");
-
+	setUp.setOption(alignBest, "--alignBest", "align the best hits");
+	if(alignBest) {
+		setUp.processAlignerDefualts();
+	}
 	setUp.setOption(measureOpt, "--measureOpt", "Measure option to compare on, options are: " + njh::conToStrEndSpecial(measureOpts, ", ", " or "));
 	if(njh::notIn(measureOpt, measureOpts)) {
 		setUp.addWarning(njh::pasteAsStr("Measure opts must be one of the following ", njh::conToStrEndSpecial(measureOpts, ", ", " or "), ", not: ", measureOpt));
@@ -53,12 +56,34 @@ int kmerExpRunner::getBestKmerDetailedKmerDistAgainstRef(const njh::progutils::C
 
 	setUp.pars_.refIoOptions_.includeWhiteSpaceInName_ = setUp.pars_.ioOptions_.includeWhiteSpaceInName_;
 	auto refSeqs = createKmerReadVec(setUp.pars_.refIoOptions_, kmerLength, getRevComp);
-
+	uint64_t maxLen = readVec::getMaxLength(refSeqs	);
+	{
+		SeqInput reader(setUp.pars_.ioOptions_);
+		reader.openIn();
+		seqInfo seq;
+		while(reader.readNextRead(seq)) {
+			readVec::getMaxLength(seq, maxLen	);
+		}
+	}
+	std::unique_ptr<aligner> alignerPtr;
+	if(alignBest) {
+		alignerPtr = std::make_unique<aligner>(maxLen,setUp.pars_.gapInfo_, setUp.pars_.scoring_);
+	}
 	SeqInput reader(setUp.pars_.ioOptions_);
 	reader.openIn();
 
+	std::unique_ptr<OutputStream> alignOut;
+	if(alignBest) {
+		auto bestAlignsFnp = njh::files::prependFileBasename(outOpts.outName(), "bestAligns_");
+		alignOut = std::make_unique<OutputStream>(bfs::path(bestAlignsFnp	).replace_extension(".fastq.gz"));
+	}
+
 	OutputStream out(outOpts);
-	out << "name\tref\trevComp\ttotalShared\tsimilarity\tsimilarityLenAdjust\ttotalKmersIn1\ttotalKmersIn2\ttotalUniqueShared\tuniqSimilarity\tuniqSimilarityLenAdjust\ttotalUniqKmersIn1\ttotalUniqKmersIn2\ttotalUniq" << "\n";
+	out << "name\tref\trevComp\ttotalShared\tsimilarity\tsimilarityLenAdjust\ttotalKmersIn1\ttotalKmersIn2\ttotalUniqueShared\tuniqSimilarity\tuniqSimilarityLenAdjust\ttotalUniqKmersIn1\ttotalUniqKmersIn2\ttotalUniq";
+	if(alignBest) {
+		out << "\tpercentIdentity";
+	}
+	out << "\n";
 
 	std::function<bool(kmerInfo::DetailedKmerDist &, const kmerInfo::DetailedKmerDist &)> compToBest;
 
@@ -102,14 +127,17 @@ int kmerExpRunner::getBestKmerDetailedKmerDistAgainstRef(const njh::progutils::C
 	std::function<void()> getBestSimilarity = [&reader,&out,&outMut,
 																			 &getRevComp,&kmerLength,
 																			 &refSeqs, &compToBest,
-																			 &doNotSkipSameName](){
+																			 &doNotSkipSameName,
+																			 &alignBest,
+																			 &alignerPtr,
+																			 &alignOut](){
 		seqInfo seq;
 
 		while(reader.readNextReadLock(seq)){
 
 			kmerInfo::DetailedKmerDist bestSimilarityScore;
 			bool bestSimSocreRevComp = false;
-			std::string bestRefName;
+			uint32_t bestRefPos;
 			kmerInfo kInfo(seq.seq_, kmerLength, false);
 			for(const auto pos : iter::range(refSeqs.size())){
 				const auto & refSeq = refSeqs[pos];
@@ -120,22 +148,28 @@ int kmerExpRunner::getBestKmerDetailedKmerDistAgainstRef(const njh::progutils::C
 					auto similarity = kInfo.compareKmersDetailed(refSeq->kInfo_);
 					if(compToBest(bestSimilarityScore, similarity)) {
 						bestSimSocreRevComp = false;
-						bestRefName = refSeq->seqBase_.name_;
+						bestRefPos = pos;
 					}
 				}
 				if(getRevComp){
 					auto revDist = kInfo.compareKmersRevCompDetailed(refSeq->kInfo_);
 					if(compToBest(bestSimilarityScore, revDist)) {
 						bestSimSocreRevComp = true;
-						bestRefName = refSeq->seqBase_.name_;
+						bestRefPos = pos;
 					}
 				}
 			}
 
 			{
 				std::lock_guard<std::mutex> lock(outMut);
+				if(alignBest) {
+					alignerPtr->alignCacheGlobal(refSeqs[bestRefPos]->seqBase_, seq);
+					alignerPtr->profileAlignment(refSeqs[bestRefPos]->seqBase_, seq,false, false,false);
+					alignerPtr->alignObjectA_.seqBase_.outPutFastq(*alignOut);
+					alignerPtr->alignObjectB_.seqBase_.outPutFastq(*alignOut);
+				}
 				out << seq.name_
-						<< "\t" << bestRefName
+						<< "\t" << refSeqs[bestRefPos]->seqBase_.name_
 						<< "\t" << njh::boolToStr(bestSimSocreRevComp)
 						<< "\t" << bestSimilarityScore.totalShared_
 						<< "\t" << bestSimilarityScore.getDistTotalShared()
@@ -147,7 +181,11 @@ int kmerExpRunner::getBestKmerDetailedKmerDistAgainstRef(const njh::progutils::C
 						<< "\t" << bestSimilarityScore.getDistUniqueSharedLenAdjusted()
 						<< "\t" << bestSimilarityScore.totalUniqKmersIn1_
 						<< "\t" << bestSimilarityScore.totalUniqKmersIn2_
-						<< "\t" << bestSimilarityScore.totalUniqBetween_
+						<< "\t" << bestSimilarityScore.totalUniqBetween_;
+				if(alignBest) {
+					out << "\t" << alignerPtr->comp_.distances_.eventBasedIdentityHq_;
+				}
+				out
 						<< "\n";
 			}
 		}
