@@ -115,6 +115,8 @@ bedExpRunner::bedExpRunner()
 					 addFunc("bedBinCloseRegions", bedBinCloseRegions, false),
            addFunc("createBedRegionFromName", createBedRegionFromName, false),
           	addFunc("vcfToBed", vcfToBed, false),
+          	addFunc("bedRenameWithKey", bedRenameWithKey, false),
+          	addFunc("bedMakeAllOneStrand", bedMakeAllOneStrand, false),
            },//
           "bedExp") {}
 
@@ -573,6 +575,82 @@ int bedExpRunner::bedChangeScoreToLength(const njh::progutils::CmdArgs & inputCo
 	return 0;
 }
 
+int bedExpRunner::bedRenameWithKey(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path nameKeyTableFnp = "";
+	std::string oldNameColName;
+	std::string newNameColName;
+
+	bfs::path bedFile = "";
+	OutOptions outOpts;
+	outOpts.outExtention_ = ".bed";
+	seqSetUp setUp(inputCommands);
+	setUp.setOption(bedFile, "--bed", "Bed file", true);
+	setUp.setOption(nameKeyTableFnp, "--nameKeyTableFnp", "A key table, either no header, 1) current chromosome names in bed file, 2) name to be renamed to, or will use the name columns supplied", true);
+	setUp.setOption(oldNameColName, "--oldNameColName", "Old Name Col Name, supply if you want to use specific columns in the name key for renaming", false);
+	setUp.setOption(newNameColName, "--newNameColName", "New Name Col Name, supply if you want to use specific columns in the name key for renaming", false);
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	if(oldNameColName.empty() != newNameColName.empty()) {
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << "supplied one key column name but not the other name"  << "\n";
+		ss << "oldNameColName: " << oldNameColName << "\n";
+		ss << "newNameColName: " << newNameColName << "\n";
+		throw std::runtime_error{ss.str()};
+	}
+	bool header = !oldNameColName.empty();
+	table nameKeyTab(nameKeyTableFnp, "\t", header);
+
+	if(nameKeyTab.columnNames_.size() < 2 ){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << nameKeyTableFnp << " should be a table with at least two columns" << "\n";
+		throw std::runtime_error{ss.str()};
+	}
+
+	std::unordered_map<std::string, std::string> nameKey;
+	if(header) {
+		nameKeyTab.checkForColumnsThrow(VecStr{oldNameColName, newNameColName}, __PRETTY_FUNCTION__);
+		for(const auto & row : nameKeyTab.content_){
+			auto oldName = row[nameKeyTab.getColPos(oldNameColName)];
+			if(njh::in(oldName, nameKey)) {
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "already have name: " << oldName << " in key, it's current value is: " << nameKey[oldName] << "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			nameKey[oldName] = row[nameKeyTab.getColPos(newNameColName)];
+		}
+	} else {
+		for(const auto & row : nameKeyTab.content_){
+			auto oldName = row[0];
+			if(njh::in(oldName, nameKey)) {
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "already have name: " << oldName << " in key, it's current value is: " << nameKey[oldName] << "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			nameKey[oldName] = row[1];
+		}
+	}
+	BioDataFileIO<Bed6RecordCore> reader{IoOptions(InOptions(bedFile), outOpts)};
+	reader.openIn();
+	reader.openOut();
+	std::shared_ptr<Bed6RecordCore> b = reader.readNextRecord();
+	while(nullptr != b){
+		if(!njh::in(b->name_, nameKey)){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error couldn't find " << b->name_ << " in table, options are:" << "\n";
+			ss << njh::conToStr(njh::getVecOfMapKeys(nameKey) , ", ") << '\n';
+			throw std::runtime_error{ss.str()};
+		}
+		b->name_ = nameKey[b->name_];
+		reader.write(*b, [](const Bed6RecordCore & bed, std::ostream & out){
+			out << bed.toDelimStrWithExtra() << std::endl;
+		});
+		b = reader.readNextRecord();
+	}
+	return 0;
+}
+
 int bedExpRunner::bedRenameChromosomes(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path chromKeyTableFnp = "";
 
@@ -896,11 +974,55 @@ int bedExpRunner::bedCreateSpanningRegions(const njh::progutils::CmdArgs & input
 }
 
 
+int bedExpRunner::bedMakeAllOneStrand(const njh::progutils::CmdArgs& inputCommands) {
+	bfs::path bedFile;
+	OutOptions outOpts;
+	std::string strand = "plus";
+	VecStr strandOptions{"plus", "+", "negative", "-"};
+	std::function<njh::progutils::ProgramSetUp::FlagCheckResult(const std::string&)> strandCheck = [&strandOptions
+			](const std::string& flag) {
+		if (njh::in(flag, strandOptions)) {
+			return njh::progutils::ProgramSetUp::FlagCheckResult(true, "success");
+		}
+		return njh::progutils::ProgramSetUp::FlagCheckResult(
+			false, njh::pasteAsStr("--strand needs to be one of the following: ", njh::conToStrEndSpecial(strandOptions, ", ", " or "), " not ",
+			                       flag));
+	};
+	seqSetUp setUp(inputCommands);
+	setUp.description_ = "Make the strand of the region in the bed file all one direction";
+	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --bed inputFile.bed");
+	setUp.processVerbose();
+	setUp.setOption(bedFile, "--bed", "Bed6 (at least first 6 columns) file", true);
+	setUp.setOption(strand, "--strand", "the make the file, either plus, +, negative, -", strandCheck);
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	BioDataFileIO<Bed6RecordCore> reader{IoOptions(InOptions(bedFile), outOpts)};
+	std::shared_ptr<Bed6RecordCore> reg;
+	reader.openIn();
+	reader.openOut();
+	bool reverseStrand = njh::in(strand, VecStr{"-", "negative"});
+	reg = reader.readNextRecord();
+	while (nullptr != reg) {
+		if (!reverseStrand) {
+			reg->strand_ = '+';
+		} else {
+			reg->strand_ = '-';
+		}
+		reader.write(*reg, [](const Bed6RecordCore& bRecord, std::ostream& out) {
+			out << bRecord.toDelimStrWithExtra() << "\n";
+		});
+		reg = reader.readNextRecord();
+	}
+	return 0;
+}
+
 int bedExpRunner::bedToggleStrand(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile;
 	OutOptions outOpts;
 	seqSetUp setUp(inputCommands);
-	setUp.description_ = "Simply switch the strand of the region in the bed file";
+	setUp.description_ = "Switch the strand of the region in the bed file, e.g. + becomes -, - becomes +";
 	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --bed inputFile.bed");
 	setUp.processVerbose();
 	setUp.setOption(bedFile, "--bed", "Bed6 (at least first 6 columns) file", true);

@@ -107,10 +107,12 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 
 	//modifying aspects of the bed regions
 	static int bedToggleStrand(const njh::progutils::CmdArgs & inputCommands);
+	static int bedMakeAllOneStrand(const njh::progutils::CmdArgs & inputCommands);
 	static int bed3ToBed6(const njh::progutils::CmdArgs & inputCommands);
 	static int bedRenameRepeatUids(const njh::progutils::CmdArgs & inputCommands);
 	static int bedRenameWithCoords(const njh::progutils::CmdArgs & inputCommands);
 	static int bedRenameChromosomes(const njh::progutils::CmdArgs & inputCommands);
+	static int bedRenameWithKey(const njh::progutils::CmdArgs & inputCommands);
 	static int bedChangeScoreToLength(const njh::progutils::CmdArgs & inputCommands);
 	static int bedCoordSort(const njh::progutils::CmdArgs & inputCommands);
 	static int reorientBasedOnSingleReadsOrientationCounts(const njh::progutils::CmdArgs & inputCommands);
