@@ -78,7 +78,7 @@ int kmerExpRunner::findingKmerEnrichment(const njh::progutils::CmdArgs & inputCo
 		}
 		allSamples.emplace(sample);
 	}
-	MultipleGroupMetaData meta(sampleMetaFnp);
+	MultipleGroupMetaData meta(sampleMetaFnp, allSamples);
 	std::set<std::string> groupsWith2Levels;
 	for(const auto & group : meta.groupData_){
 		uint32_t count = 0;
