@@ -54,6 +54,7 @@ int kmerExpRunner::findingKmerEnrichment(const njh::progutils::CmdArgs & inputCo
 	uint32_t minGroupSize = 1;
 	bool doNotAddOneToAll = false;
 	double pvalueToReportCutOff = 0.20;
+	std::set<std::string> ignoreMetaFields;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -63,6 +64,8 @@ int kmerExpRunner::findingKmerEnrichment(const njh::progutils::CmdArgs & inputCo
 	setUp.setOption(kmerLength, "--kmerLength", "kmer Length");
 	setUp.setOption(inputFiles, "--inputFiles", "input files", true);
 	setUp.setOption(sampleMetaFnp, "--sampleMetaFnp", "Sample Meta Fnp to find enrichment of", true);
+	setUp.setOption(ignoreMetaFields, "--fieldsToIgnore", "Meta fields to ignore");
+
 	setUp.setOption(pvalueToReportCutOff, "--pvalueToReportCutOff", "pvalueToReportCutOff");
 
 	setUp.processDirectoryOutputName("findingKmerEnrichment_TODAY", true);
@@ -87,7 +90,7 @@ int kmerExpRunner::findingKmerEnrichment(const njh::progutils::CmdArgs & inputCo
 				++count;
 			}
 		}
-		if(count == 2){
+		if(count == 2 && njh::notIn(group.first, ignoreMetaFields)){
 			groupsWith2Levels.emplace(group.first);
 		}
 	}
