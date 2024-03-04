@@ -348,7 +348,7 @@ int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommand
     openTextFile(tempFile, "tempFilealns.fasta", ".fasta", setUp.pars_.ioOptions_.out_);
   }
   profileInfoFile
-      << "ReadId\tReadFraction\tOtherReadId\talnScore\tperId\tk" << setUp.pars_.colOpts_.kmerOpts_.kLength_ << "Dist\t1bIndel\t2bI"
+      << "ReadId\tReadFraction\tOtherReadId\talnScore\tperId\tk" << setUp.pars_.colOpts_.kmerOpts_.kLength_ << "Sim\t1bIndel\t2bI"
          "ndel\t>2bIndel\tlqMismatch\thqMismatch\ttotalDiffs" << std::endl;
   readVec::handelLowerCaseBases(seqs, setUp.pars_.ioOptions_.lowerCaseBases_);
 	PairwisePairFactory pairFac(len(seqs));

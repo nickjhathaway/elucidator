@@ -152,7 +152,10 @@ domainPlot = ggplot() +
     env_from = env_from,
     env_to = env_to,
     env_len = env_len,
+    acc = acc,
     evalue = evalue,
+    score = score,
+    scoreOverLen = scoreOverLen,
     hmm_covered = hmm_covered,
     hmm_From = hmm_From, 
     hmm_to = hmm_to,
@@ -201,6 +204,8 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	postProcessPars.scoreCutOff = 200;
 	postProcessPars.evalueCutOff = 1e-100;
 	postProcessPars.scoreNormCutOff = 0.50;
+	postProcessPars.softModelCovergeCutOff = 0.80;
+	postProcessPars.hardScoreNormCutOff = 0.20;
 	nhmmscanOutput::QueryResults::mergeOverlapingHitsPars mergePars;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -228,17 +233,25 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	if(postProcessPars.hardAccCutOff > postProcessPars.accCutOff){
 		postProcessPars.accCutOff = postProcessPars.hardAccCutOff;
 	}
+
 	setUp.setOption(postProcessPars.hardScoreCutOff, "--hardScoreCutOff", "hard score cut off");
 	if(postProcessPars.hardScoreCutOff > postProcessPars.scoreCutOff){
 		postProcessPars.scoreCutOff = postProcessPars.hardScoreCutOff;
 	}
+
 	setUp.setOption(postProcessPars.hardEvalueCutOff, "--hardEvalueCutOff", "hard evalue cut off");
-	if(postProcessPars.hardEvalueCutOff > postProcessPars.evalueCutOff){
+	if(postProcessPars.hardEvalueCutOff < postProcessPars.evalueCutOff){
 		postProcessPars.evalueCutOff = postProcessPars.hardEvalueCutOff;
 	}
+
 	setUp.setOption(postProcessPars.hardScoreNormCutOff, "--hardScoreNormCutOff", "hard scoreNorm cut off");
 	if(postProcessPars.hardScoreNormCutOff > postProcessPars.scoreNormCutOff){
 		postProcessPars.scoreNormCutOff = postProcessPars.hardScoreNormCutOff;
+	}
+
+	setUp.setOption(postProcessPars.hardModelCovergeCutOff, "--hardModelCovergeCutOff", "hard mdoel coverage cut off");
+	if(postProcessPars.hardModelCovergeCutOff > postProcessPars.softModelCovergeCutOff){
+		postProcessPars.softModelCovergeCutOff = postProcessPars.hardModelCovergeCutOff;
 	}
 	setUp.processDirectoryOutputName(true);
 	setUp.finishSetUp(std::cout);

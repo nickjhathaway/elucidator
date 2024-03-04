@@ -39,7 +39,9 @@ class seqUtilsTrimRunner : public njh::progutils::ProgramRunner {
   static int trimFromSeq(const njh::progutils::CmdArgs & inputCommands);
   static int trimBetweenSeqs(const njh::progutils::CmdArgs & inputCommands);
   static int trimToLen(const njh::progutils::CmdArgs & inputCommands);
-  static int trimToSimilarSeq(const njh::progutils::CmdArgs & inputCommands);
+	static int rtrimToLen(const njh::progutils::CmdArgs & inputCommands);
+
+	static int trimToSimilarSeq(const njh::progutils::CmdArgs & inputCommands);
 
   static int trimAtFirstQual(const njh::progutils::CmdArgs & inputCommands);
   static int trimAtFirstBase(const njh::progutils::CmdArgs & inputCommands);

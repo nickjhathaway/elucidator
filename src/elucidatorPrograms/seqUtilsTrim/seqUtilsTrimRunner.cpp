@@ -77,7 +77,8 @@ seqUtilsTrimRunner::seqUtilsTrimRunner()
 			addFunc("trimToRefWithGlobalAlignmentNonOverlappingRegions", trimToRefWithGlobalAlignmentNonOverlappingRegions, false),
 			addFunc("removeBestSubSeq", removeBestSubSeq, false),
 			addFunc("trimBetweenHmmViaHmmsearch", trimBetweenHmmViaHmmsearch, false),
-			addFunc("trimBetweenHmmViaNhmmscan", trimBetweenHmmViaNhmmscan, false)
+			addFunc("trimBetweenHmmViaNhmmscan", trimBetweenHmmViaNhmmscan, false),
+    	addFunc("rtrimToLen", rtrimToLen, false)
 },
                     "seqUtilsTrim") {}
 //,
@@ -698,6 +699,31 @@ int seqUtilsTrimRunner::trimToLen(const njh::progutils::CmdArgs & inputCommands)
 
 	return 0;
 }
+
+int seqUtilsTrimRunner::rtrimToLen(const njh::progutils::CmdArgs & inputCommands){
+	seqUtilsTrimSetUp setUp(inputCommands);
+	FullTrimReadsPars pars;
+	/**@todo add trimmer specific trimmer */
+	setUp.setUpTrimToLen(pars);
+	SeqIO reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	seqInfo seq;
+
+	while(reader.readNextRead(seq)){
+		readVecTrimmer::rtrimToMaxLength(seq, pars.maxLength);
+		if (seq.on_ || !pars.keepOnlyOn) {
+			reader.openWrite(seq);
+		}
+	}
+
+	if(setUp.pars_.verbose_){
+		setUp.logRunTime(std::cout);
+	}
+
+	return 0;
+}
+
+
 
 
 

@@ -1488,6 +1488,8 @@ int bedExpRunner::getOverlappingBedRegions(const njh::progutils::CmdArgs & input
 			//a overlapLen of 0 indicates to find only regions that completely overlap with each other
 			if(overlapLen == 0){
 				auto overlapAmount = reg.getOverlapLen(*bed);
+//				std::cout << __FILE__ << " : " << __LINE__ << std::endl;
+//				std::cout << "overlapAmount: " << overlapAmount << std::endl;
 				if(bed->length() == overlapAmount ||reg.length() == overlapAmount){
 					intersectingRegions.emplace_back(bed->name_);
 				}

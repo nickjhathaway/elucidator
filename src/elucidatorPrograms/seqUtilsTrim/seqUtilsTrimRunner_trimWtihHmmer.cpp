@@ -766,7 +766,7 @@ int seqUtilsTrimRunner::trimBetweenHmmViaNhmmscan(const njh::progutils::CmdArgs 
 		postProcessPars.scoreCutOff = postProcessPars.hardScoreCutOff;
 	}
 	setUp.setOption(postProcessPars.hardEvalueCutOff, "--hardEvalueCutOff", "hard evalue cut off");
-	if(postProcessPars.hardEvalueCutOff > postProcessPars.evalueCutOff){
+	if(postProcessPars.hardEvalueCutOff < postProcessPars.evalueCutOff){
 		postProcessPars.evalueCutOff = postProcessPars.hardEvalueCutOff;
 	}
 	setUp.setOption(postProcessPars.hardScoreNormCutOff, "--hardScoreNormCutOff", "hard scoreNorm cut off");
