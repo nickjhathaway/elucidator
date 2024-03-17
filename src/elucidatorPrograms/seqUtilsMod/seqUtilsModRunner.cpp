@@ -858,7 +858,7 @@ int seqUtilsModRunner::renameIDs(const njh::progutils::CmdArgs & inputCommands) 
   auto outOptsKey = TableIOOpts::genTabFileOut("", true);
   bfs::path keyIn = "";
   seqUtilsModSetUp setUp(inputCommands);
-  setUp.setOption(keyIn, "--keyIn", "A file with a key to rename seqs with");
+  setUp.setOption(keyIn, "--keyIn", "A file with a key to rename seqs with, no header, first column is old name, second column is the new name");
   setUp.setOption(outOptsKey.out_.outFilename_, "--keyOut", "A filename to write a key for the original name to");
   setUp.setOption(keepComplementFlag, "--keepComplementFlag", "Keep any reads marked with _Comp");
   setUp.processVerbose();

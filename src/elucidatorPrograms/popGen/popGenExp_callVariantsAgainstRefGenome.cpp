@@ -29,6 +29,7 @@ namespace njhseq {
 
 int popGenExpRunner::callVariantsAgainstRefGenome(const njh::progutils::CmdArgs & inputCommands) {
 
+	bfs::path bedFnp;
 	CollapseAndCallVariantsPars pars;
 
 	seqSetUp setUp(inputCommands);
@@ -41,6 +42,7 @@ int popGenExpRunner::callVariantsAgainstRefGenome(const njh::progutils::CmdArgs 
 
 	setUp.processAlnInfoInput();
 	pars.alnCacheDir = setUp.pars_.alnInfoDirName_;
+	setUp.setOption(bedFnp, "--regionFnp", "do against this specific region, should only be 1 region");
 
 	setUp.setOption(pars.numThreads, "--numThreads", "number of threads");
 	pars.calcPopMeasuresPars.numThreads = pars.numThreads;
@@ -64,7 +66,15 @@ int popGenExpRunner::callVariantsAgainstRefGenome(const njh::progutils::CmdArgs 
 	setUp.setOption(pars.variantCallerRunPars.realnPars.extendAmount, "--extendAmount", "extend amount");
 
 	setUp.finishSetUp(std::cout);
-
+	if(!bedFnp.empty()) {
+		auto regions = getBeds(bedFnp);
+		if(regions.size() != 1) {
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "should only be 1 region in " << bedFnp << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		pars.refSeqRegion = GenomicRegion(*regions.front());
+	}
 	collapseAndCallVariants(pars);
 	setUp.startARunLog(pars.outputDirectory.string());
 

@@ -260,6 +260,13 @@ int gffExpRunner::gffRenameChroms(const njh::progutils::CmdArgs & inputCommands)
 		std::ifstream infile(inputFile.string());
 		while('#' == infile.peek()){
 			njh::files::crossPlatGetline(infile, line);
+			if (njh::beginsWith(line, "##sequence-region ")) {
+				auto lineToks = tokenizeString(line, "whitespace");
+				if (lineToks.size() == 4 && njh::in(lineToks[1], nameKeyMap)) {
+					lineToks[1] = nameKeyMap[lineToks[1]];
+				}
+				line = njh::conToStr(lineToks, " ");
+			}
 			outFile << line << std::endl;
 		}
 	}
@@ -286,6 +293,8 @@ int gffExpRunner::gffRenameChroms(const njh::progutils::CmdArgs & inputCommands)
 				end = true;
 				break;
 			}
+
+
 			njh::files::crossPlatGetline(*reader.inFile_, line);
 		}
 		if (end) {
