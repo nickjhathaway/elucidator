@@ -22,7 +22,7 @@
 namespace njhseq {
 
 void ampliconAnalysisSetUp::setUpCollapseTandems(
-    double& freqCutoff, bool& extra, bool& additionalOut,
+    clusterCollapser::collapseTandemsPars & pars, bool& extra, bool& additionalOut,
     std::string& additionalOutLocationFile) {
   if (needsHelp()) {
     std::cout << "collapseTandems version 1" << std::endl;
@@ -56,11 +56,16 @@ void ampliconAnalysisSetUp::setUpCollapseTandems(
   }
   pars_.ioOptions_.out_.outFilename_ = "tandemsCollapsed";
   pars_.ioOptions_.processed_ = true;
+
+	setOption(pars.freqCutoff, "--collapseTandemsFreqMultiplier", "When collapse tandem repeat gaps, larger cluster's frequency must be this many times the frequency of the smaller cluster");
+	pars.allowableMismatches.lqMismatches_ = 1;
+	setOption(pars.allowableMismatches.lqMismatches_, "--collapseTandemsLowQualityMismatchesAllowed", "When collapse tandem repeat gaps, allow this many low quality mismatches to also exist");
+	setOption(pars.allowableTandems, "--collapseTandemsAllowableTandems", "When collapse tandem repeat gaps, allow this many tandem repeat gap to allow collapse");
+
   processDefaultReader(true);
   bool mustMakeDirectory = false;
   processDirectoryOutputName(mustMakeDirectory);
   processVerbose();
-  setOption(freqCutoff, "-freqcutoff", "Frequency_multipler_cutoff");
   processRefFilename();
   processKmerProfilingOptions();
   // get the qualities

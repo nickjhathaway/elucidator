@@ -230,7 +230,8 @@ int ampliconAnalysisRunner::greedyCluster(const njh::progutils::CmdArgs & inputC
 }
 
 int ampliconAnalysisRunner::collapseTandems(const njh::progutils::CmdArgs & inputCommands) {
-  double freqCutoff = 2.0;
+	clusterCollapser::collapseTandemsPars tpars;
+
   bool extra = false;
   bool checkingAgainstReference = false;
   bool additionalOut = false;
@@ -239,7 +240,7 @@ int ampliconAnalysisRunner::collapseTandems(const njh::progutils::CmdArgs & inpu
   std::string additionalOutLocationFile = "";
   ampliconAnalysisSetUp setUp(inputCommands);
   setUp.setOption(additionalOutName, "--additionalOutName,-addName", "additionalOutName");
-  setUp.setUpCollapseTandems(freqCutoff, extra, additionalOut,
+  setUp.setUpCollapseTandems(tpars, extra, additionalOut,
                              additionalOutLocationFile);
   // read in sequences
   SeqInput reader(setUp.pars_.ioOptions_);
@@ -273,8 +274,7 @@ int ampliconAnalysisRunner::collapseTandems(const njh::progutils::CmdArgs & inpu
 			setUp.pars_.qScorePars_, setUp.pars_.colOpts_.alignOpts_.countEndGaps_,
 			setUp.pars_.colOpts_.iTOpts_.weighHomopolyer_);
   clusterCollapser::collapseTandems(
-      processedReads, alignerObj, setUp.pars_.colOpts_.kmerOpts_.runCutOff_, setUp.pars_.colOpts_.kmerOpts_.kLength_, true,
-      freqCutoff, setUp.pars_.local_, false);
+      processedReads, alignerObj, tpars);
   processedReads = readVecSplitter::splitVectorOnRemove(processedReads).first;
   readVec::allUpdateName(processedReads);
   readVecSorter::sort(processedReads);

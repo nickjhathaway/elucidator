@@ -23,6 +23,7 @@
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
 #include <njhseq/common.h>
+#include <njhseq/helpers/clusterCollapser.hpp>
 #include <njhseq/programUtils/seqSetUp.hpp>
 
 namespace njhseq {
@@ -34,7 +35,7 @@ class ampliconAnalysisSetUp : public seqSetUp {
 	using njhseq::seqSetUp::seqSetUp;
 
 
-  void setUpCollapseTandems(double& freqCutoff, bool& extra,
+  void setUpCollapseTandems(clusterCollapser::collapseTandemsPars & pars, bool& extra,
                             bool& additionalOut,
                             std::string& additionalOutLocationFile);
   void setUpMarkChimeras();
