@@ -656,7 +656,7 @@ int repelinRunner::TandemRepeatFinderOutputToBed(const njh::progutils::CmdArgs &
 
 
 int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
-	SimpleTRFinderLocsPars pars;
+	SimpleTandemRepeatFinder::SimpleTRFinderLocsPars pars;
 	bfs::path genomicLocation;
 	pars.maxRepeatUnitSize = 6;
 	uint32_t match{2};
@@ -803,7 +803,8 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
 	}
 
 	if(supplement){
-		runSimpleTRFinderLocsPars(setUp.pars_.ioOptions_, pars);
+		SimpleTandemRepeatFinder trFinder(pars);
+		trFinder.runSimpleTRFinderLocs(setUp.pars_.ioOptions_);
 		//combine
 
 		std::vector<Bed6RecordCore> combinedRepeats;

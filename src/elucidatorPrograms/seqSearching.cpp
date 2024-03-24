@@ -96,7 +96,8 @@ int seqSearchingRunner::findHomopolymerLocations(const njh::progutils::CmdArgs &
 
 int seqSearchingRunner::findSimpleTandemRepeatLocations(const njh::progutils::CmdArgs & inputCommands){
 
-	SimpleTRFinderLocsPars pars;
+
+	SimpleTandemRepeatFinder::SimpleTRFinderLocsPars pars;
 
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
@@ -108,8 +109,9 @@ int seqSearchingRunner::findSimpleTandemRepeatLocations(const njh::progutils::Cm
 	pars.setDefaultOpts(setUp);
 
 	setUp.finishSetUp(std::cout);
+	SimpleTandemRepeatFinder trfinder(pars);
 
-	runSimpleTRFinderLocsPars(setUp.pars_.ioOptions_, pars);
+	trfinder.runSimpleTRFinderLocs(setUp.pars_.ioOptions_);
 
 
 	return 0;
@@ -117,7 +119,7 @@ int seqSearchingRunner::findSimpleTandemRepeatLocations(const njh::progutils::Cm
 
 
 int seqSearchingRunner::findTandemMotifLocations(const njh::progutils::CmdArgs & inputCommands){
-	std::string motifstr = "";
+	std::string motifstr;
 	//bfs::path genomeFnp = "";
 
 	uint32_t allowableErrors = 0;

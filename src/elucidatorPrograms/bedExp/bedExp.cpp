@@ -117,6 +117,7 @@ bedExpRunner::bedExpRunner()
           	addFunc("vcfToBed", vcfToBed, false),
           	addFunc("bedRenameWithKey", bedRenameWithKey, false),
           	addFunc("bedMakeAllOneStrand", bedMakeAllOneStrand, false),
+          	addFunc("getBestScoringRegionsPerChromosome", getBestScoringRegionsPerChromosome, false),
            },//
           "bedExp") {}
 
@@ -823,15 +824,19 @@ int bedExpRunner::getBestNonOverlapingRegions(const njh::progutils::CmdArgs & in
 	setUp.finishSetUp(std::cout);
 
 	BioDataFileIO<Bed6RecordCore> reader{IoOptions(InOptions(bed1File), outOpts)};
-	std::shared_ptr<Bed6RecordCore> reg;
+
 	std::vector<std::shared_ptr<Bed6RecordCore>> startRegs;
-	reader.openIn();
-	reader.openOut();
 	uint32_t amountWritten = 0;
-	reg = reader.readNextRecord();
-	while(nullptr != reg){
-		startRegs.emplace_back(reg);
+
+	{
+		std::shared_ptr<Bed6RecordCore> reg;
+		reader.openIn();
+		reader.openOut();
 		reg = reader.readNextRecord();
+		while(nullptr != reg){
+			startRegs.emplace_back(reg);
+			reg = reader.readNextRecord();
+		}
 	}
 	if(bottom){
 		njh::sort(startRegs, [](const std::shared_ptr<Bed6RecordCore> & b1,const std::shared_ptr<Bed6RecordCore> & b2 ){

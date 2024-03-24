@@ -63,6 +63,8 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	static int getFirstRegionPerChrom(const njh::progutils::CmdArgs & inputCommands);
 	static int getLastRegionPerChrom(const njh::progutils::CmdArgs & inputCommands);
 	static int fillInRegionsByBestScore(const njh::progutils::CmdArgs & inputCommands);
+	static int getBestScoringRegionsPerChromosome(const njh::progutils::CmdArgs & inputCommands);
+
 	static int bedAddRegionsNonCompletelyInOther(const njh::progutils::CmdArgs & inputCommands);
 
 	static int bedFilterRegionsCompletelyInOther(const njh::progutils::CmdArgs & inputCommands);

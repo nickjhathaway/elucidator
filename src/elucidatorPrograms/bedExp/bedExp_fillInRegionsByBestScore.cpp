@@ -299,6 +299,62 @@ int bedExpRunner::createWindowsInbetweenRegions(const njh::progutils::CmdArgs & 
 
 
 
+int bedExpRunner::getBestScoringRegionsPerChromosome(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path bedFnp = "";
+	OutOptions outOpts(bfs::path(""), ".bed");
+	bool getLowestScore = false;
+	seqSetUp setUp(inputCommands);
+	setUp.description_ = "";
+	setUp.setOption(bedFnp, "--bedFnp", "Bed file to choose from", true);
+	setUp.setOption(getLowestScore, "--getLowestScore", "get Lowest Score instead of the highest");
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	auto bedsToSelect = getBeds(bedFnp);
+
+	std::function<bool(const std::shared_ptr<Bed6RecordCore>& reg1In, const std::shared_ptr<Bed6RecordCore>& reg2In)>
+			bedSorterFunc =
+					[](const std::shared_ptr<Bed6RecordCore>& reg1In, const std::shared_ptr<Bed6RecordCore>& reg2In) {
+				const auto& reg1 = getRef(reg1In);
+				const auto& reg2 = getRef(reg2In);
+				if (reg1.chrom_ == reg2.chrom_) {
+					return reg1.score_ > reg2.score_;
+				}
+				return reg1.chrom_ < reg2.chrom_;
+			};
+	if (getLowestScore) {
+		bedSorterFunc =
+				[](const std::shared_ptr<Bed6RecordCore>& reg1In, const std::shared_ptr<Bed6RecordCore>& reg2In) {
+					const auto& reg1 = getRef(reg1In);
+					const auto& reg2 = getRef(reg2In);
+					if (reg1.chrom_ == reg2.chrom_) {
+						return reg1.score_ < reg2.score_;
+					}
+					return reg1.chrom_ < reg2.chrom_;
+				};
+	}
+	njh::sort(bedsToSelect, bedSorterFunc);
+
+	OutputStream out(outOpts);
+	std::string currentChromsome = "it better not be named this, that would be ridiculous";
+	for(const auto & reg : bedsToSelect) {
+		if(currentChromsome != reg->chrom_) {
+			out << reg->toDelimStrWithExtra() << std::endl;
+			currentChromsome = reg->chrom_;
+		}
+	}
+
+
+	return 0;
+}
+
+
+
+
+
+
+
 int bedExpRunner::fillInRegionsByBestScore(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path withinBed = "";
 	bfs::path bedFnp = "";
