@@ -3,7 +3,7 @@
 //
 
 
-#include "kmerExp.hpp"
+#include "kmerSetExp.hpp"
 #include <njhseq/objects/kmer/KmerUtils.hpp>
 #include "elucidator/objects/seqObjects/seqKmers.h"
 #include <njhseq/IO/SeqIO/SeqIO.hpp>
@@ -13,7 +13,7 @@
 
 namespace njhseq {
 
-int kmerExpRunner::getUniqueSequenceRegions(const njh::progutils::CmdArgs &inputCommands) {
+int kmerSetExpRunner::getUniqueSequenceRegions(const njh::progutils::CmdArgs &inputCommands) {
 	uint32_t minLen = 50;
 	std::vector<bfs::path> inputSequenceFiles;
 	KmerGatherer::KmerGathererPars countPars;

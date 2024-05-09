@@ -31,6 +31,7 @@
 #include "elucidatorPrograms/gffExp/gffExp.hpp"
 #include "elucidatorPrograms/graphicsUtils.h"
 #include "elucidatorPrograms/kmerExp/kmerExp.hpp"
+#include "elucidatorPrograms/kmerSetExp/kmerSetExp.hpp"
 #include "elucidatorPrograms/jsonExp.hpp"
 #include "elucidatorPrograms/misc.h"
 #include "elucidatorPrograms/pacbioExp.hpp"
@@ -79,6 +80,7 @@ elucidatorRunner::elucidatorRunner() :
 		njh::progutils::OneRing(
 				{ addRing<pacbioExpRunner>(),      addRing<genExpRunner>(),
 					addRing<kmerExpRunner>(),        addRing<clusteringExpRunner>(),
+					addRing<kmerSetExpRunner>(),
 					addRing<fileFormatExpRunner>(),
 					addRing<bamExpRunner>(),         addRing<bamCountingExpRunner>(),
 					addRing<programWrapperRunner>(),

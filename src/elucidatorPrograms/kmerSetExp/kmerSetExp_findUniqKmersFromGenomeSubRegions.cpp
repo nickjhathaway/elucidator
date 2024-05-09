@@ -2,12 +2,13 @@
 // Created by Nicholas Hathaway on 5/6/23.
 //
 
-#include "kmerExp.hpp"
+#include "kmerSetExp.hpp"
 #include <njhseq/objects/kmer/KmerUtils.hpp>
 #include <njhseq/objects/kmer.h>
 
 
 #include "elucidator/objects/MiscUtility/GenomeSeqSearch.hpp"
+
 #include "elucidator/helpers/UniqueKmerSetHelper.hpp"
 
 #include <njhseq/objects/dataContainers/tables/TableReader.hpp>
@@ -19,7 +20,7 @@ namespace njhseq {
 
 
 
-int kmerExpRunner::uniqKmersSetToFasta(const njh::progutils::CmdArgs & inputCommands){
+int kmerSetExpRunner::uniqKmersSetToFasta(const njh::progutils::CmdArgs & inputCommands){
 
 	bfs::path countTable;
 	bfs::path nonUniqueKmerTable;
@@ -66,7 +67,7 @@ int kmerExpRunner::uniqKmersSetToFasta(const njh::progutils::CmdArgs & inputComm
 	return 0;
 }
 
-int kmerExpRunner::reportOnUniqKmersSet(const njh::progutils::CmdArgs & inputCommands){
+int kmerSetExpRunner::reportOnUniqKmersSet(const njh::progutils::CmdArgs & inputCommands){
 
 	bfs::path countTable;
 	bfs::path nonUniqueKmerTable;
@@ -104,7 +105,7 @@ int kmerExpRunner::reportOnUniqKmersSet(const njh::progutils::CmdArgs & inputCom
 	return 0;
 }
 
-int kmerExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputCommands){
+int kmerSetExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputCommands){
 
 	bfs::path countTable;
 	bfs::path nonUniqueKmerTable;
@@ -239,7 +240,7 @@ int kmerExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputComman
 
 
 
-int kmerExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutils::CmdArgs & inputCommands){
+int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutils::CmdArgs & inputCommands){
 	std::string nonUniqueRegionName = "NON_UNIQUE";
 	KmerGatherer::KmerGathererPars countPars;
 	countPars.entropyFilter_ = 0;

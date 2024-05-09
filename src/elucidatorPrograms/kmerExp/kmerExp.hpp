@@ -65,7 +65,6 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int clostestKmerDist(const njh::progutils::CmdArgs & inputCommands);
 
 
-	static int getKmerSetDistBetween(const njh::progutils::CmdArgs & inputCommands);
 
 
 	static int getKmerDistTwoSeqs(const njh::progutils::CmdArgs & inputCommands);
@@ -98,48 +97,28 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int chromVsChromUniqueComp(const njh::progutils::CmdArgs & inputCommands);
 
 
-	static int getUniqueSequenceRegions(const njh::progutils::CmdArgs & inputCommands);
 
 	static int genomeKmerCompare(const njh::progutils::CmdArgs & inputCommands);
 	static int profileSharedKmerBlocks(const njh::progutils::CmdArgs & inputCommands);
 	static int kmerCompareTwoSetsOfContigs(const njh::progutils::CmdArgs & inputCommands);
 	static int findUniqKmersBetweenSeqs(const njh::progutils::CmdArgs & inputCommands);
 
-	static int findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands);
-	static int filterUniqueKmerSetForEntropy(const njh::progutils::CmdArgs & inputCommands);
+
 	static int testingSimpleKmerHasher(const njh::progutils::CmdArgs & inputCommands);
 
-	static int findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutils::CmdArgs & inputCommands);
-	static int addToUniqKmersSet(const njh::progutils::CmdArgs & inputCommands);
-	static int reportOnUniqKmersSet(const njh::progutils::CmdArgs & inputCommands);
-	static int uniqKmersSetToFasta(const njh::progutils::CmdArgs & inputCommands);
 
-	static int findKmersInSets(const njh::progutils::CmdArgs & inputCommands);
 	static int countPerKmerPerSeq(const njh::progutils::CmdArgs & inputCommands );
-
-
-	static int extractByCountingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands);
-	static int countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArgs & inputCommands);
-	static int countingUniqKmersFromSetsBestSet(const njh::progutils::CmdArgs & inputCommands);
-	static int countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::progutils::CmdArgs & inputCommands);
-	static int countingUniqKmersFromSetsInRegionsAlnsBestSet(const njh::progutils::CmdArgs & inputCommands);
-
-	static int countingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands);
-	static int countingUniqKmersFromSetsInUnmappedAlns(const njh::progutils::CmdArgs & inputCommands);
-
 	static int kmerTestingGround(const njh::progutils::CmdArgs & inputCommands);
-
-
 	static int kmerConnectionGraph(const njh::progutils::CmdArgs & inputCommands);
-
-
 	static int countKmers(const njh::progutils::CmdArgs & inputCommands);
 	static int generateCountsTable(const njh::progutils::CmdArgs & inputCommands);
-
-
-
 	static int findingKmerEnrichment(const njh::progutils::CmdArgs & inputCommands);
 	static int simpleHashKmer(const njh::progutils::CmdArgs & inputCommands);
+
+
+
+
+
 
 };
 } /* namespace njhseq */

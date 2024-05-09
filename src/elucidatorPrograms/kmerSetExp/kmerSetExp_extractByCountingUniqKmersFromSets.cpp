@@ -1,15 +1,14 @@
 //
 // Created by Nicholas Hathaway on 5/26/23.
 //
-
-#include "kmerExp.hpp"
+#include "kmerSetExp.hpp"
 #include <njhseq/IO/SeqIO/MultiSeqIO.hpp>
 #include <njhseq/BamToolsUtils/bamExtractUtils.hpp>
 #include "elucidator/helpers/UniqueKmerSetHelper.hpp"
 
 namespace njhseq {
 
-int kmerExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArgs & inputCommands){
+int kmerSetExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
 	bfs::path countTable = "";
 	UniqueKmerSetHelper::CompareReadToSetPars compPars;
@@ -107,7 +106,7 @@ int kmerExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArg
 }
 
 
-int kmerExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands){
+int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands){
 
 	uint32_t numThreads = 1;
 	bfs::path countTable;

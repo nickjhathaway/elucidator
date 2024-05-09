@@ -50,7 +50,6 @@ seqUtilsExtractRunner::seqUtilsExtractRunner()
   addFunc("countIlluminaAaptors", countIlluminaAaptors, false),
 	addFunc("extractByName", extractByName, false),
 	addFunc("clusterByKmerSim", clusterByKmerSim, false),
-    	addFunc("extractByKmerUniqueSets", extractByKmerUniqueSets, false),
 },
                     "seqUtilsExtract") {}
 //

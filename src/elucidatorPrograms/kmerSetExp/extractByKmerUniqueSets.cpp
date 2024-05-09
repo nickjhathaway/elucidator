@@ -2,7 +2,7 @@
 // Created by Nicholas Hathaway on 2/19/24.
 //
 
-#include "seqUtilsExtractRunner.hpp"
+#include "kmerSetExp.hpp"
 
 #include <njhseq/IO/SeqIO.h>
 #include <njhseq/objects/kmer/SimpleKmerHash.hpp>
@@ -11,7 +11,7 @@
 
 namespace njhseq {
 
-int seqUtilsExtractRunner::extractByKmerUniqueSets(const njh::progutils::CmdArgs &inputCommands) {
+int kmerSetExpRunner::extractByKmerUniqueSets(const njh::progutils::CmdArgs &inputCommands) {
   bfs::path idFnp;
   bfs::path lenCutOffsFnp;
   bfs::path uniqueKmersPerTargetFnp;

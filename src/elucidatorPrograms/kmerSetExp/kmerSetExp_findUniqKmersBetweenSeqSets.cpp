@@ -1,5 +1,5 @@
 /*
- * kmerExp_findUniqKmersBetweenSeqSets.cpp
+ * kmerSetExp_findUniqKmersBetweenSeqSets.cpp
  *
  *  Created on: Jul 10, 2021
  *      Author: nick
@@ -26,7 +26,7 @@
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-#include "kmerExp.hpp"
+#include "kmerSetExp.hpp"
 #include <njhseq/objects/kmer/KmerUtils.hpp>
 #include <njhseq/objects/kmer.h>
 
@@ -44,7 +44,7 @@ namespace njhseq {
 
 
 
-int kmerExpRunner::filterUniqueKmerSetForEntropy(const njh::progutils::CmdArgs & inputCommands){
+int kmerSetExpRunner::filterUniqueKmerSetForEntropy(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path countTable = "";
 
 	KmerGatherer::KmerGathererPars countPars;
@@ -86,7 +86,7 @@ int kmerExpRunner::filterUniqueKmerSetForEntropy(const njh::progutils::CmdArgs &
 	return 0;
 }
 
-int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlns(const njh::progutils::CmdArgs & inputCommands){
+int kmerSetExpRunner::countingUniqKmersFromSetsInUnmappedAlns(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
 	bfs::path countTable = "";
 	std::string sampleName;
@@ -278,7 +278,7 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlns(const njh::progutils:
 	return 0;
 }
 
-int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands){
+int kmerSetExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
 	bfs::path countTable = "";
 	std::string sampleName;
@@ -505,7 +505,7 @@ int kmerExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & inp
 
 
 
-int kmerExpRunner::countingUniqKmersFromSetsInRegionsAlnsBestSet(const njh::progutils::CmdArgs & inputCommands){
+int kmerSetExpRunner::countingUniqKmersFromSetsInRegionsAlnsBestSet(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
 //	uint32_t numThreadsPerBam = 1;
 	bfs::path countTable = "";
@@ -648,7 +648,7 @@ int kmerExpRunner::countingUniqKmersFromSetsInRegionsAlnsBestSet(const njh::prog
 	return 0;
 }
 
-int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::progutils::CmdArgs & inputCommands){
+int kmerSetExpRunner::countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
 	uint32_t numThreadsPerBam = 1;
 	bfs::path countTable = "";
@@ -835,7 +835,7 @@ int kmerExpRunner::countingUniqKmersFromSetsInUnmappedAlnsBestSet(const njh::pro
 	return 0;
 }
 
-int kmerExpRunner::countingUniqKmersFromSetsBestSet(const njh::progutils::CmdArgs & inputCommands){
+int kmerSetExpRunner::countingUniqKmersFromSetsBestSet(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
 	bfs::path countTable = "";
 
@@ -1029,7 +1029,7 @@ int kmerExpRunner::countingUniqKmersFromSetsBestSet(const njh::progutils::CmdArg
 	return 0;
 }
 
-int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands){
+int kmerSetExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands){
 	KmerGatherer::KmerGathererPars countPars;
 	bfs::path seqSetTableFnp = "";
 	bfs::path seqSetSuppFastaTableFnp = "";
@@ -1236,7 +1236,7 @@ int kmerExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArg
 	return 0;
 }
 
-int kmerExpRunner::findKmersInSets(const njh::progutils::CmdArgs & inputCommands){
+int kmerSetExpRunner::findKmersInSets(const njh::progutils::CmdArgs & inputCommands){
 	KmerGatherer::KmerGathererPars countPars;
 	std::vector<bfs::path> seqSetFnps;
 	uint32_t minOccurrences = 1;
