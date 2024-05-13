@@ -20,7 +20,7 @@ int kmerSetExpRunner::extractByKmerUniqueSets(const njh::progutils::CmdArgs &inp
 
 
   uint32_t numThreads = 1;
-
+  bool ignoreMissingKmerSets = false;
   std::string sampleName = "sample";
   bool rename = false;
 
@@ -30,6 +30,7 @@ int kmerSetExpRunner::extractByKmerUniqueSets(const njh::progutils::CmdArgs &inp
 
   setUp.setOption(lenCutOffsFnp, "--lenCutOffsFnp,--lenCutOffs", "length Cut Offs per target", true, "IDs");
   setUp.setOption(uniqueKmersPerTargetFnp, "--uniqueKmersPerTarget", "unique Kmers Per Target", true, "IDs");
+  setUp.setOption(ignoreMissingKmerSets, "--ignoreMissingKmerSets", "ignore Missing Kmer Sets");
 
   //in and out
   setUp.processDefaultReader(VecStr{"--fastq", "--fastqgz", "--fasta", "--fastagz"});
@@ -72,7 +73,7 @@ int kmerSetExpRunner::extractByKmerUniqueSets(const njh::progutils::CmdArgs &inp
 
   //read in extra info
   ids.addLenCutOffs(lenCutOffsFnp);
-  uint32_t extractionKmer = ids.addUniqKmerCounts(uniqueKmersPerTargetFnp);
+  uint32_t extractionKmer = ids.addUniqKmerCounts(uniqueKmersPerTargetFnp, ignoreMissingKmerSets);
 
 
   // set up input
