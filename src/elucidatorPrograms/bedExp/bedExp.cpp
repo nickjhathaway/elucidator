@@ -1315,9 +1315,13 @@ int bedExpRunner::bedRenameWithCoords(const njh::progutils::CmdArgs & inputComma
 	bfs::path bedFile;
 	OutOptions outOpts;
 	bfs::path keyOutFnp = "";
-
+	bool appendName = false;
+	bool appendNameSep = "-";
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
+	setUp.setOption(appendName, "--appendName", "append name with coordinate name instead of completely renaming");
+	setUp.setOption(appendNameSep, "--appendNameSep", "what to use to seperate the appended name and the coordinate if doing so");
+
 	setUp.setOption(keyOutFnp, "--key", "Name of a file for key for rename");
 	setUp.setOption(bedFile, "--bed", "Bed6 file to rename", true);
 	setUp.processWritingOptions(outOpts);
@@ -1350,7 +1354,12 @@ int bedExpRunner::bedRenameWithCoords(const njh::progutils::CmdArgs & inputComma
 		if("" != keyOutFnp){
 			(*keyOut) << reg->name_ << "\t" << gRegion.uid_ << std::endl;
 		}
-		reg->name_ = gRegion.uid_;
+		if(appendName) {
+			reg->name_  = njh::pasteAsStr(reg->name_, appendNameSep, gRegion.uid_);
+		} else {
+			reg->name_ = gRegion.uid_;
+		}
+
 		reader.write(*reg, [](const Bed6RecordCore & bRecord, std::ostream & out){
 			out << bRecord.toDelimStrWithExtra() << "\n";
 		});
