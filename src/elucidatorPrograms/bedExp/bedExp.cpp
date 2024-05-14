@@ -1316,7 +1316,7 @@ int bedExpRunner::bedRenameWithCoords(const njh::progutils::CmdArgs & inputComma
 	OutOptions outOpts;
 	bfs::path keyOutFnp = "";
 	bool appendName = false;
-	bool appendNameSep = "-";
+	std::string appendNameSep = "-";
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.setOption(appendName, "--appendName", "append name with coordinate name instead of completely renaming");
