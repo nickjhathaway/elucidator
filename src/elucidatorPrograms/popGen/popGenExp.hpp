@@ -54,6 +54,10 @@ class popGenExpRunner : public njh::progutils::ProgramRunner {
   static int oldQuickHaplotypeInformationAndVariants(const njh::progutils::CmdArgs & inputCommands);
   static int quickHaplotypeVariantsWithRegion(const njh::progutils::CmdArgs & inputCommands);
 
+	static int variationWindowShoppingWithLastz(const njh::progutils::CmdArgs & inputCommands);
+	static int collectWindowInfoWithLastz(const njh::progutils::CmdArgs & inputCommands);
+
+	//
 };
 
 } //  namespace njhseq

@@ -51,13 +51,11 @@ popGenExpRunner::popGenExpRunner()
 					 addFunc("callVariantsAgainstRefGenome", callVariantsAgainstRefGenome, false),
 					 addFunc("randomSamplingPloidyTest", randomSamplingPloidyTest, false),
 					 addFunc("randomSamplingPloidyTest2", randomSamplingPloidyTest2, false),
+					 addFunc("variationWindowShoppingWithLastz", variationWindowShoppingWithLastz, false),
+					 addFunc("collectWindowInfoWithLastz", collectWindowInfoWithLastz, false),
 					 //
            },
           "popGenExp") {}
-
-
-
-
 
 
 int popGenExpRunner::randomSamplingPloidyTest(

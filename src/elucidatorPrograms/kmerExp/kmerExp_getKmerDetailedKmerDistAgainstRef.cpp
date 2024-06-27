@@ -134,7 +134,6 @@ int kmerExpRunner::getBestKmerDetailedKmerDistAgainstRef(const njh::progutils::C
 		seqInfo seq;
 
 		while(reader.readNextReadLock(seq)){
-
 			kmerInfo::DetailedKmerDist bestSimilarityScore;
 			bool bestSimSocreRevComp = false;
 			uint32_t bestRefPos = std::numeric_limits<uint32_t>::max();
@@ -159,7 +158,6 @@ int kmerExpRunner::getBestKmerDetailedKmerDistAgainstRef(const njh::progutils::C
 					}
 				}
 			}
-
 			{
 				std::lock_guard<std::mutex> lock(outMut);
 				if(alignBest) {
@@ -168,8 +166,9 @@ int kmerExpRunner::getBestKmerDetailedKmerDistAgainstRef(const njh::progutils::C
 					alignerPtr->alignObjectA_.seqBase_.outPutFastq(*alignOut);
 					alignerPtr->alignObjectB_.seqBase_.outPutFastq(*alignOut);
 				}
+
 				out << seq.name_
-						<< "\t" << refSeqs[bestRefPos]->seqBase_.name_
+						<< "\t" << (bestRefPos != std::numeric_limits<uint32_t>::max() ? refSeqs[bestRefPos]->seqBase_.name_ : std::string("NA") )
 						<< "\t" << njh::boolToStr(bestSimSocreRevComp)
 						<< "\t" << bestSimilarityScore.totalShared_
 						<< "\t" << bestSimilarityScore.getDistTotalShared()

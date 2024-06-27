@@ -229,7 +229,7 @@ int gffExpRunner::gffRenameChroms(const njh::progutils::CmdArgs & inputCommands)
 	OutOptions outOpts(bfs::path("out.gff"));
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(inputFile, "--gff", "Input gff file", true);
-	setUp.setOption(keyIn, "--keyIn", "A file with a key to rename seqs with");
+	setUp.setOption(keyIn, "--keyIn", "A file with a key to rename seqs with", true);
 
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
@@ -293,7 +293,6 @@ int gffExpRunner::gffRenameChroms(const njh::progutils::CmdArgs & inputCommands)
 				end = true;
 				break;
 			}
-
 
 			njh::files::crossPlatGetline(*reader.inFile_, line);
 		}
