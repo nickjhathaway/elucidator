@@ -35,6 +35,7 @@ kmerSetExpRunner::kmerSetExpRunner()
 	          addFunc("getUniqueSequenceRegions", getUniqueSequenceRegions, false),
 	          addFunc("countingUniqKmersFromSetsInRegionsAlnsBestSet", countingUniqKmersFromSetsInRegionsAlnsBestSet,false),
           	addFunc("extractByKmerUniqueSets", extractByKmerUniqueSets, false),
+          	addFunc("getBasicKmerSetCountInfo", getBasicKmerSetCountInfo, false),
 
 //,
 									//

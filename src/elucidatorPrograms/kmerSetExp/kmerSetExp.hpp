@@ -35,6 +35,7 @@ public:
 	static int countingUniqKmersFromSetsInRegionsAlnsBestSet(const njh::progutils::CmdArgs & inputCommands);
 	static int countingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands);
 
+	static int getBasicKmerSetCountInfo(const njh::progutils::CmdArgs & inputCommands);
 
 
 };
