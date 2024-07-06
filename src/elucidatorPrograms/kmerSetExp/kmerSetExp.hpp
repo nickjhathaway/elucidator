@@ -36,6 +36,7 @@ public:
 	static int countingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands);
 
 	static int getBasicKmerSetCountInfo(const njh::progutils::CmdArgs & inputCommands);
+	static int createMinimallyNonRedundantDownSampledSet(const njh::progutils::CmdArgs & inputCommands);
 
 
 };

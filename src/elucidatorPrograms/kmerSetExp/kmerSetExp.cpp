@@ -36,9 +36,10 @@ kmerSetExpRunner::kmerSetExpRunner()
 	          addFunc("countingUniqKmersFromSetsInRegionsAlnsBestSet", countingUniqKmersFromSetsInRegionsAlnsBestSet,false),
           	addFunc("extractByKmerUniqueSets", extractByKmerUniqueSets, false),
           	addFunc("getBasicKmerSetCountInfo", getBasicKmerSetCountInfo, false),
+          	addFunc("createMinimallyNonRedundantDownSampledSet", createMinimallyNonRedundantDownSampledSet, false),
 
 //,
-									//
+//
            },
           "kmerSetExp") {}
 
