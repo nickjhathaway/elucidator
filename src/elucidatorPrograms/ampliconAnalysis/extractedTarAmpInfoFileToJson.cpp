@@ -184,20 +184,34 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
       for(const auto & tar : samp.second){
         Json::Value & tarJson = target_results[tar.first];
         tarJson["target_id"] = tar.first;
-        VecStr ids;
-        std::vector<double> cnts;
-        std::vector<double> umiCnts;
+
+        Json::Value & haplotypes = tarJson["haplotypes"];
+
+        // VecStr ids;
+        // std::vector<double> cnts;
+        // std::vector<double> umiCnts;
+        // for(const auto & s : tar.second){
+        //   ids.emplace_back(s->name_);
+        //   cnts.emplace_back(s->cnt_);
+        //   if(hasUmi){
+        //     umiCnts.emplace_back(s->frac_);
+        //   }
+        // }
+        // tarJson["haplotype_ids"] = njh::json::toJson(ids);
+        // tarJson["read_counts"] = njh::json::toJson(cnts);
+        // if(hasUmi){
+        //   tarJson["umi_counts"] = njh::json::toJson(umiCnts);
+        // }
+
         for(const auto & s : tar.second){
-          ids.emplace_back(s->name_);
-          cnts.emplace_back(s->cnt_);
+          Json::Value haplotype;
+          haplotype["target_id"] = tar.first;
+          haplotype["haplotype_id"] = s->name_;
+          haplotype["read_count"] = s->cnt_;
           if(hasUmi){
-            umiCnts.emplace_back(s->frac_);
+            haplotype["umi_count"] = s->frac_;
           }
-        }
-        tarJson["haplotype_ids"] = njh::json::toJson(ids);
-        tarJson["read_counts"] = njh::json::toJson(cnts);
-        if(hasUmi){
-          tarJson["umi_counts"] = njh::json::toJson(umiCnts);
+          haplotypes.append(haplotype);
         }
       }
     }
