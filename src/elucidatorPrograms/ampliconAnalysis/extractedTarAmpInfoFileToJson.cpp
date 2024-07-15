@@ -63,7 +63,7 @@ int ampliconAnalysisRunner::specimenInfoFileToJson(const njh::progutils::CmdArgs
   OutputStream out(outOpts);
 
   Json::Value outJson;
-  VecStr plateInfoCols{"plate_name", "row", "col"};
+  VecStr plateInfoCols{"plate_name", "plate_row", "plate_col"};
   {//
     TableReader reader(TableIOOpts::genTabFileIn(specimenInfoFnp));
     reader.header_.checkForColumnsThrow(toVecStr(VecStr{"sample_id"},plateInfoCols ), __PRETTY_FUNCTION__ );
@@ -73,13 +73,14 @@ int ampliconAnalysisRunner::specimenInfoFileToJson(const njh::progutils::CmdArgs
     while (reader.getNextRow(row)) {
       std::string sample_id = row[reader.header_.getColPos("sample_id")];
       Json::Value & sampleJson = outJson[sample_id];
+      // Json::Value sampleJson;
       for(const auto & colName : reader.header_.columnNames_){
         if(colName == "sample_id"){
           sampleJson[colName] = row[reader.header_.getColPos(colName)];
         }else if(njh::in(colName, plateInfoCols)){
           //do nothing
         }else{
-          auto currentColValue = row[reader.header_.getColPos(colName)];
+          const auto & currentColValue = row[reader.header_.getColPos(colName)];
           if(isDoubleStr(currentColValue)){
             sampleJson[colName] = njh::json::toJson(njh::StrToNumConverter::stoToNum<double>(currentColValue));
           }else{
@@ -87,10 +88,14 @@ int ampliconAnalysisRunner::specimenInfoFileToJson(const njh::progutils::CmdArgs
           }
         }
       }
-      Json::Value & plateJson = sampleJson["plate_info"];
-      plateJson["plate_name"] = row[reader.header_.getColPos("plate_name")];
-      plateJson["row"] = row[reader.header_.getColPos("row")];
-      plateJson["col"] = row[reader.header_.getColPos("col")];
+      sampleJson["plate_name"] = row[reader.header_.getColPos("plate_name")];
+      sampleJson["plate_row"] = row[reader.header_.getColPos("plate_row")];
+      sampleJson["plate_col"] = row[reader.header_.getColPos("plate_col")];
+      // Json::Value & plateJson = sampleJson["plate_info"];
+      // plateJson["plate_name"] = row[reader.header_.getColPos("plate_name")];
+      // plateJson["row"] = row[reader.header_.getColPos("row")];
+      // plateJson["col"] = row[reader.header_.getColPos("col")];
+      // outJson.append(sampleJson);
     }
   }
 
@@ -205,7 +210,7 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
 
         for(const auto & s : tar.second){
           Json::Value haplotype;
-          haplotype["target_id"] = tar.first;
+          // haplotype["target_id"] = tar.first;
           haplotype["haplotype_id"] = s->name_;
           haplotype["read_count"] = s->cnt_;
           if(hasUmi){
