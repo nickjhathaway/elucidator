@@ -136,8 +136,8 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
   OutputStream out(outOpts);
 
   Json::Value outJson;
-  Json::Value & haplotypes_detected = outJson["haplotypes_detected"];
-  Json::Value & representative_haplotype_sequences = outJson["representative_haplotype_sequences"];
+  Json::Value & haplotypes_detected = outJson["microhaplotypes_detected"];
+  Json::Value & representative_haplotype_sequences = outJson["representative_microhaplotype_sequences"];
 
   haplotypes_detected["sequencing_id"] = sequencing_id;
   haplotypes_detected["bioinformatics_id"] = bioinformatics_id;
@@ -190,7 +190,7 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
         Json::Value & tarJson = target_results[tar.first];
         tarJson["target_id"] = tar.first;
 
-        Json::Value & haplotypes = tarJson["haplotypes"];
+        Json::Value & haplotypes = tarJson["microhaplotypes"];
 
         // VecStr ids;
         // std::vector<double> cnts;
@@ -211,7 +211,7 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
         for(const auto & s : tar.second){
           Json::Value haplotype;
           // haplotype["target_id"] = tar.first;
-          haplotype["haplotype_id"] = s->name_;
+          haplotype["microhaplotype_id"] = s->name_;
           haplotype["read_count"] = s->cnt_;
           if(hasUmi){
             haplotype["umi_count"] = s->frac_;
@@ -231,7 +231,7 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
       Json::Value & seqs = seqsForTarJson["seqs"];
       for(const auto & seqForTar : seqsForTar.second){
         Json::Value seqForTarJson;
-        seqForTarJson["haplotype_id"] = seqForTar->name_;
+        seqForTarJson["microhaplotype_id"] = seqForTar->name_;
         seqForTarJson["seq"] = seqForTar->seq_;
         seqs.append(seqForTarJson);
       }
