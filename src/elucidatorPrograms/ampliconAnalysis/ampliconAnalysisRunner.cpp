@@ -42,6 +42,8 @@ ampliconAnalysisRunner::ampliconAnalysisRunner()
                      addFunc("finalClustersFileToJson", finalClustersFileToJson, false),
                      addFunc("specimenInfoFileToJson", specimenInfoFileToJson, false),
                      addFunc("combingAllIntoPMOJson", combingAllIntoPMOJson, false),
+    								 addFunc("experimentInfoFileToJson", experimentInfoFileToJson, false),
+    								 addFunc("demultiplexedExperimentSampleFileToJson", demultiplexedExperimentSampleFileToJson, false),
 										 },//
                     "ampliconAnalysis") {}
 
