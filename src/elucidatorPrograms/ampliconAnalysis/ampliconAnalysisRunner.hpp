@@ -43,7 +43,10 @@ class ampliconAnalysisRunner : public njh::progutils::ProgramRunner {
   static int extractedTarAmpInfoFileToJson(const njh::progutils::CmdArgs & inputCommands);
   static int finalClustersFileToJson(const njh::progutils::CmdArgs & inputCommands);
   static int specimenInfoFileToJson(const njh::progutils::CmdArgs & inputCommands);
-  static int combingAllIntoPMOJson(const njh::progutils::CmdArgs & inputCommands);
+	static int experimentInfoFileToJson(const njh::progutils::CmdArgs & inputCommands);
+	static int demultiplexedExperimentSampleFileToJson(const njh::progutils::CmdArgs & inputCommands);
+
+	static int combingAllIntoPMOJson(const njh::progutils::CmdArgs & inputCommands);
 
 };
 }  // namespace njhseq

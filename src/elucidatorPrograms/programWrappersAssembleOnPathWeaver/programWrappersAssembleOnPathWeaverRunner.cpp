@@ -1283,7 +1283,9 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnPathWeaverRegions(cons
 				spadesRunOutputLogOut << njh::json::toJson(spadesRunOutput) << std::endl;
 
 				auto contigsFnp = njh::files::make_path(spadesFullOutputDir, "contigs.fasta");
-
+				if(njh::strToLowerRet(extraSpadesOptions).find("--rna") != std::string::npos) {
+					contigsFnp = njh::files::make_path(spadesFullOutputDir, "transcripts.fasta");
+				}
 
 				auto contigsSeqIoOpts = SeqIOOptions::genFastaIn(contigsFnp);
 //				contigsSeqIoOpts.includeWhiteSpaceInName_ = false;
