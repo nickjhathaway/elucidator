@@ -44,7 +44,6 @@ simulatorRunner::simulatorRunner()
 
 template<typename T>
 void randomSampleSeqFile(const SeqIOOptions & opts, const std::string& sample, bool verbose){
-
   uint64_t readNumber = countSeqs(opts, verbose);
   uint32_t sampleNum = processRunCutoff(sample, readNumber);
   SeqIO reader(opts);
@@ -121,13 +120,14 @@ int simulatorRunner::randomSampleFast(const njh::progutils::CmdArgs & inputComma
 
 int simulatorRunner::randomSampleFile(const njh::progutils::CmdArgs & inputCommands){
 	seqSetUp setUp(inputCommands);
-	std::string sample = "";
+	std::string sample;
 	setUp.setOption(sample, "-n,--sample", "Sample, either absolute number or a percentage", true);
 	setUp.processDefaultReader(true);
 	setUp.processVerbose();
 	setUp.processDebug();
   setUp.finishSetUp(std::cout);
-  if(SeqIOOptions::inFormats::FASTQPAIRED == setUp.pars_.ioOptions_.inFormat_){
+  if(setUp.pars_.ioOptions_.isPairedIn()){
+  	std::cout << setUp.pars_.ioOptions_.out_.outFileFormat_ << std::endl;
   	randomSampleSeqFile<PairedRead>(setUp.pars_.ioOptions_, sample, setUp.pars_.verbose_);
   }else{
   	randomSampleSeqFile<seqInfo>(setUp.pars_.ioOptions_, sample, setUp.pars_.verbose_);
