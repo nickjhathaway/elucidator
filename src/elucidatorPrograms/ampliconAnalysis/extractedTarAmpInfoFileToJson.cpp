@@ -53,7 +53,7 @@ int ampliconAnalysisRunner::combingAllIntoPMOJson(const njh::progutils::CmdArgs 
   outJson["experiment_infos"] = experiment_infos_input_json;
   outJson["panel_info"] = panel_info_input_json;
   outJson["microhaplotypes_detected"][microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json["microhaplotypes_detected"].get(std::string("tar_amp_bioinformatics_info_id"), "").asString()] = microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json["microhaplotypes_detected"];
-  outJson["representative_microhaplotype_sequences"] = microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json["representative_microhaplotype_sequences"];
+  outJson["representative_microhaplotype_sequences"][microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json["representative_microhaplotype_sequences"].get(std::string("tar_amp_bioinformatics_info_id"), "").asString()] = microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json["representative_microhaplotype_sequences"];
   if(!target_demultiplexed_experiment_samples_json_fnp.empty()) {
     Json::Value target_demultiplexed_experiment_samples_json = njh::json::parseFile(target_demultiplexed_experiment_samples_json_fnp.string());
     outJson["target_demultiplexed_experiment_samples"][target_demultiplexed_experiment_samples_json.get(std::string("tar_amp_bioinformatics_info_id"), "").asString()] = target_demultiplexed_experiment_samples_json;
@@ -296,8 +296,8 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
   Json::Value & microhaplotypes_detected = outJson["microhaplotypes_detected"];
   Json::Value & representative_microhaplotype_sequences = outJson["representative_microhaplotype_sequences"];
 
-  // microhaplotypes_detected["sequencing_id"] = sequencing_id;
   microhaplotypes_detected["tar_amp_bioinformatics_info_id"] = tar_amp_bioinformatics_info_id;
+  representative_microhaplotype_sequences["tar_amp_bioinformatics_info_id"] = tar_amp_bioinformatics_info_id;
 
   Json::Value & samplesJson = microhaplotypes_detected["samples"];
 
