@@ -100,7 +100,10 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 		for (const auto &fwd: iter::enumerate(primerInfo.second.fwds_)) {
 			auto degens = createDegenStrs(fwd.element.info_.seq_);
 			for (const auto &degen: degens) {
-				auto outName = njh::pasteAsStr(primerInfo.first, "_F", ".", forwardCount);
+				auto outName = njh::pasteAsStr(primerInfo.first, "_F");
+				if(forwardCount > 0) {
+					outName.append(njh::pasteAsStr(".", forwardCount));
+				}
 				primerSeqs.emplace_back(outName, degen);
 				forPrimerNameToTargetName[outName] = primerInfo.first;
 				primerNameToTargetName[outName] = primerInfo.first;
@@ -111,7 +114,10 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 		for (const auto &rev: primerInfo.second.revs_) {
 			auto degens = createDegenStrs(rev.info_.seq_);
 			for (const auto &degen: degens) {
-				auto outName = njh::pasteAsStr(primerInfo.first, "_R", ".", reverseCount);
+				auto outName = njh::pasteAsStr(primerInfo.first, "_R");
+				if(reverseCount > 0) {
+					outName.append(njh::pasteAsStr(".", reverseCount));
+				}
 				primerSeqs.emplace_back(outName, degen);
 				revPrimerNameToTargetName[outName] = primerInfo.first;
 				primerNameToTargetName[outName] = primerInfo.first;
@@ -183,8 +189,18 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 			adjustmentLength = 0;
 		}
 		while(reader.readNextRecord(hit)){
+
+			auto minLengthToTest = minLen;
+			//if minlen is set ot numerical max, then require the full primer length
+			if(std::numeric_limits<uint32_t>::max() == minLengthToTest) {
+				minLengthToTest = njh::mapAt(primerLengths, hit.queryName_);
+			}
+
+
+
 //	  if(hit.alignLen_  < minLen){
-			if((hit.alignLen_ + adjustmentLength) < minLen){
+			// if((hit.alignLen_ + adjustmentLength) < minLen){
+			if((hit.alignLen_ + adjustmentLength) < minLengthToTest){
 				continue;
 			}
 			//check if the 3` end matches, note if even allowing for mismatches, can't just check if the end equals, have to check if adding the amount of error is equal to or more than the expected end length
@@ -263,8 +279,11 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 			}
 			//with re-alignment when allowing errors have to check to see if new query end still is all the way to the 3'
 			//end and that the minimum alignment length is right
+
 			if(allowableErrors.passErrorProfile(realignedSeq.comp_) &&
-			realignedSeq.gRegion_.getLen() >=minLen &&
+			// realignedSeq.gRegion_.getLen() >=minLen &&
+			realignedSeq.gRegion_.getLen() >=minLengthToTest &&
+
 			newQueryEnd == njh::mapAt(primerByName, hit.queryName_).size()){
 //				std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //				realignedSeq.alnRefSeq_.outPutSeqAnsi(std::cout);
@@ -470,6 +489,9 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 
 	table outputPrimersForTesting(VecStr{"target", "forward", "reverse"});
 
+	table unexpectedOutputPrimersForTesting(VecStr{"target", "forward", "reverse"});
+
+
 	for(const auto & extraction : extractions){
 		std::string extPrimerTarName;
 		bool extForwardPrimer;
@@ -507,12 +529,19 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 			expectedExtractionBed << outRegion.toDelimStrWithExtra() << std::endl;
 		} else {
 			unexpectedExtractionBed << outRegion.toDelimStrWithExtra() << std::endl;
+			unexpectedOutputPrimersForTesting.addRow(
+						outRegion.name_,
+						extraction.getP1PortionOriginal53().seq_,
+						extraction.getP2PortionOriginal53().seq_
+						// ,outRegion.extraFields_.back()
+						);
 		}
 		allExtractionBed << outRegion.toDelimStrWithExtra() << std::endl;
 		outputPrimersForTesting.addRow(
 						outRegion.name_,
 						extraction.getP1PortionOriginal53().seq_,
 						extraction.getP2PortionOriginal53().seq_
+						// ,outRegion.extraFields_.back()
 						);
 		extractionInfos << extraction.extraction_.gRegion_->genBedRecordCore().toDelimStr()
 										<< "\t" << extraction.extraction_.gRegion_->genBedRecordCore().genUIDFromCoordsWithStrand()
@@ -538,10 +567,10 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 										<< std::endl;
 	}
 	outputPrimersForTesting.outPutContents(TableIOOpts::genTabFileOut(njh::files::make_path(setUp.pars_.directoryName_, "primersForTest.tab.txt")));
+	unexpectedOutputPrimersForTesting.outPutContents(TableIOOpts::genTabFileOut(njh::files::make_path(setUp.pars_.directoryName_, "unexpectedPrimersPairs.tab.txt")));
 
 	return 0;
 }
-
 
 
 int primerUtilsRunner::computeDimerizationScore(

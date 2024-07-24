@@ -43,7 +43,7 @@ std::vector<bfs::path> VecStrToVecPath(const VecStr & strs){
 }
 
 int genExpRunner::concatenateDifferentLanes(const njh::progutils::CmdArgs & inputCommands){
-	std::string removeRegexPatStr = "";
+	std::string removeRegexPatStr;
 	bool removeOldFiles = false;
 	bool overWrite = false;
 	uint32_t numThreads = 1;
@@ -65,7 +65,7 @@ int genExpRunner::concatenateDifferentLanes(const njh::progutils::CmdArgs & inpu
 
 	ReadPairsOrganizer pOrg{VecStr{}};
 
-	std::regex regexPat{ReadPairsOrganizer::illuminaPat_};
+	std::regex regexPat{pOrg.illuminaPat_};
 	auto fullFnps = njh::files::listAllFiles("./", false, {regexPat});
 
 	pOrg.processFiles(fullFnps);
@@ -87,7 +87,7 @@ int genExpRunner::concatenateDifferentLanes(const njh::progutils::CmdArgs & inpu
 			for(const auto & sub : pair.second.first){
 				std::cout << "\t\t" << sub << std::endl;
 				std::smatch mat;
-				std::regex_match(sub, mat, ReadPairsOrganizer::illuminaPat_);
+				std::regex_match(sub, mat, pOrg.illuminaPat_);
 				std::cout << "\t\t" << "mat[mat.size() - 1] == \".gz\": " << njh::colorBool(mat[mat.size() - 1] == ".gz") << std::endl;
 //				for(const auto & m : mat){
 //					std::cout << "\t\t" << m << std::endl;
@@ -97,7 +97,7 @@ int genExpRunner::concatenateDifferentLanes(const njh::progutils::CmdArgs & inpu
 			for(const auto & sub : pair.second.second){
 				std::cout << "\t\t" << sub << std::endl;
 				std::smatch mat;
-				std::regex_match(sub, mat, ReadPairsOrganizer::illuminaPat_);
+				std::regex_match(sub, mat, pOrg.illuminaPat_);
 				std::cout << "\t\t" << "mat[mat.size() - 1] == \".gz\": " << njh::colorBool(mat[mat.size() - 1] == ".gz") << std::endl;
 //				for(const auto & m : mat){
 //					std::cout << "\t\t" << m << std::endl;
@@ -118,7 +118,7 @@ int genExpRunner::concatenateDifferentLanes(const njh::progutils::CmdArgs & inpu
 			bool anyGz = false;
 			for(const auto & sub : pair.second.first){
 				std::smatch mat;
-				std::regex_match(sub, mat, ReadPairsOrganizer::illuminaPat_);
+				std::regex_match(sub, mat, pOrg.illuminaPat_);
 				if(mat[mat.size() - 1] == ".gz"){
 					anyGz = true;
 					break;
@@ -126,7 +126,7 @@ int genExpRunner::concatenateDifferentLanes(const njh::progutils::CmdArgs & inpu
 			}
 			for(const auto & sub : pair.second.second){
 				std::smatch mat;
-				std::regex_match(sub, mat, ReadPairsOrganizer::illuminaPat_);
+				std::regex_match(sub, mat, pOrg.illuminaPat_);
 				if(mat[mat.size() - 1] == ".gz"){
 					anyGz = true;
 					break;
@@ -180,7 +180,7 @@ int genExpRunner::concatenateDifferentLanes(const njh::progutils::CmdArgs & inpu
 	njh::concurrent::LockableQueue<std::string> queue(keys);
 
 	std::function<void()> catFiles = [&queue,&outputFiles,&overWrite,&removeOldFiles](){
-		std::string outName = "";
+		std::string outName;
 		while(queue.getVal(outName)){
 			OutOptions outOpts{bfs::path(outName)};
 			outOpts.overWriteFile_ = overWrite;
