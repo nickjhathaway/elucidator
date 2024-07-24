@@ -299,7 +299,7 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
   // microhaplotypes_detected["sequencing_id"] = sequencing_id;
   microhaplotypes_detected["tar_amp_bioinformatics_info_id"] = tar_amp_bioinformatics_info_id;
 
-  Json::Value & samplesJson = microhaplotypes_detected["samples"];
+  Json::Value & samplesJson = microhaplotypes_detected["experiment_samples"];
 
 
   std::unordered_map<std::string, std::vector<std::shared_ptr<seqInfo>>> popSeqsByTarget;
