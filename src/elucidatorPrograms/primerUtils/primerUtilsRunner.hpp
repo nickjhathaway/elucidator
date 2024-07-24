@@ -15,9 +15,10 @@ public:
 	primerUtilsRunner();
 
 	static int computeDimerizationScore(const njh::progutils::CmdArgs & inputCommands);
-	static int testWithBlastForUnspecificAmplification(const njh::progutils::CmdArgs & inputCommands);
 	static int creatingMultiplexAmpliconPools(const njh::progutils::CmdArgs & inputCommands);
 	static int testForPrimerDimers(const njh::progutils::CmdArgs & inputCommands);
+
+	static int testWithBlastForUnspecificAmplification(const njh::progutils::CmdArgs & inputCommands);
 
 };
 
