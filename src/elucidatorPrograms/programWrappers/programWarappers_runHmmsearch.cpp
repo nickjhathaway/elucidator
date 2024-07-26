@@ -84,11 +84,15 @@ int programWrapperRunner::runHmmsearch(const njh::progutils::CmdArgs & inputComm
 		}
 	}
 	{
-		//write out the model, this way you can supply it in gzip format but this will unzip it
-		InputStream inModel(hmmModel);
-		OutputStream outModel(hmmModelFnp);
-		outModel << inModel.rdbuf();
-		outModel.flush();
+		if(njh::endsWith(hmmModel.string(), ".gz")) {
+			//write out the model, this way you can supply it in gzip format but this will unzip it
+			InputStream inModel(hmmModel);
+			OutputStream outModel(hmmModelFnp);
+			outModel << inModel.rdbuf();
+			outModel.flush();
+		} else {
+			bfs::create_symlink(hmmModel, hmmModelFnp);
+		}
 	}
 
 	std::stringstream cmdSs;
