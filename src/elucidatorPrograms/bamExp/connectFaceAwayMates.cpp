@@ -91,7 +91,7 @@ int bamExpRunner::connectFaceAwayMatesRegions(
   auto inRegions = getBed3s(bedFnp);
   auto mergedRegions = BedUtility::mergeAndSort(inRegions);
 
-  std::vector<GenomicRegion> faceawayRegions;
+  std::vector<Bed3RecordCore> faceawayRegions;
   {
     BamTools::BamReader bReader;
     bReader.Open(setUp.pars_.ioOptions_.firstName_.string());
@@ -111,8 +111,8 @@ int bamExpRunner::connectFaceAwayMatesRegions(
           auto bAlnMateRegion = GenomicRegion(bAln.Name,
                                               refData[bAln.MateRefID].RefName, bAln.MatePosition,
                                               bAln.MatePosition + bAln.AlignedBases.size(), bAln.IsMateReverseStrand());
-          faceawayRegions.emplace_back(bAlnRegion);
-          faceawayRegions.emplace_back(bAlnMateRegion);
+          faceawayRegions.emplace_back(bAlnRegion.genBed3RecordCore());
+          faceawayRegions.emplace_back(bAlnMateRegion.genBed3RecordCore());
 
             }
       }
