@@ -96,6 +96,7 @@ bamExpRunner::bamExpRunner()
 					 addFunc("BamGetSpanningReadsForRegionLongReads", BamGetSpanningReadsForRegionLongReads, false),
            addFunc("getMateMapLocationForRegion", getMateMapLocationForRegion, false),
           	 addFunc("mergeImproperMatePositions", mergeImproperMatePositions, false),
+          	addFunc("connectFaceAwayMatesRegions", connectFaceAwayMatesRegions, false),
           },//
 
 				"bamExp") {

@@ -147,6 +147,8 @@ class bamExpRunner : public njh::progutils::ProgramRunner {
 
 	static int mergeImproperMatePositions(const njh::progutils::CmdArgs & inputCommands);
 
+
+	static int connectFaceAwayMatesRegions(const njh::progutils::CmdArgs & inputCommands);
 };
 
 } /* namespace njhseq */
