@@ -175,7 +175,9 @@ int bamExpRunner::connectFaceAwayMatesRegions(
 
   OutOptions outOpts(bfs::path(""), ".bed");
   bfs::path bedFnp;
-  uint32_t softClipCutOff = 5;
+  uint32_t initialSoftClipCutOff = 20;
+
+  uint32_t softClipCutOffBothSides = 5;
   uint32_t minReadAmount = 2;
   uint32_t minInsertSize = 1000;
   uint32_t step = 50;
@@ -184,7 +186,9 @@ int bamExpRunner::connectFaceAwayMatesRegions(
   seqSetUp setUp(inputCommands);
 
   setUp.setOption(sample, "--sample", "sample name", true);
-  setUp.setOption(softClipCutOff, "--softClipCutOff", "If both sides are soft clipped more than this soft Clip Cut Off, then don't count it");
+  setUp.setOption(initialSoftClipCutOff, "--initialSoftClipCutOff", "On initial pass if one side has this amount of soft clip don't count");
+
+  setUp.setOption(softClipCutOffBothSides, "--softClipCutOffBothSides", "If both sides are soft clipped more than this soft Clip Cut Off, then don't count it");
   setUp.setOption(step, "--step", "step");
   setUp.setOption(windowSize, "--windowSize", "windowSize");
   setUp.processVerbose();
@@ -234,10 +238,17 @@ int bamExpRunner::connectFaceAwayMatesRegions(
           continue;
         }
         //soft clipping cut off
-        if (bAln.CigarData.front().Type == 'S' && bAln.CigarData.front().Length > softClipCutOff &&
-            bAln.CigarData.back().Type == 'S' && bAln.CigarData.back().Length > softClipCutOff) {
+        if (bAln.CigarData.front().Type == 'S' && bAln.CigarData.front().Length > softClipCutOffBothSides &&
+            bAln.CigarData.back().Type == 'S' && bAln.CigarData.back().Length > softClipCutOffBothSides) {
           continue;
         }
+        //initialSoftClipCutOff clipping cut off
+        if ((bAln.CigarData.front().Type == 'S' && bAln.CigarData.front().Length > initialSoftClipCutOff) ||
+            (bAln.CigarData.back().Type == 'S' && bAln.CigarData.back().Length > initialSoftClipCutOff)) {
+          continue;
+        }
+
+
         auto mappingDirectionStatus = njh::pasteAsStr(njh::boolToStr(bAln.IsFirstMate()),
           "::", njh::boolToStr(bAln.IsReverseStrand()),
           "::", njh::boolToStr(bAln.IsMateReverseStrand()),
@@ -325,8 +336,8 @@ int bamExpRunner::connectFaceAwayMatesRegions(
             continue;
           }
           //soft clipping cut off
-          if(bAln.CigarData.front().Type == 'S' && bAln.CigarData.front().Length > softClipCutOff &&
-            bAln.CigarData.back().Type == 'S' && bAln.CigarData.back().Length > softClipCutOff) {
+          if(bAln.CigarData.front().Type == 'S' && bAln.CigarData.front().Length > softClipCutOffBothSides &&
+            bAln.CigarData.back().Type == 'S' && bAln.CigarData.back().Length > softClipCutOffBothSides) {
             continue;
           }
           auto mappingDirectionStatus = njh::pasteAsStr(njh::boolToStr(bAln.IsFirstMate()),
