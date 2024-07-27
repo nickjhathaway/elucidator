@@ -175,6 +175,7 @@ int bamExpRunner::connectFaceAwayMatesRegions(
 
   OutOptions outOpts(bfs::path(""), ".bed");
   bfs::path bedFnp;
+  uint32_t softClipCutOff = 5;
   uint32_t minReadAmount = 2;
   uint32_t minInsertSize = 1000;
   uint32_t step = 50;
@@ -183,7 +184,7 @@ int bamExpRunner::connectFaceAwayMatesRegions(
   seqSetUp setUp(inputCommands);
 
   setUp.setOption(sample, "--sample", "sample name", true);
-
+  setUp.setOption(softClipCutOff, "--softClipCutOff", "If both sides are soft clipped more than this soft Clip Cut Off, then don't count it");
   setUp.setOption(step, "--step", "step");
   setUp.setOption(windowSize, "--windowSize", "windowSize");
   setUp.processVerbose();
@@ -228,8 +229,13 @@ int bamExpRunner::connectFaceAwayMatesRegions(
       std::vector<Bed6RecordCore> otherRegions;
 
       while (bReader.GetNextAlignment(bAln)) {
-        //skip if either mate is not mapped or if the mates are mapped to different genomes
-        if(!bAln.IsMapped() || !bAln.IsMateMapped() || bAln.RefID != bAln.MateRefID) {
+        //skip if either mate is not mapped or if the mates are mapped to different chromosomes
+        if(!bAln.IsPrimaryAlignment() || !bAln.IsMapped() || !bAln.IsMateMapped() || bAln.RefID != bAln.MateRefID) {
+          continue;
+        }
+        //soft clipping cut off
+        if (bAln.CigarData.front().Type == 'S' && bAln.CigarData.front().Length > softClipCutOff &&
+            bAln.CigarData.back().Type == 'S' && bAln.CigarData.back().Length > softClipCutOff) {
           continue;
         }
         auto mappingDirectionStatus = njh::pasteAsStr(njh::boolToStr(bAln.IsFirstMate()),
@@ -297,11 +303,11 @@ int bamExpRunner::connectFaceAwayMatesRegions(
         }
       }
     }
-    // std::cout << "graph.nodes_.size(): " << graph.nodes_.size() << std::endl;
-    // for(const auto & n : graph.nodes_ ) {
-    //   std::cout << n.region_.genBedRecordCore().toDelimStr() << std::endl;
-    // }
-    // std::cout << std::endl;
+    std::cout << "graph.nodes_.size(): " << graph.nodes_.size() << std::endl;
+    for(const auto & n : graph.nodes_ ) {
+      std::cout << n.region_.genBedRecordCore().toDelimStr() << std::endl;
+    }
+    std::cout << std::endl;
     {
       BamTools::BamReader bReader;
       bReader.Open(setUp.pars_.ioOptions_.firstName_.string());
@@ -314,8 +320,13 @@ int bamExpRunner::connectFaceAwayMatesRegions(
         std::vector<Bed6RecordCore> otherRegions;
 
         while (bReader.GetNextAlignment(bAln)) {
-          //skip if either mate is not mapped or if the mates are mapped to different genomes
-          if(!bAln.IsMapped() || !bAln.IsMateMapped() || bAln.RefID != bAln.MateRefID) {
+          //skip if either mate is not mapped or if the mates are mapped to different chromosomes
+          if(!bAln.IsPrimaryAlignment() || !bAln.IsMapped() || !bAln.IsMateMapped() || bAln.RefID != bAln.MateRefID) {
+            continue;
+          }
+          //soft clipping cut off
+          if(bAln.CigarData.front().Type == 'S' && bAln.CigarData.front().Length > softClipCutOff &&
+            bAln.CigarData.back().Type == 'S' && bAln.CigarData.back().Length > softClipCutOff) {
             continue;
           }
           auto mappingDirectionStatus = njh::pasteAsStr(njh::boolToStr(bAln.IsFirstMate()),
@@ -339,13 +350,15 @@ int bamExpRunner::connectFaceAwayMatesRegions(
                 mate_nodes.emplace(nEnum.index);
               }
             }
-            // std::cout << "baln_nodes: " << njh::conToStr(baln_nodes, ",") << std::endl;
-            // std::cout << "mate_nodes: " << njh::conToStr(mate_nodes, ",") << std::endl;
-            // std::cout << bAlnRegion.genBedRecordCore().toDelimStr() << std::endl;
-            // std::cout << bAlnMateRegion.genBedRecordCore().toDelimStr() << std::endl;
-            //
-            //
-            // std::cout << std::endl;
+            std::cout << "baln_nodes: " << njh::conToStr(baln_nodes, ",") << std::endl;
+            std::cout << "mate_nodes: " << njh::conToStr(mate_nodes, ",") << std::endl;
+            std::cout << "genCigarStr: " << genCigarStr(bAln) << std::endl;
+
+            std::cout << bAlnRegion.genBedRecordCore().toDelimStr() << std::endl;
+            std::cout << bAlnMateRegion.genBedRecordCore().toDelimStr() << std::endl;
+
+
+            std::cout << std::endl;
             if(!baln_nodes.empty()) {
               for(const auto & balnNode: baln_nodes) {
                 for(const auto & mateNode : mate_nodes) {
@@ -379,15 +392,15 @@ int bamExpRunner::connectFaceAwayMatesRegions(
     }
     graph.turnOffEdgesReadCountCutOff(minReadAmount);
     graph.determineGroups();
-    // std::cout << "regions\tnode1Group\tnode2Group\tread_count\tsample_count" << std::endl;
-    // for(const auto & e : graph.edges_) {
-    //   std::cout << njh::conToStr(getVectorOfMapKeys(e->nodes_), ",")
-    //     << "\t" << graph.nodes_[e->nodes_.begin()->second].group_
-    //     << "\t" << graph.nodes_[e->nodes_[e->nodes_.begin()->first]].group_
-    //     << "\t" << e->reads_.size()
-    //     << "\t" << e->samples_.size() << std::endl;
-    // }
-    //
+    std::cout << "regions\tnode1Group\tnode2Group\tread_count\tsample_count" << std::endl;
+    for(const auto & e : graph.edges_) {
+      std::cout << njh::conToStr(getVectorOfMapKeys(e->nodes_), ",")
+        << "\t" << graph.nodes_[e->nodes_.begin()->second].group_
+        << "\t" << graph.nodes_[e->nodes_[e->nodes_.begin()->first]].group_
+        << "\t" << e->reads_.size()
+        << "\t" << e->samples_.size() << std::endl;
+    }
+
     // OutOptions graphVizOut(njh::files::make_path("graph.dot"));
     // graphVizOut.overWriteFile_ = true;
     // graph.writeGraphViz(graphVizOut);
