@@ -176,7 +176,7 @@ int bamExpRunner::connectFaceAwayMatesRegions(
   OutOptions outOpts(bfs::path(""), ".bed");
   bfs::path bedFnp;
   uint32_t initialSoftClipCutOff = 20;
-
+  uint32_t finalSoftClipCutOff = std::numeric_limits<uint32_t>::max();
   uint32_t softClipCutOffBothSides = 5;
   uint32_t minReadAmount = 2;
   uint32_t minInsertSize = 1000;
@@ -187,6 +187,7 @@ int bamExpRunner::connectFaceAwayMatesRegions(
 
   setUp.setOption(sample, "--sample", "sample name", true);
   setUp.setOption(initialSoftClipCutOff, "--initialSoftClipCutOff", "On initial pass if one side has this amount of soft clip don't count");
+  setUp.setOption(finalSoftClipCutOff, "--finalSoftClipCutOff", "On final pass if one side has this amount of soft clip don't count");
 
   setUp.setOption(softClipCutOffBothSides, "--softClipCutOffBothSides", "If both sides are soft clipped more than this soft Clip Cut Off, then don't count it");
   setUp.setOption(step, "--step", "step");
@@ -338,6 +339,11 @@ int bamExpRunner::connectFaceAwayMatesRegions(
           //soft clipping cut off
           if(bAln.CigarData.front().Type == 'S' && bAln.CigarData.front().Length > softClipCutOffBothSides &&
             bAln.CigarData.back().Type == 'S' && bAln.CigarData.back().Length > softClipCutOffBothSides) {
+            continue;
+          }
+          //finalSoftClipCutOff clipping cut off
+          if ((bAln.CigarData.front().Type == 'S' && bAln.CigarData.front().Length > finalSoftClipCutOff) ||
+              (bAln.CigarData.back().Type == 'S' && bAln.CigarData.back().Length > finalSoftClipCutOff)) {
             continue;
           }
           auto mappingDirectionStatus = njh::pasteAsStr(njh::boolToStr(bAln.IsFirstMate()),
