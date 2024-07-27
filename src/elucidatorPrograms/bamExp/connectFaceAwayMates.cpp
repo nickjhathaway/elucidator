@@ -176,7 +176,8 @@ int bamExpRunner::connectFaceAwayMatesRegions(
   OutOptions outOpts(bfs::path(""), ".bed");
   bfs::path bedFnp;
   uint32_t initialSoftClipCutOff = 20;
-  uint32_t finalSoftClipCutOff = std::numeric_limits<uint32_t>::max();
+  // uint32_t finalSoftClipCutOff = std::numeric_limits<uint32_t>::max();
+  uint32_t finalSoftClipCutOff = 10;
   uint32_t softClipCutOffBothSides = 5;
   uint32_t minReadAmount = 2;
   uint32_t minInsertSize = 1000;
@@ -315,11 +316,11 @@ int bamExpRunner::connectFaceAwayMatesRegions(
         }
       }
     }
-    std::cout << "graph.nodes_.size(): " << graph.nodes_.size() << std::endl;
-    for(const auto & n : graph.nodes_ ) {
-      std::cout << n.region_.genBedRecordCore().toDelimStr() << std::endl;
-    }
-    std::cout << std::endl;
+    // std::cout << "graph.nodes_.size(): " << graph.nodes_.size() << std::endl;
+    // for(const auto & n : graph.nodes_ ) {
+    //   std::cout << n.region_.genBedRecordCore().toDelimStr() << std::endl;
+    // }
+    // std::cout << std::endl;
     {
       BamTools::BamReader bReader;
       bReader.Open(setUp.pars_.ioOptions_.firstName_.string());
@@ -367,15 +368,15 @@ int bamExpRunner::connectFaceAwayMatesRegions(
                 mate_nodes.emplace(nEnum.index);
               }
             }
-            std::cout << "baln_nodes: " << njh::conToStr(baln_nodes, ",") << std::endl;
-            std::cout << "mate_nodes: " << njh::conToStr(mate_nodes, ",") << std::endl;
-            std::cout << "genCigarStr: " << genCigarStr(bAln) << std::endl;
-
-            std::cout << bAlnRegion.genBedRecordCore().toDelimStr() << std::endl;
-            std::cout << bAlnMateRegion.genBedRecordCore().toDelimStr() << std::endl;
-
-
-            std::cout << std::endl;
+            // std::cout << "baln_nodes: " << njh::conToStr(baln_nodes, ",") << std::endl;
+            // std::cout << "mate_nodes: " << njh::conToStr(mate_nodes, ",") << std::endl;
+            // std::cout << "genCigarStr: " << genCigarStr(bAln) << std::endl;
+            //
+            // std::cout << bAlnRegion.genBedRecordCore().toDelimStr() << std::endl;
+            // std::cout << bAlnMateRegion.genBedRecordCore().toDelimStr() << std::endl;
+            //
+            //
+            // std::cout << std::endl;
             if(!baln_nodes.empty()) {
               for(const auto & balnNode: baln_nodes) {
                 for(const auto & mateNode : mate_nodes) {
@@ -409,14 +410,14 @@ int bamExpRunner::connectFaceAwayMatesRegions(
     }
     graph.turnOffEdgesReadCountCutOff(minReadAmount);
     graph.determineGroups();
-    std::cout << "regions\tnode1Group\tnode2Group\tread_count\tsample_count" << std::endl;
-    for(const auto & e : graph.edges_) {
-      std::cout << njh::conToStr(getVectorOfMapKeys(e->nodes_), ",")
-        << "\t" << graph.nodes_[e->nodes_.begin()->second].group_
-        << "\t" << graph.nodes_[e->nodes_[e->nodes_.begin()->first]].group_
-        << "\t" << e->reads_.size()
-        << "\t" << e->samples_.size() << std::endl;
-    }
+    // std::cout << "regions\tnode1Group\tnode2Group\tread_count\tsample_count" << std::endl;
+    // for(const auto & e : graph.edges_) {
+    //   std::cout << njh::conToStr(getVectorOfMapKeys(e->nodes_), ",")
+    //     << "\t" << graph.nodes_[e->nodes_.begin()->second].group_
+    //     << "\t" << graph.nodes_[e->nodes_[e->nodes_.begin()->first]].group_
+    //     << "\t" << e->reads_.size()
+    //     << "\t" << e->samples_.size() << std::endl;
+    // }
 
     // OutOptions graphVizOut(njh::files::make_path("graph.dot"));
     // graphVizOut.overWriteFile_ = true;
