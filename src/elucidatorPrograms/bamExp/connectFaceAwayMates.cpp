@@ -297,8 +297,15 @@ int bamExpRunner::connectFaceAwayMatesRegions(
   // std::cout << "faceawayRegions: " << faceawayRegions.size() << std::endl;
   if(!faceawayRegions.empty()) {
     auto faceawayRegions_merged = BedUtility::mergeAndSort(faceawayRegions);
-    for(const auto & reg : mergedRegions){
+    // add the faceway regions, this will find windows that span outside of the original scanned window
+    auto combinedMergedRegions = concatVecs(faceawayRegions_merged, mergedRegions);
+    auto merged_combinedMergedRegions = BedUtility::mergeAndSort(combinedMergedRegions);
+    // for(const auto & reg : mergedRegions){
+    for(const auto & reg : merged_combinedMergedRegions){
       auto windows = BedUtility::createWindowsWithinRegion(reg, windowSize, step, true);
+
+
+
       for(const auto & win : windows) {
         bool overlapWithFace = false;
         for(const auto & face : faceawayRegions_merged) {
@@ -328,7 +335,8 @@ int bamExpRunner::connectFaceAwayMatesRegions(
       loadBamIndexThrow(bReader);
       auto refData = bReader.GetReferenceData();
       BamTools::BamAlignment bAln;
-      for (const auto& reg: mergedRegions) {
+      // for (const auto& reg: mergedRegions) {
+      for (const auto& reg: merged_combinedMergedRegions) {
         setBamFileRegionThrow(bReader, reg);
         std::vector<Bed6RecordCore> otherRegions;
 
