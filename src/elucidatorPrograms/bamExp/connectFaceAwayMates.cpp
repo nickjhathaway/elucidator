@@ -299,7 +299,11 @@ int bamExpRunner::connectFaceAwayMatesRegions(
     auto faceawayRegions_merged = BedUtility::mergeAndSort(faceawayRegions);
     // add the faceway regions, this will find windows that span outside of the original scanned window
     auto combinedMergedRegions = concatVecs(faceawayRegions_merged, mergedRegions);
-    auto merged_combinedMergedRegions = BedUtility::mergeAndSort(combinedMergedRegions);
+    std::vector<Bed6RecordCore> combinedMergedRegions_beds;
+    for(const auto & reg : combinedMergedRegions) {
+      combinedMergedRegions_beds.emplace_back(reg.genBedRecordCore());
+    }
+    auto merged_combinedMergedRegions = BedUtility::mergeAndSort(combinedMergedRegions_beds);
     // for(const auto & reg : mergedRegions){
     for(const auto & reg : merged_combinedMergedRegions){
       auto windows = BedUtility::createWindowsWithinRegion(reg, windowSize, step, true);
