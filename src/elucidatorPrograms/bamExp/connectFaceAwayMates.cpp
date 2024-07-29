@@ -317,7 +317,8 @@ int bamExpRunner::connectFaceAwayMatesRegions(
     // add the faceway regions, this will find windows that span outside of the original scanned window
     auto combinedMergedRegions = concatVecs(faceawayRegions_merged, mergedRegions);
     std::vector<Bed6RecordCore> combinedMergedRegions_beds;
-    for(const auto & reg : combinedMergedRegions) {
+    combinedMergedRegions_beds.reserve(combinedMergedRegions.size());
+    for (const auto &reg: combinedMergedRegions) {
       combinedMergedRegions_beds.emplace_back(reg.genBedRecordCore());
     }
     auto merged_combinedMergedRegions = BedUtility::mergeAndSort(combinedMergedRegions_beds);
@@ -460,7 +461,7 @@ int bamExpRunner::connectFaceAwayMatesRegions(
         return nodes[otherEdge.nodesInOrder_.first].region_.overlaps(frontRegion_) &&
           nodes[otherEdge.nodesInOrder_.second].region_.overlaps(backRegion_);
       }
-      GenomicRegion genSpanningRegion() const {
+      [[nodiscard]] GenomicRegion genSpanningRegion() const {
         GenomicRegion ret = frontRegion_;
         ret.end_ = backRegion_.end_;
         ret.uid_ = ret.createUidFromCoords();
@@ -477,15 +478,29 @@ int bamExpRunner::connectFaceAwayMatesRegions(
       if(mergedEdges.empty()) {
         mergedEdges.emplace_back(edge, graph.nodes_);
       } else {
-        if(mergedEdges.back().bothNodesOverlap(*edge, graph.nodes_)) {
-          mergedEdges.back().edges_.emplace_back(edge);
-          mergedEdges.back().frontRegion_.start_ = std::min(mergedEdges.back().frontRegion_.start_, graph.nodes_[edge->nodesInOrder_.first].region_.start_);
-          mergedEdges.back().frontRegion_.end_ = std::max(mergedEdges.back().frontRegion_.end_, graph.nodes_[edge->nodesInOrder_.first].region_.end_);
-          mergedEdges.back().backRegion_.start_ = std::min(mergedEdges.back().backRegion_.start_, graph.nodes_[edge->nodesInOrder_.second].region_.start_);
-          mergedEdges.back().backRegion_.end_ = std::max(mergedEdges.back().backRegion_.end_, graph.nodes_[edge->nodesInOrder_.second].region_.end_);
-        } else {
+        bool foundOverlap = false;
+        for(auto & otherMergedEdge : mergedEdges) {
+          if(otherMergedEdge.bothNodesOverlap(*edge, graph.nodes_)) {
+            foundOverlap = true;
+            otherMergedEdge.edges_.emplace_back(edge);
+            otherMergedEdge.frontRegion_.start_ = std::min(otherMergedEdge.frontRegion_.start_, graph.nodes_[edge->nodesInOrder_.first].region_.start_);
+            otherMergedEdge.frontRegion_.end_ = std::max(otherMergedEdge.frontRegion_.end_, graph.nodes_[edge->nodesInOrder_.first].region_.end_);
+            otherMergedEdge.backRegion_.start_ = std::min(otherMergedEdge.backRegion_.start_, graph.nodes_[edge->nodesInOrder_.second].region_.start_);
+            otherMergedEdge.backRegion_.end_ = std::max(otherMergedEdge.backRegion_.end_, graph.nodes_[edge->nodesInOrder_.second].region_.end_);
+          }
+        }
+        if(!foundOverlap) {
           mergedEdges.emplace_back(edge, graph.nodes_);
         }
+        // if(mergedEdges.back().bothNodesOverlap(*edge, graph.nodes_)) {
+        //   mergedEdges.back().edges_.emplace_back(edge);
+        //   mergedEdges.back().frontRegion_.start_ = std::min(mergedEdges.back().frontRegion_.start_, graph.nodes_[edge->nodesInOrder_.first].region_.start_);
+        //   mergedEdges.back().frontRegion_.end_ = std::max(mergedEdges.back().frontRegion_.end_, graph.nodes_[edge->nodesInOrder_.first].region_.end_);
+        //   mergedEdges.back().backRegion_.start_ = std::min(mergedEdges.back().backRegion_.start_, graph.nodes_[edge->nodesInOrder_.second].region_.start_);
+        //   mergedEdges.back().backRegion_.end_ = std::max(mergedEdges.back().backRegion_.end_, graph.nodes_[edge->nodesInOrder_.second].region_.end_);
+        // } else {
+        //   mergedEdges.emplace_back(edge, graph.nodes_);
+        // }
       }
     }
     // for(const auto & mergedEdge : iter::enumerate(mergedEdges)) {
