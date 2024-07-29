@@ -17,14 +17,22 @@ class GenomicRegionGraph {
 
 
   public:
-
+  class node;
   class edge {
   public:
+
     //key is genomic UID and value is the position of the other node
     std::unordered_map<std::string, uint32_t> nodes_;
     std::unordered_set<std::string> samples_;
     std::unordered_set<std::string> reads_;
+
+    std::pair<uint32_t, uint32_t> nodesInOrder_;
     bool on_{true};
+
+    [[nodiscard]] bool bothNodesOverlap(const edge & otherEdge, std::vector<node> nodes) const {
+      return nodes[nodesInOrder_.first].region_.overlaps(nodes[otherEdge.nodesInOrder_.first].region_) &&
+        nodes[nodesInOrder_.second].region_.overlaps(nodes[otherEdge.nodesInOrder_.second].region_);
+    }
   };
 
   class node {
@@ -164,6 +172,15 @@ public:
     }
 	  out << "}" << std::endl;
 
+  }
+
+  void sortEdges() {
+    njh::sort(edges_, [this](const std::shared_ptr<edge> & e1, const std::shared_ptr<edge> & e2) {
+      if(nodes_[e1->nodesInOrder_.first].region_.sameRegion(nodes_[e2->nodesInOrder_.first].region_)) {
+        return nodes_[e1->nodesInOrder_.second].region_ < nodes_[e2->nodesInOrder_.second].region_;
+      }
+      return nodes_[e1->nodesInOrder_.first].region_ < nodes_[e2->nodesInOrder_.first].region_;
+    });
   }
 
 };
@@ -405,6 +422,11 @@ int bamExpRunner::connectFaceAwayMatesRegions(
                     auto newEdge = std::make_shared<GenomicRegionGraph::edge>();
                     newEdge->nodes_[graph.nodes_[mateNode].region_.uid_] = balnNode;
                     newEdge->nodes_[graph.nodes_[balnNode].region_.uid_] = mateNode;
+                    if(graph.nodes_[mateNode].region_ < graph.nodes_[balnNode].region_) {
+                      newEdge->nodesInOrder_ = std::make_pair(mateNode, balnNode);
+                    } else {
+                      newEdge->nodesInOrder_ = std::make_pair(balnNode, mateNode);
+                    }
                     newEdge->reads_.emplace(bAln.Name);
                     newEdge->samples_.emplace(sample);
                     graph.nodes_[mateNode].edges_.emplace_back(newEdge);
@@ -421,7 +443,60 @@ int bamExpRunner::connectFaceAwayMatesRegions(
       }
     }
     graph.turnOffEdgesReadCountCutOff(minReadAmount);
-    graph.determineGroups();
+    // graph.determineGroups();
+
+    graph.sortEdges();
+    struct GroupedEdges {
+      GroupedEdges(const std::shared_ptr<GenomicRegionGraph::edge> & firstEdge, const std::vector<GenomicRegionGraph::node> & nodes) {
+        edges_.emplace_back(firstEdge);
+        frontRegion_ = nodes[firstEdge->nodesInOrder_.first].region_;
+        backRegion_ = nodes[firstEdge->nodesInOrder_.second].region_;
+      }
+      GenomicRegion frontRegion_;
+      GenomicRegion backRegion_;
+      std::vector<std::shared_ptr<GenomicRegionGraph::edge>> edges_;
+
+      [[nodiscard]] bool bothNodesOverlap(const GenomicRegionGraph::edge & otherEdge, std::vector<GenomicRegionGraph::node> nodes) const {
+        return nodes[otherEdge.nodesInOrder_.first].region_.overlaps(frontRegion_) &&
+          nodes[otherEdge.nodesInOrder_.second].region_.overlaps(backRegion_);
+      }
+      GenomicRegion genSpanningRegion() const {
+        GenomicRegion ret = frontRegion_;
+        ret.end_ = backRegion_.end_;
+        ret.uid_ = ret.createUidFromCoords();
+        return ret;
+      }
+
+    };
+    std::vector<GroupedEdges> mergedEdges;
+    // std::vector<std::vector<std::shared_ptr<GenomicRegionGraph::edge>>> mergedEdges;
+    for(const auto & edge : graph.edges_) {
+      if(!edge->on_) {
+        continue;
+      }
+      if(mergedEdges.empty()) {
+        mergedEdges.emplace_back(edge, graph.nodes_);
+      } else {
+        if(mergedEdges.back().bothNodesOverlap(*edge, graph.nodes_)) {
+          mergedEdges.back().edges_.emplace_back(edge);
+          mergedEdges.back().frontRegion_.start_ = std::min(mergedEdges.back().frontRegion_.start_, graph.nodes_[edge->nodesInOrder_.first].region_.start_);
+          mergedEdges.back().frontRegion_.end_ = std::max(mergedEdges.back().frontRegion_.end_, graph.nodes_[edge->nodesInOrder_.first].region_.end_);
+          mergedEdges.back().backRegion_.start_ = std::min(mergedEdges.back().backRegion_.start_, graph.nodes_[edge->nodesInOrder_.second].region_.start_);
+          mergedEdges.back().backRegion_.end_ = std::max(mergedEdges.back().backRegion_.end_, graph.nodes_[edge->nodesInOrder_.second].region_.end_);
+        } else {
+          mergedEdges.emplace_back(edge, graph.nodes_);
+        }
+      }
+    }
+    // for(const auto & mergedEdge : iter::enumerate(mergedEdges)) {
+    //   std::cout << mergedEdge.index << std::endl;
+    //   std::cout << mergedEdge.element.frontRegion_.genBedRecordCore().toDelimStr() << std::endl;
+    //   std::cout << mergedEdge.element.backRegion_.genBedRecordCore().toDelimStr() << std::endl;
+    //
+    //   for(const auto & edge : mergedEdge.element.edges_) {
+    //     std::cout << "\t" << graph.nodes_[edge->nodesInOrder_.first].region_.genBed3RecordCore().toDelimStr() << '\t' << graph.nodes_[edge->nodesInOrder_.second].region_.genBed3RecordCore().toDelimStr() << std::endl;
+    //   }
+    // }
     // std::cout << "regions\tnode1Group\tnode2Group\tread_count\tsample_count" << std::endl;
     // for(const auto & e : graph.edges_) {
     //   std::cout << njh::conToStr(getVectorOfMapKeys(e->nodes_), ",")
@@ -435,43 +510,67 @@ int bamExpRunner::connectFaceAwayMatesRegions(
     // graphVizOut.overWriteFile_ = true;
     // graph.writeGraphViz(graphVizOut);
 
-    std::map<uint32_t, std::vector<Bed3RecordCore>> regionsPerGroup;
-    std::unordered_map<uint32_t, std::unordered_set<std::string>> pairsPerGroup;
-    auto groupCounts = graph.getGroupCounts();
-    for(const auto & n : graph.nodes_) {
-      if(groupCounts[n.group_] > 1) {
-        regionsPerGroup[n.group_].emplace_back(n.region_.genBed3RecordCore());
-        for(const auto & e : n.edges_) {
-          if(e->on_) {
-            pairsPerGroup[n.group_].insert(e->reads_.begin(), e->reads_.end());
-          }
-        }
-      }
-    }
+    // std::map<uint32_t, std::vector<Bed3RecordCore>> regionsPerGroup;
+    // std::unordered_map<uint32_t, std::unordered_set<std::string>> pairsPerGroup;
+    // auto groupCounts = graph.getGroupCounts();
+    // for(const auto & n : graph.nodes_) {
+    //   if(groupCounts[n.group_] > 1) {
+    //     regionsPerGroup[n.group_].emplace_back(n.region_.genBed3RecordCore());
+    //     for(const auto & e : n.edges_) {
+    //       if(e->on_) {
+    //         pairsPerGroup[n.group_].insert(e->reads_.begin(), e->reads_.end());
+    //       }
+    //     }
+    //   }
+    // }
+    //
+    // for (auto &regionsForGroup: regionsPerGroup) {
+    //   auto mergedRegionsForGroup = BedUtility::mergeAndSort(regionsForGroup.second);
+    //   size_t minPos = std::numeric_limits<size_t>::max();
+    //   size_t maxPos = 0;
+    //
+    //   for(const auto & region : mergedRegionsForGroup) {
+    //     if(region.start_ < minPos) {
+    //       minPos = region.start_;
+    //     }
+    //     if(region.end_ > maxPos) {
+    //       maxPos = region.end_;
+    //     }
+    //   }
+    //   for (const auto &mergedRegion: mergedRegionsForGroup) {
+    //     finalOut << mergedRegion.genBedRecordCore().toDelimStr()
+    //     << "\t" << regionsForGroup.first
+    //     << "\t" << pairsPerGroup[regionsForGroup.first].size()
+    //     << "\t" << sample
+    //     << "\t" << minPos
+    //     << "\t" << maxPos
+    //     << "\t" << maxPos - minPos
+    //     << std::endl;
+    //   }
+    // }
+    for(const auto & mergedEdge : iter::enumerate(mergedEdges)) {
+      auto spanning = mergedEdge.element.genSpanningRegion();
+      std::unordered_set<std::string> allPairs;
 
-    for (auto &regionsForGroup: regionsPerGroup) {
-      auto mergedRegionsForGroup = BedUtility::mergeAndSort(regionsForGroup.second);
-      size_t minPos = std::numeric_limits<size_t>::max();
-      size_t maxPos = 0;
-
-      for(const auto & region : mergedRegionsForGroup) {
-        if(region.start_ < minPos) {
-          minPos = region.start_;
-        }
-        if(region.end_ > maxPos) {
-          maxPos = region.end_;
-        }
+      for(const auto & edge : mergedEdge.element.edges_) {
+        allPairs.insert(edge->reads_.begin(), edge->reads_.end());
       }
-      for (const auto &mergedRegion: mergedRegionsForGroup) {
-        finalOut << mergedRegion.genBedRecordCore().toDelimStr()
-        << "\t" << regionsForGroup.first
-        << "\t" << pairsPerGroup[regionsForGroup.first].size()
-        << "\t" << sample
-        << "\t" << minPos
-        << "\t" << maxPos
-        << "\t" << maxPos - minPos
-        << std::endl;
-      }
+      finalOut << mergedEdge.element.frontRegion_.genBedRecordCore().toDelimStr()
+          << "\t" << mergedEdge.index
+          << "\t" << allPairs.size()
+          << "\t" << sample
+          << "\t" << spanning.start_
+          << "\t" << spanning.end_
+          << "\t" << spanning.getLen()
+          << std::endl;
+      finalOut << mergedEdge.element.backRegion_.genBedRecordCore().toDelimStr()
+          << "\t" << mergedEdge.index
+          << "\t" << allPairs.size()
+          << "\t" << sample
+          << "\t" << spanning.start_
+          << "\t" << spanning.end_
+          << "\t" << spanning.getLen()
+          << std::endl;
     }
   }
   return 0;
