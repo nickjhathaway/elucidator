@@ -30,8 +30,6 @@
 //
 
 namespace njhseq {
-static int (const njh::progutils::CmdArgs & inputCommands);
-static int (const njh::progutils::CmdArgs & inputCommands);
 
 ampliconAnalysisRunner::ampliconAnalysisRunner()
     : njh::progutils::ProgramRunner({
