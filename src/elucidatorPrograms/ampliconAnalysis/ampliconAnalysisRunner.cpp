@@ -30,20 +30,24 @@
 //
 
 namespace njhseq {
+static int (const njh::progutils::CmdArgs & inputCommands);
+static int (const njh::progutils::CmdArgs & inputCommands);
 
 ampliconAnalysisRunner::ampliconAnalysisRunner()
     : njh::progutils::ProgramRunner({
-                     addFunc("collapseTandems", collapseTandems, false),
-                     addFunc("markChimeras", markChimeras, false),
-                     addFunc("greedyCluster", greedyCluster, false),
-										 addFunc("singleLinkageClusteringOnPerId", singleLinkageClusteringOnPerId, false),
-										 addFunc("processRawExtractByKmerPathWeaverResults", processRawExtractByKmerPathWeaverResults, false),
-                     addFunc("extractedTarAmpInfoFileToJson", extractedTarAmpInfoFileToJson, false),
-                     addFunc("finalClustersFileToJson", finalClustersFileToJson, false),
-                     addFunc("specimenInfoFileToJson", specimenInfoFileToJson, false),
-                     addFunc("combingAllIntoPMOJson", combingAllIntoPMOJson, false),
-    								 addFunc("experimentInfoFileToJson", experimentInfoFileToJson, false),
-    								 addFunc("demultiplexedExperimentSampleFileToJson", demultiplexedExperimentSampleFileToJson, false),
+                      addFunc("collapseTandems", collapseTandems, false),
+                      addFunc("markChimeras", markChimeras, false),
+                      addFunc("greedyCluster", greedyCluster, false),
+                      addFunc("singleLinkageClusteringOnPerId", singleLinkageClusteringOnPerId, false),
+                      addFunc("processRawExtractByKmerPathWeaverResults", processRawExtractByKmerPathWeaverResults, false),
+                      addFunc("extractedTarAmpInfoFileToJson", extractedTarAmpInfoFileToJson, false),
+                      addFunc("finalClustersFileToJson", finalClustersFileToJson, false),
+                      addFunc("specimenInfoFileToJson", specimenInfoFileToJson, false),
+                      addFunc("combingAllIntoPMOJson", combingAllIntoPMOJson, false),
+                      addFunc("experimentInfoFileToJson", experimentInfoFileToJson, false),
+                      addFunc("demultiplexedExperimentSampleFileToJson", demultiplexedExperimentSampleFileToJson, false),
+                      addFunc("determinePossibleMaskFromSeqs", determinePossibleMaskFromSeqs, false),
+                      addFunc("maskRegionBasedOnRefSubRegions", maskRegionBasedOnRefSubRegions, false),
 										 },//
                     "ampliconAnalysis") {}
 
