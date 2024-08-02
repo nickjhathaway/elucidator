@@ -22,7 +22,11 @@ int ampliconAnalysisRunner::combingAllIntoPMOJson(const njh::progutils::CmdArgs 
   bfs::path panel_info_input_json_fnp;
   bfs::path target_demultiplexed_experiment_samples_json_fnp;
   bfs::path microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json_fnp;
+
+  std::string analysis_name;
   ampliconAnalysisSetUp setUp(inputCommands);
+  setUp.setOption(analysis_name, "--analysis_name", "analysis name", true);
+
   setUp.setOption(bioinformatics_info_input_json_fnp, "--bioinformatics_info_input_json_fnp", "bioinformatics_info_input_json_fnp", true);
   setUp.setOption(specimen_infos_input_json_fnp, "--specimen_infos_input_json_fnp", "specimen_infos_input_json_fnp", true);
   setUp.setOption(experiment_infos_input_json_fnp, "--experiment_infos_input_json_fnp", "experiment_infos_input_json_fnp", true);
@@ -46,14 +50,14 @@ int ampliconAnalysisRunner::combingAllIntoPMOJson(const njh::progutils::CmdArgs 
   Json::Value sequencing_info_input_json = njh::json::parseFile(sequencing_info_input_json_fnp.string());
   Json::Value panel_info_input_json = njh::json::parseFile(panel_info_input_json_fnp.string());
   Json::Value microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json = njh::json::parseFile(microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json_fnp.string());
-
+  outJson["analysis_name"] = analysis_name;
   outJson["taramp_bioinformatics_infos"][bioinformatics_info_input_json.get(std::string("tar_amp_bioinformatics_info_id"), "").asString()] = bioinformatics_info_input_json;
   outJson["specimen_infos"] = specimen_infos_input_json;
   outJson["sequencing_infos"] = sequencing_info_input_json;
   outJson["experiment_infos"] = experiment_infos_input_json;
   outJson["panel_info"] = panel_info_input_json;
   outJson["microhaplotypes_detected"][microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json["microhaplotypes_detected"].get(std::string("tar_amp_bioinformatics_info_id"), "").asString()] = microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json["microhaplotypes_detected"];
-  outJson["representative_microhaplotype_sequences"][microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json["representative_microhaplotype_sequences"].get(std::string("tar_amp_bioinformatics_info_id"), "").asString()] = microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json["representative_microhaplotype_sequences"];
+  outJson["representative_microhaplotype_sequences"][microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json["representative_microhaplotype_sequences"].get(std::string("representative_microhaplotype_id"), "").asString()] = microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json["representative_microhaplotype_sequences"];
   if(!target_demultiplexed_experiment_samples_json_fnp.empty()) {
     Json::Value target_demultiplexed_experiment_samples_json = njh::json::parseFile(target_demultiplexed_experiment_samples_json_fnp.string());
     outJson["target_demultiplexed_experiment_samples"][target_demultiplexed_experiment_samples_json.get(std::string("tar_amp_bioinformatics_info_id"), "").asString()] = target_demultiplexed_experiment_samples_json;
@@ -264,6 +268,8 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
   OutOptions outOpts("", ".json");
   std::string sequencing_id;
   std::string tar_amp_bioinformatics_info_id;
+  std::string representative_microhaplotype_id;
+
   bfs::path finalClustersFnp;
   std::string sampleIDCol = "s_Sample";
   std::string targetIDCol = "p_name";
@@ -276,6 +282,7 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
   ampliconAnalysisSetUp setUp(inputCommands);
   setUp.setOption(sequencing_id, "--sequencing_id", "sequencing id", true);
   setUp.setOption(tar_amp_bioinformatics_info_id, "--tar_amp_bioinformatics_info_id", "bioinformatics id", true);
+  setUp.setOption(representative_microhaplotype_id, "--representative_microhaplotype_id", "representative microhaplotype id", true);
 
   setUp.setOption(finalClustersFnp, "--finalClustersFnp", "Name extracted Info Fnp", true);
 
@@ -297,9 +304,12 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
   Json::Value & representative_microhaplotype_sequences = outJson["representative_microhaplotype_sequences"];
 
   microhaplotypes_detected["tar_amp_bioinformatics_info_id"] = tar_amp_bioinformatics_info_id;
-  representative_microhaplotype_sequences["tar_amp_bioinformatics_info_id"] = tar_amp_bioinformatics_info_id;
+  microhaplotypes_detected["representative_microhaplotype_id"] = representative_microhaplotype_id;
 
-  Json::Value & samplesJson = microhaplotypes_detected["samples"];
+  representative_microhaplotype_sequences["representative_microhaplotype_id"] = representative_microhaplotype_id;
+
+  Json::Value & samplesJson = microhaplotypes_detected["experiment_samples"];
+  Json::Value & repTargetsJson = representative_microhaplotype_sequences["targets"];
 
 
   std::unordered_map<std::string, std::vector<std::shared_ptr<seqInfo>>> popSeqsByTarget;
@@ -383,14 +393,16 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
     for(auto & seqsForTar : popSeqsByTarget){
       //sort
       readVecSorter::sortByName(seqsForTar.second, true);
-      Json::Value & seqsForTarJson = representative_microhaplotype_sequences[seqsForTar.first];
+      Json::Value & seqsForTarJson = repTargetsJson[seqsForTar.first];
       seqsForTarJson["target_id"] = seqsForTar.first;
       Json::Value & seqs = seqsForTarJson["seqs"];
+
       for(const auto & seqForTar : seqsForTar.second){
         Json::Value seqForTarJson;
         seqForTarJson["microhaplotype_id"] = seqForTar->name_;
         seqForTarJson["seq"] = seqForTar->seq_;
-        seqs.append(seqForTarJson);
+        seqs[seqForTar->name_] = seqForTarJson;
+        // seqs.append(seqForTarJson);
       }
     }
   }

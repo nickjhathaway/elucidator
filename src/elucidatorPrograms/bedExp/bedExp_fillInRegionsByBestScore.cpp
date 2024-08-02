@@ -17,36 +17,6 @@
 namespace njhseq {
 
 
-template<typename T>
-std::vector<GenomicRegion> mergeAndSort(std::vector<T> & beds) {
-	BedUtility::coordSort(beds, false);
-	std::vector<GenomicRegion> ret;
-	if (beds.size() > 1) {
-		ret.emplace_back(GenomicRegion(getRef(beds.front())));
-		for (const auto regPos : iter::range<uint32_t>(1, beds.size())) {
-			//merge if they overlap or start where the last region starts
-			if (ret.back().overlaps(getRef(beds[regPos])) || ret.back().end_ == getRef(beds[regPos]).chromStart_) {
-				ret.back().end_ = getRef(beds[regPos]).chromEnd_;
-			} else {
-				ret.emplace_back(GenomicRegion(getRef(beds[regPos])));
-			}
-		}
-	} else if (1 == beds.size()) {
-		ret.emplace_back(GenomicRegion(getRef(beds.front())));
-	} else {
-		std::stringstream ss;
-		ss << __PRETTY_FUNCTION__ << ", error " << "no regions read in input" << "\n";
-		throw std::runtime_error { ss.str() };
-	}
-	return ret;
-}
-
-
-std::vector<GenomicRegion> readInBedsMergeAndSort(const bfs::path & bedFile) {
-	auto inRegions = getBed3s(bedFile);
-	return mergeAndSort(inRegions);
-}
-
 
 
 int bedExpRunner::getInterveningRegions(const njh::progutils::CmdArgs & inputCommands) {
@@ -80,7 +50,7 @@ int bedExpRunner::getInterveningRegions(const njh::progutils::CmdArgs & inputCom
 	for(auto & reg : inRegions){
 		BedUtility::extendLeftRight(*reg, padding, padding, njh::mapAt(chromosomeLengths,reg->chrom_));
 	}
-	auto mergedRegions = mergeAndSort(inRegions);
+	auto mergedRegions = BedUtility::mergeAndSort(inRegions);
 
 	std::set<std::string> usedChromosomes;
 
@@ -132,30 +102,7 @@ int bedExpRunner::getInterveningRegions(const njh::progutils::CmdArgs & inputCom
 }
 
 
-std::vector<GenomicRegion> createWindowsWithinRegion(
-		const GenomicRegion & region, uint32_t windowSize, uint32_t windowStep,
-		bool includeRemainer = false) {
-	std::vector<GenomicRegion> ret;
-	if (region.getLen() >= windowSize) {
-		uint32_t start = 0;
-		while (start + windowSize <= region.getLen()) {
-			ret.emplace_back("", region.chrom_, region.start_ + start,
-					region.start_ + start + windowSize, region.reverseSrand_);
-			ret.back().setUidWtihCoordsStrand();
-			start += windowStep;
-		}
-		if (start < region.getLen() && region.getLen() - start > 0
-				&& includeRemainer) {
-			ret.emplace_back("", region.chrom_, region.start_ + start, region.end_,
-					region.reverseSrand_);
-			ret.back().setUidWtihCoordsStrand();
-		}
-	} else if (includeRemainer) {
-		ret.emplace_back(region);
-		ret.back().setUidWtihCoordsStrand();
-	}
-	return ret;
-}
+
 
 
 
@@ -178,10 +125,10 @@ int bedExpRunner::createWindowsInRegions(const njh::progutils::CmdArgs & inputCo
 	//get chrom lengths
 	OutputStream out(outOpts);
 	auto inRegions = getBed3s(bedFile);
-	auto mergedRegions = mergeAndSort(inRegions);
+	auto mergedRegions = BedUtility::mergeAndSort(inRegions);
 
 	auto createWindowsWrite = [&out,&minLen,&windowSize,&step](const GenomicRegion & region){
-		auto windows = createWindowsWithinRegion(region, windowSize, step, true);
+		auto windows = BedUtility::createWindowsWithinRegion(region, windowSize, step, true);
 		for(const auto & window : windows){
 			if(window.getLen() >= minLen){
 				out << window.genBedRecordCore().toDelimStr() << std::endl;
@@ -234,10 +181,10 @@ int bedExpRunner::createWindowsInbetweenRegions(const njh::progutils::CmdArgs & 
 	for(auto & reg : inRegions){
 		BedUtility::extendLeftRight(*reg, padding, padding, njh::mapAt(chromosomeLengths,reg->chrom_));
 	}
-	auto mergedRegions = mergeAndSort(inRegions);
+	auto mergedRegions = BedUtility::mergeAndSort(inRegions);
 
 	auto createWindowsWrite = [&out,&minLen,&windowSize,&step](const GenomicRegion & region){
-		auto windows = createWindowsWithinRegion(region, windowSize, step, true);
+		auto windows = BedUtility::createWindowsWithinRegion(region, windowSize, step, true);
 		for(const auto & window : windows){
 			if(window.getLen() >= minLen){
 				out << window.genBedRecordCore().toDelimStr() << std::endl;
