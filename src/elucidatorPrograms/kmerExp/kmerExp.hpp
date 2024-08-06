@@ -101,6 +101,8 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int genomeKmerCompare(const njh::progutils::CmdArgs & inputCommands);
 	static int profileSharedKmerBlocks(const njh::progutils::CmdArgs & inputCommands);
 	static int kmerCompareTwoSetsOfContigs(const njh::progutils::CmdArgs & inputCommands);
+	static int kmerCompareSetOfSeqsToReference(const njh::progutils::CmdArgs & inputCommands);
+
 	static int findUniqKmersBetweenSeqs(const njh::progutils::CmdArgs & inputCommands);
 
 

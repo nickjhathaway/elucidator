@@ -255,7 +255,7 @@ int kmerExpRunner::getKmerDetailedKmerDistAgainstRef(const njh::progutils::CmdAr
 							<< "\t" << dist.totalUniqKmersIn1_
 							<< "\t" << dist.totalUniqKmersIn2_
 							<< "\t" << dist.totalUniqBetween_
-							<< "\n";
+							<< std::endl;;
 				}
 				if(getRevComp){
 					auto revDist = kInfo.compareKmersRevCompDetailed(refSeq->kInfo_);

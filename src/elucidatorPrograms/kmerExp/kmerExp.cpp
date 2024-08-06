@@ -74,6 +74,9 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("getUniqKmerBlocksOnGenomeAgainstRef", getUniqKmerBlocksOnGenomeAgainstRef, false),
 					 addFunc("findPositionsOfUniqueKmersInEachOther", findPositionsOfUniqueKmersInEachOther, false),
 					 addFunc("kmerCompareTwoSetsOfContigs", kmerCompareTwoSetsOfContigs, false),
+          	addFunc("kmerCompareSetOfSeqsToReference", kmerCompareSetOfSeqsToReference, false),
+
+
 					 addFunc("kmerConnectionGraph", kmerConnectionGraph, false),
 					 addFunc("countKmers", countKmers, false),
 					 addFunc("getKmerSharedBlocksBetweenGenomes", getKmerSharedBlocksBetweenGenomes, false),

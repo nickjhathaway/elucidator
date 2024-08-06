@@ -185,10 +185,132 @@ ggplotly(ggplot() +
 
 )";
 
+
+void addKmersToMap(const std::string & seq, uint32_t kmerLength, std::unordered_map<std::string, uint32_t> & kCounts, bool addReverseComp) {
+	//set kmer information in the current direction
+	for (const auto pos : iter::range(seq.size() + 1 - kmerLength)) {
+		auto currentK = seq.substr(pos, kmerLength);
+		kCounts[currentK] += 1;
+	}
+	//if needed set kmer information for the reverse direction
+	if (addReverseComp) {
+		std::string reverseComplement = seqUtil::reverseComplement(seq, "DNA");
+		for (const auto pos : iter::range(reverseComplement.size() + 1 - kmerLength)) {
+			auto currentK = reverseComplement.substr(pos, kmerLength);
+			kCounts[currentK] += 1;
+		}
+	}
+}
+
+
+
+int kmerExpRunner::kmerCompareSetOfSeqsToReference(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path refContigs = "";
+	uint32_t kmerLengthRangeStart = 15;
+	uint32_t kmerLengthRangeStep = 1;
+	bool setReverse = false;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(kmerLengthRangeStart, "--kmerLength", "kmer Length");
+	setUp.setOption(kmerLengthRangeStep, "--kmerLengthRangeStep", "kmer Length Range Step");
+	uint32_t kmerLengthRangeStop = kmerLengthRangeStart + kmerLengthRangeStep;
+	setUp.setOption(kmerLengthRangeStop, "--kmerLengthRangeStop", "kmer Length Range Stop");
+	if(kmerLengthRangeStop < kmerLengthRangeStart) {
+		setUp.addWarning(njh::pasteAsStr("kmerLengthRangeStop:", kmerLengthRangeStop, " shouldn't be less than ", kmerLengthRangeStart));
+		setUp.failed_ = true;
+	}
+	kmerLengthRangeStop += kmerLengthRangeStep;
+	setUp.processReadInNames(true);
+	setUp.processRefFilename(true);
+	setUp.processDirectoryOutputName(true);
+	setUp.finishSetUp(std::cout);
+
+	setUp.startARunLog(setUp.pars_.directoryName_);
+	auto inputSeqs = SeqInput::getSeqVec<seqInfo>(setUp.pars_.ioOptions_);
+	auto refSeqs = SeqInput::getSeqVec<seqInfo>(setUp.pars_.refIoOptions_);
+
+	OutputStream allComparison(njh::files::make_path(setUp.pars_.directoryName_, "allComparison.tsv"));
+	allComparison << "name\tref\tkmerLength\trevComp\ttotalShared\tsimilarity\tsimilarityLenAdjust\ttotalKmersIn1\ttotalKmersIn2\ttotalUniqueShared\tuniqSimilarity\tuniqSimilarityLenAdjust\ttotalUniqKmersIn1\ttotalUniqKmersIn2\ttotalUniq" << "\n";
+
+
+	for(const auto & kmerLength : iter::range(kmerLengthRangeStart, kmerLengthRangeStop, kmerLengthRangeStep)){
+		std::unordered_map<std::string, uint32_t> allInput;
+		std::unordered_map<std::string, uint32_t> allRef;
+
+		std::unordered_map<std::string, kmerInfo> inputSeqKmerInfos;
+		std::unordered_map<std::string, kmerInfo> refSeqKmerInfos;
+		uint32_t totalInInput = 0;
+		uint32_t totalInRef = 0;
+		for(const auto & seq : inputSeqs){
+			if(len(seq) >= kmerLength){
+				inputSeqKmerInfos.emplace(seq.name_, kmerInfo(seq.seq_, kmerLength, setReverse));
+				addKmersToMap(seq.seq_, kmerLength, allInput, setReverse);
+				totalInInput += len(seq) - kmerLength + 1;
+			}
+		}
+
+		for(const auto & seq : refSeqs){
+			if(len(seq) >= kmerLength){
+				refSeqKmerInfos.emplace(seq.name_, kmerInfo(seq.seq_, kmerLength, setReverse));
+				addKmersToMap(seq.seq_, kmerLength, allRef, setReverse);
+				totalInRef += len(seq) - kmerLength + 1;
+			}
+		}
+
+		uint32_t totalShared = 0;
+
+		std::set<std::string> kmersInInput = njh::vecToSet(getVectorOfMapKeys(allInput));
+		std::set<std::string> kmersInRef = njh::vecToSet(getVectorOfMapKeys(allRef));
+
+		std::vector<std::string> inInput;
+		std::vector<std::string> inRef;
+		std::vector<std::string> inBoth;
+
+		njh::decompose_sets(kmersInInput.begin(), kmersInInput.end(),
+			kmersInRef.begin(), kmersInRef.end(),
+			std::back_inserter(inInput),
+			std::back_inserter(inRef),
+			std::back_inserter(inBoth));
+
+
+
+		for(const auto & k : allInput) {
+			if(njh::in(k.first, allRef)) {
+				totalShared += std::min(k.second, allRef[k.first]);
+			}
+
+		}
+
+		allComparison << bfs::basename(setUp.pars_.ioOptions_.firstName_)
+					<< "\t" << bfs::basename(setUp.pars_.refIoOptions_.firstName_)
+					<< "\t" << kmerLength
+					<< "\t" << njh::boolToStr(false)
+					<< "\t" << totalShared
+					<< "\t" << static_cast<double>(totalShared + totalShared) / (totalInInput + totalInRef)
+					<< "\t" << static_cast<double>(totalShared) / std::min(totalInInput, totalInRef)
+					<< "\t" << totalInInput
+					<< "\t" << totalInRef
+					<< "\t" << inBoth.size()
+					<< "\t" << static_cast<double>(inBoth.size())/ static_cast<double>(inBoth.size() + inInput.size() + inRef.size())
+					<< "\t" << static_cast<double>(inBoth.size())/ static_cast<double>(std::min( inBoth.size() + inInput.size(), inBoth.size() +inRef.size()))
+					<< "\t" << inInput.size()
+					<< "\t" << inRef.size()
+					<< "\t" << inBoth.size() + inInput.size() + inRef.size()
+					<< std::endl;;
+
+	}
+	return 0;
+}
+
+
+
+
 int kmerExpRunner::kmerCompareTwoSetsOfContigs(const njh::progutils::CmdArgs & inputCommands){
 
 	bfs::path refContigs = "";
 	uint32_t kmerLength = 31;
+	bool setReverse = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -206,20 +328,49 @@ int kmerExpRunner::kmerCompareTwoSetsOfContigs(const njh::progutils::CmdArgs & i
 	auto refSeqs = SeqInput::getSeqVec<seqInfo>(setUp.pars_.refIoOptions_);
 
 
+	kmerInfo allInput;
+	kmerInfo allRef;
 	std::unordered_map<std::string, kmerInfo> inputSeqKmerInfos;
 	std::unordered_map<std::string, kmerInfo> refSeqKmerInfos;
 
 	for(const auto & seq : inputSeqs){
 		if(len(seq) >= kmerLength){
-			inputSeqKmerInfos.emplace(seq.name_, kmerInfo(seq.seq_, kmerLength, false));
+			inputSeqKmerInfos.emplace(seq.name_, kmerInfo(seq.seq_, kmerLength, setReverse));
+			allInput.updateKmers(seq.seq_, setReverse);
 		}
 	}
 
 	for(const auto & seq : refSeqs){
 		if(len(seq) >= kmerLength){
-			refSeqKmerInfos.emplace(seq.name_, kmerInfo(seq.seq_, kmerLength, false));
+			refSeqKmerInfos.emplace(seq.name_, kmerInfo(seq.seq_, kmerLength, setReverse));
+			allRef.updateKmers(seq.seq_, setReverse);
 		}
 	}
+
+	auto allDistComp = allRef.compareKmersDetailed(allInput);
+	{
+		OutputStream allComparison(njh::files::make_path(setUp.pars_.directoryName_, "allComparison.tsv"));
+		allComparison << "name\tref\tkmerLength\trevComp\ttotalShared\tdist\tdistLenAdjust\ttotalKmersIn1\ttotalKmersIn2\ttotalUniqueShared\tuniqDist\tuniqDistLenAdjust\ttotalUniqKmersIn1\ttotalUniqKmersIn2\ttotalUniq" << "\n";
+
+		allComparison << setUp.pars_.ioOptions_.firstName_
+					<< "\t" << setUp.pars_.refIoOptions_.firstName_
+					<< "\t" << kmerLength
+					<< "\t" << njh::boolToStr(false)
+					<< "\t" << allDistComp.totalShared_
+					<< "\t" << allDistComp.getDistTotalShared()
+					<< "\t" << allDistComp.getDistTotalSharedLenAdjusted()
+					<< "\t" << allDistComp.totalKmersIn1_
+					<< "\t" << allDistComp.totalKmersIn2_
+					<< "\t" << allDistComp.totalUniqShared_
+					<< "\t" << allDistComp.getDistUniqueShared()
+					<< "\t" << allDistComp.getDistUniqueSharedLenAdjusted()
+					<< "\t" << allDistComp.totalUniqKmersIn1_
+					<< "\t" << allDistComp.totalUniqKmersIn2_
+					<< "\t" << allDistComp.totalUniqBetween_
+					<< "\n";
+	}
+
+
 
 
 	struct GrowingSegment{
