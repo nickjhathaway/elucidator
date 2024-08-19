@@ -60,26 +60,24 @@ int genExpRunner::translateSeqsBasedOnGFF(const njh::progutils::CmdArgs & inputC
 
 	transPars.workingDirtory_ = setUp.pars_.directoryName_;
 	TranslatorByAlignment translator(transPars);
-  std::unordered_map<std::string, std::unordered_set<std::string>> counts;
+	//key1 = hap, key2 = sample, value = read counts
+  std::unordered_map<std::string, std::unordered_map<std::string, uint32_t>> counts;
 
   SeqInput seqReader(setUp.pars_.ioOptions_);
-	auto input = seqReader.readAllReads<seqInfo>();
-  {
-    uint32_t ongoingCount = 0;
-    for(const auto & seq : input ){
-      auto seqCount = std::ceil(seq.cnt_);
-      for(const auto count : iter::range(seqCount)){
-        std::string sample = njh::pasteAsStr("samp.", ongoingCount + count);
-        if(MetaDataInName::nameHasMetaData(seq.name_)){
-          MetaDataInName seqMeta(seq.name_);
-          if(seqMeta.containsMeta("sample")){
-            sample = seqMeta.getMeta("sample");
-          }
-        }
-        counts[seq.name_].emplace(sample);
-      }
-      ongoingCount += seqCount;
-    }
+  auto input = seqReader.readAllReads<seqInfo>(); {
+	  uint32_t ongoingCount = 0;
+	  for (const auto& seq: input) {
+		  auto seqCount = static_cast<uint32_t>(std::ceil(seq.cnt_));
+		  if (MetaDataInName::nameHasMetaData(seq.name_)) {
+			  MetaDataInName seqMeta(seq.name_);
+			  if (seqMeta.containsMeta("sample")) {
+				  counts[seq.name_][seqMeta.getMeta("sample")] = seqCount;
+			  }
+		  } else {
+			  counts[seq.name_][njh::pasteAsStr("samp.", ongoingCount)] = seqCount;
+		  }
+		  ++ongoingCount;
+	  }
   }
 	auto translatedRes = translator.run(setUp.pars_.ioOptions_, counts, variantCallerRunPars);
 

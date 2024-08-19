@@ -2191,7 +2191,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 						subRegionsSeqsUniq[subSeqs.first] = uniqSeqs;
 						SeqOutput::write(uniqSeqs.seqs_, SeqIOOptions::genFastaOutGz(njh::files::make_path(seqsDir, "uniq_" + subSeqs.first + ".fasta.gz")));
 						//samples names
-						auto sampNamesPerSeq = uniqSeqs.getSampleNamesPerSeqs();
+						auto sampNamesPerSeq = uniqSeqs.getSampleReadCntsPerSeqs();
 						auto allSamples = uniqSeqs.getAllSampleNames();
 						uint64_t maxLen = readVec::getMaxLength(uniqSeqs.seqs_);
 						readVec::getMaxLength(refSeq, maxLen);

@@ -225,7 +225,7 @@ int metaExpRunner::addMetaBySampleName(const njh::progutils::CmdArgs & inputComm
 
 int metaExpRunner::addMetaFieldToAll(const njh::progutils::CmdArgs & inputCommands){
 	bool overWriteMeta = false;
-
+	std::string metaTokenizer = ",";
 	std::string metaField;
 	std::string metaData;
 	seqSetUp setUp(inputCommands);
@@ -234,12 +234,22 @@ int metaExpRunner::addMetaFieldToAll(const njh::progutils::CmdArgs & inputComman
 	setUp.setOption(metaData, "--metaData", "The meta value to add for the field", true);
 	setUp.setOption(metaField, "--metaField", "Name of the meta data field", true);
 	setUp.setOption(overWriteMeta, "--overWriteMeta", "Over Write Meta Fields in names");
+	setUp.setOption(metaTokenizer, "--metaTokenizer", "meta Tokenizer for adding multiple at once");
+
 	setUp.processDefaultReader(true);
 	setUp.description_ = "Set meta field to a set value for all sequences";
 	setUp.examples_.emplace_back("MASTERPROGRAM SUBPROGRAM --metaData condition1 --metaField experiment --fasta infile.fasta");
 
 	setUp.finishSetUp(std::cout);
 
+
+	auto metaDataToks = tokenizeString(metaData, metaTokenizer);
+	auto metaFieldToks = tokenizeString(metaField, metaTokenizer);
+	if(metaDataToks.size() != metaFieldToks.size()) {
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << "metaDataToks.size(): " << metaDataToks.size() << " must equal metaFieldToks.size(): " << metaFieldToks.size() << "" << "\n";
+		throw std::runtime_error{ss.str()};
+	}
 
 	seqInfo seq;
 	SeqIO reader(setUp.pars_.ioOptions_);
@@ -250,7 +260,9 @@ int metaExpRunner::addMetaFieldToAll(const njh::progutils::CmdArgs & inputComman
 		if (MetaDataInName::nameHasMetaData(seq.name_)){
 			seqMeta = MetaDataInName(seq.name_);
 		}
-		seqMeta.addMeta(metaField, metaData, overWriteMeta);
+		for(const auto & tokEnum : iter::enumerate(metaFieldToks)) {
+			seqMeta.addMeta(tokEnum.element, metaDataToks[tokEnum.index], overWriteMeta);
+		}
 		if (MetaDataInName::nameHasMetaData(seq.name_)){
 			seqMeta.resetMetaInName(seq.name_);
 		}else{

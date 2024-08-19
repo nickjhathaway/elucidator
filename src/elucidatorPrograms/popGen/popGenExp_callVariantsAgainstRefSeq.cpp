@@ -175,7 +175,8 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 		inputSeqs.revCompSeqs();
 	}
 	//samples names
-	auto sampNamesPerSeq = inputSeqs.getSampleNamesPerSeqs();
+	auto sampReadCountsPerSeq = inputSeqs.getSampleReadCntsPerSeqs();
+
 	auto allSamples = inputSeqs.getAllSampleNames();
 	//rename based on freq
 	inputSeqs.renameBaseOnFreq(identifier);
@@ -199,7 +200,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 				refComps[pos].refAlnSeq_,
 				refComps[pos].queryAlnSeq_,
 				inputSeqs.seqs_[pos]->cnt_,
-				sampNamesPerSeq[pos],
+				sampReadCountsPerSeq[pos],
 				refComps[pos].comp_,
 				refRegion.start_);
 	}
@@ -382,7 +383,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 						//should log which ones have messed up translations
 					}else{
 						auto seqKey = inputSeqs.genSeqNameKey();
-						auto sampNamesPerKey = inputSeqs.getSampleNamesPerSeqs();
+						auto sampNamesPerKey = inputSeqs.getSampleReadCntsPerSeqs();
 						auto popCount = sampNamesPerKey.at(njh::mapAt(seqKey, seqName.first)).size();
 						transwriter.openWrite(transcript.second.translation_);
 						proteinVariants.at(transcript.first).addVariantInfo(
