@@ -184,7 +184,7 @@ create_dt(nhmmscan_hits_filtered_merged_noOverlap_table_hits)
 
 ```{r}
 #| column: screen-inset-shaded
-#| fig-height: !expr 'nrow(nhmmscan_hits_filtered_merged_noOverlap_table_hits) * 0.1'
+#| fig-height: !expr 'max(10,nrow(nhmmscan_hits_filtered_merged_noOverlap_table_hits) * 0.1)'
 ggplotly(domainPlot)
 ```
 )";
@@ -261,11 +261,11 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 
 	auto inputSeqFnp = njh::files::make_path(setUp.pars_.directoryName_, "inputSeqs.fasta");
 
-  auto noOverlapFiltAllModelsTrimFnp = njh::files::make_path(setUp.pars_.directoryName_, "noOverlapFiltAllModelsTrim.fasta");
-  auto noOverlapFiltFnp = njh::files::make_path(setUp.pars_.directoryName_, "noOverlapFiltHits.fasta");
+  auto noOverlapFiltAllModelsTrimFnp = njh::files::make_path(setUp.pars_.directoryName_, "noOverlapFiltAllModelsTrim");
+  auto noOverlapFiltFnp = njh::files::make_path(setUp.pars_.directoryName_, "noOverlapFiltHits");
 
-  auto noOverlapMergedFiltAllModelsTrimFnp = njh::files::make_path(setUp.pars_.directoryName_, "noOverlapMergedFiltAllModelsTrim.fasta");
-	auto noOverlapMergedFiltFnp = njh::files::make_path(setUp.pars_.directoryName_, "noOverlapMergedFiltHits.fasta");
+  auto noOverlapMergedFiltAllModelsTrimFnp = njh::files::make_path(setUp.pars_.directoryName_, "noOverlapMergedFiltAllModelsTrim");
+	auto noOverlapMergedFiltFnp = njh::files::make_path(setUp.pars_.directoryName_, "noOverlapMergedFiltHits");
 	auto hmmModelFnp = njh::files::make_path(setUp.pars_.directoryName_, "hmmModel.txt");
 
 	std::unordered_map<std::string, GenomicRegion> regionsByName;
@@ -384,11 +384,11 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 		seqInfo seq;
 		SeqInput reader(setUp.pars_.ioOptions_);
 
-		SeqOutput noOverlapFiltWriter(SeqIOOptions::genFastaOut(noOverlapFiltFnp));
-    SeqOutput noOverlapFiltAllModelsTrimWriter(SeqIOOptions::genFastaOut(noOverlapFiltAllModelsTrimFnp));
+		SeqOutput noOverlapFiltWriter(SeqIOOptions(njh::appendAsNeededRet(noOverlapFiltFnp.string(), SeqIOOptions::getOutExtension(setUp.pars_.ioOptions_.outFormat_)), setUp.pars_.ioOptions_.outFormat_));
+    SeqOutput noOverlapFiltAllModelsTrimWriter(SeqIOOptions(njh::appendAsNeededRet(noOverlapFiltAllModelsTrimFnp.string(), SeqIOOptions::getOutExtension(setUp.pars_.ioOptions_.outFormat_)), setUp.pars_.ioOptions_.outFormat_));
 
-    SeqOutput noOverlapMergedFiltWriter(SeqIOOptions::genFastaOut(noOverlapMergedFiltFnp));
-    SeqOutput noOverlapMergedFiltAllModelsTrimWriter(SeqIOOptions::genFastaOut(noOverlapMergedFiltAllModelsTrimFnp));
+    SeqOutput noOverlapMergedFiltWriter(SeqIOOptions(njh::appendAsNeededRet(noOverlapMergedFiltFnp.string(), SeqIOOptions::getOutExtension(setUp.pars_.ioOptions_.outFormat_)), setUp.pars_.ioOptions_.outFormat_));
+    SeqOutput noOverlapMergedFiltAllModelsTrimWriter(SeqIOOptions(njh::appendAsNeededRet(noOverlapMergedFiltAllModelsTrimFnp.string(), SeqIOOptions::getOutExtension(setUp.pars_.ioOptions_.outFormat_)), setUp.pars_.ioOptions_.outFormat_));
 
 
 		reader.openIn();
