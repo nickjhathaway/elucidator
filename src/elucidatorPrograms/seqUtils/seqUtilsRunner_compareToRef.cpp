@@ -42,7 +42,7 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 	bool dontSkipSameName = false;
 	OutOptions outOpts(bfs::path("refComparisonInfo.tab.txt"));
 	bool setReverse = false;
-
+	bool doDiagGlobal = false;
   seqUtilsSetUp setUp(inputCommands);
   setUp.pars_.colOpts_.kmerOpts_.kLength_ = 5;
   setUp.setOption(dontSkipSameName, "--dontSkipSameName", "By default reads with the same name are skipped, use this flag to compare reads even if they have the same name");
@@ -50,6 +50,7 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
   setUp.setOption(forceMatch, "--forceMatch", "Force finding a match");
   setUp.setOption(numThreads, "--numThreads", "Number of threads to use when comparing");
   setUp.setOption(setReverse, "--checkReverseComplement", "Check reverse complement");
+	setUp.setOption(doDiagGlobal, "--doDiagGlobal", "do Diag Global");
 
   setUp.processWritingOptions(outOpts);
   setUp.setUpCompareToRef();
@@ -134,7 +135,8 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 
   std::function<void()> compareInput = [&dontSkipSameName,&outMut,&profileInfoFile,&tempFile,&alnPool,
 																				&setUp,&inputSeqs,&refSeqs,&counter,&pBar,&posQueue,&kmerCutOff,
-																				&forceMatch, &setReverse](){
+																				&forceMatch, &setReverse,
+																				&doDiagGlobal](){
   	std::vector<uint32_t> subPositions;
   	auto curAligner = alnPool.popAligner();
   	while(posQueue.getVals(subPositions, 5	)){
@@ -164,7 +166,12 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 				      if(ref->compareKmers(*input).second < currentKmerCutOff){
 				       	continue;
 				      }
-							curAligner->alignCache(ref, input, setUp.pars_.local_);
+				    	if(doDiagGlobal) {
+				    		curAligner->alignCacheGlobalDiag(ref, input);
+				    	} else {
+				    		curAligner->alignCache(ref, input, setUp.pars_.local_);
+				    	}
+
 							double currentScore = 0;
 							if(setUp.pars_.colOpts_.alignOpts_.eventBased_) {
 								curAligner->profileAlignment(ref, input, false, true, false);

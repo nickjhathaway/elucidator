@@ -56,10 +56,36 @@ seqUtilsModRunner::seqUtilsModRunner()
 		addFunc("renameSeqNameToUniqueNames", renameSeqNameToUniqueNames, false),
 		addFunc("sortReadsPairedEnd", sortReadsPairedEnd, false),
 		addFunc("compSeq", compSeq, false),
+    	addFunc("changeLetterToOtherLetter", changeLetterToOtherLetter, false),
 
 
 },//
                     "seqUtilsMod") {}
+
+int seqUtilsModRunner::changeLetterToOtherLetter(const njh::progutils::CmdArgs & inputCommands){
+	char base = ' ';
+	char replacement = ' ';
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDefaultReader( true);
+	setUp.setOption(base, "--base", "Base to replace", true);
+	setUp.setOption(replacement, "--replacement", "replacement base", true);
+
+	setUp.finishSetUp(std::cout);
+
+	seqInfo seq;
+	SeqIO reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	reader.openOut();
+	std::regex baseRegex(std::string(1, base));
+	auto replacementStr = std::string(1, replacement);
+	while(reader.readNextRead(seq)){
+		seq.seq_ = std::regex_replace(seq.seq_,baseRegex, replacementStr);
+		reader.write(seq);
+	}
+	return 0;
+}
+
 
 int seqUtilsModRunner::increaseQualityScores(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t qualIncrease = 1;

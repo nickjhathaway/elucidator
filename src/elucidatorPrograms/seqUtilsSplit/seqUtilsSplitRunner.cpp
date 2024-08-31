@@ -353,13 +353,14 @@ int seqUtilsSplitRunner::getSimilarSequencesByKDist(const njh::progutils::CmdArg
 
 struct defaultSplitPars{
   bool mark_ = false;
-
+	bool include_ = false;
   SeqIOOptions incOpts_;
   SeqIOOptions excOpts_;
 
 };
 void defaultSplitSetUpOptions(seqSetUp & setUp, defaultSplitPars & pars){
-  setUp.setOption(pars.mark_, "--mark", "Mark the sequence names");
+	setUp.setOption(pars.include_, "--include", "Switch the exclusion and inclusion, by default most splitters exclude the search criteria");
+	setUp.setOption(pars.mark_, "--mark", "Mark the sequence names");
   setUp.processVerbose();
   // input file info
   setUp.processDefaultReader(true);
@@ -404,7 +405,10 @@ int seqUtilsSplitRunner::SeqSplitOnLenBelow(const njh::progutils::CmdArgs & inpu
   seqInfo seq;
   while(reader.readNextRead(seq)){
   	checker->checkRead(seq);
-    std::string condition = "";
+  	if(dSplitPars.include_) {
+  		seq.on_ = !seq.on_;
+  	}
+    std::string condition;
     if(seq.on_){
     	condition = "include";
     }else{
@@ -497,7 +501,10 @@ int seqUtilsSplitRunner::SeqSplitOnLenWithinMedianLen(const njh::progutils::CmdA
   seqInfo seq;
   while(reader.readNextRead(seq)){
   	checker->checkRead(seq);
-    std::string condition = "";
+  	if(dSplitPars.include_) {
+  		seq.on_ = !seq.on_;
+  	}
+    std::string condition;
     if(seq.on_){
     	condition = "include";
     }else{
@@ -536,7 +543,10 @@ int seqUtilsSplitRunner::SeqSplitOnLenWithin(const njh::progutils::CmdArgs & inp
   seqInfo seq;
   while(reader.readNextRead(seq)){
   	checker->checkRead(seq);
-    std::string condition = "";
+  	if(dSplitPars.include_) {
+  		seq.on_ = !seq.on_;
+  	}
+    std::string condition;
     if(seq.on_){
     	condition = "include";
     }else{
@@ -561,6 +571,7 @@ int seqUtilsSplitRunner::SeqSplitOnNameContainsPattern(const njh::progutils::Cmd
   setUp.processVerbose();
   // input file info
   setUp.processDefaultReader(true);
+	setUp.setOption(dSplitPars.include_, "--include", "Switch the exclusion and inclusion, by default most splitters exclude the search criteria");
 
   dSplitPars.excOpts_ = setUp.pars_.ioOptions_;
   dSplitPars.incOpts_ = setUp.pars_.ioOptions_;
@@ -586,10 +597,12 @@ int seqUtilsSplitRunner::SeqSplitOnNameContainsPattern(const njh::progutils::Cmd
   reader.openIn();
 	seqInfo seq;
 	while (reader.readNextRead(seq)) {
-		std::smatch match;
-		std::string condition = "";
-
-		if (std::regex_match(seq.name_, pat)) {
+		auto searchResults = std::regex_match(seq.name_, pat);
+		std::string condition;
+		if(dSplitPars.include_) {
+			searchResults = !searchResults;
+		}
+		if (searchResults) {
 			condition = "exclude";
 		} else {
 			condition = "include";
@@ -624,7 +637,10 @@ int seqUtilsSplitRunner::SeqSplitOnNameContains(const njh::progutils::CmdArgs & 
   seqInfo seq;
   while(reader.readNextRead(seq)){
   	checker->checkRead(seq);
-    std::string condition = "";
+  	if(dSplitPars.include_) {
+  		seq.on_ = !seq.on_;
+  	}
+    std::string condition;
     if(seq.on_){
     	condition = "include";
     }else{
@@ -661,7 +677,10 @@ int seqUtilsSplitRunner::SeqSplitOnSeqContains(const njh::progutils::CmdArgs & i
   seqInfo seq;
   while(reader.readNextRead(seq)){
   	checker->checkRead(seq);
-    std::string condition = "";
+  	if(dSplitPars.include_) {
+  		seq.on_ = !seq.on_;
+  	}
+    std::string condition;
     if(seq.on_){
     	condition = "include";
     }else{
@@ -696,7 +715,10 @@ int seqUtilsSplitRunner::SeqSplitOnLenAbove(const njh::progutils::CmdArgs & inpu
   seqInfo seq;
   while(reader.readNextRead(seq)){
   	checker->checkRead(seq);
-    std::string condition = "";
+  	if(dSplitPars.include_) {
+  		seq.on_ = !seq.on_;
+  	}
+    std::string condition;
     if(seq.on_){
     	condition = "include";
     }else{
@@ -736,7 +758,10 @@ int seqUtilsSplitRunner::SeqSplitOnLenBetween(const njh::progutils::CmdArgs & in
   seqInfo seq;
   while(reader.readNextRead(seq)){
   	checker->checkRead(seq);
-    std::string condition = "";
+  	if(dSplitPars.include_) {
+  		seq.on_ = !seq.on_;
+  	}
+    std::string condition;
     if(seq.on_){
     	condition = "include";
     }else{
@@ -777,7 +802,10 @@ int seqUtilsSplitRunner::SeqSplitOnQualityWindow(const njh::progutils::CmdArgs &
   seqInfo seq;
   while(reader.readNextRead(seq)){
   	checker->checkRead(seq);
-    std::string condition = "";
+  	if(dSplitPars.include_) {
+  		seq.on_ = !seq.on_;
+  	}
+    std::string condition;
     if(seq.on_){
     	condition = "include";
     }else{
@@ -816,7 +844,10 @@ int seqUtilsSplitRunner::SeqSplitOnQualityCheck(const njh::progutils::CmdArgs & 
   seqInfo seq;
   while(reader.readNextRead(seq)){
   	checker->checkRead(seq);
-    std::string condition = "";
+  	if(dSplitPars.include_) {
+  		seq.on_ = !seq.on_;
+  	}
+    std::string condition;
     if(seq.on_){
     	condition = "include";
     }else{
@@ -873,7 +904,10 @@ int seqUtilsSplitRunner::SeqSplitOnNucelotideComp(const njh::progutils::CmdArgs 
   seqInfo seq;
   while(reader.readNextRead(seq)){
   	checker->checkRead(seq);
-    std::string condition = "";
+  	if(dSplitPars.include_) {
+  		seq.on_ = !seq.on_;
+  	}
+    std::string condition;
     if(seq.on_){
     	condition = "include";
     }else{

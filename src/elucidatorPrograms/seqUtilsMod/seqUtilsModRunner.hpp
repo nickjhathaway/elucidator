@@ -67,5 +67,7 @@ class seqUtilsModRunner : public njh::progutils::ProgramRunner {
   static int inverseLetterCase(const njh::progutils::CmdArgs & inputCommands);
   static int changeLetterCase(const njh::progutils::CmdArgs & inputCommands);
 
+	static int changeLetterToOtherLetter(const njh::progutils::CmdArgs & inputCommands);
+
 };
 } // namespace njhseq

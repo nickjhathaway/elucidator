@@ -64,6 +64,7 @@ seqUtilsInfoRunner::seqUtilsInfoRunner()
 	addFunc("multipleAlnProteinToPcaInput", multipleAlnProteinToPcaInput, false),
 	addFunc("getSlidingEntropy", getSlidingEntropy, false),
 	addFunc("getSlidingEntropyGenomicRegion", getSlidingEntropyGenomicRegion, false),
+    	addFunc("findExactMatches", findExactMatches, false),
 	},
                     "seqUtilsInfo") {}
 //
@@ -1768,5 +1769,65 @@ int seqUtilsInfoRunner::genPsuedoMismatchMinTree(const njh::progutils::CmdArgs &
 
 	return 0;
 }
+
+
+int seqUtilsInfoRunner::findExactMatches(const njh::progutils::CmdArgs & inputCommands) {
+	OutOptions outOpts(bfs::path(""), ".bed");
+	bool checkReverseComp = false;
+	SeqIOOptions searchSeqs;
+	seqSetUp setUp(inputCommands);
+	setUp.description_ = "Find the exact match locations of a set of sequences within another sequence file";
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.processReadInNames(true);
+	setUp.setOption(checkReverseComp, "--checkReverseComp", "check the Reverse Comp of the main seqs as well");
+	setUp.processSeqIoFilename(searchSeqs, "searchSeqs", "true");
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	auto mainSeqs = SeqInput::getSeqVec<seqInfo>(setUp.pars_.ioOptions_);
+
+	OutputStream out(outOpts);
+	out << "#ref\tref_start\tref_end\tquery\tlength\tstrand" << std::endl;
+	{
+		SeqInput reader(searchSeqs	);
+		seqInfo seq;
+		reader.openIn();
+		while (reader.readNextRead(seq)) {
+			for (const auto& mainSeq: mainSeqs) {
+				{
+					//forward
+					auto occurs = findOccurences(mainSeq.seq_, seq.seq_);
+					for (const auto& occ: occurs) {
+						out << mainSeq.name_
+								<< "\t" << occ
+								<< "\t" << occ + seq.seq_.size()
+								<< "\t" << seq.name_
+								<< "\t" << seq.seq_.size()
+								<< "\t" << "+" << std::endl;
+					}
+				}
+				if(checkReverseComp) {
+					seq.reverseComplementRead();
+					auto occurs = findOccurences(mainSeq.seq_, seq.seq_);
+					for (const auto& occ: occurs) {
+						out << mainSeq.name_
+								<< "\t" << occ
+								<< "\t" << occ + seq.seq_.size()
+								<< "\t" << seq.name_
+								<< "\t" << seq.seq_.size()
+								<< "\t" << "-" << std::endl;
+					}
+				}
+			}
+		}
+	}
+
+	return 0;
+}
+
+
+
+
 
 } // namespace njhseq

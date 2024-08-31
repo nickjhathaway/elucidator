@@ -69,6 +69,7 @@ class seqUtilsInfoRunner : public njh::progutils::ProgramRunner {
 	static int getSlidingEntropyGenomicRegion(const njh::progutils::CmdArgs & inputCommands);
 
 
+	static int findExactMatches(const njh::progutils::CmdArgs & inputCommands);
 
 
 };
