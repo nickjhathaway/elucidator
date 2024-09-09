@@ -37,6 +37,7 @@ kmerSetExpRunner::kmerSetExpRunner()
           	addFunc("extractByKmerUniqueSets", extractByKmerUniqueSets, false),
           	addFunc("getBasicKmerSetCountInfo", getBasicKmerSetCountInfo, false),
           	addFunc("createMinimallyNonRedundantDownSampledSet", createMinimallyNonRedundantDownSampledSet, false),
+          	addFunc("createKmerPresenceMatrixFromSets", createKmerPresenceMatrixFromSets, false),
 
 //,
 //
