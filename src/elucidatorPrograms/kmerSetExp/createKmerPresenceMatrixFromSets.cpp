@@ -13,6 +13,8 @@
 namespace njhseq {
 
 
+
+
 int kmerSetExpRunner::createKmerPresenceMatrixFromSets(const njh::progutils::CmdArgs & inputCommands) {
   OutOptions outOpts("", ".tsv.gz");
   KmerGatherer::KmerGathererPars countPars;
@@ -29,10 +31,8 @@ int kmerSetExpRunner::createKmerPresenceMatrixFromSets(const njh::progutils::Cmd
   setUp.setOption(countPars.numThreads_, "--numThreads", "num Threads");
   setUp.processWritingOptions(outOpts);
   setUp.finishSetUp(std::cout);
-
   KmerGatherer kGather(countPars);
   OutputStream out(outOpts);
-
   auto allKmers = kGather.getUniqueKmersSetFromFastas(fastaFiles);
   std::set<std::string> allUniqueKmers;
   for(const auto & set : allKmers) {
@@ -45,11 +45,11 @@ int kmerSetExpRunner::createKmerPresenceMatrixFromSets(const njh::progutils::Cmd
     fastaFilesStrs.emplace_back(fnp.string());
   }
   njh::naturalSortNameSet(fastaFilesStrs);
+	// naturalSortNameSet(fastaFilesStrs);
   for(const auto & fnp : fastaFilesStrs) {
     out << "\t" << bfs::basename(fnp);
   }
   out << std::endl;
-
   for(const auto & k : allUniqueKmers) {
     out << k;
     for(const auto & fnp : fastaFilesStrs) {

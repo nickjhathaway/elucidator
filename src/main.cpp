@@ -84,12 +84,18 @@ namespace njhseq {
 //	std::cout << "}" << std::endl;
 //}
 
+
+
+
+
+
+
 }  // namespace njhseq
 
 
 int main(int argc, char* argv[]) {
-//	njhseq::test();
-//	return 0;
+	// njhseq::test();
+	// return 0;
 
 	try {
 		njhseq::elucidatorRunner runner;
