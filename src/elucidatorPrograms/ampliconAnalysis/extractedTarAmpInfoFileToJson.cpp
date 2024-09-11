@@ -55,7 +55,7 @@ int ampliconAnalysisRunner::combingAllIntoPMOJson(const njh::progutils::CmdArgs 
   outJson["specimen_infos"] = specimen_infos_input_json;
   outJson["sequencing_infos"] = sequencing_info_input_json;
   outJson["experiment_infos"] = experiment_infos_input_json;
-  outJson["panel_info"] = panel_info_input_json;
+  outJson["panel_info"][panel_info_input_json.get(std::string("panel_id"), "").asString()] = panel_info_input_json;
   outJson["microhaplotypes_detected"][microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json["microhaplotypes_detected"].get(std::string("tar_amp_bioinformatics_info_id"), "").asString()] = microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json["microhaplotypes_detected"];
   outJson["representative_microhaplotype_sequences"][microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json["representative_microhaplotype_sequences"].get(std::string("representative_microhaplotype_id"), "").asString()] = microhaplotypes_detected_and_representative_microhaplotype_sequences_input_json["representative_microhaplotype_sequences"];
   if(!target_demultiplexed_experiment_samples_json_fnp.empty()) {
