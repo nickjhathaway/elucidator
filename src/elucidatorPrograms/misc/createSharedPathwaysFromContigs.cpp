@@ -1072,7 +1072,6 @@ Below is plotted the expected heterozygosity for each sub region with the red bl
 variableRegionLoc = readr::read_tsv("subRegionInfo/0_ref_variable_genomic.bed", col_names = F) %>%
   rename(target = X4)
 variableRegionDiv = readr::read_tsv("subRegionInfo/divMeasuresPerVarRegion.tab.txt", col_names = T) %>%
-  rename(target = id) %>%
   left_join(variableRegionLoc)
 create_dt(variableRegionLoc)
 create_dt(variableRegionDiv)
