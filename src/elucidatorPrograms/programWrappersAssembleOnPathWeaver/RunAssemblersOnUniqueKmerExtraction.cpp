@@ -93,7 +93,7 @@ public:
 
 		TwoBit::TwoBitFile treader(inputPars_.twobitFnp_.string());
 		refFnp_ = njh::files::make_path(inputPars_.outputDir_, "allRefs.fasta");
-		SeqOutput writer(SeqIOOptions::genFastqOut(refFnp_));
+		SeqOutput writer(SeqIOOptions::genFastaOut(refFnp_));
 		for(const auto & region : inputRegions_) {
 			writer.openWrite(region.extractSeq(treader));
 		}
