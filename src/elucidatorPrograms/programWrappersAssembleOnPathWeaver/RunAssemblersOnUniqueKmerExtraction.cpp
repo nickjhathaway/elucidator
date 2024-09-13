@@ -54,7 +54,7 @@ public:
 	explicit OtherAssemblersUtilityForUniqueKmerExtraction(InputPars pars): inputPars_(std::move(pars)){
 		regInfo_ = std::make_shared<BamRegionInvestigator::RegionInfo>(GenomicRegion(Bed3RecordCore(inputPars_.regionUid_, 0, 1) ) );
 
-		finalExtractionDir_ = njh::files::make_path(inputPars_.outputDir_, "finalExtraction");
+		finalExtractionDir_ = njh::files::make_path(inputPars_.extractionOutputDir_, "finalExtraction");
 		//first extract the reads
 		pairedR1Fnp_ = njh::files::make_path(finalExtractionDir_, inputPars_.regionUid_ + "_R1.fastq.gz");
 		pairedR2Fnp_ = njh::files::make_path(finalExtractionDir_, inputPars_.regionUid_ + "_R2.fastq.gz");
