@@ -38,7 +38,7 @@ public:
 
 		void setPars(seqSetUp & setUp){
 			setUp.setOption(bedFile_, "--bed", "The Regions to analyze", true);
-			setUp.setOption(twobitFnp_, "--twobitFnp_", "A twobit Fnp to extract ref from", true);
+			setUp.setOption(twobitFnp_, "--twobitFnp,--twobitFnp_", "A twobit Fnp to extract ref from", true);
 			setUp.setOption(extractionOutputDir_, "--kmerExtractionDir", "The kmer extraction directory", true);
 			setUp.setOption(sample_, "--sample", "sample name", true);
 			setUp.setOption(regionUid_, "--regionUid", "region ID", true);
