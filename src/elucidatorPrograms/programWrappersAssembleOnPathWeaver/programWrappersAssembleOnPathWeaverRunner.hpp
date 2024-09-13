@@ -19,6 +19,9 @@ class programWrappersAssembleOnPathWeaverRunner : public njh::progutils::Program
  public:
 	programWrappersAssembleOnPathWeaverRunner();
 
+
+
+
 	static int runUnicyclerOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int runSpadesOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
 	static int runMegahitOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands);
@@ -45,6 +48,28 @@ class programWrappersAssembleOnPathWeaverRunner : public njh::progutils::Program
 	static int runIDBAUDOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
 	static int runMIRAOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
 	static int runFermiLiteOnPathWeaverRegionsAndUnmapped(const njh::progutils::CmdArgs & inputCommands);
+
+
+
+
+
+
+
+
+
+
+	static int runUnicyclerOnUniqueKmerExtraction(const njh::progutils::CmdArgs & inputCommands);
+	static int runSpadesOnUniqueKmerExtraction(const njh::progutils::CmdArgs & inputCommands);
+	static int runMegahitOnUniqueKmerExtraction(const njh::progutils::CmdArgs & inputCommands);
+	static int runSavageOnUniqueKmerExtraction(const njh::progutils::CmdArgs & inputCommands);
+	static int runPolyteOnUniqueKmerExtraction(const njh::progutils::CmdArgs & inputCommands);
+	static int runVelvetOptimizerAndMetaVelvetOnUniqueKmerExtraction(const njh::progutils::CmdArgs & inputCommands);
+	static int runPRICEOnUniqueKmerExtraction(const njh::progutils::CmdArgs & inputCommands);
+	static int runTrinityOnUniqueKmerExtraction(const njh::progutils::CmdArgs & inputCommands);
+	static int runRayOnUniqueKmerExtraction(const njh::progutils::CmdArgs & inputCommands);
+	static int runIDBAUDOnUniqueKmerExtraction(const njh::progutils::CmdArgs & inputCommands);
+	static int runMIRAOnUniqueKmerExtraction(const njh::progutils::CmdArgs & inputCommands);
+	static int runFermiLiteOnUniqueKmerExtraction(const njh::progutils::CmdArgs & inputCommands);
 
 
 };

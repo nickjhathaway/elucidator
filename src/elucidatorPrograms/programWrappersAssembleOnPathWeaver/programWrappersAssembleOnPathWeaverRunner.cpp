@@ -52,10 +52,29 @@ programWrappersAssembleOnPathWeaverRunner::programWrappersAssembleOnPathWeaverRu
 					 addFunc("runRayOnPathWeaverRegionsAndUnmapped", runRayOnPathWeaverRegionsAndUnmapped, false),
 					 addFunc("runMIRAOnPathWeaverRegionsAndUnmapped", runMIRAOnPathWeaverRegionsAndUnmapped, false),
 					 addFunc("runFermiLiteOnPathWeaverRegionsAndUnmapped", runFermiLiteOnPathWeaverRegionsAndUnmapped, false),
+
+
+
+
+
+
+          	addFunc("runUnicyclerOnUniqueKmerExtraction", runUnicyclerOnUniqueKmerExtraction, false),
+						addFunc("runSpadesOnUniqueKmerExtraction", runSpadesOnUniqueKmerExtraction, false),
+          	addFunc("runMegahitOnUniqueKmerExtraction", runMegahitOnUniqueKmerExtraction, false),
+          	addFunc("runSavageOnUniqueKmerExtraction", runSavageOnUniqueKmerExtraction, false),
+						addFunc("runPolyteOnUniqueKmerExtraction", runPolyteOnUniqueKmerExtraction, false),
+						addFunc("runVelvetOptimizerAndMetaVelvetOnUniqueKmerExtraction", runVelvetOptimizerAndMetaVelvetOnUniqueKmerExtraction, false),
+						addFunc("runPRICEOnUniqueKmerExtraction", runPRICEOnUniqueKmerExtraction, false),
+						addFunc("runTrinityOnUniqueKmerExtraction", runTrinityOnUniqueKmerExtraction, false),
+						addFunc("runRayOnUniqueKmerExtraction", runRayOnUniqueKmerExtraction, false),
+						addFunc("runIDBAUDOnUniqueKmerExtraction", runIDBAUDOnUniqueKmerExtraction, false),
+						addFunc("runMIRAOnUniqueKmerExtraction", runMIRAOnUniqueKmerExtraction, false),
+						addFunc("runFermiLiteOnUniqueKmerExtraction", runFermiLiteOnUniqueKmerExtraction, false),
            },//,
           "programWrappersAssembleOnPathWeaverRunner") {
 
 }
+
 
 
 int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands) {
