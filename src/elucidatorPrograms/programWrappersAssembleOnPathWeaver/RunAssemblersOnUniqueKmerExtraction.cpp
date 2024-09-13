@@ -46,7 +46,7 @@ public:
 			setUp.setOption(extraProgramOptions_, "--extraProgramOptions", "extra program Options");
 			setUp.setOption(minFinalLength_, "--minFinalLength", "min Final Length");
 			setUp.setOption(reOrientingKmerLength_, "--reOrientingKmerLength", "reOrientingKmerLength Length");
-			setUp.processDirectoryOutputName(njh::pasteAsStr(njh::files::make_path(extractionOutputDir_, "finalExtraction"),regionUid_ +  "_" + programName_ + "_TODAY"), true);
+			setUp.processDirectoryOutputName(njh::pasteAsStr(njh::files::make_path(extractionOutputDir_, "finalExtraction", regionUid_ +  "_" + programName_)), true);
 			outputDir_ = setUp.pars_.directoryName_;
 		}
 	};
