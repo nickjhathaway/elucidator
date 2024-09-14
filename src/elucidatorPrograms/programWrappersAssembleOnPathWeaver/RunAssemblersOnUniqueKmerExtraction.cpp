@@ -825,9 +825,14 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnUniqueKmerExtraction(c
 	setUp.processVerbose();
 	OtherAssemblersUtilityForUniqueKmerExtraction::InputPars inPars;
 	inPars.programName_ = "spades";
-	inPars.setPars(setUp);
 	setUp.setOption(runMeta, "--runMeta", "Run metaspades");
 	setUp.setOption(runRna, "--runRna", "Run rnaspades");
+	if (runMeta) {
+		inPars.programName_ = "metaspades";
+	} else if (runRna) {
+		inPars.programName_ = "rnaspades";
+	}
+	inPars.setPars(setUp);
 
 	setUp.setOption(spadesOutDir,     "--spadesOutDir",     "spades Out Directory name, will be relative to final pass directory");
 
@@ -835,11 +840,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnUniqueKmerExtraction(c
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
 	njh::sys::requireExternalProgramThrow("spades.py");
-	if (runMeta) {
-		inPars.programName_ = "metaspades";
-	} else if (runRna) {
-		inPars.programName_ = "rnaspades";
-	}
+
 	OtherAssemblersUtilityForUniqueKmerExtraction utility(inPars);
 	auto outputAboveCutOffSeqOpts = SeqIOOptions::genFastaOut(utility.outputAboveCutOffFnp_);
 	SeqOutput outputAboveCutOffWriter(outputAboveCutOffSeqOpts);
