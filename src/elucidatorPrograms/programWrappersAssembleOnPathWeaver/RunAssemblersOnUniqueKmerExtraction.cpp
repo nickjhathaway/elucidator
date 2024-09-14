@@ -299,7 +299,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnUniqueKmerExtraction(con
 			seqMeta.resetMetaInName(seq->seqBase_.name_);
 			seq->seqBase_.frac_ = assembleInfo.coverage_/totalCoverage;
 			seq->seqBase_.cnt_ = assembleInfo.seqNumber_;
-			seq->seqBase_.name_ += njh::pasteAsStr("_t", assembleInfo.seqNumber_);
+			// seq->seqBase_.name_ += njh::pasteAsStr("_t", assembleInfo.seqNumber_);
 		}
 
 		OutOptions trimmedContigInfoOpts(njh::files::make_path(MIRAFullOutputDir, "trimmed_reOriented_contigs_outputInfo.tab.txt"));
