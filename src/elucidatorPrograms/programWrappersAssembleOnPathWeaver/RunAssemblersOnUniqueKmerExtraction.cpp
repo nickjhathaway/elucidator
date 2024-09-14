@@ -819,6 +819,7 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnUniqueKmerExtraction(c
 
 	bool runMeta = false;
 	bool runRna = false;
+	bool useHardFiltForRna = false;
 	bfs::path spadesOutDir = "spadesOut";
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
@@ -827,6 +828,8 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnUniqueKmerExtraction(c
 	inPars.programName_ = "spades";
 	setUp.setOption(runMeta, "--runMeta", "Run metaspades");
 	setUp.setOption(runRna, "--runRna", "Run rnaspades");
+	setUp.setOption(useHardFiltForRna, "--useHardFiltForRna", "use Hard filt transcripts for when running in rna mode");
+
 	if (runMeta) {
 		inPars.programName_ = "metaspades";
 	} else if (runRna) {
@@ -894,7 +897,14 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnUniqueKmerExtraction(c
 		spadesRunOutputLogOut << njh::json::toJson(spadesRunOutput) << std::endl;
 
 		auto contigsFnp = njh::files::make_path(spadesFullOutputDir, "contigs.fasta");
+		if(runRna) {
+			if(useHardFiltForRna) {
+				contigsFnp = njh::files::make_path(spadesFullOutputDir, "hard_filtered_transcripts.fasta");
+			} else {
+				contigsFnp = njh::files::make_path(spadesFullOutputDir, "soft_filtered_transcripts.fasta");
+			}
 
+		}
 
 		auto contigsSeqIoOpts = SeqIOOptions::genFastaIn(contigsFnp);
 //				contigsSeqIoOpts.includeWhiteSpaceInName_ = false;
