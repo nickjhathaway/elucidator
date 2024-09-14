@@ -818,6 +818,7 @@ int programWrappersAssembleOnPathWeaverRunner::runUnicyclerOnUniqueKmerExtractio
 int programWrappersAssembleOnPathWeaverRunner::runSpadesOnUniqueKmerExtraction(const njh::progutils::CmdArgs & inputCommands) {
 
 	bool runMeta = false;
+	bool runRna = false;
 	bfs::path spadesOutDir = "spadesOut";
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
@@ -825,17 +826,20 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnUniqueKmerExtraction(c
 	OtherAssemblersUtilityForUniqueKmerExtraction::InputPars inPars;
 	inPars.programName_ = "spades";
 	inPars.setPars(setUp);
-	setUp.setOption(runMeta, "--runMeta", "Run Meta");
-	if(runMeta){
-		spadesOutDir = "metaspadesOut";
-	}
+	setUp.setOption(runMeta, "--runMeta", "Run metaspades");
+	setUp.setOption(runRna, "--runRna", "Run rnaspades");
+
 	setUp.setOption(spadesOutDir,     "--spadesOutDir",     "spades Out Directory name, will be relative to final pass directory");
 
 
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
 	njh::sys::requireExternalProgramThrow("spades.py");
-
+	if (runMeta) {
+		inPars.programName_ = "metaspades";
+	} else if (runRna) {
+		inPars.programName_ = "rnaspades";
+	}
 	OtherAssemblersUtilityForUniqueKmerExtraction utility(inPars);
 	auto outputAboveCutOffSeqOpts = SeqIOOptions::genFastaOut(utility.outputAboveCutOffFnp_);
 	SeqOutput outputAboveCutOffWriter(outputAboveCutOffSeqOpts);
@@ -855,8 +859,10 @@ int programWrappersAssembleOnPathWeaverRunner::runSpadesOnUniqueKmerExtraction(c
 		std::stringstream spadesCmdStream;
 		spadesCmdStream << "cd " << regionOutputDir;
 		if(runMeta){
-			spadesCmdStream << " && metaspades.py ";
-		}else{
+			spadesCmdStream << " && spades.py --meta ";
+		}else if(runRna) {
+			spadesCmdStream << " && spades.py --rna ";
+		} else{
 			spadesCmdStream << " && spades.py ";
 		}
 
@@ -2423,7 +2429,7 @@ int programWrappersAssembleOnPathWeaverRunner::runPRICEOnUniqueKmerExtraction(co
 	OtherAssemblersUtilityForUniqueKmerExtraction::InputPars inPars;
 	inPars.programName_ = "PRICE";
 	inPars.setPars(setUp);
-	setUp.setOption(insertSize,     "--insertSize",     "PRICE insert Size");
+	setUp.setOption(insertSize,     "--insertSize",     "PRICE insert Size", true);
 
 	setUp.setOption(PRICEOutDir,     "--PRICEOutDir",     "PRICE Out Directory name, will be relative to final pass directory");
 	setUp.finishSetUp(std::cout);
