@@ -44,7 +44,7 @@ bamExpRunner::bamExpRunner()
 					 addFunc("bamReadProfiling", bamReadProfiling, false),
 					 addFunc("bamToFastq", bamToFastq, false),
 					 addFunc("getInsertSizesStats", getInsertSizesStats, false),
-					 addFunc("BamExtractReadsFromRegeion", BamExtractReadsFromRegion, false),
+					 addFunc("BamExtractReadsFromRegion", BamExtractReadsFromRegion, false),
 					 addFunc("printBamRefIds", printBamRefIds, false),
 					 addFunc("bamToBed", bamToBed, false),
 					 addFunc("getUnmappedAlnsFromBam", getUnmappedAlnsFromBam, false),
