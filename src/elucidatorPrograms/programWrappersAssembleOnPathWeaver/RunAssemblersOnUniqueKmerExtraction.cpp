@@ -1550,6 +1550,7 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnUniqueKmerExtraction(
 	setUp.processDebug();
 	setUp.processVerbose();
 	OtherAssemblersUtilityForUniqueKmerExtraction::InputPars inPars;
+	inPars.minFinalLength_ = 100;
 	inPars.programName_ = "Trinity";
 	inPars.setPars(setUp);
 	setUp.setOption(TrinityMaxMemory, "--TrinityMaxMemory", "Trinity Max Memory (in gigabytes)");
@@ -1606,8 +1607,8 @@ int programWrappersAssembleOnPathWeaverRunner::runTrinityOnUniqueKmerExtraction(
 		OutputStream TrinityRunOutputLogOut(TrinityRunOutputLogOpts);
 		TrinityRunOutputLogOut << njh::json::toJson(TrinityRunOutput) << std::endl;
 
-		auto contigsFnp = njh::files::make_path(TrinityFullOutputDir, "Trinity.fasta");
-
+		// auto contigsFnp = njh::files::make_path(TrinityFullOutputDir, "Trinity.fasta");
+		auto contigsFnp = njh::files::make_path(TrinityFullOutputDir.string() + ".Trinity.fasta");
 		auto contigsSeqIoOpts = SeqIOOptions::genFastaIn(contigsFnp);
 		contigsSeqIoOpts.includeWhiteSpaceInName_ = false;
 		contigsSeqIoOpts.lowerCaseBases_ = "upper";
