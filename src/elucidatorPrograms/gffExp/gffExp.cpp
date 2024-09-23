@@ -1369,6 +1369,10 @@ int gffExpRunner::reorientBedToIntersectingGeneInGff(const njh::progutils::CmdAr
 			for(auto & inputRegion : beds){
 				if(gRegion.overlaps(*inputRegion)){
 					inputRegion->strand_ = gRegion.reverseSrand_ ? '-' : '+';
+					MetaDataInName overlapRegionInfo;
+					overlapRegionInfo.addMeta("ID", gRecord->getIDAttr());
+					overlapRegionInfo.addMeta("feature", gRecord->type_);
+					inputRegion->extraFields_.emplace_back(overlapRegionInfo.createMetaName());
 				}
 			}
 		}
