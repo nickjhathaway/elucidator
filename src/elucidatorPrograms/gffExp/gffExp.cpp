@@ -1361,18 +1361,14 @@ int gffExpRunner::reorientBedToIntersectingGeneInGff(const njh::progutils::CmdAr
 	OutOptions outOptsJson(outOpts.outFilename_);
 	outOptsJson.outExtention_ = ".json";
 	outOptsJson.transferOverwriteOpts(outOpts);
-
+	std::unordered_map<uint32_t, std::vector<GFFCore>> regionsForInput;
 	while (nullptr != gRecord) {
 
 		if(njh::in(gRecord->type_, features)){
 			auto gRegion = GenomicRegion(*gRecord);
-			for(auto & inputRegion : beds){
-				if(gRegion.overlaps(*inputRegion)){
-					inputRegion->strand_ = gRegion.reverseSrand_ ? '-' : '+';
-					MetaDataInName overlapRegionInfo;
-					overlapRegionInfo.addMeta("ID", gRecord->getIDAttr());
-					overlapRegionInfo.addMeta("feature", gRecord->type_);
-					inputRegion->extraFields_.emplace_back(overlapRegionInfo.createMetaName());
+			for(const auto & inputRegion : iter::enumerate(beds)){
+				if(gRegion.overlaps(*inputRegion.element)){
+					regionsForInput[inputRegion.index].emplace_back(*gRecord);
 				}
 			}
 		}
@@ -1390,6 +1386,24 @@ int gffExpRunner::reorientBedToIntersectingGeneInGff(const njh::progutils::CmdAr
 		gRecord = reader.readNextRecord();
 		// ++count;
 	}
+	for(const auto & regionForInput : regionsForInput) {
+		double bestOverlap = 0;
+		uint32_t bestOverlapIndex = 0;
+		for(const auto & overlapRegion : iter::enumerate(regionForInput.second)) {
+			auto overlap = static_cast<double>(GenomicRegion(overlapRegion.element).getOverlapLen(*beds[regionForInput.first]));
+			double overlapFrac = overlap/beds[regionForInput.first]->length();
+			if(overlapFrac > bestOverlap) {
+				bestOverlap = overlapFrac;
+				bestOverlapIndex = overlapRegion.index;
+			}
+		}
+		beds[regionForInput.first]->strand_ = regionForInput.second[bestOverlapIndex].isReverseStrand() ? '-' : '+';
+		MetaDataInName overlapRegionInfo;
+		overlapRegionInfo.addMeta("ID", regionForInput.second[bestOverlapIndex].getIDAttr());
+		overlapRegionInfo.addMeta("feature", regionForInput.second[bestOverlapIndex].type_);
+		beds[regionForInput.first]->extraFields_.emplace_back(overlapRegionInfo.createMetaName());
+	}
+
 	for(const auto & bed : beds){
 		out << bed->toDelimStrWithExtra() << std::endl;
 	}
