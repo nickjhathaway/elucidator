@@ -423,6 +423,10 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 					meta.addMeta("trimLen", region.length(), true);
 					meta.addMeta("trimCov", region.length()/static_cast<double>(len(seq)), true);
 					meta.addMeta("revStrand", region.reverseStrand(), true);
+					if(subSeq.nameHasMetaData()) {
+						MetaDataInName nameMeta(subSeq.name_);
+						meta.addMeta(nameMeta, true);
+					}
 					meta.resetMetaInName(subSeq.name_);
 					noOverlapMergedFiltWriter.write(subSeq);
 				}
@@ -485,7 +489,13 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 					meta.addMeta("scoreNorm", hit.modelScore_/region.length(), true);
 					meta.addMeta("evalue", hit.modelEvalue_, true);
 					meta.addMeta("model", hit.targetName_);
-					meta.addMeta("ID", hit.targetDesc_);
+					if(!hit.targetDesc_.empty()) {
+						meta.addMeta("ID", hit.targetDesc_);
+					}
+					if(subSeq.nameHasMetaData()) {
+						MetaDataInName nameMeta(subSeq.name_);
+						meta.addMeta(nameMeta, true);
+					}
 					meta.resetMetaInName(subSeq.name_);
 					noOverlapFiltWriter.write(subSeq);
 				}

@@ -93,6 +93,8 @@ int kmerSetExpRunner::getBasicKmerSetCountInfo(const njh::progutils::CmdArgs & i
   return 0;
 }
 
+
+
 int kmerSetExpRunner::createMinimallyNonRedundantDownSampledSet(const njh::progutils::CmdArgs & inputCommands) {
   uint32_t kmerLength = 15;
   uint32_t kmerMinOccurrenceCoverage = 3;

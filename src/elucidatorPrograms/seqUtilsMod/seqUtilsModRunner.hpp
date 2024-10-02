@@ -63,6 +63,8 @@ class seqUtilsModRunner : public njh::progutils::ProgramRunner {
 
   static int dereplicate(const njh::progutils::CmdArgs & inputCommands);
 
+	static int fragmentSequences(const njh::progutils::CmdArgs & inputCommands);
+
 
   static int inverseLetterCase(const njh::progutils::CmdArgs & inputCommands);
   static int changeLetterCase(const njh::progutils::CmdArgs & inputCommands);

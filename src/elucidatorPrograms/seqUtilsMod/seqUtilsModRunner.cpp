@@ -57,10 +57,43 @@ seqUtilsModRunner::seqUtilsModRunner()
 		addFunc("sortReadsPairedEnd", sortReadsPairedEnd, false),
 		addFunc("compSeq", compSeq, false),
     	addFunc("changeLetterToOtherLetter", changeLetterToOtherLetter, false),
+    	addFunc("fragmentSequences", fragmentSequences, false),
 
 
 },//
                     "seqUtilsMod") {}
+
+int seqUtilsModRunner::fragmentSequences(const njh::progutils::CmdArgs & inputCommands){
+	uint32_t size = std::numeric_limits<uint32_t>::max();
+	uint32_t step = std::numeric_limits<uint32_t>::max();
+	bool doNotModName = false;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDefaultReader( true);
+	setUp.setOption(size, "--size", "fragment size", true);
+	setUp.setOption(step, "--step", "stepping value, how many bases along to fragment", true);
+	setUp.setOption(doNotModName, "--doNotModName", "doNotModName");
+
+	setUp.finishSetUp(std::cout);
+
+	seqInfo seq;
+	SeqIO reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	reader.openOut();
+
+	while(reader.readNextRead(seq)){
+		if(len(seq) > size) {
+			for(uint32_t pos = 0; pos + size <=len(seq); pos += step) {
+				auto subSeq = seq.getSubRead(pos, size);
+				if(!doNotModName) {
+					subSeq.name_ = njh::pasteAsStr(seq.name_, " pos=", pos);
+				}
+				reader.write(subSeq);
+			}
+		}
+	}
+	return 0;
+}
 
 int seqUtilsModRunner::changeLetterToOtherLetter(const njh::progutils::CmdArgs & inputCommands){
 	char base = ' ';
