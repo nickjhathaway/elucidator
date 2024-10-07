@@ -121,7 +121,8 @@ div.content {
 </style>
 
 ```{r}
-nhmmscan_hits_filtered_merged_noOverlap_table_hits = readr::read_tsv("nhmmscan_hits_filtered_merged_noOverlap_table_hits.tab.txt")
+nhmmscan_hits_filtered_merged_noOverlap_table_hits = readr::read_tsv("nhmmscan_hits_filtered_merged_noOverlap_table_hits.tab.txt") %>%
+  arrange(`#chrom`, start, end)
 
 
 nhmmscan_hits_filtered_merged_noOverlap_table_hits_qLens = nhmmscan_hits_filtered_merged_noOverlap_table_hits %>%

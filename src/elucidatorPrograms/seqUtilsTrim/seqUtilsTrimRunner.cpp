@@ -333,9 +333,13 @@ int seqUtilsTrimRunner::trimToPositionsForEachName(const njh::progutils::CmdArgs
 	std::unordered_map<std::string, std::vector<TrimPosInfo>> trimPositions;
 
 	for(const auto & row : trimPositionsTab.content_){
+		// std::cout << __FILE__ << " " << __LINE__ << std::endl;
+		// std::cout << "row: " << njh::conToStr(row, ",") << std::endl;
+
 		TrimPosInfo tInfo(
 				njh::StrToNumConverter::stoToNum<uint32_t>(row[startColPos]),
 				njh::StrToNumConverter::stoToNum<uint32_t>(row[endColPos]));
+		// std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		std::string name = row[nameColPos];
 		if (tInfo.start_ >= tInfo.end_) {
 			std::stringstream ss;

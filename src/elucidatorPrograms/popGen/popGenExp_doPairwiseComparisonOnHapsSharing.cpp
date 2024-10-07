@@ -12,6 +12,7 @@
 #include "elucidator/objects/BioDataObject.h"
 #include <njhseq/objects/counters/DNABaseCounter.hpp>
 #include <njhseq/PopulationGenetics.h>
+#include <njhseq/objects/dataContainers/BasicPointMatrix.hpp>
 
 
 namespace njhseq {
@@ -20,6 +21,10 @@ namespace njhseq {
 
 int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::CmdArgs & inputCommands){
 	bool writeOutDistMatrices = false;
+	bool clusterOnJacardIndexShared = false;
+	njhUndirWeightedGraph<double, std::shared_ptr<BasicPointMatrix<double>::BasicPoint>>::dbscanPars dbscanPars;
+	dbscanPars.eps_ = 0.99;
+	dbscanPars.minEpNeighbors_ = 2;
 	bfs::path metaFnp;
 	VecStr metaFieldsToCalcPopDiffs{};
 	HapsEncodedMatrix::SetWithExternalPars pars;
@@ -28,6 +33,9 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
+	setUp.setOption(clusterOnJacardIndexShared, "--clusterOnJacardIndexShared", "cluster On Jacard Index Shared");
+	setUp.setOption(dbscanPars.eps_, "--eps", "Epsilon (distance sensitivity of algorithm)");
+	setUp.setOption(dbscanPars.minEpNeighbors_, "--minpts", "The minimum number of epsilon neighbors");
 	setUp.setOption(writeOutDistMatrices, "--writeOutDistMatrices", "write Out Dist Matrices");
 	setUp.setOption(metaFnp, "--metaFnp", "Table of meta data for samples, needs a column named sample and each additonal column will be the meta data associated with that sample");
 	setUp.setOption(metaFieldsToCalcPopDiffs, "--metaFieldsToCalcPopDiffs", "Meta Fields To Calc Pop Diffs");
@@ -63,8 +71,10 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	numTargetsPerSample.outPutContents(outSamplesPerTarget, "\t");
 	setUp.timer_.startNewLap("get index measures");
 	auto indexRes = haps.genIndexMeasures(setUp.pars_.verbose_);
+	OutputStream outSampNamesOut(njh::files::make_path(setUp.pars_.directoryName_, "sampleNames.tab.txt"));
+	outSampNamesOut << njh::conToStr(haps.sampNamesVec_, "\n") << std::endl;
+
 	if(writeOutDistMatrices){
-		OutputStream outSampNamesOut(njh::files::make_path(setUp.pars_.directoryName_, "sampleNames.tab.txt"));
 		OutputStream byTargetOut(njh::files::make_path(setUp.pars_.directoryName_, "percOfTarSharingAtLeastOneHap.tab.txt.gz"));
 		OutputStream byHapOut(njh::files::make_path(setUp.pars_.directoryName_, "jacardByAllHap.tab.txt.gz"));
 		OutputStream byHapTarSharedOut(njh::files::make_path(setUp.pars_.directoryName_, "jacardByHapsTarShared.tab.txt.gz"));
@@ -76,7 +86,6 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 
 
 
-		outSampNamesOut << njh::conToStr(haps.sampNamesVec_, "\n") << std::endl;
 		for(const auto & it : indexRes.byTarget){
 			byTargetOut << njh::conToStr(it, "\t") << std::endl;
 		}
@@ -98,6 +107,63 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 
 		for(const auto & ih : indexRes.targetsShared){
 			targetsSharedBetweenSampsOut << njh::conToStr(ih, "\t") << std::endl;
+		}
+	}
+
+	if(clusterOnJacardIndexShared) {
+		auto distFnp = njh::files::make_path(setUp.pars_.directoryName_, "1MinusjacardByHapsTarShared.tab.txt.gz");
+		{
+			OutputStream byHapTarSharedOut(distFnp);
+			for(const auto & ih : indexRes.byHapsTarShared){
+				std::vector<double> outRow;
+				outRow.reserve(ih.size());
+				for(const auto & i : ih) {
+					outRow.emplace_back(1 - i);
+				}
+				byHapTarSharedOut << njh::conToStr(outRow, "\t") << std::endl;
+			}
+		}
+
+		OutputStream outFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_by_jacardTargetsShared.tsv")));
+		njh::stopWatch watch;
+		watch.setLapName("Reading in");
+		auto mat = BasicPointMatrix<double>::readInBasicMatrix(distFnp, dbscanPars);
+
+		watch.startNewLap("Adding nodes");
+
+		mat.setGraph(pars.numThreads, setUp.pars_.verbose_);
+
+		watch.startNewLap("dbscan");
+		mat.graph_->dbscan(dbscanPars);
+
+		watch.startNewLap("output");
+		//mat.writeGraph(outFile);
+		outFile << "sample\tgroup" << std::endl;
+		std::map<uint32_t, std::vector<uint32_t>> groupIndexes;
+		for(const auto & n : iter::enumerate(mat.graph_->nodes_)) {
+			groupIndexes[n.element->group_].emplace_back(n.index);
+		}
+		for(const auto & group : groupIndexes) {
+			for(const auto & idx : group.second) {
+
+				if(group.first == std::numeric_limits<uint32_t>::max()) {
+					outFile << haps.sampNamesVec_[idx] << "\t" << "nogroup" << std::endl;
+				}else {
+					outFile << haps.sampNamesVec_[idx] << "\t" << group.first << std::endl;
+				}
+			}
+		}
+		OutputStream outGroupCountsFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_by_jacardTargetsShared_groupCounts.tsv")));
+		outGroupCountsFile << "group\tsampleCount" << std::endl;
+		for(const auto & group : groupIndexes) {
+			if(group.first == std::numeric_limits<uint32_t>::max()) {
+				outGroupCountsFile << "nogroup" << "\t" << group.second.size() << std::endl;
+			} else {
+				outGroupCountsFile << group.first << "\t" << group.second.size() << std::endl;
+			}
+		}
+		if(setUp.pars_.verbose_){
+			watch.logLapTimes(std::cout, true, 6, true);
 		}
 	}
 
