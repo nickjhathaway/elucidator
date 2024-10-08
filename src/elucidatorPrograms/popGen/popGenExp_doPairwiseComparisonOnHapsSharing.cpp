@@ -215,19 +215,20 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 								auto dist = mat.points_[pair.row_]->euDist(*mat.points_[pair.col_]);
 								if (dist < mat.dbscanPars_.eps_) {
 									std::vector<double> rmses;
-									// double sum = 0;
+									double sum = 0;
 									for(const auto tpos : iter::range(haps.tarNamesVec_.size())) {
 										if(haps.targetsEncodeBySamp_[pair.col_][tpos]  + haps.targetsEncodeBySamp_[pair.row_][tpos] == 2) {
 											double current_sum = 0;
 											for(const auto hapPos : iter::range(haps.numberOfHapsPerTarget_[tpos])) {
 												current_sum += std::pow(hapsEncodeBySampRelAbund[pair.col_][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[pair.row_][haps.tarStart_[tpos] + hapPos],2);
-												// sum += std::pow(hapsEncodeBySampRelAbund[pair.col_][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[pair.row_][haps.tarStart_[tpos] + hapPos],2);
+												sum += std::pow(hapsEncodeBySampRelAbund[pair.col_][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[pair.row_][haps.tarStart_[tpos] + hapPos],2);
 											}
 											rmses.emplace_back(std::sqrt(current_sum));
 										}
 									}
 									//only add if mean RMSE is less than the cut off
-									if(vectorMean(rmses) < rmseCutOffToBreak) {
+									//if(vectorMean(rmses) < rmseCutOffToBreak) {
+									if(std::sqrt(sum/rmses.size()) < rmseCutOffToBreak){
 										belowEps.emplace_back(PairDist{pair, dist});
 									}
 								}
@@ -255,7 +256,45 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		watch.startNewLap("dbscan");
 		mat.graph_->dbscan(dbscanPars);
 		// if(!doNotBreakWithRmse){
-		//
+		// 						//first fill the relative abundance vector with the input relative abundance
+		// 	std::vector<std::vector<double>> hapsEncodeBySampRelAbund = std::vector<std::vector<double>> (haps.sampNames_.size());
+		// 	for(const auto & samp : haps.sampNames_){
+		// 		hapsEncodeBySampRelAbund[haps.sampNamesKey_[samp]] = std::vector<double>(haps.totalHaps_, 0);
+		// 	}
+		// 	TableReader reReadHapTab(TableIOOpts(InOptions(haps.pars_.tableFnp), "\t", true));
+		// 	VecStr row;
+		// 	while(reReadHapTab.getNextRow(row)){
+		// 		const auto& samp = row[reReadHapTab.header_.getColPos(haps.pars_.sampleCol)];
+		// 		const auto& tar = row[reReadHapTab.header_.getColPos(haps.pars_.targetNameCol)];
+		// 		if(!haps.pars_.selectSamples.empty() && !njh::in(samp, haps.pars_.selectSamples)){
+		// 			continue;
+		// 		}
+		// 		if(!haps.pars_.selectTargets.empty() && !njh::in(tar, haps.pars_.selectTargets)){
+		// 			continue;
+		// 		}
+		// 		const auto& hapName = row[reReadHapTab.header_.getColPos(haps.pars_.popIDCol)];
+		// 		auto rBund = njh::StrToNumConverter::stoToNum<double>(row[reReadHapTab.header_.getColPos(haps.pars_.relAbundCol)]);
+		// 		auto tKey = haps.tarNameKey_[tar];
+		// 		auto hKey = haps.hapNamesKey_[tar][hapName];
+		// 		//				if(rBund > 0 && rBund < 1){
+		// 		//					std::cout << rBund << std::endl;
+		// 		//				}
+		// 		hapsEncodeBySampRelAbund[haps.sampNamesKey_[samp]][haps.tarStart_[tKey] + hKey] = rBund;
+		// 	}
+		// 	//now recalculate the relative abundance to be 0-1
+		// 	for(const auto pos : iter::range(haps.sampNames_.size())) {
+		// 		for(const auto tpos : iter::range(haps.tarNamesVec_.size())) {
+		// 			if(haps.targetsEncodeBySamp_[pos][tpos] == 1) {
+		// 				double sum = 0;
+		// 				for(const auto hapPos : iter::range(haps.numberOfHapsPerTarget_[tpos])) {
+		// 					sum += hapsEncodeBySampRelAbund[pos][haps.tarStart_[tpos] + hapPos];
+		// 				}
+		// 				for(const auto hapPos : iter::range(haps.numberOfHapsPerTarget_[tpos])) {
+		// 					hapsEncodeBySampRelAbund[pos][haps.tarStart_[tpos] + hapPos] = hapsEncodeBySampRelAbund[pos][haps.tarStart_[tpos] + hapPos]/sum;
+		// 				}
+		// 			}
+		// 		}
+		// 	}
 		// 	// for(const auto pos : iter::range(haps.sampNamesKey_.size())) {
 		// 	// 	std::cout << njh::conToStr( hapsEncodeBySampRelAbund[pos], "\t") << std::endl;
 		// 	// }
@@ -264,22 +303,22 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		// 		groupIndexes[n.element->group_].emplace_back(n.index);
 		// 	}
 		// 	for(const auto & group : groupIndexes) {
-		// 		PairwisePairFactory pair_factory(haps.sampNamesKey_.size());
+		// 		PairwisePairFactory pair_factory(group.second.size());
 		// 		PairwisePairFactory::PairwisePair pair;
 		// 		while(pair_factory.setNextPair(pair)) {
 		// 			std::vector<double> rmses;
 		// 			double sum = 0;
 		// 			for(const auto tpos : iter::range(haps.tarNamesVec_.size())) {
-		// 				if(haps.targetsEncodeBySamp_[pair.col_][tpos]  + haps.targetsEncodeBySamp_[pair.row_][tpos] == 2) {
+		// 				if(haps.targetsEncodeBySamp_[group.second[pair.col_]][tpos]  + haps.targetsEncodeBySamp_[group.second[pair.row_]][tpos] == 2) {
 		// 					double current_sum = 0;
 		// 					for(const auto hapPos : iter::range(haps.numberOfHapsPerTarget_[tpos])) {
-		// 						current_sum += std::pow(hapsEncodeBySampRelAbund[pair.col_][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[pair.row_][haps.tarStart_[tpos] + hapPos],2);
-		// 						sum += std::pow(hapsEncodeBySampRelAbund[pair.col_][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[pair.row_][haps.tarStart_[tpos] + hapPos],2);
+		// 						current_sum += std::pow(hapsEncodeBySampRelAbund[group.second[pair.col_]][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[group.second[pair.row_]][haps.tarStart_[tpos] + hapPos],2);
+		// 						sum += std::pow(hapsEncodeBySampRelAbund[group.second[pair.col_]][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[group.second[pair.row_]][haps.tarStart_[tpos] + hapPos],2);
 		// 					}
 		// 					rmses.emplace_back(std::sqrt(current_sum));
 		// 				}
 		// 			}
-		// 			std::cout << haps.sampNamesVec_[pair.col_] << "\t" <<  haps.sampNamesVec_[pair.row_] << "\t" << std::sqrt(sum) << "\t" << vectorMean(rmses) << std::endl;
+		// 			std::cout << haps.sampNamesVec_[group.second[pair.col_]] << "\t" <<  haps.sampNamesVec_[group.second[pair.row_]] << "\t" << std::sqrt(sum) << "\t" << std::sqrt(sum)/rmses.size() << "\t" << std::sqrt(sum/rmses.size()) << "\t" << vectorMean(rmses) << std::endl;
 		// 		}
 		// 	}
 		// }
