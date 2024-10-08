@@ -30,10 +30,15 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	HapsEncodedMatrix::SetWithExternalPars pars;
 	bool onlyPloidy2 = false;
 	bool writeOutTarsAbsoluteShared = false;
+	bool doNotBreakWithRmse = false;
+	double rmseCutOffToBreak = 0.075;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.setOption(clusterOnJacardIndexShared, "--clusterOnJacardIndexShared", "cluster On Jacard Index Shared");
+	setUp.setOption(doNotBreakWithRmse, "--doNotBreakWithRmse", "do Not Break With Rmse");
+	setUp.setOption(dbscanPars.eps_, "--rmseCutOffToBreak", "rmse Cut Off To Break");
+
 	setUp.setOption(dbscanPars.eps_, "--eps", "Epsilon (distance sensitivity of algorithm)");
 	setUp.setOption(dbscanPars.minEpNeighbors_, "--minpts", "The minimum number of epsilon neighbors");
 	setUp.setOption(writeOutDistMatrices, "--writeOutDistMatrices", "write Out Dist Matrices");
@@ -130,11 +135,154 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		auto mat = BasicPointMatrix<double>::readInBasicMatrix(distFnp, dbscanPars);
 
 		watch.startNewLap("Adding nodes");
+		if(doNotBreakWithRmse) {
+			mat.setGraph(pars.numThreads, setUp.pars_.verbose_);
+		} else {
 
-		mat.setGraph(pars.numThreads, setUp.pars_.verbose_);
+						//first fill the relative abundance vector with the input relative abundance
+			std::vector<std::vector<double>> hapsEncodeBySampRelAbund = std::vector<std::vector<double>> (haps.sampNames_.size());
+			for(const auto & samp : haps.sampNames_){
+				hapsEncodeBySampRelAbund[haps.sampNamesKey_[samp]] = std::vector<double>(haps.totalHaps_, 0);
+			}
+			TableReader reReadHapTab(TableIOOpts(InOptions(haps.pars_.tableFnp), "\t", true));
+			VecStr row;
+			while(reReadHapTab.getNextRow(row)){
+				const auto& samp = row[reReadHapTab.header_.getColPos(haps.pars_.sampleCol)];
+				const auto& tar = row[reReadHapTab.header_.getColPos(haps.pars_.targetNameCol)];
+				if(!haps.pars_.selectSamples.empty() && !njh::in(samp, haps.pars_.selectSamples)){
+					continue;
+				}
+				if(!haps.pars_.selectTargets.empty() && !njh::in(tar, haps.pars_.selectTargets)){
+					continue;
+				}
+				const auto& hapName = row[reReadHapTab.header_.getColPos(haps.pars_.popIDCol)];
+				auto rBund = njh::StrToNumConverter::stoToNum<double>(row[reReadHapTab.header_.getColPos(haps.pars_.relAbundCol)]);
+				auto tKey = haps.tarNameKey_[tar];
+				auto hKey = haps.hapNamesKey_[tar][hapName];
+				//				if(rBund > 0 && rBund < 1){
+				//					std::cout << rBund << std::endl;
+				//				}
+				hapsEncodeBySampRelAbund[haps.sampNamesKey_[samp]][haps.tarStart_[tKey] + hKey] = rBund;
+			}
+			//now recalculate the relative abundance to be 0-1
+			for(const auto pos : iter::range(haps.sampNames_.size())) {
+				for(const auto tpos : iter::range(haps.tarNamesVec_.size())) {
+					if(haps.targetsEncodeBySamp_[pos][tpos] == 1) {
+						double sum = 0;
+						for(const auto hapPos : iter::range(haps.numberOfHapsPerTarget_[tpos])) {
+							sum += hapsEncodeBySampRelAbund[pos][haps.tarStart_[tpos] + hapPos];
+						}
+						for(const auto hapPos : iter::range(haps.numberOfHapsPerTarget_[tpos])) {
+							hapsEncodeBySampRelAbund[pos][haps.tarStart_[tpos] + hapPos] = hapsEncodeBySampRelAbund[pos][haps.tarStart_[tpos] + hapPos]/sum;
+						}
+					}
+				}
+			}
+
+			if (0 == pars.numThreads) {
+				pars.numThreads = 1;
+			}
+
+			mat.graph_ = std::make_unique<
+					njhUndirWeightedGraph<double,
+							std::shared_ptr<BasicPointMatrix<double>::BasicPoint>>>();
+
+			for (const auto & pos : iter::range(mat.points_.size())) {
+				mat.graph_->addNode(estd::to_string(pos), mat.points_[pos]);
+			}
+
+			uint32_t belowEp = 0;
+			/**@todo this appears to be actually fairly slow, i think it's mostly because the eu calculations is so fast, perhaps a better way of multithreading this can be done
+			 *
+			 */
+			PairwisePairFactory pairFactory(mat.points_.size());
+			uint32_t pairBatchCount = 100000;
+			std::mutex graphMut;
+			struct PairDist {
+				PairDist(const PairwisePairFactory::PairwisePair & pair, double dist) :
+						pair_(pair), dist_(dist) {
+				}
+				PairwisePairFactory::PairwisePair pair_;
+				double dist_;
+			};
+
+			std::function<void()> addToGraph =
+					[&graphMut, &pairFactory,&pairBatchCount,&belowEp,&mat, &haps,&hapsEncodeBySampRelAbund,&rmseCutOffToBreak]() {
+						PairwisePairFactory::PairwisePairVec pairs;
+						std::vector<PairDist> belowEps;
+						while(pairFactory.setNextPairs(pairs, pairBatchCount)) {
+							for(const auto & pair : pairs.pairs_) {
+								auto dist = mat.points_[pair.row_]->euDist(*mat.points_[pair.col_]);
+								if (dist < mat.dbscanPars_.eps_) {
+									std::vector<double> rmses;
+									// double sum = 0;
+									for(const auto tpos : iter::range(haps.tarNamesVec_.size())) {
+										if(haps.targetsEncodeBySamp_[pair.col_][tpos]  + haps.targetsEncodeBySamp_[pair.row_][tpos] == 2) {
+											double current_sum = 0;
+											for(const auto hapPos : iter::range(haps.numberOfHapsPerTarget_[tpos])) {
+												current_sum += std::pow(hapsEncodeBySampRelAbund[pair.col_][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[pair.row_][haps.tarStart_[tpos] + hapPos],2);
+												// sum += std::pow(hapsEncodeBySampRelAbund[pair.col_][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[pair.row_][haps.tarStart_[tpos] + hapPos],2);
+											}
+											rmses.emplace_back(std::sqrt(current_sum));
+										}
+									}
+									//only add if mean RMSE is less than the cut off
+									if(vectorMean(rmses) < rmseCutOffToBreak) {
+										belowEps.emplace_back(PairDist{pair, dist});
+									}
+								}
+							}
+						}
+						if(!belowEps.empty()) {
+							std::lock_guard<std::mutex> lock(graphMut);
+							belowEp += belowEps.size();
+							for(const auto & bEps : belowEps) {
+								mat.graph_->addEdge(estd::to_string(bEps.pair_.row_), estd::to_string(bEps.pair_.col_),
+										bEps.dist_);
+							}
+						}
+			};
+
+			njh::concurrent::runVoidFunctionThreaded(addToGraph, pars.numThreads);
+
+			if (setUp.pars_.verbose_) {
+				std::cout << std::endl;
+				std::cout << "below: " << belowEp << "/" << pairFactory.totalCompares_ << std::endl;
+			}
+		}
+
 
 		watch.startNewLap("dbscan");
 		mat.graph_->dbscan(dbscanPars);
+		// if(!doNotBreakWithRmse){
+		//
+		// 	// for(const auto pos : iter::range(haps.sampNamesKey_.size())) {
+		// 	// 	std::cout << njh::conToStr( hapsEncodeBySampRelAbund[pos], "\t") << std::endl;
+		// 	// }
+		// 	std::map<uint32_t, std::vector<uint32_t>> groupIndexes;
+		// 	for(const auto & n : iter::enumerate(mat.graph_->nodes_)) {
+		// 		groupIndexes[n.element->group_].emplace_back(n.index);
+		// 	}
+		// 	for(const auto & group : groupIndexes) {
+		// 		PairwisePairFactory pair_factory(haps.sampNamesKey_.size());
+		// 		PairwisePairFactory::PairwisePair pair;
+		// 		while(pair_factory.setNextPair(pair)) {
+		// 			std::vector<double> rmses;
+		// 			double sum = 0;
+		// 			for(const auto tpos : iter::range(haps.tarNamesVec_.size())) {
+		// 				if(haps.targetsEncodeBySamp_[pair.col_][tpos]  + haps.targetsEncodeBySamp_[pair.row_][tpos] == 2) {
+		// 					double current_sum = 0;
+		// 					for(const auto hapPos : iter::range(haps.numberOfHapsPerTarget_[tpos])) {
+		// 						current_sum += std::pow(hapsEncodeBySampRelAbund[pair.col_][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[pair.row_][haps.tarStart_[tpos] + hapPos],2);
+		// 						sum += std::pow(hapsEncodeBySampRelAbund[pair.col_][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[pair.row_][haps.tarStart_[tpos] + hapPos],2);
+		// 					}
+		// 					rmses.emplace_back(std::sqrt(current_sum));
+		// 				}
+		// 			}
+		// 			std::cout << haps.sampNamesVec_[pair.col_] << "\t" <<  haps.sampNamesVec_[pair.row_] << "\t" << std::sqrt(sum) << "\t" << vectorMean(rmses) << std::endl;
+		// 		}
+		// 	}
+		// }
 
 		watch.startNewLap("output");
 		//mat.writeGraph(outFile);
