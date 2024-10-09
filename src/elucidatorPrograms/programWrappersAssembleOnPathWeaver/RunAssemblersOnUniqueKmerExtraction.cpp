@@ -2711,7 +2711,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	setUp.processDebug();
 	setUp.processVerbose();
 	OtherAssemblersUtilityForUniqueKmerExtraction::InputPars inPars;
-	inPars.programName_ = "velvet";
+	inPars.programName_ = "Velvet";
 	inPars.setPars(setUp);
 	OtherAssemblersUtilityForUniqueKmerExtraction::InputPars inParsMetaVelvet = inPars;
 
@@ -2747,9 +2747,10 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 		}
 	}
 	setUp.finishSetUp(std::cout);
-	setUp.startARunLog(setUp.pars_.directoryName_);
-	OtherAssemblersUtilityForUniqueKmerExtraction utility(inPars);
 
+
+	OtherAssemblersUtilityForUniqueKmerExtraction utility(inPars);
+	setUp.startARunLog(setUp.pars_.directoryName_);
 	bfs::path metaVelvetFinalDir = njh::replaceString(setUp.pars_.directoryName_, "Velvet", "MetaVelvet");
 	njh::files::MkdirPar metaVelvetFinalDirPar(metaVelvetFinalDir, setUp.pars_.overWriteDir_);
 	if (bfs::exists(metaVelvetFinalDir) && setUp.pars_.overWriteDir_) {
