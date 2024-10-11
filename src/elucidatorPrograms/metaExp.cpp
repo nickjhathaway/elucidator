@@ -538,9 +538,15 @@ int metaExpRunner::splitSeqFileWithMeta(const njh::progutils::CmdArgs & inputCom
 				uid = njh::conToStr(VecStr(metaToks.size(), "NA"), "_");
 			}
 			if(!writers.containsReader(uid)){
-				auto seqOpts = SeqIOOptions(setUp.pars_.ioOptions_.out_.outFilename_.string() + "_" + uid, setUp.pars_.ioOptions_.outFormat_) ;
+				SeqIOOptions seqOpts;
+
 				if(setUp.pars_.ioOptions_.out_.outFilename_.empty()){
 					seqOpts = SeqIOOptions(uid, setUp.pars_.ioOptions_.outFormat_);
+				} else if (bfs::is_directory(setUp.pars_.ioOptions_.out_.outFilename_)){
+					seqOpts = SeqIOOptions(njh::files::make_path(setUp.pars_.ioOptions_.out_.outFilename_,uid), setUp.pars_.ioOptions_.outFormat_);
+				} else {
+					seqOpts = SeqIOOptions(setUp.pars_.ioOptions_.out_.outFilename_.string() + "_" + uid, setUp.pars_.ioOptions_.outFormat_);
+
 				}
 				seqOpts.out_.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
 				writers.addReader(uid, seqOpts);
@@ -568,12 +574,19 @@ int metaExpRunner::splitSeqFileWithMeta(const njh::progutils::CmdArgs & inputCom
 				uid = njh::conToStr(VecStr(metaToks.size(), "NA"), "_");
 			}
 			if(!writers.containsReader(uid)){
-				auto opts = SeqIOOptions(setUp.pars_.ioOptions_.out_.outFilename_.string() + "_" + uid, setUp.pars_.ioOptions_.outFormat_);
+				SeqIOOptions seqOpts;
+
 				if(setUp.pars_.ioOptions_.out_.outFilename_.empty()){
-					opts = SeqIOOptions(uid, setUp.pars_.ioOptions_.outFormat_);
+					seqOpts = SeqIOOptions(uid, setUp.pars_.ioOptions_.outFormat_);
+				} else if (bfs::is_directory(setUp.pars_.ioOptions_.out_.outFilename_)){
+					seqOpts = SeqIOOptions(njh::files::make_path(setUp.pars_.ioOptions_.out_.outFilename_,uid), setUp.pars_.ioOptions_.outFormat_);
+				} else {
+					seqOpts = SeqIOOptions(setUp.pars_.ioOptions_.out_.outFilename_.string() + "_" + uid, setUp.pars_.ioOptions_.outFormat_);
+
 				}
-				opts.out_.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
-				writers.addReader(uid, opts );
+
+				seqOpts.out_.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
+				writers.addReader(uid, seqOpts );
 			}
 			writers.add(uid, seq);
 		}
@@ -672,7 +685,7 @@ int metaExpRunner::excludeSeqsFileWithMatchingMeta(const njh::progutils::CmdArgs
 	setUp.processDebug();
 	setUp.processVerbose();
 	setUp.pars_.ioOptions_.out_.outFilename_ = "out";
-	setUp.processDefaultReader(VecStr { "-fastq", "-fasta", "--fastq1" }, true);
+	setUp.processDefaultReader(VecStr { "-fastq", "-fasta", "--fastq1", "-fastqgz", "-fastagz", "--fastq1gz" }, true);
 	setUp.setOption(metaField, "--metaField",
 			"Meta Field compare", true);
 	setUp.setOption(metaValue, "--metaValue",
