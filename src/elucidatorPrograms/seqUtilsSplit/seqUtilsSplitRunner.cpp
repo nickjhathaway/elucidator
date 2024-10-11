@@ -371,7 +371,8 @@ void defaultSplitSetUpOptions(seqSetUp & setUp, defaultSplitPars & pars){
   if(pars.incOpts_.out_.outFilename_ == "out"){
   	bName = njh::files::bfs::path(setUp.pars_.ioOptions_.firstName_);
   }
-  bName.replace_extension("");
+  // bName.replace_extension("");
+  bName = njh::files::removeExtension(bName);
   pars.incOpts_.out_.outFilename_ = bName.string() + "_included";
 	pars.excOpts_.out_.outFilename_ = bName.string() + "_excluded";
 
