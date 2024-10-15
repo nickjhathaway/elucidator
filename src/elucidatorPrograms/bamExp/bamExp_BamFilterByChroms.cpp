@@ -404,8 +404,9 @@ int bamExpRunner::BamGetImproperPairsOnChroms(const njh::progutils::CmdArgs & in
 
 
 int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommands){
-	std::string chromFnp = "";
+	std::string chromFnp;
 	OutOptions outOpts(bfs::path("out"));
+	uint32_t minMappingQuality = 60;
 	uint32_t allowableSoftClipInAln = 10;
 	bool requireProperPair = false;
 	bool doNotWriteFilterOff = false;
@@ -416,6 +417,7 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	setUp.setOption(chromFnp, "--chroms", "chromosomes to filter off", true);
 	setUp.setOption(requireProperPair, "--requireProperPair", "Require Proper Pair to be filtered off");
 	setUp.setOption(doNotWriteFilterOff, "--doNotWriteFilterOff", "do Not Write Filter Off");
+	setUp.setOption(minMappingQuality, "--minMappingQuality", "min Mapping Quality");
 
 	setUp.processReadInNames({"--bam"}, true);
 	setUp.processWritingOptions(outOpts);
@@ -489,7 +491,7 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 
 	auto doesAlnPassSoftClipFilt = [&allowableSoftClipInAln,&refData](const BamTools::BamAlignment & bamAln){
 		uint32_t softClipSum = 0;
-		if(bamAln.CigarData.size() > 0 && 'S' == bamAln.CigarData.front().Type && 0 != bamAln.Position){
+		if(!bamAln.CigarData.empty() && 'S' == bamAln.CigarData.front().Type && 0 != bamAln.Position){
 			softClipSum += bamAln.CigarData.front().Length;
 		}
 		if(bamAln.CigarData.size() > 1 && 'S' == bamAln.CigarData.back().Type && bamAln.GetEndPosition() != refData[bamAln.RefID].RefLength){
@@ -516,7 +518,7 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 				singlesWriter.openWrite(bamAlnToSeqInfo(bAln));
 			} else {
 				if (njh::in(refData[bAln.RefID].RefName, chroms)) {
-					if(doesAlnPassSoftClipFilt(bAln)){
+					if(doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality){
 						if(!doNotWriteFilterOff){
 							filteredSinglesWriter.openWrite(bamAlnToSeqInfo(bAln));
 						}
@@ -544,8 +546,8 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 					continue;
 				} else {
 					auto search = filterAlnCache.get(bAln.Name);
-					if(doesAlnPassSoftClipFilt(*search) &&
-							doesAlnPassSoftClipFilt(bAln)){
+					if(doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality &&
+							doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality){
 						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
 						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
 						if(!doNotWriteFilterOff){
@@ -563,7 +565,7 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 							pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
 						}
 					}
-					// now that operations have been computed, remove ther other mate found from cache
+					// now that operations have been computed, remove their other mate found from cache
 					filterAlnCache.remove(search->Name);
 					continue;
 				}
@@ -602,11 +604,18 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	if (len(filterAlnCache) > 0) {
 		auto names = filterAlnCache.getNames();
 		for (const auto & name : names) {
-			++filteredOrphans_;
+
 			auto search = filterAlnCache.get(name);
-			if(!doNotWriteFilterOff){
-				filteredSinglesWriter.openWrite(bamAlnToSeqInfo(*search));
+			if(doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality) {
+				++filteredOrphans_;
+				if(!doNotWriteFilterOff){
+					filteredSinglesWriter.openWrite(bamAlnToSeqInfo(*search));
+				}
+			} else {
+				++keptOrphans_;
+				singlesWriter.openWrite(bamAlnToSeqInfo(*search));
 			}
+
 			filterAlnCache.remove(name);
 		}
 	}

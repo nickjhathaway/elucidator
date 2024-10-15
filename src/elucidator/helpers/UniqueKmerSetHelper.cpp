@@ -627,7 +627,6 @@ void UniqueKmerSetHelper::processReadForExtractingPairsSeparate(PairedRead &pseq
 		} else {
 			pseq.seqBase_.name_.append("_firstMate");
 			++counts.readCountsPerSet[compResFirstMate.winnerRevComp][compResFirstMate.winnerSet];
-
 			if (!extractingPars.doNotWriteUndetermined || compResFirstMate.winnerSet != "undetermined") {
 				if (extractingPars.writeOutExclude || !njh::in(compResFirstMate.winnerSet, extractingPars.compPars.excludeSetNames)) {
 					seqOut.openWrite(njh::pasteAsStr(compResFirstMate.winnerSet, "-single"), pseq.seqBase_);
