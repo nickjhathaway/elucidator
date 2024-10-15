@@ -470,6 +470,7 @@ int metaExpRunner::selectMetaFieldsToKeep(const njh::progutils::CmdArgs & inputC
 
 int metaExpRunner::splitSeqFileWithMeta(const njh::progutils::CmdArgs & inputCommands) {
 	std::string metaField;
+	bool replaceSpaceWithUnderscore = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
 	setUp.processVerbose();
@@ -477,6 +478,7 @@ int metaExpRunner::splitSeqFileWithMeta(const njh::progutils::CmdArgs & inputCom
 	setUp.processDefaultReader(VecStr { "--fastq", "--fasta", "--fastq1", "--fastqgz", "--fastagz", "--fastq1gz" }, true);
 	setUp.setOption(metaField, "--metaField",
 			"Meta Field to split on, could be multiple separated by a comma", true);
+	setUp.setOption(replaceSpaceWithUnderscore, "--replaceSpaceWithUnderscore", "replace Space With Underscore");
 
 	setUp.finishSetUp(std::cout);
 
@@ -539,14 +541,16 @@ int metaExpRunner::splitSeqFileWithMeta(const njh::progutils::CmdArgs & inputCom
 			}
 			if(!writers.containsReader(uid)){
 				SeqIOOptions seqOpts;
-
+				auto uid_for_fnp = uid;
+				if(replaceSpaceWithUnderscore) {
+					uid_for_fnp = njh::replaceSpecialCharacters(uid_for_fnp, "_");
+				}
 				if(setUp.pars_.ioOptions_.out_.outFilename_.empty()){
-					seqOpts = SeqIOOptions(uid, setUp.pars_.ioOptions_.outFormat_);
+					seqOpts = SeqIOOptions(uid_for_fnp, setUp.pars_.ioOptions_.outFormat_);
 				} else if (bfs::is_directory(setUp.pars_.ioOptions_.out_.outFilename_)){
-					seqOpts = SeqIOOptions(njh::files::make_path(setUp.pars_.ioOptions_.out_.outFilename_,uid), setUp.pars_.ioOptions_.outFormat_);
+					seqOpts = SeqIOOptions(njh::files::make_path(setUp.pars_.ioOptions_.out_.outFilename_,uid_for_fnp), setUp.pars_.ioOptions_.outFormat_);
 				} else {
-					seqOpts = SeqIOOptions(setUp.pars_.ioOptions_.out_.outFilename_.string() + "_" + uid, setUp.pars_.ioOptions_.outFormat_);
-
+					seqOpts = SeqIOOptions(setUp.pars_.ioOptions_.out_.outFilename_.string() + "_" + uid_for_fnp, setUp.pars_.ioOptions_.outFormat_);
 				}
 				seqOpts.out_.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
 				writers.addReader(uid, seqOpts);
@@ -575,14 +579,16 @@ int metaExpRunner::splitSeqFileWithMeta(const njh::progutils::CmdArgs & inputCom
 			}
 			if(!writers.containsReader(uid)){
 				SeqIOOptions seqOpts;
-
+				auto uid_for_fnp = uid;
+				if(replaceSpaceWithUnderscore) {
+					uid_for_fnp = njh::replaceSpecialCharacters(uid_for_fnp, "_");
+				}
 				if(setUp.pars_.ioOptions_.out_.outFilename_.empty()){
-					seqOpts = SeqIOOptions(uid, setUp.pars_.ioOptions_.outFormat_);
+					seqOpts = SeqIOOptions(uid_for_fnp, setUp.pars_.ioOptions_.outFormat_);
 				} else if (bfs::is_directory(setUp.pars_.ioOptions_.out_.outFilename_)){
-					seqOpts = SeqIOOptions(njh::files::make_path(setUp.pars_.ioOptions_.out_.outFilename_,uid), setUp.pars_.ioOptions_.outFormat_);
+					seqOpts = SeqIOOptions(njh::files::make_path(setUp.pars_.ioOptions_.out_.outFilename_,uid_for_fnp), setUp.pars_.ioOptions_.outFormat_);
 				} else {
-					seqOpts = SeqIOOptions(setUp.pars_.ioOptions_.out_.outFilename_.string() + "_" + uid, setUp.pars_.ioOptions_.outFormat_);
-
+					seqOpts = SeqIOOptions(setUp.pars_.ioOptions_.out_.outFilename_.string() + "_" + uid_for_fnp, setUp.pars_.ioOptions_.outFormat_);
 				}
 
 				seqOpts.out_.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);

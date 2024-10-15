@@ -49,7 +49,7 @@ int kmerSetExpRunner::createKmerPresenceMatrixFromSets(const njh::progutils::Cmd
   njh::naturalSortNameSet(fastaFilesStrs);
 	// naturalSortNameSet(fastaFilesStrs);
   for(const auto & fnp : fastaFilesStrs) {
-    out << "\t" << bfs::basename(fnp);
+    out << "\t" << bfs::basename(njh::files::replaceExtension(fnp, ""));
   }
   out << std::endl;
   for(const auto & k : allUniqueKmers) {
