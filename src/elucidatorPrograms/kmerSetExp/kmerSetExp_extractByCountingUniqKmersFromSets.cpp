@@ -106,6 +106,17 @@ int kmerSetExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::Cmd
 }
 
 
+/*
+*						if(extractingPars.markReadsPerIteration){
+							MetaDataInName meta;
+							if(MetaDataInName::nameHasMetaData(seq.name_)){
+								meta = MetaDataInName(seq.name_);
+							}
+							meta.addMeta("iteration", "initial", true);
+							meta.resetMetaInName(seq.name_);
+						}
+ **/
+
 int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands){
 
 	uint32_t numThreads = 1;
@@ -186,8 +197,6 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 	//setUp.setOption(finalExtractionPairsSeparate, "--finalExtractionPairsSeparate", "extract the pairs separately for final extraction step");
 
 
-
-	//setUp.setOption(extractingPars.compPars.pairsSeparate, "--pairsSeparate", "extract the pairs separately");
 	setUp.setOption(extractingPars.compPars.allowableCharacters_, "--allowableCharacters", "allowable characters");
 
 	setUp.setOption(extractingPars.compPars.entropyFilter_, "--entropyFilter", "entropy Filter cut off");
@@ -214,6 +223,7 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 	extractingPars.qPars.qualCheckCutOff_ = 0.50;
 	setUp.setOption(extractingPars.qPars.qualCheckCutOff_, "--qualCheckCutOff", "the fraction of bases that have to be above the qualCheck check");
 	setUp.setOption(extractingPars.qPars.checkingQFrac_, "--checkingQFrac", "filtering on quality");
+	extractingPars.qual_checker = std::make_shared<ReadCheckerQualCheck>(extractingPars.qPars.qualCheck_, extractingPars.qPars.qualCheckCutOff_, false);
 	setUp.setOption(extractingPars.filterOnNs, "--filterOnNs", "filter reads containing Ns");
 
 
@@ -319,11 +329,11 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 	watch.startNewLap("initial scan");
 
 	OutOptions outCountsOpts(njh::files::make_path(setUp.pars_.directoryName_, "extractionCounts.tab.txt"));
+	OutOptions inversePairOutCountsOpts(njh::files::make_path(setUp.pars_.directoryName_, "inversePairsCounts.tab.txt"));
 	OutputStream outCounts(outCountsOpts);
+	OutputStream inversePairOutCountsOut(inversePairOutCountsOpts);
 	UniqueKmerSetHelper::ProcessReadForExtractingCounts::writeOutCountsHeader(outCounts, extractingPars);
-
-
-
+	inversePairOutCountsOut << njh::conToStr(toVecStr("iteration", "sample", "totalReads", "target", "count", "frac"), "\t") << std::endl;
 
 	std::unordered_map<std::string, UniqueKmerSetHelper::FilePositons> positionsAfterLastIteration;
 	{//initial
@@ -352,15 +362,30 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 			if(extractingPars.compPars.pairsSeparate){
 				readInComp = [&reader, &uniqueKmersPerSet,
 								&mut, &extractingPars, &initialSeqOut, &initialCounts
+
 				]() {
 					SimpleKmerHash hasher;
 					PairedRead pseq;
 					UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
 					while (reader.readNextReadLock(pseq)) {
-						UniqueKmerSetHelper::processReadForExtractingPairsSeparate(pseq, uniqueKmersPerSet,
-																																			 extractingPars, hasher, initialSeqOut,
-																																			 currentCounts,
-																																			 "initial");
+						bool firstMatePassQcCheck = UniqueKmerSetHelper::readPassesQCChecks(pseq.seqBase_, extractingPars,currentCounts);
+						bool secondMatePassQcCheck = UniqueKmerSetHelper::readPassesQCChecks(pseq.mateSeqBase_, extractingPars,currentCounts);
+						if(firstMatePassQcCheck && secondMatePassQcCheck) {
+							UniqueKmerSetHelper::processReadForExtractingPairsSeparate(pseq, uniqueKmersPerSet,
+																							extractingPars, hasher, initialSeqOut,
+																							currentCounts
+																							);
+						} else if(firstMatePassQcCheck) {
+							pseq.seqBase_.name_.append("_firstMate");
+							UniqueKmerSetHelper::processReadForExtracting(pseq.seqBase_, uniqueKmersPerSet,
+																		extractingPars, hasher, initialSeqOut,
+																		currentCounts);
+						} else if(secondMatePassQcCheck) {
+							pseq.mateSeqBase_.name_.append("_secondMate");
+							UniqueKmerSetHelper::processReadForExtracting(pseq.mateSeqBase_, uniqueKmersPerSet,
+																		extractingPars, hasher, initialSeqOut,
+																		currentCounts);
+						}
 					}
 					{
 						std::lock_guard<std::mutex> lockGuard(mut);
@@ -370,15 +395,30 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 			}else{
 				readInComp = [&reader, &uniqueKmersPerSet,
 								&mut, &extractingPars, &initialSeqOut, &initialCounts
+
 				]() {
 					SimpleKmerHash hasher;
 					PairedRead pseq;
 					UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
 					while (reader.readNextReadLock(pseq)) {
-						UniqueKmerSetHelper::processReadForExtractingPairsTogether(pseq, uniqueKmersPerSet,
-																													extractingPars, hasher, initialSeqOut,
-																													currentCounts,
-																													"initial");
+						bool firstMatePassQcCheck = UniqueKmerSetHelper::readPassesQCChecks(pseq.seqBase_, extractingPars,currentCounts);
+						bool secondMatePassQcCheck = UniqueKmerSetHelper::readPassesQCChecks(pseq.mateSeqBase_, extractingPars,currentCounts);
+			      if(firstMatePassQcCheck && secondMatePassQcCheck) {
+				      UniqueKmerSetHelper::processReadForExtractingPairsTogether(pseq, uniqueKmersPerSet,
+																							extractingPars, hasher, initialSeqOut,
+																							currentCounts
+																							);
+			      } else if(firstMatePassQcCheck) {
+			      	pseq.seqBase_.name_.append("_firstMate");
+			      	UniqueKmerSetHelper::processReadForExtracting(pseq.seqBase_, uniqueKmersPerSet,
+																		extractingPars, hasher, initialSeqOut,
+																		currentCounts);
+			      } else if(secondMatePassQcCheck) {
+			      	pseq.mateSeqBase_.name_.append("_secondMate");
+			      	UniqueKmerSetHelper::processReadForExtracting(pseq.mateSeqBase_, uniqueKmersPerSet,
+																		extractingPars, hasher, initialSeqOut,
+																		currentCounts);
+			      }
 					}
 					{
 						std::lock_guard<std::mutex> lockGuard(mut);
@@ -393,15 +433,18 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 			reader.openIn();
 			std::function<void()> readInComp = [&reader, &uniqueKmersPerSet,
 							&mut, &extractingPars, &initialSeqOut, &initialCounts
+
 //							, &testReads
 			]() {
 				SimpleKmerHash hasher;
 				seqInfo seq;
 				UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
 				while (reader.readNextReadLock(seq)) {
-					UniqueKmerSetHelper::processReadForExtracting(seq, uniqueKmersPerSet,
-																												extractingPars, hasher, initialSeqOut,
-																												currentCounts, "initial");
+					if(UniqueKmerSetHelper::readPassesQCChecks(seq,extractingPars,currentCounts)) {
+						UniqueKmerSetHelper::processReadForExtracting(seq, uniqueKmersPerSet,
+																								extractingPars, hasher, initialSeqOut,
+																								currentCounts);
+					}
 				}
 				{
 					std::lock_guard<std::mutex> lockGuard(mut);
@@ -411,6 +454,17 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 			njh::concurrent::runVoidFunctionThreaded(readInComp, numThreads);
 		}
 		initialCounts.writeOutCounts(outCounts,extractingPars,uniqueKmersPerSet,"initial");
+		{
+			auto totalReadCnt = initialCounts.getTotalCounts();
+			for(const auto & set : initialCounts.inversePairReadCountsPerSet) {
+				inversePairOutCountsOut << "initial"
+				<< "\t" << extractingPars.compPars.sampleName
+				<< "\t" << totalReadCnt
+				<< "\t" << set.first
+				<< "\t" << set.second
+				<< "\t" << static_cast<double>(set.second)/static_cast<double>(totalReadCnt) << std::endl;
+			}
+		}
 	}
 	initialSeqOut.closeOutForReopeningAll();
 
@@ -700,8 +754,7 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 
 			if(extractingPars.compPars.pairsSeparate){
 				readInComp = [&reader, &uniqueKmersPerSet,
-								&mut, &extractingPars, &initialSeqOut, &initialCounts,
-								&iterNumber
+								&mut, &extractingPars, &initialSeqOut, &initialCounts
 				]() {
 					SimpleKmerHash hasher;
 					PairedRead pseq;
@@ -709,8 +762,7 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 					while (reader.readNextReadLock(pseq)) {
 						UniqueKmerSetHelper::processReadForExtractingPairsSeparate(pseq, uniqueKmersPerSet,
 																																			 extractingPars, hasher, initialSeqOut,
-																																			 currentCounts,
-																																			 njh::pasteAsStr(iterNumber));
+																																			 currentCounts);
 					}
 					{
 						std::lock_guard<std::mutex> lockGuard(mut);
@@ -719,8 +771,7 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 				};
 			}else{
 				readInComp = [&reader, &uniqueKmersPerSet,
-								&mut, &extractingPars, &initialSeqOut, &initialCounts,
-								&iterNumber
+								&mut, &extractingPars, &initialSeqOut, &initialCounts
 				]() {
 					SimpleKmerHash hasher;
 					PairedRead pseq;
@@ -728,8 +779,7 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 					while (reader.readNextReadLock(pseq)) {
 						UniqueKmerSetHelper::processReadForExtractingPairsTogether(pseq, uniqueKmersPerSet,
 																																			 extractingPars, hasher, initialSeqOut,
-																																			 currentCounts,
-																																			 njh::pasteAsStr(iterNumber));
+																																			 currentCounts);
 					}
 					{
 						std::lock_guard<std::mutex> lockGuard(mut);
@@ -744,17 +794,14 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 			SeqInput reader(undeterminedSingleInOpts);
 			reader.openIn();
 			std::function<void()> readInComp = [&reader, &uniqueKmersPerSet,
-							&mut, &extractingPars, &initialSeqOut, &initialCounts
-//							, &testReads
-			, &iterNumber]() {
+							&mut, &extractingPars, &initialSeqOut, &initialCounts]() {
 				SimpleKmerHash hasher;
 				seqInfo seq;
 				UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
 				while (reader.readNextReadLock(seq)) {
 					UniqueKmerSetHelper::processReadForExtracting(seq, uniqueKmersPerSet,
 																												extractingPars, hasher, initialSeqOut,
-																												currentCounts,
-																												njh::pasteAsStr(iterNumber));
+																												currentCounts);
 				}
 
 				{
@@ -767,6 +814,17 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 		}
 		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		initialCounts.writeOutCounts(outCounts,extractingPars,uniqueKmersPerSet,njh::pasteAsStr(iterNumber));
+		{
+			auto totalReadCnt = initialCounts.getTotalCounts();
+			for(const auto & set : initialCounts.inversePairReadCountsPerSet) {
+				inversePairOutCountsOut << njh::pasteAsStr(iterNumber)
+				<< "\t" << extractingPars.compPars.sampleName
+				<< "\t" << totalReadCnt
+				<< "\t" << set.first
+				<< "\t" << set.second
+				<< "\t" << static_cast<double>(set.second)/static_cast<double>(totalReadCnt) << std::endl;
+			}
+		}
 		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		uint64_t currentTotalUndeterminedReads = initialCounts.genTotalUndeterminedCount();
 		uint64_t currentTotalReads = initialCounts.getTotalCounts();
@@ -866,10 +924,24 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 					PairedRead pseq;
 					UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
 					while (reader.readNextReadLock(pseq)) {
-						UniqueKmerSetHelper::processReadForExtractingPairsSeparate(pseq, uniqueKmersPerSet,
+						bool firstMatePassQcCheck = UniqueKmerSetHelper::readPassesQCChecks(pseq.seqBase_, extractingPars,currentCounts);
+						bool secondMatePassQcCheck = UniqueKmerSetHelper::readPassesQCChecks(pseq.mateSeqBase_, extractingPars,currentCounts);
+						if(firstMatePassQcCheck && secondMatePassQcCheck) {
+							UniqueKmerSetHelper::processReadForExtractingPairsSeparate(pseq, uniqueKmersPerSet,
 																																			 extractingPars, hasher, finalSeqOut,
-																																			 currentCounts,
-																																			 "final");
+																																			 currentCounts
+																							);
+						} else if(firstMatePassQcCheck) {
+							pseq.seqBase_.name_.append("_firstMate");
+							UniqueKmerSetHelper::processReadForExtracting(pseq.seqBase_, uniqueKmersPerSet,
+																		extractingPars, hasher, finalSeqOut,
+																		currentCounts);
+						} else if(secondMatePassQcCheck) {
+							pseq.mateSeqBase_.name_.append("_secondMate");
+							UniqueKmerSetHelper::processReadForExtracting(pseq.mateSeqBase_, uniqueKmersPerSet,
+																		extractingPars, hasher, finalSeqOut,
+																		currentCounts);
+						}
 					}
 					{
 						std::lock_guard<std::mutex> lockGuard(mut);
@@ -884,10 +956,24 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 					PairedRead pseq;
 					UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
 					while (reader.readNextReadLock(pseq)) {
-						UniqueKmerSetHelper::processReadForExtractingPairsTogether(pseq, uniqueKmersPerSet,
+						bool firstMatePassQcCheck = UniqueKmerSetHelper::readPassesQCChecks(pseq.seqBase_, extractingPars,currentCounts);
+						bool secondMatePassQcCheck = UniqueKmerSetHelper::readPassesQCChecks(pseq.mateSeqBase_, extractingPars,currentCounts);
+						if(firstMatePassQcCheck && secondMatePassQcCheck) {
+							UniqueKmerSetHelper::processReadForExtractingPairsTogether(pseq, uniqueKmersPerSet,
 																																			 extractingPars, hasher, finalSeqOut,
-																																			 currentCounts,
-																																			 "final");
+																																			 currentCounts
+																							);
+						} else if(firstMatePassQcCheck) {
+							pseq.seqBase_.name_.append("_firstMate");
+							UniqueKmerSetHelper::processReadForExtracting(pseq.seqBase_, uniqueKmersPerSet,
+																		extractingPars, hasher, finalSeqOut,
+																		currentCounts);
+						} else if(secondMatePassQcCheck) {
+							pseq.mateSeqBase_.name_.append("_secondMate");
+							UniqueKmerSetHelper::processReadForExtracting(pseq.mateSeqBase_, uniqueKmersPerSet,
+																		extractingPars, hasher, finalSeqOut,
+																		currentCounts);
+						}
 					}
 					{
 						std::lock_guard<std::mutex> lockGuard(mut);
@@ -908,10 +994,12 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 				seqInfo seq;
 				UniqueKmerSetHelper::ProcessReadForExtractingCounts currentCounts;
 				while (reader.readNextReadLock(seq)) {
-					UniqueKmerSetHelper::processReadForExtracting(seq, uniqueKmersPerSet,
-																												extractingPars, hasher, finalSeqOut,
-																												currentCounts,
-																												"final");
+					if(UniqueKmerSetHelper::readPassesQCChecks(seq,extractingPars,currentCounts)) {
+						UniqueKmerSetHelper::processReadForExtracting(seq, uniqueKmersPerSet,
+						                                              extractingPars, hasher, finalSeqOut,
+						                                              currentCounts
+						);
+					}
 				}
 				{
 					std::lock_guard<std::mutex> lockGuard(mut);
@@ -921,6 +1009,17 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 			njh::concurrent::runVoidFunctionThreaded(readInComp, numThreads);
 		}
 		finalCounts.writeOutCounts(outCounts,extractingPars,uniqueKmersPerSet,"final");
+		{
+			auto totalReadCnt = initialCounts.getTotalCounts();
+			for(const auto & set : initialCounts.inversePairReadCountsPerSet) {
+				inversePairOutCountsOut << njh::pasteAsStr("final")
+				<< "\t" << extractingPars.compPars.sampleName
+				<< "\t" << totalReadCnt
+				<< "\t" << set.first
+				<< "\t" << set.second
+				<< "\t" << static_cast<double>(set.second)/static_cast<double>(totalReadCnt) << std::endl;
+			}
+		}
 		if(setUp.pars_.verbose_){
 			std::cout << "iterNumber: " << "final" << std::endl;
 			std::cout << "Total Reads: " << finalCounts.getTotalCounts() << std::endl;

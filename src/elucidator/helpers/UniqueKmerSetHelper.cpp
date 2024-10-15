@@ -8,229 +8,101 @@
 
 namespace njhseq {
 
-
-UniqueKmerSetHelper::CompareReadToSetRes UniqueKmerSetHelper::compareReadToSets(PairedRead &pseq,
-																																								const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
-																																								const CompareReadToSetPars &compPars,
-																																								const SimpleKmerHash &hasher) {
-	CompareReadToSetRes ret;
-	if (len(pseq.seqBase_.seq_) > compPars.klen) {
-		for (uint32_t pos = 0; pos < len(pseq.seqBase_.seq_) - compPars.klen + 1; ++pos) {
-			++ret.hashedInputKmers[hasher.hash(pseq.seqBase_.seq_.substr(pos, compPars.klen))];
-		}
-	}
-	if (len(pseq.mateSeqBase_.seq_) > compPars.klen) {
-		for (uint32_t pos = 0; pos < len(pseq.mateSeqBase_.seq_) - compPars.klen + 1; ++pos) {
-			++ret.hashedInputKmers[hasher.hash(pseq.mateSeqBase_.seq_.substr(pos, compPars.klen))];
-		}
-	}
-	if (compPars.includeRevComp) {
-		if (len(pseq.seqBase_.seq_) > compPars.klen) {
-			for (uint32_t pos = 0; pos < len(pseq.seqBase_.seq_) - compPars.klen + 1; ++pos) {
-				++ret.hashedInputKmersRevComp[hasher.revCompHash(pseq.seqBase_.seq_.substr(pos, compPars.klen))];
-			}
-		}
-		if (len(pseq.mateSeqBase_.seq_) > compPars.klen) {
-			for (uint32_t pos = 0; pos < len(pseq.mateSeqBase_.seq_) - compPars.klen + 1; ++pos) {
-				++ret.hashedInputKmersRevComp[hasher.revCompHash(pseq.mateSeqBase_.seq_.substr(pos, compPars.klen))];
-			}
-		}
-	}
-
-
-	for (const auto &hashedKmer: ret.hashedInputKmers) {
-		for (const auto &uniqueKmers: uniqueKmersPerSet) {
-			if (njh::in(hashedKmer.first, uniqueKmers.second)) {
-				++ret.foundPerSet[uniqueKmers.first];
-			}
-		}
-	}
-
-	if (compPars.includeRevComp) {
-		for (const auto &hashedKmer: ret.hashedInputKmersRevComp) {
-			for (const auto &uniqueKmers: uniqueKmersPerSet) {
-				if (njh::in(hashedKmer.first, uniqueKmers.second)) {
-					++ret.foundPerSetRevComp[uniqueKmers.first];
-				}
-			}
-		}
-	}
-
-	//set a hard cut off, reset counts to zero
-	for (auto &perSet: ret.foundPerSet) {
-		if (perSet.second < compPars.hardCountOff) {
-			perSet.second = 0;
-		}
-	}
-	for (auto &perSet: ret.foundPerSetRevComp) {
-		if (perSet.second < compPars.hardCountOff) {
-			perSet.second = 0;
-		}
-	}
-
-	uint32_t kmersPossible = (pseq.seqBase_.seq_.size() - compPars.klen + 1) + (pseq.mateSeqBase_.seq_.size() - compPars.klen + 1);
-	//set a hard cut off or the fraction of possible kmers is less than frac cut off, reset counts to zero
-	for (auto &perSet: ret.foundPerSet) {
-		if (perSet.second < compPars.hardCountOff || perSet.second / static_cast<double>(kmersPossible) < compPars.fracCutOff) {
-			perSet.second = 0;
-		}
-	}
-	for (auto &perSet: ret.foundPerSetRevComp) {
-		if (perSet.second < compPars.hardCountOff || perSet.second / static_cast<double>(kmersPossible) < compPars.fracCutOff) {
-			perSet.second = 0;
-		}
-	}
-
-	for (const auto &setName: njh::getVecOfMapKeys(uniqueKmersPerSet)) {
-		if (static_cast<double>(ret.foundPerSet[setName]) / static_cast<double>(ret.hashedInputKmers.size()) >
-				ret.bestFrac) {
-			ret.bestFrac = static_cast<double>(ret.foundPerSet[setName]) / static_cast<double>(ret.hashedInputKmers.size());
-			ret.winnerSet = setName;
-			ret.winnerRevComp = false;
-		}
-		if (compPars.includeRevComp) {
-			if (static_cast<double>(ret.foundPerSetRevComp[setName]) / static_cast<double>(ret.hashedInputKmers.size()) >
-					ret.bestFrac) {
-				ret.bestFrac = static_cast<double>(ret.foundPerSetRevComp[setName]) /
-											 static_cast<double>(ret.hashedInputKmers.size());
-				ret.winnerSet = setName;
-				ret.winnerRevComp = true;
-			}
-		}
-	}
-
-	if (ret.winnerRevComp) {
-		pseq.seqBase_.reverseComplementRead(false, true);
-		pseq.mateSeqBase_.reverseComplementRead(false, true);
-	}
-	return ret;
-}
-
-UniqueKmerSetHelper::CompareReadToSetRes UniqueKmerSetHelper::compareReadToSets(seqInfo &seq,
-																																								const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
-																																								const CompareReadToSetPars &compPars,
-																																								const SimpleKmerHash &hasher) {
-	CompareReadToSetRes ret;
+void UniqueKmerSetHelper::CompareReadToSetRes::increaseHashedInputKmerCounts(const seqInfo & seq, const CompareReadToSetPars &compPars, const SimpleKmerHash &hasher) {
+	// hash kmers
 	if (len(seq.seq_) > compPars.klen) {
 		for (uint32_t pos = 0; pos < len(seq.seq_) - compPars.klen + 1; ++pos) {
-			++ret.hashedInputKmers[hasher.hash(seq.seq_.substr(pos, compPars.klen))];
-		}
-		if (compPars.includeRevComp) {
-			for (uint32_t pos = 0; pos < len(seq.seq_) - compPars.klen + 1; ++pos) {
-				++ret.hashedInputKmersRevComp[hasher.revCompHash(seq.seq_.substr(pos, compPars.klen))];
-			}
+			++hashedInputKmers[hasher.hash(seq.seq_.substr(pos, compPars.klen))];
 		}
 	}
+}
+
+void UniqueKmerSetHelper::CompareReadToSetRes::increaseHashedInputKmerCountsRevComp(const seqInfo & seq, const CompareReadToSetPars &compPars, const SimpleKmerHash &hasher) {
+	// hash kmers
+	if (len(seq.seq_) > compPars.klen) {
+		for (uint32_t pos = 0; pos < len(seq.seq_) - compPars.klen + 1; ++pos) {
+			++hashedInputKmersRevComp[hasher.revCompHash(seq.seq_.substr(pos, compPars.klen))];
+		}
+	}
+}
+
+void UniqueKmerSetHelper::CompareReadToSetRes::increaseHashedInputKmerCountsBoth(const seqInfo & seq, const CompareReadToSetPars &compPars, const SimpleKmerHash &hasher) {
+	// hash kmers
+	if (len(seq.seq_) > compPars.klen) {
+		for (uint32_t pos = 0; pos < len(seq.seq_) - compPars.klen + 1; ++pos) {
+			++hashedInputKmers[hasher.hash(seq.seq_.substr(pos, compPars.klen))];
+		}
+		for (uint32_t pos = 0; pos < len(seq.seq_) - compPars.klen + 1; ++pos) {
+			++hashedInputKmersRevComp[hasher.revCompHash(seq.seq_.substr(pos, compPars.klen))];
+		}
+	}
+}
+
+void UniqueKmerSetHelper::CompareReadToSetRes::determineWinner(
+	const std::unordered_map<std::string, std::unordered_set<uint64_t> > &uniqueKmersPerSet) {
+	for (const auto &setName: uniqueKmersPerSet) {
+		if (static_cast<double>(foundPerSet[setName.first]) / static_cast<double>(hashedInputKmers.size()) >
+		    bestFrac) {
+			bestFrac = static_cast<double>(foundPerSet[setName.first]) / static_cast<double>(hashedInputKmers.size());
+			winnerSet = setName.first;
+			winnerRevComp = false;
+		}
+		//if not checking rev comp this will be always be false so don't have to check if we're checking rev comp
+		if (static_cast<double>(foundPerSetRevComp[setName.first]) / static_cast<double>(hashedInputKmers.size()) >
+		    bestFrac) {
+			bestFrac = static_cast<double>(foundPerSetRevComp[setName.first]) /
+			           static_cast<double>(hashedInputKmers.size());
+			winnerSet = setName.first;
+			winnerRevComp = true;
+		}
+	}
+}
 
 
-	for (const auto &hashedKmer: ret.hashedInputKmers) {
+void UniqueKmerSetHelper::CompareReadToSetRes::checkForPresenceOfHashedInputKmers(const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet){
+	// check for presence of kmers in sets
+	for (const auto &hashedKmer: hashedInputKmers) {
 		for (const auto &uniqueKmers: uniqueKmersPerSet) {
 			if (njh::in(hashedKmer.first, uniqueKmers.second)) {
-				++ret.foundPerSet[uniqueKmers.first];
+				++foundPerSet[uniqueKmers.first];
 			}
 		}
 	}
-
-	if (compPars.includeRevComp) {
-		for (const auto &hashedKmer: ret.hashedInputKmersRevComp) {
-			for (const auto &uniqueKmers: uniqueKmersPerSet) {
-				if (njh::in(hashedKmer.first, uniqueKmers.second)) {
-					++ret.foundPerSetRevComp[uniqueKmers.first];
-				}
+	//if not checking rev comp this will just be empty anyways so don't have to check if checking rev comp
+	for (const auto &hashedKmer: hashedInputKmersRevComp) {
+		for (const auto &uniqueKmers: uniqueKmersPerSet) {
+			if (njh::in(hashedKmer.first, uniqueKmers.second)) {
+				++foundPerSetRevComp[uniqueKmers.first];
 			}
 		}
 	}
-
-//	bool print = false;
-//	VecStr testReadNames = {"ERR980507.sra.1612064_secondMate","ERR980507.sra.506751_secondMate","ERR980507.sra.1358147_firstMate","ERR980507.sra.101811_secondMate","ERR980507.sra.101803_secondMate"};
-//	if(njh::in(seq.name_, testReadNames)){
-//		print = true;
-//	}
-
-	uint32_t kmersPossible = seq.seq_.size() - compPars.klen + 1;
-	//set a hard cut-off or the fraction of possible kmers is less than frac cut off, reset counts to zero
-
-//	if(print){
-//		auto foundNames = njh::getSetOfMapKeys(ret.foundPerSet);
-//		std::cout << seq.name_ << std::endl;
-//		std::cout << "forward" << std::endl;
-//		for(const auto & name : foundNames){
-//			std::cout << name << " " << ret.foundPerSet.at(name) << " " << ret.foundPerSet.at(name)/static_cast<double>(kmersPossible) << std::endl;
-//			std::cout << "\t" << ret.foundPerSet.at(name)/static_cast<double>(ret.hashedInputKmers.size()) << std::endl;
-//		}
-//		std::cout << "reverse" << std::endl;
-//		foundNames = njh::getSetOfMapKeys(ret.foundPerSetRevComp);
-//		for(const auto & name : foundNames){
-//			std::cout << name << " " << ret.foundPerSetRevComp.at(name) << " " << ret.foundPerSetRevComp.at(name)/static_cast<double>(kmersPossible) << std::endl;
-//			std::cout << "\t" << ret.foundPerSetRevComp.at(name)/static_cast<double>(ret.hashedInputKmers.size()) << std::endl;
-//		}
-//	}
-
-	for (auto &perSet: ret.foundPerSet) {
-		if (njh::in(perSet.first, compPars.excludeSetNames)) {
-			if (perSet.second < compPars.initialExcludeHardCountOff || perSet.second / static_cast<double>(kmersPossible) < compPars.initialExcludeFracCutOff) {
-				perSet.second = 0;
-			}
-		} else {
-			if (perSet.second < compPars.hardCountOff || perSet.second / static_cast<double>(kmersPossible) < compPars.fracCutOff) {
-				perSet.second = 0;
-			}
-		}
-	}
-	for (auto &perSet: ret.foundPerSetRevComp) {
-		if (njh::in(perSet.first, compPars.excludeSetNames)) {
-			if (perSet.second < compPars.initialExcludeHardCountOff || perSet.second / static_cast<double>(kmersPossible) < compPars.initialExcludeFracCutOff) {
-				perSet.second = 0;
-			}
-		} else {
-			if (perSet.second < compPars.hardCountOff || perSet.second / static_cast<double>(kmersPossible) < compPars.fracCutOff) {
-				perSet.second = 0;
-			}
-		}
-	}
-//	if(print){
-//		auto foundNames = njh::getSetOfMapKeys(ret.foundPerSet);
-//		std::cout << "forward" << std::endl;
-//		foundNames = njh::getSetOfMapKeys(ret.foundPerSet);
-//		for(const auto & name : foundNames){
-//			std::cout << name << " " << ret.foundPerSet.at(name) << " " << ret.foundPerSet.at(name)/static_cast<double>(kmersPossible) << std::endl;
-//			std::cout << "\t" << ret.foundPerSet.at(name)/static_cast<double>(ret.hashedInputKmers.size()) << std::endl;
-//		}
-//		std::cout << "reverse" << std::endl;
-//		foundNames = njh::getSetOfMapKeys(ret.foundPerSetRevComp);
-//		for(const auto & name : foundNames){
-//			std::cout << name << " " << ret.foundPerSetRevComp.at(name) << " " << ret.foundPerSetRevComp.at(name)/static_cast<double>(kmersPossible) << std::endl;
-//			std::cout << "\t" << ret.foundPerSetRevComp.at(name)/static_cast<double>(ret.hashedInputKmers.size()) << std::endl;
-//		}
-//	}
-
-	for (const auto &setName: njh::getVecOfMapKeys(uniqueKmersPerSet)) {
-		if (static_cast<double>(ret.foundPerSet[setName]) / static_cast<double>(ret.hashedInputKmers.size()) >
-				ret.bestFrac) {
-			ret.bestFrac = static_cast<double>(ret.foundPerSet[setName]) / static_cast<double>(ret.hashedInputKmers.size());
-			ret.winnerSet = setName;
-			ret.winnerRevComp = false;
-		}
-		if (compPars.includeRevComp) {
-			if (static_cast<double>(ret.foundPerSetRevComp[setName]) / static_cast<double>(ret.hashedInputKmers.size()) >
-					ret.bestFrac) {
-				ret.bestFrac = static_cast<double>(ret.foundPerSetRevComp[setName]) /
-											 static_cast<double>(ret.hashedInputKmers.size());
-				ret.winnerSet = setName;
-				ret.winnerRevComp = true;
-			}
-		}
-	}
-//	if(print){
-//		std::cout << "ret.winnerSet: " << ret.winnerSet << std::endl;
-//		std::cout << std::endl;
-//	}
-
-	if (ret.winnerRevComp) {
-		seq.reverseComplementRead(false, true);
-	}
-	return ret;
 }
+
+void UniqueKmerSetHelper::CompareReadToSetRes::preprocessedFoundKmers(const CompareReadToSetPars &compPars, uint32_t kmersPossible) {
+	for (auto &perSet: foundPerSet) {
+		if (njh::in(perSet.first, compPars.excludeSetNames)) {
+			if (perSet.second < compPars.initialExcludeHardCountOff || perSet.second / static_cast<double>(kmersPossible) < compPars.initialExcludeFracCutOff) {
+				perSet.second = 0;
+			}
+		} else {
+			if (perSet.second < compPars.hardCountOff || perSet.second / static_cast<double>(kmersPossible) < compPars.fracCutOff) {
+				perSet.second = 0;
+			}
+		}
+	}
+	for (auto &perSet: foundPerSetRevComp) {
+		if (njh::in(perSet.first, compPars.excludeSetNames)) {
+			if (perSet.second < compPars.initialExcludeHardCountOff || perSet.second / static_cast<double>(kmersPossible) < compPars.initialExcludeFracCutOff) {
+				perSet.second = 0;
+			}
+		} else {
+			if (perSet.second < compPars.hardCountOff || perSet.second / static_cast<double>(kmersPossible) < compPars.fracCutOff) {
+				perSet.second = 0;
+			}
+		}
+	}
+}
+
 
 
 
@@ -243,7 +115,7 @@ void UniqueKmerSetHelper::CompareReadToSetRes::zeroFillFoundSets(const VecStr &s
 }
 
 
-uint32_t UniqueKmerSetHelper::CompareReadToSetRes::getTotalDetermined() {
+uint32_t UniqueKmerSetHelper::CompareReadToSetRes::getTotalDetermined() const {
 	uint32_t count = 0;
 	for (auto &perSet: foundPerSet) {
 		count += perSet.second;
@@ -276,7 +148,7 @@ UniqueKmerSetHelper::CompareReadToSetRes::writeOutputHeader(std::ostream &out, c
 
 std::vector<std::vector<std::string>> UniqueKmerSetHelper::CompareReadToSetRes::genOutput(const seqInfo &seq,
 																																													const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
-																																													const CompareReadToSetPars &compPars) {
+																																													const CompareReadToSetPars &compPars) const {
 	std::vector<std::vector<std::string>> content;
 	for (const auto &setName: uniqueKmersPerSet) {
 		VecStr row = toVecStr(
@@ -314,7 +186,7 @@ std::vector<std::vector<std::string>> UniqueKmerSetHelper::CompareReadToSetRes::
 void UniqueKmerSetHelper::CompareReadToSetRes::writeOutput(std::ostream &out, const seqInfo &seq,
 																													 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
 																													 const CompareReadToSetPars &compPars,
-																													 const std::string &delim) {
+																													 const std::string &delim) const {
 	auto content = genOutput(seq, uniqueKmersPerSet, compPars);
 	for (const auto &row: content) {
 		out << njh::conToStr(row, delim) << "\n";
@@ -374,6 +246,10 @@ UniqueKmerSetHelper::ProcessReadForExtractingCounts::addOtherCounts(const Proces
 	}
 	for (const auto &readsPerSetRevCompCount: otherCounts.readCountsPerSet.at(true)) {
 		readCountsPerSet[true][readsPerSetRevCompCount.first] += readsPerSetRevCompCount.second;
+	}
+	//
+	for (const auto &inversePairReadCounts: otherCounts.inversePairReadCountsPerSet) {
+		inversePairReadCountsPerSet[inversePairReadCounts.first] += inversePairReadCounts.second;
 	}
 }
 
@@ -554,310 +430,6 @@ uint64_t UniqueKmerSetHelper::ProcessReadForExtractingCounts::genTotalDetermined
 	return totalDeterminedCount;
 }
 
-
-void UniqueKmerSetHelper::processReadForExtracting(PairedRead &pseq,
-																									 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
-																									 const ProcessReadForExtractingPars &extractingPars,
-																									 const SimpleKmerHash &hasher,
-																									 MultiSeqIO &seqOut, ProcessReadForExtractingCounts &counts,
-																									 const std::string & iterationName) {
-
-	if(extractingPars.compPars.pairsSeparate){
-		processReadForExtractingPairsSeparate(pseq, uniqueKmersPerSet, extractingPars, hasher, seqOut, counts, iterationName);
-	}else{
-		processReadForExtractingPairsTogether(pseq, uniqueKmersPerSet, extractingPars, hasher, seqOut, counts, iterationName);
-	}
-}
-
-void UniqueKmerSetHelper::processReadForExtractingPairsSeparate(PairedRead &pseq,
-																																const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
-																																const ProcessReadForExtractingPars &extractingPars,
-																																const SimpleKmerHash &hasher,
-																																MultiSeqIO &seqOut, ProcessReadForExtractingCounts &counts,
-																																const std::string & iterationName) {
-
-	if(len(pseq.seqBase_.seq_) < extractingPars.smallLenCutOff && len(pseq.mateSeqBase_.seq_) < extractingPars.smallLenCutOff){
-		++counts.smallLenCutOffCount;
-		return;
-	}
-	ReadCheckerQualCheck checker(extractingPars.qPars.qualCheck_, extractingPars.qPars.qualCheckCutOff_, false);
-
-	if(extractingPars.qPars.checkingQFrac_ && !checker.checkRead(pseq)){
-		++counts.poorQualityCount;
-		return;
-	}
-
-	if(extractingPars.filterOnNs && (std::string::npos != pseq.seqBase_.seq_.find('N') || std::string::npos != pseq.mateSeqBase_.seq_.find('N')) ){
-		++counts.containsNs;
-		return;
-	}
-
-	MetaDataInName meta;
-	if(extractingPars.markReadsPerIteration){
-		if(MetaDataInName::nameHasMetaData(pseq.seqBase_.name_)){
-			meta = MetaDataInName(pseq.seqBase_.name_);
-		}
-		meta.addMeta("iteration", iterationName, true);
-		meta.resetMetaInName(pseq.seqBase_.name_);
-		meta.resetMetaInName(pseq.mateSeqBase_.name_);
-	}
-	auto compResFirstMate = UniqueKmerSetHelper::compareReadToSets(pseq.seqBase_, uniqueKmersPerSet,
-																																 extractingPars.compPars, hasher);
-
-	auto compResSecondMate = UniqueKmerSetHelper::compareReadToSets(pseq.mateSeqBase_, uniqueKmersPerSet,
-																																	extractingPars.compPars, hasher);
-
-	if (compResFirstMate.winnerSet == compResSecondMate.winnerSet &&
-			compResFirstMate.winnerRevComp == compResSecondMate.winnerRevComp &&
-			(len(pseq.seqBase_.seq_) >= extractingPars.smallLenCutOff && len(pseq.mateSeqBase_.seq_) >= extractingPars.smallLenCutOff)) {
-		++counts.readCountsPerSet[compResFirstMate.winnerRevComp][compResFirstMate.winnerSet];
-		if (!extractingPars.doNotWriteUndetermined || compResFirstMate.winnerSet != "undetermined") {
-			if (extractingPars.writeOutExclude || !njh::in(compResFirstMate.winnerSet, extractingPars.compPars.excludeSetNames)) {
-				seqOut.openWrite(njh::pasteAsStr(compResFirstMate.winnerSet, "-paired"), pseq);
-			}
-		}
-	} else {
-
-		if (len(pseq.seqBase_.seq_) < extractingPars.smallLenCutOff) {
-			++counts.smallLenCutOffCount;
-		} else if (extractingPars.qPars.checkingQFrac_ && !checker.checkRead(pseq.seqBase_)) {
-			++counts.poorQualityCount;
-		} else if (extractingPars.filterOnNs && (std::string::npos != pseq.seqBase_.seq_.find('N'))) {
-			++counts.containsNs;
-		} else {
-			pseq.seqBase_.name_.append("_firstMate");
-			++counts.readCountsPerSet[compResFirstMate.winnerRevComp][compResFirstMate.winnerSet];
-			if (!extractingPars.doNotWriteUndetermined || compResFirstMate.winnerSet != "undetermined") {
-				if (extractingPars.writeOutExclude || !njh::in(compResFirstMate.winnerSet, extractingPars.compPars.excludeSetNames)) {
-					seqOut.openWrite(njh::pasteAsStr(compResFirstMate.winnerSet, "-single"), pseq.seqBase_);
-				}
-			}
-		}
-
-		if (len(pseq.mateSeqBase_.seq_) < extractingPars.smallLenCutOff) {
-			++counts.smallLenCutOffCount;
-		} else if (extractingPars.qPars.checkingQFrac_ && !checker.checkRead(pseq.mateSeqBase_)) {
-			++counts.poorQualityCount;
-		} else if (extractingPars.filterOnNs && (std::string::npos != pseq.mateSeqBase_.seq_.find('N'))) {
-			++counts.containsNs;
-		} else {
-			pseq.mateSeqBase_.name_.append("_secondMate");
-			++counts.readCountsPerSet[compResSecondMate.winnerRevComp][compResSecondMate.winnerSet];
-			if (!extractingPars.doNotWriteUndetermined || compResSecondMate.winnerSet != "undetermined") {
-				if (extractingPars.writeOutExclude || !njh::in(compResSecondMate.winnerSet, extractingPars.compPars.excludeSetNames)) {
-					seqOut.openWrite(njh::pasteAsStr(compResSecondMate.winnerSet, "-single"), pseq.mateSeqBase_);
-				}
-			}
-		}
-	}
-}
-
-
-
-void UniqueKmerSetHelper::processReadForFilteringPairsSeparate(PairedRead &pseq,
-																									 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
-																									 const ProcessReadForExtractingPars &extractingPars,
-																									 const SimpleKmerHash &hasher,
-																									 MultiSeqIO &seqOut,
-																									 ProcessReadForExtractingCounts & counts,
-																									 const std::string & iterationName,
-																															 const std::string & filterName,
-																															 const std::string & keepName) {
-
-	MetaDataInName meta;
-	if(extractingPars.markReadsPerIteration){
-		if(MetaDataInName::nameHasMetaData(pseq.seqBase_.name_)){
-			meta = MetaDataInName(pseq.seqBase_.name_);
-		}
-		meta.addMeta("iteration", iterationName, true);
-		meta.resetMetaInName(pseq.seqBase_.name_);
-		meta.resetMetaInName(pseq.mateSeqBase_.name_);
-	}
-	auto compResFirstMate = UniqueKmerSetHelper::compareReadToSets(pseq.seqBase_, uniqueKmersPerSet,
-																																 extractingPars.compPars, hasher);
-
-	auto compResSecondMate = UniqueKmerSetHelper::compareReadToSets(pseq.mateSeqBase_, uniqueKmersPerSet,
-																																	extractingPars.compPars, hasher);
-
-	auto firstMateTotalDetermined = compResFirstMate.getTotalDetermined();
-	auto secondMateTotalDetermined = compResSecondMate.getTotalDetermined();
-	if (firstMateTotalDetermined > 0 && secondMateTotalDetermined > 0) {
-		seqOut.openWrite(njh::pasteAsStr(keepName, "-paired"), pseq);
-	} else if (firstMateTotalDetermined == 0 && secondMateTotalDetermined == 0) {
-		if (extractingPars.writeOutExclude) {
-			seqOut.openWrite(njh::pasteAsStr(filterName, "-paired"), pseq);
-		}
-		counts.filteredDissimilarCount += 1;
-	} else if (firstMateTotalDetermined == 0) {
-		seqOut.openWrite(njh::pasteAsStr(keepName, "-single"), pseq.mateSeqBase_);
-		counts.filteredDissimilarCount += 1;
-		if (extractingPars.writeOutExclude) {
-			seqOut.openWrite(njh::pasteAsStr(filterName, "-single"), pseq.seqBase_);
-		}
-	} else if (secondMateTotalDetermined == 0) {
-		seqOut.openWrite(njh::pasteAsStr(keepName, "-single"), pseq.seqBase_);
-		counts.filteredDissimilarCount += 1;
-		if (extractingPars.writeOutExclude) {
-			seqOut.openWrite(njh::pasteAsStr(filterName, "-single"), pseq.mateSeqBase_);
-		}
-	}
-}
-
-
-
-void UniqueKmerSetHelper::processReadForFilteringPairsTogether(PairedRead &pseq,
-																															 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
-																															 const ProcessReadForExtractingPars &extractingPars,
-																															 const SimpleKmerHash &hasher,
-																															 MultiSeqIO &seqOut,
-																															 ProcessReadForExtractingCounts & counts,
-																															 const std::string & iterationName,
-																															 const std::string & filterName,
-																															 const std::string & keepName) {
-
-	MetaDataInName meta;
-	if(extractingPars.markReadsPerIteration){
-		if(MetaDataInName::nameHasMetaData(pseq.seqBase_.name_)){
-			meta = MetaDataInName(pseq.seqBase_.name_);
-		}
-		meta.addMeta("iteration", iterationName, true);
-		meta.resetMetaInName(pseq.seqBase_.name_);
-		meta.resetMetaInName(pseq.mateSeqBase_.name_);
-	}
-	auto compResFirstMate = UniqueKmerSetHelper::compareReadToSets(pseq.seqBase_, uniqueKmersPerSet,
-																																 extractingPars.compPars, hasher);
-
-	auto compResSecondMate = UniqueKmerSetHelper::compareReadToSets(pseq.mateSeqBase_, uniqueKmersPerSet,
-																																	extractingPars.compPars, hasher);
-
-	auto firstMateTotalDetermined = compResFirstMate.getTotalDetermined();
-	auto secondMateTotalDetermined = compResSecondMate.getTotalDetermined();
-	if (firstMateTotalDetermined == 0 && secondMateTotalDetermined == 0) {
-		if (extractingPars.writeOutExclude) {
-			seqOut.openWrite(njh::pasteAsStr(filterName, "-paired"), pseq);
-		}
-		counts.filteredDissimilarCount += 1;
-	} else {
-		seqOut.openWrite(njh::pasteAsStr(keepName, "-paired"), pseq);
-	}
-}
-
-
-void UniqueKmerSetHelper::processReadForFiltering
-				(seqInfo &seq,
-				 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
-				 const ProcessReadForExtractingPars &extractingPars,
-				 const SimpleKmerHash &hasher,
-				 MultiSeqIO &seqOut,
-				 ProcessReadForExtractingCounts &counts,
-				 const std::string &iterationName,
-				 const std::string &filterName,
-				 const std::string &keepName) {
-
-	MetaDataInName meta;
-	if(extractingPars.markReadsPerIteration){
-		if(MetaDataInName::nameHasMetaData(seq.name_)){
-			meta = MetaDataInName(seq.name_);
-		}
-		meta.addMeta("iteration", iterationName, true);
-		meta.resetMetaInName(seq.name_);
-	}
-	auto compRes = UniqueKmerSetHelper::compareReadToSets(seq, uniqueKmersPerSet, extractingPars.compPars, hasher);
-
-	auto totalDetermined = compRes.getTotalDetermined();
-	if (totalDetermined == 0) {
-		if (extractingPars.writeOutExclude) {
-			seqOut.openWrite(njh::pasteAsStr(filterName, "-single"), seq);
-		}
-		counts.filteredDissimilarCount += 1;
-	} else {
-		seqOut.openWrite(njh::pasteAsStr(keepName, "-single"), seq);
-	}
-}
-
-
-
-
-void UniqueKmerSetHelper::processReadForExtractingPairsTogether(PairedRead &pseq,
-																									 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
-																									 const ProcessReadForExtractingPars &extractingPars,
-																									 const SimpleKmerHash &hasher,
-																									 MultiSeqIO &seqOut, ProcessReadForExtractingCounts &counts,
-																									 const std::string & iterationName) {
-	if(len(pseq.seqBase_.seq_) < extractingPars.smallLenCutOff && len(pseq.mateSeqBase_.seq_) < extractingPars.smallLenCutOff){
-		++counts.smallLenCutOffCount;
-		return;
-	}
-
-	ReadCheckerQualCheck checker(extractingPars.qPars.qualCheck_, extractingPars.qPars.qualCheckCutOff_, false);
-
-	if(extractingPars.qPars.checkingQFrac_ && !checker.checkRead(pseq)){
-		++counts.poorQualityCount;
-		return;
-	}
-
-	if(extractingPars.filterOnNs && (std::string::npos != pseq.seqBase_.seq_.find('N') || std::string::npos != pseq.mateSeqBase_.seq_.find('N')) ){
-		++counts.containsNs;
-		return;
-	}
-
-
-	MetaDataInName meta;
-	if(extractingPars.markReadsPerIteration){
-		if(MetaDataInName::nameHasMetaData(pseq.seqBase_.name_)){
-			meta = MetaDataInName(pseq.seqBase_.name_);
-		}
-		meta.addMeta("iteration", iterationName, true);
-		meta.resetMetaInName(pseq.seqBase_.name_);
-		meta.resetMetaInName(pseq.mateSeqBase_.name_);
-	}
-
-	auto compRes = UniqueKmerSetHelper::compareReadToSets(pseq, uniqueKmersPerSet, extractingPars.compPars, hasher);
-	++counts.readCountsPerSet[compRes.winnerRevComp][compRes.winnerSet];
-	if(!extractingPars.doNotWriteUndetermined || compRes.winnerSet != "undetermined"){
-		if(extractingPars.writeOutExclude || !njh::in(compRes.winnerSet, extractingPars.compPars.excludeSetNames)){
-			seqOut.openWrite(njh::pasteAsStr(compRes.winnerSet, "-paired"), pseq);
-		}
-	}
-}
-
-void UniqueKmerSetHelper::processReadForExtracting(seqInfo &seq,
-																									 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
-																									 const ProcessReadForExtractingPars & extractingPars, const SimpleKmerHash &hasher,
-																									 MultiSeqIO & seqOut, ProcessReadForExtractingCounts & counts,
-																									 const std::string & iterationName){
-	if(len(seq.seq_) < extractingPars.smallLenCutOff){
-		++counts.smallLenCutOffCount;
-		return;
-	}
-	ReadCheckerQualCheck checker(extractingPars.qPars.qualCheck_, extractingPars.qPars.qualCheckCutOff_, false);
-
-	if(extractingPars.qPars.checkingQFrac_ && !checker.checkRead(seq)){
-		++counts.poorQualityCount;
-		return;
-	}
-
-	if(extractingPars.filterOnNs && (std::string::npos != seq.seq_.find('N')) ){
-		++counts.containsNs;
-		return;
-	}
-
-	MetaDataInName meta;
-	if(extractingPars.markReadsPerIteration){
-		if(MetaDataInName::nameHasMetaData(seq.name_)){
-			meta = MetaDataInName(seq.name_);
-		}
-		meta.addMeta("iteration", iterationName, true);
-		meta.resetMetaInName(seq.name_);
-	}
-	auto compRes = UniqueKmerSetHelper::compareReadToSets(seq, uniqueKmersPerSet, extractingPars.compPars, hasher);
-	++counts.readCountsPerSet[compRes.winnerRevComp][compRes.winnerSet];
-	if(!extractingPars.doNotWriteUndetermined || compRes.winnerSet != "undetermined"){
-		if(extractingPars.writeOutExclude || !njh::in(compRes.winnerSet, extractingPars.compPars.excludeSetNames)){
-			seqOut.openWrite(njh::pasteAsStr(compRes.winnerSet, "-single"), seq);
-		}
-	}
-}
 
 
 std::unordered_map<std::string, std::unordered_map<uint64_t, uint32_t>>
