@@ -222,9 +222,16 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 	setUp.setOption(extractingPars.qPars.qualCheck_, "--qualCheck", "quality score for filtering");
 	extractingPars.qPars.qualCheckCutOff_ = 0.50;
 	setUp.setOption(extractingPars.qPars.qualCheckCutOff_, "--qualCheckCutOff", "the fraction of bases that have to be above the qualCheck check");
-	setUp.setOption(extractingPars.qPars.checkingQFrac_, "--checkingQFrac", "filtering on quality");
+
+	// setUp.setOption(extractingPars.qPars.checkingQFrac_, "--checkingQFrac", "filtering on quality");
+	bool notCheckingQFrac = false;
+	setUp.setOption(notCheckingQFrac, "--noCheckingQFrac", "do not filtering on quality");
+	extractingPars.qPars.checkingQFrac_ = ! notCheckingQFrac;
 	extractingPars.qual_checker = std::make_shared<ReadCheckerQualCheck>(extractingPars.qPars.qualCheck_, extractingPars.qPars.qualCheckCutOff_, false);
-	setUp.setOption(extractingPars.filterOnNs, "--filterOnNs", "filter reads containing Ns");
+	bool doNotFilterOnNs = false;
+	setUp.setOption(doNotFilterOnNs, "--noFilterOnNs", "do not filter reads containing Ns");
+	extractingPars.filterOnNs = ! doNotFilterOnNs;
+	//setUp.setOption(extractingPars.filterOnNs, "--filterOnNs", "filter reads containing Ns");
 
 
 
@@ -1010,8 +1017,8 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 		}
 		finalCounts.writeOutCounts(outCounts,extractingPars,uniqueKmersPerSet,"final");
 		{
-			auto totalReadCnt = initialCounts.getTotalCounts();
-			for(const auto & set : initialCounts.inversePairReadCountsPerSet) {
+			auto totalReadCnt = finalCounts.getTotalCounts();
+			for(const auto & set : finalCounts.inversePairReadCountsPerSet) {
 				inversePairOutCountsOut << njh::pasteAsStr("final")
 				<< "\t" << extractingPars.compPars.sampleName
 				<< "\t" << totalReadCnt

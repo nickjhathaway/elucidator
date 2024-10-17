@@ -182,13 +182,99 @@ void UniqueKmerSetHelper::processReadForExtractingPairsTogether(PairedRead &pseq
 																									 MultiSeqIO &seqOut, ProcessReadForExtractingCounts &counts
 																									 ) {
 
-	auto compRes = UniqueKmerSetHelper::compareReadToSets(pseq, uniqueKmersPerSet, extractingPars.compPars, hasher);
+	// auto compRes = UniqueKmerSetHelper::compareReadToSets(pseq, uniqueKmersPerSet, extractingPars.compPars, hasher);
+	//
+	// ++counts.readCountsPerSet[compRes.winnerRevComp][compRes.winnerSet];
+	// ++counts.readCountsPerSet[compRes.winnerRevComp][compRes.winnerSet];
+	// if(!extractingPars.doNotWriteUndetermined || compRes.winnerSet != "undetermined"){
+	// 	if(extractingPars.writeOutExclude || !njh::in(compRes.winnerSet, extractingPars.compPars.excludeSetNames)){
+	// 		seqOut.openWrite(njh::pasteAsStr(compRes.winnerSet, "-paired"), pseq);
+	// 	}
+	// }
 
-	++counts.readCountsPerSet[compRes.winnerRevComp][compRes.winnerSet];
-	++counts.readCountsPerSet[compRes.winnerRevComp][compRes.winnerSet];
-	if(!extractingPars.doNotWriteUndetermined || compRes.winnerSet != "undetermined"){
-		if(extractingPars.writeOutExclude || !njh::in(compRes.winnerSet, extractingPars.compPars.excludeSetNames)){
-			seqOut.openWrite(njh::pasteAsStr(compRes.winnerSet, "-paired"), pseq);
+	// auto compResFirstMate = UniqueKmerSetHelper::compareReadToSets(pseq.seqBase_, uniqueKmersPerSet,
+	// 																															 extractingPars.compPars, hasher);
+	//
+	// auto compResSecondMate = UniqueKmerSetHelper::compareReadToSets(pseq.mateSeqBase_, uniqueKmersPerSet,
+	// 																																extractingPars.compPars, hasher);
+	//
+	//
+	// if (compResFirstMate.winnerSet == compResSecondMate.winnerSet &&
+	// 		compResFirstMate.winnerRevComp == compResSecondMate.winnerRevComp ) {
+	// 	++counts.readCountsPerSet[compResFirstMate.winnerRevComp][compResFirstMate.winnerSet];
+	// 	++counts.readCountsPerSet[compResFirstMate.winnerRevComp][compResFirstMate.winnerSet];
+	// 	if (!extractingPars.doNotWriteUndetermined || compResFirstMate.winnerSet != "undetermined") {
+	// 		if (extractingPars.writeOutExclude || !njh::in(compResFirstMate.winnerSet, extractingPars.compPars.excludeSetNames)) {
+	// 			seqOut.openWrite(njh::pasteAsStr(compResFirstMate.winnerSet, "-paired"), pseq);
+	// 		}
+	// 	}
+	// } else {
+	// 	if (compResFirstMate.winnerSet == compResSecondMate.winnerSet &&
+	// 					 compResFirstMate.winnerRevComp != compResSecondMate.winnerRevComp &&
+	// 					 !njh::in(compResFirstMate.winnerSet, extractingPars.compPars.excludeSetNames)) {
+	// 		++counts.inversePairReadCountsPerSet[compResFirstMate.winnerSet];
+	// 		++counts.inversePairReadCountsPerSet[compResFirstMate.winnerSet];
+	// 	}
+	// 	//mates didn't match into same category, leave in undetermined
+	// 	++counts.readCountsPerSet[false]["undetermined"];
+	// 	++counts.readCountsPerSet[false]["undetermined"];
+	// 	if (!extractingPars.doNotWriteUndetermined) {
+	// 		if(compResFirstMate.winnerRevComp != compResSecondMate.winnerRevComp) {
+	// 			if(compResSecondMate.winnerRevComp) {
+	// 				pseq.mateSeqBase_.reverseComplementRead(false, true);
+	// 			} else {
+	// 				pseq.seqBase_.reverseComplementRead(false, true);
+	// 			}
+	// 		}
+	// 		seqOut.openWrite(njh::pasteAsStr("undetermined", "-paired"), pseq);
+	// 	}
+	// }
+
+	auto compResFirstMate = UniqueKmerSetHelper::compareReadToSets(pseq.seqBase_, uniqueKmersPerSet,
+																																 extractingPars.compPars, hasher);
+
+	auto compResSecondMate = UniqueKmerSetHelper::compareReadToSets(pseq.mateSeqBase_, uniqueKmersPerSet,
+																																	extractingPars.compPars, hasher);
+
+	if (compResFirstMate.winnerSet == compResSecondMate.winnerSet &&
+						 compResFirstMate.winnerRevComp != compResSecondMate.winnerRevComp &&
+						 !njh::in(compResFirstMate.winnerSet, extractingPars.compPars.excludeSetNames)) {
+		++counts.inversePairReadCountsPerSet[compResFirstMate.winnerSet];
+		++counts.inversePairReadCountsPerSet[compResFirstMate.winnerSet];
+		//mates didn't match into same category, leave in undetermined
+		++counts.readCountsPerSet[false]["undetermined"];
+		++counts.readCountsPerSet[false]["undetermined"];
+		if (!extractingPars.doNotWriteUndetermined) {
+			// if(compResFirstMate.winnerRevComp != compResSecondMate.winnerRevComp) {
+			// 	if(compResSecondMate.winnerRevComp) {
+			// 		pseq.mateSeqBase_.reverseComplementRead(false, true);
+			// 	} else {
+			// 		pseq.seqBase_.reverseComplementRead(false, true);
+			// 	}
+			// }
+			if(compResFirstMate.winnerRevComp) {
+				pseq.seqBase_.reverseComplementRead(false, true);
+			}
+			if(compResSecondMate.winnerRevComp) {
+				pseq.mateSeqBase_.reverseComplementRead(false, true);
+			}
+			seqOut.openWrite(njh::pasteAsStr("undetermined", "-paired"), pseq);
+		}
+	} else {
+		if(compResFirstMate.winnerRevComp) {
+			pseq.seqBase_.reverseComplementRead(false, true);
+		}
+		if(compResSecondMate.winnerRevComp) {
+			pseq.mateSeqBase_.reverseComplementRead(false, true);
+		}
+		auto compRes = UniqueKmerSetHelper::compareReadToSets(pseq, uniqueKmersPerSet, extractingPars.compPars, hasher);
+
+		++counts.readCountsPerSet[compRes.winnerRevComp][compRes.winnerSet];
+		++counts.readCountsPerSet[compRes.winnerRevComp][compRes.winnerSet];
+		if(!extractingPars.doNotWriteUndetermined || compRes.winnerSet != "undetermined"){
+			if(extractingPars.writeOutExclude || !njh::in(compRes.winnerSet, extractingPars.compPars.excludeSetNames)){
+				seqOut.openWrite(njh::pasteAsStr(compRes.winnerSet, "-paired"), pseq);
+			}
 		}
 	}
 }
@@ -205,7 +291,7 @@ void UniqueKmerSetHelper::processReadForExtractingPairsSeparate(PairedRead &pseq
 	auto compResSecondMate = UniqueKmerSetHelper::compareReadToSets(pseq.mateSeqBase_, uniqueKmersPerSet,
 																																	extractingPars.compPars, hasher);
 	if (compResFirstMate.winnerSet == compResSecondMate.winnerSet &&
-			compResFirstMate.winnerRevComp == compResSecondMate.winnerRevComp) {
+			compResFirstMate.winnerRevComp == compResSecondMate.winnerRevComp ) {
 		++counts.readCountsPerSet[compResFirstMate.winnerRevComp][compResFirstMate.winnerSet];
 		++counts.readCountsPerSet[compResFirstMate.winnerRevComp][compResFirstMate.winnerSet];
 		if (!extractingPars.doNotWriteUndetermined || compResFirstMate.winnerSet != "undetermined") {
@@ -213,14 +299,20 @@ void UniqueKmerSetHelper::processReadForExtractingPairsSeparate(PairedRead &pseq
 				seqOut.openWrite(njh::pasteAsStr(compResFirstMate.winnerSet, "-paired"), pseq);
 			}
 		}
-	} else if(compResFirstMate.winnerSet == compResSecondMate.winnerSet &&
-		compResFirstMate.winnerRevComp != compResSecondMate.winnerRevComp) {
+	} else if (compResFirstMate.winnerSet == compResSecondMate.winnerSet &&
+	           compResFirstMate.winnerRevComp != compResSecondMate.winnerRevComp &&
+	           !njh::in(compResFirstMate.winnerSet, extractingPars.compPars.excludeSetNames)) {
 		//one mate matched one direction of the input while the other mate matched the other direction, for now will put into "undetermined"
 		++counts.readCountsPerSet[false]["undetermined"];
 		++counts.readCountsPerSet[false]["undetermined"];
 		++counts.inversePairReadCountsPerSet[compResFirstMate.winnerSet];
 		++counts.inversePairReadCountsPerSet[compResFirstMate.winnerSet];
 		if (!extractingPars.doNotWriteUndetermined) {
+			if(compResSecondMate.winnerRevComp) {
+				pseq.mateSeqBase_.reverseComplementRead(false, true);
+			} else {
+				pseq.seqBase_.reverseComplementRead(false, true);
+			}
 			seqOut.openWrite(njh::pasteAsStr("undetermined", "-paired"), pseq);
 		}
 	} else {
