@@ -44,7 +44,9 @@ class metaExpRunner : public njh::progutils::ProgramRunner {
 	static int splitSeqFileWithMeta(const njh::progutils::CmdArgs & inputCommands);
 	static int splitSeqFileWithExternalMeta(const njh::progutils::CmdArgs & inputCommands);
   static int createTableFromSeqs(const njh::progutils::CmdArgs & inputCommands);
-  static int printMetaFieldsFromSeqs(const njh::progutils::CmdArgs & inputCommands);
+	static int createSeqsFromTable(const njh::progutils::CmdArgs & inputCommands);
+
+	static int printMetaFieldsFromSeqs(const njh::progutils::CmdArgs & inputCommands);
 
 
   static int addMetaFieldToAll(const njh::progutils::CmdArgs & inputCommands);

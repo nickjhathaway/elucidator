@@ -1048,7 +1048,7 @@ int kmerSetExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::Cmd
 		countPars.entropyFilter_ = 0;
 		countPars.allowableCharacters_ = njh::genSetOfAnsiPrintable();
 	}
-	std::string columnsHelp = njh::pasteAsStr("1)set,2)", (fasta? "fasta": "2bit"));
+	std::string columnsHelp = njh::pasteAsStr("1)set,2)", fasta? "fasta": "2bit");
 	setUp.setOption(seqSetTableFnp, "--seqSetTableFnp", "Seq Set Table, 2 columns, " + columnsHelp, true);
 	setUp.setOption(seqSetSuppFastaTableFnp, "--seqSetSuppFastaTableFnp", "Seq Set Table supplement small fasta files, 2 columns, 1)set,2)fasta");
 	countPars.setOptions(setUp);

@@ -58,10 +58,47 @@ seqUtilsModRunner::seqUtilsModRunner()
 		addFunc("compSeq", compSeq, false),
     	addFunc("changeLetterToOtherLetter", changeLetterToOtherLetter, false),
     	addFunc("fragmentSequences", fragmentSequences, false),
+    	addFunc("breakUpSeqsOnPattern", breakUpSeqsOnPattern, false),
 
 
 },//
                     "seqUtilsMod") {}
+
+
+
+int seqUtilsModRunner::breakUpSeqsOnPattern(const njh::progutils::CmdArgs & inputCommands){
+	std::string pattern = "N+";
+	bool doNotModName = false;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDefaultReader( true);
+	setUp.setOption(pattern, "--pattern", "pattern");
+	setUp.setOption(doNotModName, "--doNotModName", "doNotModName");
+
+	setUp.finishSetUp(std::cout);
+
+	seqInfo seq;
+	SeqIO reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	reader.openOut();
+
+	while(reader.readNextRead(seq)){
+		std::regex pat{"N+"};
+		bool mark = doNotModName;
+		//break up
+		auto trimmedSeqs = readVecTrimmer::breakUpSeqOnPat(seq, pat);
+		for(auto & trimmedSeq : trimmedSeqs){
+			if(mark && 0 != trimmedSeq.start_ && len(seq) != trimmedSeq.end_){
+				trimmedSeq.seqBase_.name_.append(njh::pasteAsStr("-s", trimmedSeq.start_, "-e", trimmedSeq.end_));
+			}
+			reader.write(trimmedSeq.seqBase_);
+		}
+	}
+	return 0;
+}
+
+
+
 
 int seqUtilsModRunner::fragmentSequences(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t size = std::numeric_limits<uint32_t>::max();

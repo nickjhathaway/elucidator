@@ -37,7 +37,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	setUp.processDebug();
 	setUp.setOption(clusterOnJacardIndexShared, "--clusterOnJacardIndexShared", "cluster On Jacard Index Shared");
 	setUp.setOption(doNotBreakWithRmse, "--doNotBreakWithRmse", "do Not Break With Rmse");
-	setUp.setOption(dbscanPars.eps_, "--rmseCutOffToBreak", "rmse Cut Off To Break");
+	setUp.setOption(rmseCutOffToBreak, "--rmseCutOffToBreak", "rmse Cut Off To Break");
 
 	setUp.setOption(dbscanPars.eps_, "--eps", "Epsilon (distance sensitivity of algorithm)");
 	setUp.setOption(dbscanPars.minEpNeighbors_, "--minpts", "The minimum number of epsilon neighbors");

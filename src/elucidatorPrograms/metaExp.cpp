@@ -26,6 +26,7 @@
 #include "metaExp.hpp"
 #include <njhseq/IO/SeqIO.h>
 #include <njhseq/objects/Meta.h>
+#include <njhseq/objects/dataContainers/tables/TableReader.hpp>
 
 
 namespace njhseq {
@@ -42,6 +43,8 @@ metaExpRunner::metaExpRunner()
 					 addFunc("splitSeqFileWithMeta", splitSeqFileWithMeta, false),
 					 addFunc("splitSeqFileWithExternalMeta", splitSeqFileWithExternalMeta, false),
 					 addFunc("createTableFromSeqs", createTableFromSeqs, false),
+          	addFunc("createSeqsFromTable", createSeqsFromTable, false),
+
 					 addFunc("printMetaFieldsFromSeqs", printMetaFieldsFromSeqs, false),
 					 addFunc("addMetaFieldToAll", addMetaFieldToAll, false),
 					 addFunc("renameSeqsWithMetaField", renameSeqsWithMetaField, false),
@@ -913,6 +916,10 @@ int metaExpRunner::createTableFromSeqs(const njh::progutils::CmdArgs & inputComm
 
 	allMetaKeys.emplace("name");
 	allMetaKeys.emplace("seq");
+	if(njh::in(setUp.pars_.ioOptions_.inFormat_, {SeqIOOptions::inFormats::FASTQ, SeqIOOptions::inFormats::FASTQGZ})) {
+		allMetaKeys.emplace("qual");
+	}
+
 
 	OutputStream out(tabOpts.out_);
 	table outTab;
@@ -928,9 +935,85 @@ int metaExpRunner::createTableFromSeqs(const njh::progutils::CmdArgs & inputComm
 			}
 		}
 	} else {
-		outTab = seqsToMetaTable(inReads);
+		outTab = seqsToMetaTable(inReads, njh::in(setUp.pars_.ioOptions_.inFormat_, {SeqIOOptions::inFormats::FASTQ, SeqIOOptions::inFormats::FASTQGZ}));
 	}
 	outTab.outPutContents(out, "\t");
+	return 0;
+}
+
+int metaExpRunner::createSeqsFromTable(const njh::progutils::CmdArgs & inputCommands) {
+
+	std::string nameColumn = "name";
+	std::string seqColumn = "seq";
+	std::string qualColumn ;
+	std::set<std::string> fields;
+	std::set<std::string> excludeFields;
+
+	OutOptions out_options;
+	auto tabOpts = TableIOOpts::genTabFileIn("STDIN", true);
+
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+
+	setUp.processWritingOptions(out_options);
+	setUp.setOption(tabOpts.inDelim_, "--delim", "delimiter of file");
+	setUp.setOption(tabOpts.in_.inFilename_, "--file", "File", true);
+	setUp.setOption(nameColumn, "--nameColumn", "Name Column");
+	setUp.setOption(seqColumn, "--seqColumn", "Seq Column");
+	setUp.setOption(qualColumn, "--qualColumn", "qual Column, must be in fastq asci format");
+
+	setUp.setOption(fields, "--fields", "Only export these fields");
+	setUp.setOption(excludeFields, "--excludeFields", "Exclude these fields");
+	setUp.finishSetUp(std::cout);
+
+	TableReader table_reader(tabOpts);
+	VecStr requiredColumns{nameColumn, seqColumn};
+	auto outputFormat = SeqIOOptions::outFormats::FASTAGZ;
+
+	if(!qualColumn.empty()) {
+		outputFormat = SeqIOOptions::outFormats::FASTQGZ;
+		requiredColumns.emplace_back(qualColumn);
+	}
+	table_reader.header_.checkForColumnsThrow(requiredColumns, __PRETTY_FUNCTION__);
+	uint32_t seqColPos = table_reader.header_.getColPos(seqColumn);
+	uint32_t nameColPos = table_reader.header_.getColPos(nameColumn);
+
+	uint32_t qualColPos = std::numeric_limits<uint32_t>::max();
+	if (!qualColumn.empty()) {
+		qualColPos = table_reader.header_.getColPos(qualColumn);
+	}
+	if(!fields.empty()) {
+		table_reader.header_.checkForColumnsThrow(std::vector(fields.begin(), fields.end()), __PRETTY_FUNCTION__);
+	}
+
+	SeqIOOptions out_seq_opts(out_options.outName(), outputFormat);
+	out_seq_opts.out_.transferOverwriteOpts(out_options);
+	SeqOutput writer(out_seq_opts);
+	writer.openOut();
+
+	VecStr row;
+
+
+	while(table_reader.getNextRow(row)) {
+		MetaDataInName meta;
+		for(const auto & col : table_reader.header_.columnNames_) {
+			if(njh::notIn(col, requiredColumns) && (fields.empty() || njh::in(col, fields) ) && (excludeFields.empty() || njh::notIn(col, excludeFields)) ) {
+				meta.addMeta(col, row[table_reader.header_.getColPos(col)], true);
+			}
+		}
+		auto name = row[nameColPos];
+		if(!meta.meta_.empty()) {
+			name += meta.createMetaName();
+		}
+		seqInfo seq;
+		if(qualColumn.empty()) {
+			seq = seqInfo(name, row[seqColPos]);
+		} else {
+			seq = seqInfo(name, row[seqColPos], row[qualColPos], SangerQualOffset);
+		}
+		writer.write(seq);
+	}
+
 	return 0;
 }
 
