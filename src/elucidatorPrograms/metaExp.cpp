@@ -49,9 +49,60 @@ metaExpRunner::metaExpRunner()
 					 addFunc("addMetaFieldToAll", addMetaFieldToAll, false),
 					 addFunc("renameSeqsWithMetaField", renameSeqsWithMetaField, false),
 					 addFunc("addSeqNameAsSampleMeta", addSeqNameAsSampleMeta, false),
+          	addFunc("convertOtherMetaInfoNjhMeta", convertOtherMetaInfoNjhMeta, false),
 
            },//
           "metaExp") {}
+
+
+int metaExpRunner::convertOtherMetaInfoNjhMeta(const njh::progutils::CmdArgs & inputCommands){
+	std::string separator = " ";
+	std::string subSeparator = "=";
+	bool keepFullName = false;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+
+	setUp.processDebug();
+	setUp.setOption(keepFullName, "--keepFullName", "keep the Full original Name and just append the meta");
+
+	setUp.setOption(separator, "--separator", "meta separator");
+	setUp.setOption(subSeparator, "--subSeparator", "sub meta separator, e.g. = would be the separator for field=value, _ for field_value");
+
+	setUp.processDefaultReader(true);
+	setUp.description_ = "convert other meta formating into njh meta format, the other meta has to still have field=value but may have other separators";
+
+	setUp.finishSetUp(std::cout);
+
+
+	seqInfo seq;
+	SeqIO reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	reader.openOut();
+	while (reader.readNextRead(seq)) {
+		auto toks = njh::tokenizeString(seq.name_, separator);
+		MetaDataInName seqMeta;
+		if (toks.size() > 1) {
+			for (const auto & tokPos : iter::range(1UL, toks.size())) {
+				auto subToks = tokenizeString(toks[tokPos], subSeparator);
+				if (subToks.size() != 2) {
+					std::stringstream ss;
+					ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << " expecting two tokens for " << toks[tokPos] << " using sub separator " << subSeparator << " instead got " << subToks.size() << "\n";
+					throw std::runtime_error{ss.str()};
+				}
+				seqMeta.addMeta(subToks[0], subToks[1]);
+			}
+		}
+		auto metaString = seqMeta.createMetaName();
+		if (keepFullName) {
+			seq.name_ += metaString;
+		} else {
+			seq.name_ = njh::pasteAsStr(toks[0], metaString);
+		}
+		reader.write(seq);
+	}
+	return 0;
+}
+
 
 
 int metaExpRunner::addSeqNameAsSampleMeta(const njh::progutils::CmdArgs & inputCommands){

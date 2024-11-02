@@ -23,7 +23,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	bool writeOutDistMatrices = false;
 	bool clusterOnJacardIndexShared = false;
 	njhUndirWeightedGraph<double, std::shared_ptr<BasicPointMatrix<double>::BasicPoint>>::dbscanPars dbscanPars;
-	dbscanPars.eps_ = 0.99;
+	dbscanPars.eps_ = 0.50;
 	dbscanPars.minEpNeighbors_ = 2;
 	bfs::path metaFnp;
 	VecStr metaFieldsToCalcPopDiffs{};
