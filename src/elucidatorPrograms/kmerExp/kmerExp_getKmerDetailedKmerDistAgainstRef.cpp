@@ -226,7 +226,7 @@ int kmerExpRunner::getKmerDetailedKmerDistAgainstRef(const njh::progutils::CmdAr
 	reader.openIn();
 
 	OutputStream out(outOpts);
-	out << "name\tref\trevComp\ttotalShared\tdist\tdistLenAdjust\ttotalKmersIn1\ttotalKmersIn2\ttotalUniqueShared\tuniqDist\tuniqDistLenAdjust\ttotalUniqKmersIn1\ttotalUniqKmersIn2\ttotalUniq" << "\n";
+	out << "name\tref\trevComp\ttotalShared\tsimilarity\tsimilarityLenAdjust\ttotalKmersIn1\ttotalKmersIn2\ttotalUniqueShared\tuniqSimilarity\tuniqSimilarityLenAdjust\ttotalUniqKmersIn1\ttotalUniqKmersIn2\ttotalUniq" << "\n";
 
 	std::mutex outMut;
 	std::function<void()> getBestDist = [&reader,&out,&outMut,

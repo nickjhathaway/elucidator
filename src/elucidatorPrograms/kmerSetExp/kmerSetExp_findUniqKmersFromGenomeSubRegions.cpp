@@ -79,6 +79,9 @@ int kmerSetExpRunner::reportOnUniqKmersSet(const njh::progutils::CmdArgs & input
 	setUp.description_ = "Add unique kmers to set of already determined unique kmers";
 	setUp.setOption(nonUniqueKmerTable, "--nonUniqueKmerTable", "non-unique Kmer Table, 1)set,2)kmer");
 	setUp.setOption(countTable, "--countTable,--kmerTable", "unique kmer sets, 1)set,2)kmer", true);
+	if (nonUniqueKmerTable.empty() && bfs::exists(njh::files::prependFileBasename(countTable, "nonUniqueKmers_"))) {
+		nonUniqueKmerTable = njh::files::prependFileBasename(countTable, "nonUniqueKmers_");
+	}
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 
@@ -129,6 +132,9 @@ int kmerSetExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputCom
 	setUp.setOption(countPars.allUpper_, "--changeSeqsToUpper", "change all sequences to upper case, otherwise they will filter off");
 
 	setUp.setOption(countTable, "--kmerTable,--countTable", "unique kmer sets, 1)set,2)kmer", true);
+	if (nonUniqueKmerTable.empty() && bfs::exists(njh::files::prependFileBasename(countTable, "nonUniqueKmers_"))) {
+		nonUniqueKmerTable = njh::files::prependFileBasename(countTable, "nonUniqueKmers_");
+	}
 	setUp.setOption(regionName, "--regionName", "region name for the input, can be a name already in --kmerTable", true);
 	setUp.processReadInNames(VecStr{"--fasta", "--fastagz", "--fastq", "--fastqgz"}, true);
 	setUp.processWritingOptions(outOpts);

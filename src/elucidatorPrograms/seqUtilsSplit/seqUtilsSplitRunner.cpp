@@ -39,6 +39,10 @@ seqUtilsSplitRunner::seqUtilsSplitRunner()
 
   		addFunc("SeqSplitOnNameContains", SeqSplitOnNameContains, false),
   		addFunc("SeqSplitOnSeqContains", SeqSplitOnSeqContains, false),
+    	addFunc("SeqSplitOnSeqContainsPattern", SeqSplitOnSeqContainsPattern, false),
+    	addFunc("SeqSplitOnSeqAllowableChars", SeqSplitOnSeqAllowableChars, false),
+
+
   		addFunc("SeqSplitOnLenAbove", SeqSplitOnLenAbove, false),
   		addFunc("SeqSplitOnLenBetween", SeqSplitOnLenBetween, false),
   		addFunc("SeqSplitOnQualityWindow", SeqSplitOnQualityWindow, false),
@@ -655,40 +659,137 @@ int seqUtilsSplitRunner::SeqSplitOnNameContains(const njh::progutils::CmdArgs & 
   }
   return 0;
 }
-
 int seqUtilsSplitRunner::SeqSplitOnSeqContains(const njh::progutils::CmdArgs & inputCommands) {
 	defaultSplitPars dSplitPars;
 	std::string seqContains;
-  uint32_t occurences = 1;
+	uint32_t occurrences = 1;
+
+	seqSetUp setUp(inputCommands);
+	defaultSplitSetUpOptions(setUp, dSplitPars);
+	setUp.setOption(occurrences, "--occurrences", "Minimum number of times a sequence must occur");
+	setUp.setOption(seqContains, "--seqContains", "Exclude if Seq Contains this", true);
+
+	setUp.finishSetUp(std::cout);
+
+	MultiSeqOutCache<seqInfo> seqOuts;
+	seqOuts.addReader("include", dSplitPars.incOpts_);
+	seqOuts.addReader("exclude", dSplitPars.excOpts_);
+	auto checker = std::make_unique<const ReadCheckerOnSeqContaining>( seqContains, occurrences, dSplitPars.mark_);
+
+	SeqIO reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	seqInfo seq;
+	while(reader.readNextRead(seq)){
+		checker->checkRead(seq);
+		if(dSplitPars.include_) {
+			seq.on_ = !seq.on_;
+		}
+		std::string condition;
+		if(seq.on_){
+			condition = "include";
+		}else{
+			condition = "exclude";
+		}
+		seqOuts.add(condition, seq);
+	}
+
+	if(setUp.pars_.verbose_){
+		setUp.logRunTime(std::cout);
+	}
+	return 0;
+}
+
+
+
+
+int seqUtilsSplitRunner::SeqSplitOnSeqAllowableChars(const njh::progutils::CmdArgs & inputCommands) {
+	defaultSplitPars dSplitPars;
+	std::vector<char> allowableChars{'A', 'C', 'G', 'T'};
+	uint32_t occurrences = 1;
+
+	seqSetUp setUp(inputCommands);
+	defaultSplitSetUpOptions(setUp, dSplitPars);
+	setUp.setOption(occurrences, "--occurrences", "Minimum number of times a sequence must occur");
+	setUp.setOption(allowableChars, "--allowableChars", "Exclude if seq contains any of characters that aren't these characters");
+	setUp.finishSetUp(std::cout);
+
+	MultiSeqOutCache<seqInfo> seqOuts;
+	seqOuts.addReader("include", dSplitPars.incOpts_);
+	seqOuts.addReader("exclude", dSplitPars.excOpts_);
+
+	SeqIO reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	seqInfo seq;
+	while (reader.readNextRead(seq)) {
+		uint32_t count = std::count_if(seq.seq_.begin(), seq.seq_.end(), [&allowableChars](char c) {
+			return njh::notIn(c, allowableChars);
+		});
+		if (setUp.pars_.verbose_) {
+			std::cout << seq.name_ << std::endl;
+			std::cout << "\tcount: " << count << std::endl;
+		}
+		if (count >= occurrences) {
+			seq.on_ = !seq.on_;
+		}
+		// checker->checkRead(seq);
+		if (dSplitPars.include_) {
+			seq.on_ = !seq.on_;
+		}
+		std::string condition;
+		if (seq.on_) {
+			condition = "include";
+		} else {
+			condition = "exclude";
+		}
+		seqOuts.add(condition, seq);
+	}
+
+	if(setUp.pars_.verbose_){
+		setUp.logRunTime(std::cout);
+	}
+	return 0;
+}
+
+int seqUtilsSplitRunner::SeqSplitOnSeqContainsPattern(const njh::progutils::CmdArgs & inputCommands) {
+	defaultSplitPars dSplitPars;
+	std::string seqContains;
+  uint32_t occurrences = 1;
 
   seqSetUp setUp(inputCommands);
   defaultSplitSetUpOptions(setUp, dSplitPars);
-	setUp.setOption(occurences, "--occurences", "Minimum number of times a sequence must occur");
-	setUp.setOption(seqContains, "--seqContains", "Exclude if Seq Contains this", true);
-
+	setUp.setOption(occurrences, "--occurrences", "Minimum number of times a sequence must occur");
+	setUp.setOption(seqContains, "--pattern", "Exclude if Seq Contains this", true);
   setUp.finishSetUp(std::cout);
 
   MultiSeqOutCache<seqInfo> seqOuts;
   seqOuts.addReader("include", dSplitPars.incOpts_);
   seqOuts.addReader("exclude", dSplitPars.excOpts_);
-	auto checker = std::make_unique<const ReadCheckerOnSeqContaining>( seqContains, occurences, dSplitPars.mark_);
 
   SeqIO reader(setUp.pars_.ioOptions_);
   reader.openIn();
   seqInfo seq;
-  while(reader.readNextRead(seq)){
-  	checker->checkRead(seq);
-  	if(dSplitPars.include_) {
-  		seq.on_ = !seq.on_;
-  	}
-    std::string condition;
-    if(seq.on_){
-    	condition = "include";
-    }else{
-    	condition = "exclude";
-    }
-    seqOuts.add(condition, seq);
-  }
+	std::regex seqContainsReg{seqContains};
+	while (reader.readNextRead(seq)) {
+		uint32_t count = countRegexOccurrences(seq.seq_, seqContainsReg);
+		if (setUp.pars_.verbose_) {
+			std::cout << seq.name_ << std::endl;
+			std::cout << "\tcount: " << count << std::endl;
+		}
+		if (count >= occurrences) {
+			seq.on_ = !seq.on_;
+		}
+		// checker->checkRead(seq);
+		if (dSplitPars.include_) {
+			seq.on_ = !seq.on_;
+		}
+		std::string condition;
+		if (seq.on_) {
+			condition = "include";
+		} else {
+			condition = "exclude";
+		}
+		seqOuts.add(condition, seq);
+	}
 
   if(setUp.pars_.verbose_){
   	setUp.logRunTime(std::cout);

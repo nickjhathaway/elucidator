@@ -84,11 +84,11 @@ int seqUtilsModRunner::breakUpSeqsOnPattern(const njh::progutils::CmdArgs & inpu
 
 	while(reader.readNextRead(seq)){
 		std::regex pat{"N+"};
-		bool mark = doNotModName;
+		bool mark = !doNotModName;
 		//break up
 		auto trimmedSeqs = readVecTrimmer::breakUpSeqOnPat(seq, pat);
 		for(auto & trimmedSeq : trimmedSeqs){
-			if(mark && 0 != trimmedSeq.start_ && len(seq) != trimmedSeq.end_){
+			if(mark && len(trimmedSeqs) > 1){
 				trimmedSeq.seqBase_.name_.append(njh::pasteAsStr("-s", trimmedSeq.start_, "-e", trimmedSeq.end_));
 			}
 			reader.write(trimmedSeq.seqBase_);
