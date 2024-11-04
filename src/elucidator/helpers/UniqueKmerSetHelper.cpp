@@ -40,12 +40,14 @@ void UniqueKmerSetHelper::CompareReadToSetRes::increaseHashedInputKmerCountsBoth
 
 void UniqueKmerSetHelper::CompareReadToSetRes::determineWinner(
 	const std::unordered_map<std::string, std::unordered_set<uint64_t> > &uniqueKmersPerSet) {
+
 	for (const auto &setName: uniqueKmersPerSet) {
 		if (static_cast<double>(foundPerSet[setName.first]) / static_cast<double>(hashedInputKmers.size()) >
 		    bestFrac) {
 			bestFrac = static_cast<double>(foundPerSet[setName.first]) / static_cast<double>(hashedInputKmers.size());
 			winnerSet = setName.first;
 			winnerRevComp = false;
+			allHits.emplace(winnerSet);
 		}
 		//if not checking rev comp this will be always be false so don't have to check if we're checking rev comp
 		if (static_cast<double>(foundPerSetRevComp[setName.first]) / static_cast<double>(hashedInputKmers.size()) >
@@ -54,6 +56,7 @@ void UniqueKmerSetHelper::CompareReadToSetRes::determineWinner(
 			           static_cast<double>(hashedInputKmers.size());
 			winnerSet = setName.first;
 			winnerRevComp = true;
+			allHits.emplace(winnerSet);
 		}
 	}
 }
@@ -183,6 +186,21 @@ std::vector<std::vector<std::string>> UniqueKmerSetHelper::CompareReadToSetRes::
 	return content;
 }
 
+[[nodiscard]] Json::Value UniqueKmerSetHelper::CompareReadToSetRes::toJson() const {
+	Json::Value ret;
+	ret["class"] = njh::getTypeName(*this);
+	ret["winnerSet"] = njh::json::toJson(winnerSet);
+	ret["bestFrac"] = njh::json::toJson(bestFrac);
+	ret["winnerRevComp"] = njh::json::toJson(winnerRevComp);
+	ret["allHits"] = njh::json::toJson(allHits);
+	ret["hashedInputKmers"] = njh::json::toJson(hashedInputKmers);
+	ret["hashedInputKmersRevComp"] = njh::json::toJson(hashedInputKmersRevComp);
+	ret["foundPerSet"] = njh::json::toJson(foundPerSet);
+	ret["foundPerSetRevComp"] = njh::json::toJson(foundPerSetRevComp);
+	return ret;
+}
+
+
 void UniqueKmerSetHelper::CompareReadToSetRes::writeOutput(std::ostream &out, const seqInfo &seq,
 																													 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
 																													 const CompareReadToSetPars &compPars,
@@ -251,6 +269,9 @@ UniqueKmerSetHelper::ProcessReadForExtractingCounts::addOtherCounts(const Proces
 	for (const auto &inversePairReadCounts: otherCounts.inversePairReadCountsPerSet) {
 		inversePairReadCountsPerSet[inversePairReadCounts.first] += inversePairReadCounts.second;
 	}
+	for (const auto &multi_hit_read_count: otherCounts.multiHitReadCounts) {
+		multiHitReadCounts[multi_hit_read_count.first] += multi_hit_read_count.second;
+	}
 }
 
 VecStr UniqueKmerSetHelper::ProcessReadForExtractingCounts::genOutCountsHeader(
@@ -304,7 +325,7 @@ VecStr UniqueKmerSetHelper::ProcessReadForExtractingCounts::genOutCountsHeader(
 							, "smallLenReads"
 							, smallLenCutOffCount
 							, static_cast<double>(smallLenCutOffCount) / static_cast<double>(totalReads)
-							, smallLenCutOffCount
+							, 0
 							, 0
 			));
 
@@ -314,7 +335,7 @@ VecStr UniqueKmerSetHelper::ProcessReadForExtractingCounts::genOutCountsHeader(
 							, "poorQualityCount"
 							, poorQualityCount
 							, static_cast<double>(poorQualityCount) / static_cast<double>(totalReads)
-							, poorQualityCount
+							, 0
 							, 0
 			));
 
@@ -324,13 +345,41 @@ VecStr UniqueKmerSetHelper::ProcessReadForExtractingCounts::genOutCountsHeader(
 							, "containsNs"
 							, containsNs
 							, static_cast<double>(containsNs) / static_cast<double>(totalReads)
-							, containsNs
+							, 0
 							, 0
 			));
+		}
 
+		{
+			uint32_t inverseCounts = 0;
+			for (const auto& inverse_count: inversePairReadCountsPerSet) {
+				inverseCounts += inverse_count.second;
+			}
+			content.emplace_back(toVecStr(iterName
+																		, extractingPars.compPars.sampleName
+																		, totalReads
+																		, "inverseCounts"
+																		, inverseCounts
+																		, static_cast<double>(inverseCounts) / static_cast<double>(totalReads),
+																		0,
+																		0
+			));
+		}
 
-
-
+		{
+			uint32_t multiHitCounts = 0;
+			for (const auto& multi_hit_read_count: multiHitReadCounts) {
+				multiHitCounts += multi_hit_read_count.second;
+			}
+			content.emplace_back(toVecStr(iterName
+																		, extractingPars.compPars.sampleName
+																		, totalReads
+																		, "multiHitCounts"
+																		, multiHitCounts
+																		, static_cast<double>(multiHitCounts) / static_cast<double>(totalReads),
+																		0,
+																		0
+			));
 		}
 	} else {
 		auto setNames = njh::getVecOfMapKeys(uniqueKmersPerSet);
@@ -378,6 +427,35 @@ VecStr UniqueKmerSetHelper::ProcessReadForExtractingCounts::genOutCountsHeader(
 							, static_cast<double>(containsNs) / static_cast<double>(totalReads)
 			));
 		}
+		{
+			uint32_t inverseCounts = 0;
+			for (const auto& inverse_count: inversePairReadCountsPerSet) {
+				inverseCounts += inverse_count.second;
+			}
+			content.emplace_back(toVecStr(iterName
+			                              , extractingPars.compPars.sampleName
+			                              , totalReads
+			                              , "inverseCounts"
+			                              , inverseCounts
+			                              , static_cast<double>(inverseCounts) / static_cast<double>(totalReads)
+			));
+		}
+
+		{
+			uint32_t multiHitCounts = 0;
+			for (const auto& multi_hit_read_count: multiHitReadCounts) {
+				multiHitCounts += multi_hit_read_count.second;
+			}
+			content.emplace_back(toVecStr(iterName
+																		, extractingPars.compPars.sampleName
+																		, totalReads
+																		, "multiHitCounts"
+																		, multiHitCounts
+																		, static_cast<double>(multiHitCounts) / static_cast<double>(totalReads),
+																		0,
+																		0
+			));
+		}
 	}
 	return content;
 }
@@ -404,9 +482,24 @@ void UniqueKmerSetHelper::ProcessReadForExtractingCounts::writeOutCountsHeader(s
 	out << njh::conToStr(header, delim) << std::endl;
 }
 
+uint64_t UniqueKmerSetHelper::ProcessReadForExtractingCounts::genTotalInversePairCount() const {
+	uint64_t totalInversePairCount = 0;
+	for (const auto &inverse_pair_count: inversePairReadCountsPerSet) {
+		totalInversePairCount += inverse_pair_count.second;
+	}
+	return totalInversePairCount;
+}
+
+uint64_t UniqueKmerSetHelper::ProcessReadForExtractingCounts::genTotalMultihitCount() const {
+	uint64_t totalReads = 0;
+	for (const auto& readCountsPerSet: multiHitReadCounts) {
+		totalReads += readCountsPerSet.second;
+	}
+	return totalReads;
+}
 
 uint64_t UniqueKmerSetHelper::ProcessReadForExtractingCounts::getTotalCounts() const {
-	uint64_t totalReads = poorQualityCount + containsNs + smallLenCutOffCount + genTotalUndeterminedCount() + genTotalDeterminedCount();
+	uint64_t totalReads = poorQualityCount + containsNs + smallLenCutOffCount + genTotalUndeterminedCount() + genTotalDeterminedCount() + genTotalMultihitCount();
 	return totalReads;
 }
 
@@ -602,6 +695,15 @@ std::unordered_map<std::string, std::unordered_set<uint64_t>> UniqueKmerSetHelpe
 						nonUniqueKmersPerSet.emplace(finalNewKmer.first);
 						break;
 					}
+					//for uniqueness filtering need to make sure the rev comp isn't also in there
+					auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
+					if(njh::in(revCompKmerHash, set.second)){
+						pass = false;
+						nonUniqueKmersPerSet.emplace(revCompKmerHash);
+						//putting the revCompHash in but could also consider whether or now placing the original kmer is needed too? currently doing so below
+						nonUniqueKmersPerSet.emplace(finalNewKmer.first);
+						break;
+					}
 				}
 			}
 			if (pass) {
@@ -627,6 +729,14 @@ std::unordered_map<std::string, std::unordered_set<uint64_t>> UniqueKmerSetHelpe
 					pass = false;
 					break;
 				}
+				auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalKmer));
+				if(njh::in(revCompKmerHash, set.second)){
+					pass = false;
+					nonUniqueKmersPerSet.emplace(revCompKmerHash);
+					//putting the revCompHash in but could also consider whether or now placing the original kmer is needed too? currently doing so below
+					nonUniqueKmersPerSet.emplace(finalKmer);
+					break;
+				}
 			}
 			if(pass){
 				outputUniqueKmersPerSet[set.first].emplace(finalKmer);
@@ -642,6 +752,7 @@ std::unordered_map<std::string, std::unordered_set<uint64_t>> UniqueKmerSetHelpe
 				const ProcessReadForExtractingPars &extractingPars,
 				const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
 				std::unordered_set<uint64_t> &nonUniqueKmersPerSet) {
+	SimpleKmerHash hasher;
 	std::unordered_map<std::string, std::unordered_set<uint64_t>> outputUniqueKmersPerSet;
 	for (const auto &finalNewKmerSet: rawKmersPerInput) {
 		for (const auto finalNewKmer: finalNewKmerSet.second) {
@@ -658,6 +769,15 @@ std::unordered_map<std::string, std::unordered_set<uint64_t>> UniqueKmerSetHelpe
 					}
 					if (njh::in(finalNewKmer.first, set.second)) {
 						pass = false;
+						nonUniqueKmersPerSet.emplace(finalNewKmer.first);
+						break;
+					}
+					//for uniqueness filtering need to make sure the rev comp isn't also in there
+					auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
+					if(njh::in(revCompKmerHash, set.second)){
+						pass = false;
+						nonUniqueKmersPerSet.emplace(revCompKmerHash);
+						//putting the revCompHash in but could also consider whether or now placing the original kmer is needed too? currently doing so below
 						nonUniqueKmersPerSet.emplace(finalNewKmer.first);
 						break;
 					}
@@ -678,6 +798,14 @@ std::unordered_map<std::string, std::unordered_set<uint64_t>> UniqueKmerSetHelpe
 				}
 				if(njh::in(finalKmer, rawInput.second)){
 					pass = false;
+					break;
+				}
+				auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalKmer));
+				if(njh::in(revCompKmerHash, set.second)){
+					pass = false;
+					nonUniqueKmersPerSet.emplace(revCompKmerHash);
+					//putting the revCompHash in but could also consider whether or now placing the original kmer is needed too? currently doing so below
+					nonUniqueKmersPerSet.emplace(finalKmer);
 					break;
 				}
 			}

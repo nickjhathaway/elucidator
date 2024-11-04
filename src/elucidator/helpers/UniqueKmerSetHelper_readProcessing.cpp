@@ -152,12 +152,22 @@ void UniqueKmerSetHelper::processReadForExtracting(seqInfo &seq,
 
 
 	auto compRes = UniqueKmerSetHelper::compareReadToSets(seq, uniqueKmersPerSet, extractingPars.compPars, hasher);
-
-	++counts.readCountsPerSet[compRes.winnerRevComp][compRes.winnerSet];
-
-	if(!extractingPars.doNotWriteUndetermined || compRes.winnerSet != "undetermined"){
-		if(extractingPars.writeOutExclude || !njh::in(compRes.winnerSet, extractingPars.compPars.excludeSetNames)){
-			seqOut.openWrite(njh::pasteAsStr(compRes.winnerSet, "-single"), seq);
+	if (extractingPars.filterMultiHitReads && compRes.allHits.size() > 1) {
+		++counts.multiHitReadCounts[njh::conToStr(compRes.allHits, "::")];
+		if(!extractingPars.doNotWriteUndetermined) {
+			if (extractingPars.writeMultiHitSeparate) {
+				seq.name_.append(njh::pasteAsStr("[hits=", njh::conToStr(compRes.allHits, "::"), ";]"));
+				seqOut.openWrite(njh::pasteAsStr("multihit", "-single"), seq);
+			} else {
+				seqOut.openWrite(njh::pasteAsStr("undetermined", "-single"), seq);
+			}
+		}
+	} else {
+		++counts.readCountsPerSet[compRes.winnerRevComp][compRes.winnerSet];
+		if(!extractingPars.doNotWriteUndetermined || compRes.winnerSet != "undetermined"){
+			if(extractingPars.writeOutExclude || !njh::in(compRes.winnerSet, extractingPars.compPars.excludeSetNames)){
+				seqOut.openWrite(njh::pasteAsStr(compRes.winnerSet, "-single"), seq);
+			}
 		}
 	}
 }
@@ -268,12 +278,25 @@ void UniqueKmerSetHelper::processReadForExtractingPairsTogether(PairedRead &pseq
 			pseq.mateSeqBase_.reverseComplementRead(false, true);
 		}
 		auto compRes = UniqueKmerSetHelper::compareReadToSets(pseq, uniqueKmersPerSet, extractingPars.compPars, hasher);
-
-		++counts.readCountsPerSet[compRes.winnerRevComp][compRes.winnerSet];
-		++counts.readCountsPerSet[compRes.winnerRevComp][compRes.winnerSet];
-		if(!extractingPars.doNotWriteUndetermined || compRes.winnerSet != "undetermined"){
-			if(extractingPars.writeOutExclude || !njh::in(compRes.winnerSet, extractingPars.compPars.excludeSetNames)){
-				seqOut.openWrite(njh::pasteAsStr(compRes.winnerSet, "-paired"), pseq);
+		if (extractingPars.filterMultiHitReads && compRes.allHits.size() > 1) {
+			++counts.multiHitReadCounts[njh::conToStr(compRes.allHits, "::")];
+			++counts.multiHitReadCounts[njh::conToStr(compRes.allHits, "::")];
+			if(!extractingPars.doNotWriteUndetermined) {
+				if (extractingPars.writeMultiHitSeparate) {
+					pseq.seqBase_.name_.append(njh::pasteAsStr("[firstMateHits=", njh::conToStr(compResFirstMate.allHits, "::"), ";", "secondMateHits=", njh::conToStr(compResSecondMate.allHits, "::"), ";]"));
+					pseq.mateSeqBase_.name_.append(njh::pasteAsStr("[firstMateHits=", njh::conToStr(compResFirstMate.allHits, "::"), ";", "secondMateHits=", njh::conToStr(compResSecondMate.allHits, "::"), ";]"));
+					seqOut.openWrite(njh::pasteAsStr("multihit", "-paired"), pseq);
+				} else {
+					seqOut.openWrite(njh::pasteAsStr("undetermined", "-paired"), pseq);
+				}
+			}
+		} else {
+			++counts.readCountsPerSet[compRes.winnerRevComp][compRes.winnerSet];
+			++counts.readCountsPerSet[compRes.winnerRevComp][compRes.winnerSet];
+			if(!extractingPars.doNotWriteUndetermined || compRes.winnerSet != "undetermined"){
+				if(extractingPars.writeOutExclude || !njh::in(compRes.winnerSet, extractingPars.compPars.excludeSetNames)){
+					seqOut.openWrite(njh::pasteAsStr(compRes.winnerSet, "-paired"), pseq);
+				}
 			}
 		}
 	}
@@ -285,13 +308,31 @@ void UniqueKmerSetHelper::processReadForExtractingPairsSeparate(PairedRead &pseq
 																																const SimpleKmerHash &hasher,
 																																MultiSeqIO &seqOut, ProcessReadForExtractingCounts &counts
 																																) {
+	// if (pseq.seqBase_.name_.find("PfSN01_080036600.1-exon2_id49_pos520_size170") != std::string::npos) {
+	// 	std::cout << __FILE__ << " " << __LINE__ << std::endl;
+	// 	std::cout << extractingPars.compPars.hardCountOff << std::endl;
+	// 	std::cout << extractingPars.compPars.fracCutOff << std::endl;
+	// }
+
 	auto compResFirstMate = UniqueKmerSetHelper::compareReadToSets(pseq.seqBase_, uniqueKmersPerSet,
 																																 extractingPars.compPars, hasher);
 
 	auto compResSecondMate = UniqueKmerSetHelper::compareReadToSets(pseq.mateSeqBase_, uniqueKmersPerSet,
 																																	extractingPars.compPars, hasher);
+	// if (pseq.seqBase_.name_.find("PfSN01_080036600.1-exon2_id49_pos520_size170") != std::string::npos) {
+	// 	std::cout << "compResFirstMate: " << std::endl;
+	// 	std::cout << njh::json::JsonConversion::toJson(compResFirstMate) << std::endl;
+	// 	compResFirstMate.writeOutputHeader(std::cout, extractingPars.compPars);
+	// 	compResFirstMate.writeOutput(std::cout, pseq.seqBase_, uniqueKmersPerSet, extractingPars.compPars);
+	// 	std::cout << "compResSecondMate: " << std::endl;
+	// 	std::cout << njh::json::JsonConversion::toJson(compResSecondMate) << std::endl;
+	// 	compResSecondMate.writeOutputHeader(std::cout, extractingPars.compPars);
+	// 	compResSecondMate.writeOutput(std::cout, pseq.mateSeqBase_, uniqueKmersPerSet, extractingPars.compPars);
+	// }
+
 	if (compResFirstMate.winnerSet == compResSecondMate.winnerSet &&
-			compResFirstMate.winnerRevComp == compResSecondMate.winnerRevComp ) {
+			compResFirstMate.winnerRevComp == compResSecondMate.winnerRevComp &&
+			(!extractingPars.filterMultiHitReads || (compResFirstMate.allHits.size() == 1 && compResSecondMate.allHits.size() == 1) )) {
 		++counts.readCountsPerSet[compResFirstMate.winnerRevComp][compResFirstMate.winnerSet];
 		++counts.readCountsPerSet[compResFirstMate.winnerRevComp][compResFirstMate.winnerSet];
 		if (!extractingPars.doNotWriteUndetermined || compResFirstMate.winnerSet != "undetermined") {
@@ -317,17 +358,42 @@ void UniqueKmerSetHelper::processReadForExtractingPairsSeparate(PairedRead &pseq
 		}
 	} else {
 		pseq.seqBase_.name_.append("_firstMate");
-		++counts.readCountsPerSet[compResFirstMate.winnerRevComp][compResFirstMate.winnerSet];
-		if (!extractingPars.doNotWriteUndetermined || compResFirstMate.winnerSet != "undetermined") {
-			if (extractingPars.writeOutExclude || !njh::in(compResFirstMate.winnerSet, extractingPars.compPars.excludeSetNames)) {
-				seqOut.openWrite(njh::pasteAsStr(compResFirstMate.winnerSet, "-single"), pseq.seqBase_);
+		if (extractingPars.filterMultiHitReads && compResFirstMate.allHits.size() > 1) {
+			++counts.multiHitReadCounts[njh::conToStr(compResFirstMate.allHits, "::")];
+			if(!extractingPars.doNotWriteUndetermined) {
+				if (extractingPars.writeMultiHitSeparate) {
+					pseq.seqBase_.name_.append(njh::pasteAsStr("[hits=", njh::conToStr(compResFirstMate.allHits, "::"), ";]"));
+					seqOut.openWrite(njh::pasteAsStr("multihit", "-single"), pseq.seqBase_);
+				} else {
+					seqOut.openWrite(njh::pasteAsStr("undetermined", "-single"), pseq.seqBase_);
+				}
+			}
+		} else {
+			++counts.readCountsPerSet[compResFirstMate.winnerRevComp][compResFirstMate.winnerSet];
+			if (!extractingPars.doNotWriteUndetermined || compResFirstMate.winnerSet != "undetermined") {
+				if (extractingPars.writeOutExclude || !njh::in(compResFirstMate.winnerSet, extractingPars.compPars.excludeSetNames)) {
+					seqOut.openWrite(njh::pasteAsStr(compResFirstMate.winnerSet, "-single"), pseq.seqBase_);
+				}
 			}
 		}
+
 		pseq.mateSeqBase_.name_.append("_secondMate");
-		++counts.readCountsPerSet[compResSecondMate.winnerRevComp][compResSecondMate.winnerSet];
-		if (!extractingPars.doNotWriteUndetermined || compResSecondMate.winnerSet != "undetermined") {
-			if (extractingPars.writeOutExclude || !njh::in(compResSecondMate.winnerSet, extractingPars.compPars.excludeSetNames)) {
-				seqOut.openWrite(njh::pasteAsStr(compResSecondMate.winnerSet, "-single"), pseq.mateSeqBase_);
+		if (extractingPars.filterMultiHitReads && compResSecondMate.allHits.size() > 1) {
+			++counts.multiHitReadCounts[njh::conToStr(compResSecondMate.allHits, "::")];
+			if(!extractingPars.doNotWriteUndetermined) {
+				if (extractingPars.writeMultiHitSeparate) {
+					pseq.mateSeqBase_.name_.append(njh::pasteAsStr("[hits=", njh::conToStr(compResSecondMate.allHits, "::"), ";]"));
+					seqOut.openWrite(njh::pasteAsStr("multihit", "-single"), pseq.mateSeqBase_);
+				} else {
+					seqOut.openWrite(njh::pasteAsStr("undetermined", "-single"), pseq.mateSeqBase_);
+				}
+			}
+		} else {
+			++counts.readCountsPerSet[compResSecondMate.winnerRevComp][compResSecondMate.winnerSet];
+			if (!extractingPars.doNotWriteUndetermined || compResSecondMate.winnerSet != "undetermined") {
+				if (extractingPars.writeOutExclude || !njh::in(compResSecondMate.winnerSet, extractingPars.compPars.excludeSetNames)) {
+					seqOut.openWrite(njh::pasteAsStr(compResSecondMate.winnerSet, "-single"), pseq.mateSeqBase_);
+				}
 			}
 		}
 	}

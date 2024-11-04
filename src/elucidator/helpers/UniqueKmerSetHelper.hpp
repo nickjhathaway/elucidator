@@ -54,6 +54,9 @@ public:
 		uint32_t hardCountOff = 0;
 		double fracCutOff = 0;
 
+		uint32_t finalHardCountOff = 0;
+		double finalFracCutOff = 0;
+
 		std::set<std::string> excludeSetNames{"genomeRest"};
 
 		uint32_t initialExcludeHardCountOff = 0;
@@ -64,6 +67,7 @@ public:
 
 		std::vector<char> allowableCharacters_{'A', 'C', 'G', 'T'};
 	};
+
 
 	struct CompareReadToSetRes {
 		std::unordered_map<uint64_t, uint64_t> hashedInputKmers;
@@ -82,6 +86,8 @@ public:
 		std::string winnerSet = "undetermined";
 		double bestFrac = 0;
 		bool winnerRevComp = false;
+		std::set<std::string> allHits;
+
 
 		[[nodiscard]] uint32_t getTotalDetermined() const;
 
@@ -96,7 +102,7 @@ public:
 		void writeOutput(std::ostream & out, const seqInfo &seq,
 										 const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
 										 const CompareReadToSetPars &pars, const std::string & delim = "\t") const;
-
+		[[nodiscard]] Json::Value toJson() const;
 	};
 
 
@@ -120,11 +126,14 @@ public:
 		uint32_t smallLenCutOff = 0;
 		bool writeOutExclude = false;
 		bool doNotWriteUndetermined = false;
+		bool writeMultiHitSeparate = false;
 		bool doReCheckExcludeSets = false;
 		uint32_t addingInKmersCountCutOff = 3;
 
 		bool markReadsPerIteration = false;
 		bool writeOutFinalKmerSets = false;
+
+		bool filterMultiHitReads = false;
 	};
 
 	struct ProcessReadForExtractingCounts{
@@ -137,6 +146,7 @@ public:
 
 		std::unordered_map<bool, std::unordered_map<std::string, uint32_t>> readCountsPerSet;
 		std::unordered_map<std::string, uint32_t> inversePairReadCountsPerSet;// the count of times the paris ended up in same set but in opposite directions
+		std::unordered_map<std::string, uint32_t> multiHitReadCounts;// the count of times the extracted hits had more than 1 hit
 
 
 		uint32_t smallLenCutOffCount = 0;
@@ -146,6 +156,8 @@ public:
 		uint32_t filteredDissimilarCount = 0;//not to be included final counts
 
 		void addOtherCounts(const ProcessReadForExtractingCounts & otherCounts);
+		[[nodiscard]] uint64_t genTotalInversePairCount() const;
+		[[nodiscard]] uint64_t genTotalMultihitCount() const;
 
 		[[nodiscard]] uint64_t getTotalCounts() const;
 		[[nodiscard]] uint64_t genTotalUndeterminedCount() const;

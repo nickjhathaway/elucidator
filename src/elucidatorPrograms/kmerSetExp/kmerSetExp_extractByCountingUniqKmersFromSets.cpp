@@ -10,7 +10,9 @@ namespace njhseq {
 
 int kmerSetExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t numThreads = 1;
-	bfs::path countTable = "";
+	bfs::path countTable;
+	bfs::path nonUniqueKmerTable;
+
 	UniqueKmerSetHelper::CompareReadToSetPars compPars;
 	compPars.kmerLengthForEntropyCalc_ = 2;
 	compPars.entropyFilter_ = 1.20;
@@ -30,6 +32,13 @@ int kmerSetExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::Cmd
 
 	//comp results
 	setUp.setOption(countTable, "--kmerTable", "kmerTable, no header, columns 1)set,2)kmer", true);
+	{
+		auto possibleNonUniqueTable = njh::files::prependFileBasename(countTable, "nonUniqueKmers_");
+		if(exists(possibleNonUniqueTable)){
+			nonUniqueKmerTable = possibleNonUniqueTable;
+		}
+	}
+	setUp.setOption(nonUniqueKmerTable, "--nonUniqueKmerTable", "non-unique Kmer Table, 1)set,2)kmer");
 	setUp.setOption(compPars.sampleName, "--sampleName", "Name to add to output file", true);
 	setUp.setOption(compPars.includeRevComp, "--includeRevComp", "include Rev Comp of the input seqs");
 	setUp.setOption(compPars.pairsSeparate, "--pairsSeparate", "count the pairs separately");
@@ -46,6 +55,11 @@ int kmerSetExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::Cmd
 	watch.startNewLap("reading in unique kmer table");
 	compPars.klen = UniqueKmerSetHelper::getKmerLenFromUniqueKmerTable(countTable);
 	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet = UniqueKmerSetHelper::readInUniqueKmerTablePerSet(countTable);
+	std::string nonUniqueRegionName = "NON_UNIQUE";
+	std::unordered_set<uint64_t> nonUniqueKmersPerSet;
+	if (!nonUniqueKmerTable.empty()) {
+		nonUniqueKmersPerSet = UniqueKmerSetHelper::readInUniqueKmerTableSetsCollapsed(nonUniqueKmerTable);
+	}
 	if(setUp.pars_.verbose_){
 		std::cout << watch.getLapName() << "\t" << watch.timeLapFormatted() <<std::endl;
 	}
@@ -136,11 +150,14 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 	UniqueKmerSetHelper::ProcessReadForExtractingPars extractingPars;
 	extractingPars.compPars.hardCountOff = 20;
 	extractingPars.compPars.fracCutOff = 0.12;
+	extractingPars.compPars.finalHardCountOff = 20;
+	extractingPars.compPars.finalFracCutOff = 0.30;
 	extractingPars.compPars.kmerLengthForEntropyCalc_ = 2;
 	extractingPars.compPars.entropyFilter_ = 1.20;
 
 	extractingPars.compPars.initialExcludeHardCountOff = 60;
 	extractingPars.compPars.initialExcludeFracCutOff = 0.25;
+
 	uint32_t iterationToLowerExcludeCutOff = 6;
 
 	bool finalExtractionPairsSeparate = false;
@@ -205,6 +222,8 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 
 	setUp.setOption(dissimilarFilterPars.hardCountOff, "--hardCountOffForDissimilarFiltering", "hard Count Off For Dissimilar Filtering");
 	setUp.setOption(dissimilarFilterPars.fracCutOff, "--fracCutOffForDissimilarFiltering", "frac Cut Off For Dissimilar Filtering");
+
+
 	setUp.setOption(iterationsToFilterDissimilar, "--iterationsToFilterDissimilar", "iterations To Filter Dissimilar");
 
 	setUp.setOption(extractingPars.compPars.initialExcludeFracCutOff, "--initialExcludeFracCutOff", "initial for exclusion sets per read Kmer Frac Cut Off");
@@ -217,6 +236,17 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 	}
 	setUp.setOption(extractingPars.compPars.fracCutOff, "--readKmerFracCutOff", "per read Kmer Frac Cut Off");
 	setUp.setOption(extractingPars.compPars.hardCountOff, "--hardCountOff", "hard Count Off, do not count sets unless greater thant his number");
+	if (extractingPars.compPars.hardCountOff > extractingPars.compPars.finalHardCountOff) {
+		extractingPars.compPars.finalHardCountOff = extractingPars.compPars.hardCountOff;
+	}
+	if (extractingPars.compPars.fracCutOff > extractingPars.compPars.finalFracCutOff) {
+		extractingPars.compPars.finalFracCutOff = extractingPars.compPars.fracCutOff;
+	}
+	setUp.setOption(extractingPars.compPars.finalFracCutOff, "--finalReadKmerFracCutOff", "final round extraction per read Kmer Frac Cut Off");
+	setUp.setOption(extractingPars.compPars.finalHardCountOff, "--finalHardCountOff", "final round extraction hard Count Off, do not count sets unless greater thant his number");
+
+
+
 	extractingPars.smallLenCutOff = extractingPars.compPars.hardCountOff + extractingPars.compPars.klen + 11;
 	setUp.setOption(extractingPars.smallLenCutOff, "--smallLenCutOff", "small Len Cut Off of input sequences, if less than this size will skip over");
 	setUp.setOption(extractingPars.qPars.qualCheck_, "--qualCheck", "quality score for filtering");
@@ -233,6 +263,7 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 	extractingPars.filterOnNs = ! doNotFilterOnNs;
 	//setUp.setOption(extractingPars.filterOnNs, "--filterOnNs", "filter reads containing Ns");
 
+	setUp.setOption(extractingPars.filterMultiHitReads, "--filterMultiHitReads", "filter Multi Hit Reads");
 
 
 	setUp.setOption(extractingPars.markReadsPerIteration, "--markReadsPerIteration", "mark Reads Per Iteration");
@@ -257,6 +288,8 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 	//setUp.setOption(extractAfterIterating, "--extractAfterIterating", "Extract After Iterating");
 	setUp.setOption(maxIterations, "--maxIterations", "max Iterations to perform");
 
+	bool finalWriteOutMultiHitSeparate = false;
+	setUp.setOption(finalWriteOutMultiHitSeparate, "--finalWriteOutMultiHitSeparate", "final Write Out Multi Hit Separate");
 
 	setUp.setOption(extractingPars.doNotWriteUndetermined, "--doNotWriteUndetermined", "do Not Write Undetermined");
 	setUp.setOption(extractingPars.writeOutExclude, "--writeOutExclude", "write Out Excluded reads that match the excluded kmer sets");
@@ -337,10 +370,15 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 
 	OutOptions outCountsOpts(njh::files::make_path(setUp.pars_.directoryName_, "extractionCounts.tab.txt"));
 	OutOptions inversePairOutCountsOpts(njh::files::make_path(setUp.pars_.directoryName_, "inversePairsCounts.tab.txt"));
+	OutOptions multiHitOutCountsOpts(njh::files::make_path(setUp.pars_.directoryName_, "multihitCounts.tab.txt"));
+
 	OutputStream outCounts(outCountsOpts);
 	OutputStream inversePairOutCountsOut(inversePairOutCountsOpts);
+	OutputStream multiHitOutCountsOut(multiHitOutCountsOpts);
+
 	UniqueKmerSetHelper::ProcessReadForExtractingCounts::writeOutCountsHeader(outCounts, extractingPars);
 	inversePairOutCountsOut << njh::conToStr(toVecStr("iteration", "sample", "totalReads", "target", "count", "frac"), "\t") << std::endl;
+	multiHitOutCountsOut << njh::conToStr(toVecStr("iteration", "sample", "totalReads", "hits", "count", "frac"), "\t") << std::endl;
 
 	std::unordered_map<std::string, UniqueKmerSetHelper::FilePositons> positionsAfterLastIteration;
 	{//initial
@@ -352,11 +390,14 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 			initialSeqOut.addReader(njh::pasteAsStr(name, "-paired"), seqOutOpts);
 		}
 		initialSeqOut.addReader("undetermined-paired", SeqIOOptions::genPairedOut(njh::files::make_path(setUp.pars_.directoryName_, "undetermined")));
+		initialSeqOut.addReader("multihit-paired", SeqIOOptions::genPairedOut(njh::files::make_path(setUp.pars_.directoryName_, "multihit")));
+
 		for(const auto & name : names){
 			auto seqOutOpts = SeqIOOptions::genFastqOut(njh::files::make_path(setUp.pars_.directoryName_, name));
 			initialSeqOut.addReader(njh::pasteAsStr(name, "-single"), seqOutOpts);
 		}
 		initialSeqOut.addReader("undetermined-single", SeqIOOptions::genFastqOut(njh::files::make_path(setUp.pars_.directoryName_, "undetermined")));
+		initialSeqOut.addReader("multihit-single", SeqIOOptions::genFastqOut(njh::files::make_path(setUp.pars_.directoryName_, "multihit")));
 
 		//to make below count correctly, make sure mate is automatically reversed complemented
 		setUp.pars_.ioOptions_.revComplMate_ = true;
@@ -472,6 +513,17 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 				<< "\t" << static_cast<double>(set.second)/static_cast<double>(totalReadCnt) << std::endl;
 			}
 		}
+		{
+			auto totalReadCnt = initialCounts.getTotalCounts();
+			for(const auto & set : initialCounts.multiHitReadCounts) {
+				multiHitOutCountsOut << "initial"
+				<< "\t" << extractingPars.compPars.sampleName
+				<< "\t" << totalReadCnt
+				<< "\t" << set.first
+				<< "\t" << set.second
+				<< "\t" << static_cast<double>(set.second)/static_cast<double>(totalReadCnt) << std::endl;
+			}
+		}
 	}
 	initialSeqOut.closeOutForReopeningAll();
 
@@ -510,6 +562,12 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 		std::cout << "Total Initial Poor Quality Count: " << initialCounts.poorQualityCount << " ("
 							<< initialCounts.poorQualityCount * 100 / static_cast<double>(initialCounts.getTotalCounts()) << "%)"
 							<< std::endl;
+		std::cout << "Total Initial Inverse Pair Count: " << initialCounts.genTotalInversePairCount() << " ("
+					<< initialCounts.genTotalInversePairCount() * 100 / static_cast<double>(initialCounts.getTotalCounts()) << "%)"
+					<< std::endl;
+		std::cout << "Total Initial Multihit Count: " << initialCounts.genTotalMultihitCount() << " ("
+					<< initialCounts.genTotalMultihitCount() * 100 / static_cast<double>(initialCounts.getTotalCounts()) << "%)"
+					<< std::endl;
 		std::cout << watch.getLapName() << "\t" << watch.timeLapFormatted() << std::endl;
 	}
 	//read in the extract reads and add to the unique kmer sets
@@ -615,6 +673,8 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 			std::string filter = "dissimilar";
 			filteringSeqOut.addReader("undetermined-paired", SeqIOOptions::genPairedOut(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr(iterNumber, "_undetermined"))));
 			filteringSeqOut.addReader("undetermined-single", SeqIOOptions::genFastqOut(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr(iterNumber, "_undetermined"))));
+			filteringSeqOut.addReader("multihit-paired", SeqIOOptions::genPairedOut(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr(iterNumber, "_multihit"))));
+			filteringSeqOut.addReader("multihit-single", SeqIOOptions::genFastqOut(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr(iterNumber, "_multihit"))));
 			filteringSeqOut.addReader("dissimilar-paired", SeqIOOptions::genPairedOut(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr(iterNumber, "_dissimilar"))));
 			filteringSeqOut.addReader("dissimilar-single", SeqIOOptions::genFastqOut(njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr(iterNumber, "_dissimilar"))));
 			if (pairedInUndeterminedExists) {
@@ -832,6 +892,17 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 				<< "\t" << static_cast<double>(set.second)/static_cast<double>(totalReadCnt) << std::endl;
 			}
 		}
+		{
+			auto totalReadCnt = initialCounts.getTotalCounts();
+			for(const auto & set : initialCounts.multiHitReadCounts) {
+				multiHitOutCountsOut << njh::pasteAsStr(iterNumber)
+				<< "\t" << extractingPars.compPars.sampleName
+				<< "\t" << totalReadCnt
+				<< "\t" << set.first
+				<< "\t" << set.second
+				<< "\t" << static_cast<double>(set.second)/static_cast<double>(totalReadCnt) << std::endl;
+			}
+		}
 		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		uint64_t currentTotalUndeterminedReads = initialCounts.genTotalUndeterminedCount();
 		uint64_t currentTotalReads = initialCounts.getTotalCounts();
@@ -849,8 +920,8 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 			std::cout << "\tTotal Less Than Small Len Cut Off Count: " << initialCounts.smallLenCutOffCount << " (" << initialCounts.smallLenCutOffCount * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
 			std::cout << "\tTotal Contains Ns Count: " << initialCounts.containsNs << " (" << initialCounts.containsNs * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
 			std::cout << "\tTotal Poor Quality Count: " << initialCounts.poorQualityCount << " (" << initialCounts.poorQualityCount * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
-
-
+			std::cout << "\tTotal Inverse pair Count: " << initialCounts.genTotalInversePairCount() << " (" << initialCounts.genTotalInversePairCount() * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
+			std::cout << "\tTotal Multihit Count: " << initialCounts.genTotalMultihitCount() << " (" << initialCounts.genTotalMultihitCount() * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
 			std::cout << "\tDissimilar Filter: " << initialCounts.filteredDissimilarCount << " (" << initialCounts.filteredDissimilarCount * 100 /static_cast<double>(currentTotalReads)<< "%)"<< std::endl;
 			std::cout << std::endl;
 		}
@@ -910,12 +981,24 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 			finalSeqOut.addReader(njh::pasteAsStr(name, "-paired"), seqOutOpts);
 		}
 		finalSeqOut.addReader("undetermined-paired", SeqIOOptions::genPairedOutGz(njh::files::make_path(finalExtractionDir, "undetermined")));
+		finalSeqOut.addReader("multihit-paired", SeqIOOptions::genPairedOutGz(njh::files::make_path(finalExtractionDir, "multihit")));
+
 		for(const auto & name : names){
 			auto seqOutOpts = SeqIOOptions::genFastqOutGz(njh::files::make_path(finalExtractionDir, name));
 			finalSeqOut.addReader(njh::pasteAsStr(name, "-single"), seqOutOpts);
 		}
 		finalSeqOut.addReader("undetermined-single", SeqIOOptions::genFastqOutGz(njh::files::make_path(finalExtractionDir, "undetermined")));
+		finalSeqOut.addReader("multihit-single", SeqIOOptions::genFastqOutGz(njh::files::make_path(finalExtractionDir, "multihit")));
 
+		//setting final extraction cut offs
+		extractingPars.compPars.initialExcludeHardCountOff = extractingPars.compPars.finalHardCountOff;
+		extractingPars.compPars.initialExcludeFracCutOff = extractingPars.compPars.finalFracCutOff;
+		extractingPars.compPars.hardCountOff = extractingPars.compPars.finalHardCountOff;
+		extractingPars.compPars.fracCutOff = extractingPars.compPars.finalFracCutOff;
+
+		if (finalWriteOutMultiHitSeparate) {
+			extractingPars.writeMultiHitSeparate = true;
+		}
 		extractingPars.compPars.pairsSeparate = finalExtractionPairsSeparate;
 		if (!setUp.pars_.ioOptions_.firstName_.empty()) {
 			SeqInput reader(setUp.pars_.ioOptions_);
@@ -1027,12 +1110,28 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 				<< "\t" << static_cast<double>(set.second)/static_cast<double>(totalReadCnt) << std::endl;
 			}
 		}
+
+		{
+			auto totalReadCnt = finalCounts.getTotalCounts();
+			for(const auto & set : finalCounts.multiHitReadCounts) {
+				multiHitOutCountsOut << njh::pasteAsStr("final")
+				<< "\t" << extractingPars.compPars.sampleName
+				<< "\t" << totalReadCnt
+				<< "\t" << set.first
+				<< "\t" << set.second
+				<< "\t" << static_cast<double>(set.second)/static_cast<double>(totalReadCnt) << std::endl;
+			}
+		}
 		if(setUp.pars_.verbose_){
 			std::cout << "iterNumber: " << "final" << std::endl;
 			std::cout << "Total Reads: " << finalCounts.getTotalCounts() << std::endl;
 			std::cout << "Total Undetermined Reads: " << finalCounts.genTotalUndeterminedCount() << " (" << finalCounts.genTotalUndeterminedCount() * 100 /static_cast<double>(finalCounts.getTotalCounts())<< "%)" << std::endl;
 			std::cout << "Total Determined Reads: " << finalCounts.genTotalDeterminedCount() << " (" << finalCounts.genTotalDeterminedCount() * 100 /static_cast<double>(finalCounts.getTotalCounts())<< "%)"<< std::endl;
 			std::cout << "Total Less Than Small Len Cut Off Count: " << finalCounts.smallLenCutOffCount << " (" << finalCounts.smallLenCutOffCount * 100 /static_cast<double>(finalCounts.getTotalCounts())<< "%)"<< std::endl;
+			std::cout << "Total Low Quality Count: " << finalCounts.poorQualityCount << " (" << finalCounts.poorQualityCount * 100 /static_cast<double>(finalCounts.getTotalCounts())<< "%)"<< std::endl;
+			std::cout << "Total Inverse Pair Count: " << finalCounts.genTotalInversePairCount() << " (" << finalCounts.genTotalInversePairCount() * 100 /static_cast<double>(finalCounts.getTotalCounts())<< "%)"<< std::endl;
+			std::cout << "Total Multihit Count: " << finalCounts.genTotalMultihitCount() << " (" << finalCounts.genTotalMultihitCount() * 100 /static_cast<double>(finalCounts.getTotalCounts())<< "%)"<< std::endl;
+
 			if (setUp.pars_.debug_) {
 				std::cout << watch.getLapName() << "\t" << watch.timeLapFormatted() << std::endl;
 				std::cout << "klen: " << extractingPars.compPars.klen << std::endl;

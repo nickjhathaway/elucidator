@@ -172,6 +172,7 @@ int kmerSetExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputCom
 	reader.openIn();
 	SimpleKmerHash hasher;
 	std::unordered_set<uint64_t> rawKmersPerInput;
+	std::unordered_set<uint64_t> rawKmersPerInput_revComForFiltering;
 	while (reader.readNextRead(seq)) {
 		if (len(seq.seq_) < klen) {
 			continue;
@@ -189,6 +190,14 @@ int kmerSetExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputCom
 				kmerInfo kinfo(k, countPars.kmerLengthForEntropyCalc_, false);
 				if (seqCheck(k) && kinfo.computeKmerEntropy() > countPars.entropyFilter_) {
 					rawKmersPerInput.emplace(hasher.revCompHash(k));
+				}
+			}
+		} else {
+			for (uint32_t pos = 0; pos < len(seq.seq_) - klen + 1; ++pos) {
+				auto k = seq.seq_.substr(pos, klen);
+				kmerInfo kinfo(k, countPars.kmerLengthForEntropyCalc_, false);
+				if (seqCheck(k) && kinfo.computeKmerEntropy() > countPars.entropyFilter_) {
+					rawKmersPerInput_revComForFiltering.emplace(hasher.revCompHash(k));
 				}
 			}
 		}
@@ -212,6 +221,15 @@ int kmerSetExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputCom
 					nonUniqueKmersPerSet.emplace(finalNewKmer);
 					break;
 				}
+				if (countPars.noRevComp_) {
+					auto finalNewKmerRevComp = hasher.hash(hasher.revCompReverseHash(finalNewKmer));
+					if (njh::in(finalNewKmerRevComp, set.second)) {
+						pass = false;
+						nonUniqueKmersPerSet.emplace(finalNewKmerRevComp);
+						nonUniqueKmersPerSet.emplace(finalNewKmer);
+						break;
+					}
+				}
 			}
 		}
 		if (pass) {
@@ -225,7 +243,10 @@ int kmerSetExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputCom
 			continue;
 		}
 		for(const auto & finalKmer : set.second){
-			if(!njh::in(finalKmer, rawKmersPerInput)){
+			// have to make sure it's not in both the forward and reverse comp of the input,
+			// rawKmersPerInput_revComForFiltering will be empty if the input was reverse complemented so can be
+			// used for filtering either way
+			if(!njh::in(finalKmer, rawKmersPerInput) && !njh::in(finalKmer, rawKmersPerInput_revComForFiltering)) {
 				outputUniqueKmersPerSet[set.first].emplace(finalKmer);
 			}
 		}
@@ -498,6 +519,7 @@ int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progu
 		}
 	}
 	std::map<std::string, std::set<uint64_t>> finalKmersPerInput;
+
 	//initial filter to other groups
 	if (rawKmersPerInput.size() > 1) {
 		finalKmersPerInput = rawKmersPerInput;
@@ -511,6 +533,16 @@ int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progu
 							pass = false;
 							nonUniqueKmers.emplace(kmer);
 							break;
+						}
+						if (!getReverseCompOfInputRegions) {
+							auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(kmer));
+							if(njh::in(revCompKmerHash, otherKmerSet.second)){
+								pass = false;
+								//putting the revCompHash in but could also consider placing the original kmer too
+								nonUniqueKmers.emplace(revCompKmerHash);
+								nonUniqueKmers.emplace(kmer);
+								break;
+							}
 						}
 					}
 				}
@@ -536,6 +568,7 @@ int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progu
 
 	if (gatherRestOfGenomeInOneGo) {
 		std::set<uint64_t> kmersPerInbetween;
+		std::set<uint64_t> kmersPerInbetween_revCompForFiltering;
 		if(setUp.pars_.verbose_){
 			for(const auto & finalKmerSet : finalKmersPerInput){
 				std::cout << "\t" << "prior to filter for set: " << finalKmerSet.first  << " " << finalKmerSet.second.size() << std::endl;
@@ -557,6 +590,8 @@ int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progu
 						kmersPerInbetween.emplace(hasher.hash(k));
 						if (getReverseCompOfGenomeRegions) {
 							kmersPerInbetween.emplace(hasher.revCompHash(k));
+						} else {
+							kmersPerInbetween_revCompForFiltering.emplace(hasher.revCompHash(k));
 						}
 					}
 					//kmersPerInbetween.emplace(hasher.hash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
@@ -585,8 +620,38 @@ int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progu
 													std::back_inserter(uniqueTo_finalKmerSet),
 													std::back_inserter(uniqueTo_kmersPerInbetween),
 													std::back_inserter(shared));
-			std::move(uniqueTo_finalKmerSet.begin(), uniqueTo_finalKmerSet.end(), std::inserter(filterKmers[finalKmerSet.first],filterKmers[finalKmerSet.first].end()));
-			std::move(shared.begin(), shared.end(), std::inserter(nonUniqueKmers,nonUniqueKmers.end()));
+			if (!getReverseCompOfGenomeRegions && !getReverseCompOfInputRegions) {
+				// did not get reverse complement of rest of genome or the input so have to make sure the kmers of
+				// the input set are not in the reverse complement of the genome
+				std::vector<uint64_t> uniqueTo_finalKmerSet_again;
+				uniqueTo_finalKmerSet_again.reserve(uniqueTo_finalKmerSet.size());
+				std::vector<uint64_t> uniqueTo_kmersPerInbetween_revCompForFiltering;
+				uniqueTo_kmersPerInbetween_revCompForFiltering.reserve(kmersPerInbetween_revCompForFiltering.size());
+				//now the non-unique kmers to the whole genome reverse complement gets added to the shared vector again
+				njh::decompose_sets(finalKmerSet.second.begin(), finalKmerSet.second.end(),
+										kmersPerInbetween_revCompForFiltering.begin(), kmersPerInbetween_revCompForFiltering.end(),
+										std::back_inserter(uniqueTo_finalKmerSet_again),
+										std::back_inserter(uniqueTo_kmersPerInbetween_revCompForFiltering),
+										std::back_inserter(shared));
+				uniqueTo_finalKmerSet = uniqueTo_finalKmerSet_again;
+			}
+
+
+
+			//make sure to add the reverse complement of the shared kmer as well, this will handle when the reverse complement
+			//wasn't gotten for either the input or the rest of the genome
+			for (const auto k : shared) {
+				nonUniqueKmers.emplace(k);
+				nonUniqueKmers.emplace(hasher.hash(hasher.revCompReverseHash(k)));
+			}
+			for(const auto & finalKmer: uniqueTo_finalKmerSet){
+				if(!njh::in(finalKmer, nonUniqueKmers)){
+					filterKmers[finalKmerSet.first].emplace(finalKmer);
+				}
+			}
+			// std::move(uniqueTo_finalKmerSet.begin(), uniqueTo_finalKmerSet.end(), std::inserter(filterKmers[finalKmerSet.first],filterKmers[finalKmerSet.first].end()));
+
+			//std::move(shared.begin(), shared.end(), std::inserter(nonUniqueKmers,nonUniqueKmers.end()));
 //				std::vector<uint64_t> notShared;
 //				notShared.reserve(finalKmerSet.second.size());
 //				std::set_difference(
@@ -649,6 +714,7 @@ int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progu
 					}
 				}
 				std::set<uint64_t> kmersPerInbetween;
+				std::set<uint64_t> kmersPerInbetween_revCompForFiltering;
 				auto currentSeq = GenomicRegion(region).extractSeq(tReader);
 				if("upper" == lower){
 					njh::strToUpper(currentSeq.seq_);
@@ -659,6 +725,8 @@ int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progu
 						kmersPerInbetween.emplace(hasher.hash(k));
 						if (getReverseCompOfGenomeRegions) {
 							kmersPerInbetween.emplace(hasher.revCompHash(k));
+						} else {
+							kmersPerInbetween_revCompForFiltering.emplace(hasher.revCompHash(k));
 						}
 					}
 					//kmersPerInbetween.emplace(hasher.hash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
@@ -685,8 +753,36 @@ int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progu
 															std::back_inserter(uniqueTo_finalKmerSet),
 															std::back_inserter(uniqueTo_kmersPerInbetween),
 															std::back_inserter(shared));
-					std::move(uniqueTo_finalKmerSet.begin(), uniqueTo_finalKmerSet.end(), std::inserter(filterKmers[finalKmerSet.first],filterKmers[finalKmerSet.first].end()));
-					std::move(shared.begin(), shared.end(), std::inserter(nonUniqueKmers,nonUniqueKmers.end()));
+
+					if (!getReverseCompOfGenomeRegions && !getReverseCompOfInputRegions) {
+						// did not get reverse complement of rest of genome or the input so have to make sure the kmers of
+						// the input set are not in the reverse complement of the genome
+						std::vector<uint64_t> uniqueTo_finalKmerSet_again;
+						uniqueTo_finalKmerSet_again.reserve(uniqueTo_finalKmerSet.size());
+						std::vector<uint64_t> uniqueTo_kmersPerInbetween_revCompForFiltering;
+						uniqueTo_kmersPerInbetween_revCompForFiltering.reserve(kmersPerInbetween_revCompForFiltering.size());
+						//now the non-unique kmers to the whole genome reverse complement gets added to the shared vector again
+						njh::decompose_sets(finalKmerSet.second.begin(), finalKmerSet.second.end(),
+												kmersPerInbetween_revCompForFiltering.begin(), kmersPerInbetween_revCompForFiltering.end(),
+												std::back_inserter(uniqueTo_finalKmerSet_again),
+												std::back_inserter(uniqueTo_kmersPerInbetween_revCompForFiltering),
+												std::back_inserter(shared));
+						uniqueTo_finalKmerSet = uniqueTo_finalKmerSet_again;
+					}
+					//make sure to add the reverse complement of the shared kmer as well, this will handle when the reverse complement
+					//wasn't gotten for either the input or the rest of the genome
+					for (const auto k : shared) {
+						nonUniqueKmers.emplace(k);
+						nonUniqueKmers.emplace(hasher.hash(hasher.revCompReverseHash(k)));
+					}
+					for(const auto & finalKmer: uniqueTo_finalKmerSet){
+						if(!njh::in(finalKmer, nonUniqueKmers)){
+							filterKmers[finalKmerSet.first].emplace(finalKmer);
+						}
+					}
+					// std::move(uniqueTo_finalKmerSet.begin(), uniqueTo_finalKmerSet.end(), std::inserter(filterKmers[finalKmerSet.first],filterKmers[finalKmerSet.first].end()));
+
+					//std::move(shared.begin(), shared.end(), std::inserter(nonUniqueKmers,nonUniqueKmers.end()));
 //				std::vector<uint64_t> notShared;
 //				notShared.reserve(finalKmerSet.second.size());
 //				std::set_difference(
