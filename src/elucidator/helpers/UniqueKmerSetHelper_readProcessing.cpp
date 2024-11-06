@@ -152,6 +152,11 @@ void UniqueKmerSetHelper::processReadForExtracting(seqInfo &seq,
 
 
 	auto compRes = UniqueKmerSetHelper::compareReadToSets(seq, uniqueKmersPerSet, extractingPars.compPars, hasher);
+	// std::cout << __FILE__ << " : " << __LINE__ << std::endl;
+	// std::cout << njh::json::toJson(compRes) << std::endl;
+	// compRes.writeOutputHeader(std::cout, extractingPars.compPars);
+	// compRes.writeOutput(std::cout, seq, uniqueKmersPerSet, extractingPars.compPars);
+
 	if (extractingPars.filterMultiHitReads && compRes.allHits.size() > 1) {
 		++counts.multiHitReadCounts[njh::conToStr(compRes.allHits, "::")];
 		if(!extractingPars.doNotWriteUndetermined) {

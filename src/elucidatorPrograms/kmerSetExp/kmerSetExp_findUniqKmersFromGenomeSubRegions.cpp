@@ -521,14 +521,35 @@ int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progu
 	std::map<std::string, std::set<uint64_t>> finalKmersPerInput;
 
 	//initial filter to other groups
-	if (rawKmersPerInput.size() > 1) {
+	if (rawKmersPerInput.size() <= 1) {
 		finalKmersPerInput = rawKmersPerInput;
 	} else {
 		for(const auto & kmerSet : rawKmersPerInput){
 			for(const auto & kmer : kmerSet.second){
 				bool pass = true;
+				if (setUp.pars_.debug_ && 4444344131411234113 == kmer) {
+					std::cout << __FILE__ << " : " << __LINE__ << std::endl;
+					std::cout << "kmer: " << kmer << std::endl;
+					std::cout << "hash kmer: " << hasher.reverseHash(kmer) << std::endl;
+
+					std::cout << "pass: " << njh::colorBool(pass) << std::endl;
+				}
 				for(const auto & otherKmerSet : rawKmersPerInput){
 					if(otherKmerSet.first != kmerSet.first){
+						if (setUp.pars_.debug_ && 4444344131411234113 == kmer) {
+							std::cout << __FILE__ << " : " << __LINE__ << std::endl;
+							std::cout << "kmer: " << kmer << std::endl;
+							std::cout << "hash kmer: " << hasher.reverseHash(kmer) << std::endl;
+
+							std::cout << "pass: " << njh::colorBool(pass) << std::endl;
+							std::cout << "otherKmerSet.first: " << otherKmerSet.first << std::endl;
+							std::cout << "kmerSet.first     : " << kmerSet.first << std::endl;
+							std::cout << "njh::in(kmer, otherKmerSet.second): " << njh::colorBool(njh::in(kmer, otherKmerSet.second)) << std::endl;
+							auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(kmer));
+							std::cout << "njh::in(revCompKmerHash, otherKmerSet.second): " << njh::colorBool(njh::in(revCompKmerHash, otherKmerSet.second)) << std::endl;
+							std::cout << std::endl;
+						}
+
 						if(njh::in(kmer, otherKmerSet.second)){
 							pass = false;
 							nonUniqueKmers.emplace(kmer);
@@ -545,6 +566,10 @@ int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progu
 							}
 						}
 					}
+				}
+				if (setUp.pars_.debug_ && 4444344131411234113 == kmer) {
+					std::cout << "kmer: " << kmer << std::endl;
+					std::cout << "pass: " << njh::colorBool(pass) << std::endl;
 				}
 				if(pass){
 					finalKmersPerInput[kmerSet.first].emplace(kmer);

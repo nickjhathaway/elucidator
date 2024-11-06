@@ -1240,33 +1240,54 @@ int kmerSetExpRunner::findKmersInSets(const njh::progutils::CmdArgs & inputComma
 	KmerGatherer::KmerGathererPars countPars;
 	std::vector<bfs::path> seqSetFnps;
 	uint32_t minOccurrences = 1;
+	bfs::path countTable;
+	OutOptions outOpts(bfs::path(""), ".tsv.gz");
 	seqSetUp setUp(inputCommands);
 	setUp.description_ = "Take a sequence file and report for each kmer stepped along the seq if that kmer can be found within a set of other fasta files";
 	setUp.processVerbose();
 	setUp.processDebug();
-	setUp.setOption(seqSetFnps, "--seqSetFnps", "seqSetFnps", true);
+	bool seqSetFnpsSet = setUp.setOption(seqSetFnps, "--seqSetFnps", "seqSetFnps", false);
 	setUp.setOption(minOccurrences, "--minOccurrences", "minOccurrences");
+
+	setUp.setOption(countTable, "--kmerTable", "countTable, 1)set,2)kmer", !seqSetFnpsSet);
 
 	countPars.setOptions(setUp);
 	setUp.processReadInNames(true);
-
-	setUp.processDirectoryOutputName(true);
+	setUp.processWritingOptions(outOpts);
+	// setUp.processDirectoryOutputName(true);
 	setUp.finishSetUp(std::cout);
-	setUp.startARunLog(setUp.pars_.directoryName_);
+	// setUp.startARunLog(setUp.pars_.directoryName_);
 
-	KmerGatherer kGather(countPars);
 	std::unordered_map<std::string, std::unordered_map<std::string, uint32_t>> allCounts;
-	setUp.rLog_.setCurrentLapName("initial");
-	for(const auto & seqSetFnp : seqSetFnps){
-		std::string genomeFnp1Base = bfs::basename(njh::files::removeExtension(seqSetFnp));
-		setUp.rLog_.logCurrentTime("genome1_counting-" + genomeFnp1Base);
-		allCounts[genomeFnp1Base] = kGather.countGenomeKmers(seqSetFnp);
+	// setUp.rLog_.setCurrentLapName("initial");
+
+	if (countTable.empty()) {
+		KmerGatherer kGather(countPars);
+		for(const auto & seqSetFnp : seqSetFnps){
+			std::string genomeFnp1Base = bfs::basename(njh::files::removeExtension(seqSetFnp));
+			// setUp.rLog_.logCurrentTime("genome1_counting-" + genomeFnp1Base);
+			allCounts[genomeFnp1Base] = kGather.countGenomeKmers(seqSetFnp);
+		}
+	}	else {
+		TableReader counts_table_reader(TableIOOpts::genTabFileIn(countTable, false));
+		VecStr row;
+		if (counts_table_reader.header_.nCol() != 2) {
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "expected 2 columns for " << countTable << " but found " << counts_table_reader.header_.nCol() << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		while (counts_table_reader.getNextRow(row)) {
+			++allCounts[row[0]][row[1]];
+		}
+		countPars.kmerLength_ = row[1].size();
 	}
+
 
 	seqInfo seq;
 	SeqInput reader(setUp.pars_.ioOptions_);
 	reader.openIn()	;
-	OutputStream kmerClassifierOut(njh::files::make_path(setUp.pars_.directoryName_, "seqsKmerClassified.tab.txt.gz"));
+	// OutputStream kmerClassifierOut(njh::files::make_path(setUp.pars_.directoryName_, "seqsKmerClassified.tab.txt.gz"));
+	OutputStream kmerClassifierOut(outOpts);
 	kmerClassifierOut << "name\tpos\tkmer\tfoundIn" << std::endl;
 	while(reader.readNextRead(seq)){
 		if(len(seq) >= countPars.kmerLength_){
@@ -1293,7 +1314,7 @@ int kmerSetExpRunner::findKmersInSets(const njh::progutils::CmdArgs & inputComma
 		}
 	}
 
-	setUp.rLog_.logCurrentTime("end");
+	// setUp.rLog_.logCurrentTime("end");
 
 	return 0;
 }

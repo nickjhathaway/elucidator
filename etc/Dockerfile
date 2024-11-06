@@ -42,6 +42,7 @@ RUN git clone https://github.com/nickjhathaway/elucidator.git
 WORKDIR /opt/elucidator
 RUN git checkout develop
 RUN ./setup.py  --libs adapterremoval:v2.3.2 --numCores ${CPU_COUNT} --overWrite --symlinkBin
+RUN ./setup.py  --libs bamtools:develop --symlinkBin
 RUN ./setup.py  --libs elucidator:${ELUCIDATOR_VERSION} --numCores ${CPU_COUNT} --overWrite --symlinkBin
 
 # expose ports
