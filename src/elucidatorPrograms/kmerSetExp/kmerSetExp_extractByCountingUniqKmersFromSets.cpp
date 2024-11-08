@@ -290,11 +290,12 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 
 	bool finalWriteOutMultiHitSeparate = false;
 	setUp.setOption(finalWriteOutMultiHitSeparate, "--finalWriteOutMultiHitSeparate", "final Write Out Multi Hit Separate");
+	setUp.setOption(extractingPars.writeMultiHitSeparate, "--writeMultiHitSeparate", "Write Out Multi Hit Separate");
+
+
 
 	setUp.setOption(extractingPars.doNotWriteUndetermined, "--doNotWriteUndetermined", "do Not Write Undetermined");
 	setUp.setOption(extractingPars.writeOutExclude, "--writeOutExclude", "write Out Excluded reads that match the excluded kmer sets");
-
-
 
 	setUp.setOption(numThreads, "--numThreads", "numThreads");
 	setUp.processDirectoryOutputName(true);
