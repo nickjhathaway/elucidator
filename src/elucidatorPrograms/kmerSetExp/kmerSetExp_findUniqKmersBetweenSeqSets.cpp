@@ -1294,9 +1294,17 @@ int kmerSetExpRunner::findKmersInSets(const njh::progutils::CmdArgs & inputComma
 			for(auto pos = 0; pos < (len(seq) + 1 - countPars.kmerLength_); ++pos){
 				auto currentK = seq.seq_.substr(pos, countPars.kmerLength_);
 				std::set<std::string> setsFounds;
-				for( auto & seqSet : allCounts){
+				for(auto & seqSet : allCounts){
 					if(njh::in(currentK, seqSet.second) && seqSet.second[currentK] >= minOccurrences){
 						setsFounds.emplace(seqSet.first);
+					}
+				}
+				if (!countPars.noRevComp_) {
+					auto revComp_currentK = seqUtil::reverseComplement(currentK, "DNA");
+					for(auto & seqSet : allCounts){
+						if(njh::in(revComp_currentK, seqSet.second) && seqSet.second[revComp_currentK] >= minOccurrences){
+							setsFounds.emplace(njh::pasteAsStr(seqSet.first, "-revComp"));
+						}
 					}
 				}
 				kmerClassifierOut

@@ -113,7 +113,7 @@ int kmerSetExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputCom
 	bfs::path countTable;
 	bfs::path nonUniqueKmerTable;
 	bool getRevComp = false;
-	std::string regionName;
+	std::string inputRegionName;
 	OutOptions outOpts;
 	KmerGatherer::KmerGathererPars countPars;
 	countPars.allUpper_ = false;
@@ -135,8 +135,13 @@ int kmerSetExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputCom
 	if (nonUniqueKmerTable.empty() && bfs::exists(njh::files::prependFileBasename(countTable, "nonUniqueKmers_"))) {
 		nonUniqueKmerTable = njh::files::prependFileBasename(countTable, "nonUniqueKmers_");
 	}
-	setUp.setOption(regionName, "--regionName", "region name for the input, can be a name already in --kmerTable", true);
-	setUp.processReadInNames(VecStr{"--fasta", "--fastagz", "--fastq", "--fastqgz"}, true);
+	bfs::path kmerSetFnps;
+	bool kmerSetFnpsSet = setUp.setOption(kmerSetFnps, "--kmerSetFnps", "kmer Set Fnps", false);
+
+	setUp.setOption(inputRegionName, "--regionName", "region name for the input, can be a name already in --kmerTable", !kmerSetFnpsSet);
+	setUp.processReadInNames(VecStr{"--fasta", "--fastagz", "--fastq", "--fastqgz"}, !kmerSetFnpsSet);
+
+
 	setUp.processWritingOptions(outOpts);
 	bfs::path nonUniqueOutputFnp = njh::files::prependFileBasename(outOpts.outName(), "nonUniqueKmers_");
 	setUp.setOption(nonUniqueOutputFnp, "--nonUniqueOutputFnp", "non Unique Output Fnp");
@@ -159,95 +164,172 @@ int kmerSetExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputCom
 	if (!nonUniqueKmerTable.empty()) {
 		nonUniqueKmersPerSet = UniqueKmerSetHelper::readInUniqueKmerTableSetsCollapsed(nonUniqueKmerTable);
 	}
-
-
-	seqInfo seq;
-	if(countPars.allUpper_){
-		setUp.pars_.ioOptions_.lowerCaseBases_ = "upper";
+	std::unordered_map<std::string, SeqIOOptions> inputAddingRegions;
+	if (kmerSetFnpsSet) {
+		table kmerSetFnpsTable(kmerSetFnps, "\t", true);
+		kmerSetFnpsTable.checkForColumnsThrow(VecStr{"set", "fasta"}, __PRETTY_FUNCTION__);
+		for (const auto & row : kmerSetFnpsTable) {
+			inputAddingRegions[row[kmerSetFnpsTable.getColPos("set")]] = SeqIOOptions::genFastaIn(row[kmerSetFnpsTable.getColPos("fasta")]);
+			if(countPars.allUpper_){
+				inputAddingRegions[row[kmerSetFnpsTable.getColPos("set")]].lowerCaseBases_ = "upper";
+			}
+		}
+	} else {
+		if(countPars.allUpper_){
+			setUp.pars_.ioOptions_.lowerCaseBases_ = "upper";
+		}
+		inputAddingRegions[inputRegionName] = setUp.pars_.ioOptions_;
 	}
+
 	std::function<bool(const std::string&)> seqCheck = [&countPars](const std::string & k){
 		return std::all_of(k.begin(), k.end(), [&countPars](char base){return njh::in(base, countPars.allowableCharacters_);});
 	};
-	SeqInput reader(setUp.pars_.ioOptions_);
-	reader.openIn();
+
 	SimpleKmerHash hasher;
-	std::unordered_set<uint64_t> rawKmersPerInput;
-	std::unordered_set<uint64_t> rawKmersPerInput_revComForFiltering;
-	while (reader.readNextRead(seq)) {
-		if (len(seq.seq_) < klen) {
-			continue;
-		}
-		for (uint32_t pos = 0; pos < len(seq.seq_) - klen + 1; ++pos) {
-			auto k = seq.seq_.substr(pos, klen);
-			kmerInfo kinfo(k, countPars.kmerLengthForEntropyCalc_, false);
-			if (seqCheck(k) && kinfo.computeKmerEntropy() > countPars.entropyFilter_) {
-				rawKmersPerInput.emplace(hasher.hash(k));
+
+	std::unordered_map<std::string, std::unordered_set<uint64_t>> rawKmersPerInputPerSet;
+	std::function<bool(std::string)> doesInputRegionKPass;
+	if (countPars.entropyFilter_ > 0) {
+		doesInputRegionKPass = [&seqCheck, &countPars](const std::string &k) {
+			kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
+			return kInfo.computeKmerEntropy() > countPars.entropyFilter_ && seqCheck(k);
+		};
+	} else {
+		doesInputRegionKPass = [&seqCheck](const std::string &k) {
+			return seqCheck(k);
+		};
+	}
+	for (const auto & regionSeqIoOpts : inputAddingRegions) {
+		seqInfo seq;
+		SeqInput reader(regionSeqIoOpts.second);
+		reader.openIn();
+		while (reader.readNextRead(seq)) {
+			if (len(seq.seq_) < klen) {
+				continue;
 			}
-		}
-		if (!countPars.noRevComp_) {
 			for (uint32_t pos = 0; pos < len(seq.seq_) - klen + 1; ++pos) {
 				auto k = seq.seq_.substr(pos, klen);
-				kmerInfo kinfo(k, countPars.kmerLengthForEntropyCalc_, false);
-				if (seqCheck(k) && kinfo.computeKmerEntropy() > countPars.entropyFilter_) {
-					rawKmersPerInput.emplace(hasher.revCompHash(k));
+				if (doesInputRegionKPass(k)) {
+					rawKmersPerInputPerSet[regionSeqIoOpts.first].emplace(hasher.hash(k));
 				}
+				// kmerInfo kinfo(k, countPars.kmerLengthForEntropyCalc_, false);
+				// if (seqCheck(k) && kinfo.computeKmerEntropy() > countPars.entropyFilter_) {
+				// 	rawKmersPerInputPerSet[regionSeqIoOpts.first].emplace(hasher.hash(k));
+				// }
 			}
-		} else {
-			for (uint32_t pos = 0; pos < len(seq.seq_) - klen + 1; ++pos) {
-				auto k = seq.seq_.substr(pos, klen);
-				kmerInfo kinfo(k, countPars.kmerLengthForEntropyCalc_, false);
-				if (seqCheck(k) && kinfo.computeKmerEntropy() > countPars.entropyFilter_) {
-					rawKmersPerInput_revComForFiltering.emplace(hasher.revCompHash(k));
+			if (!countPars.noRevComp_) {
+				for (uint32_t pos = 0; pos < len(seq.seq_) - klen + 1; ++pos) {
+					auto k = seq.seq_.substr(pos, klen);
+					if (doesInputRegionKPass(k)) {
+						rawKmersPerInputPerSet[regionSeqIoOpts.first].emplace(hasher.revCompHash(k));
+					}
+					// kmerInfo kinfo(k, countPars.kmerLengthForEntropyCalc_, false);
+					// if (seqCheck(k) && kinfo.computeKmerEntropy() > countPars.entropyFilter_) {
+					// 	rawKmersPerInputPerSet[regionSeqIoOpts.first].emplace(hasher.revCompHash(k));
+					// }
 				}
 			}
 		}
 	}
+
+	std::unordered_map<std::string, std::unordered_set<uint64_t>> filt_rawKmersPerInputPerSet;
+
+	if (inputAddingRegions.size() > 1 ){
+		filt_rawKmersPerInputPerSet = std::move(rawKmersPerInputPerSet);
+	} else {
+		//filter for non-unique kmers between sets first
+		for(const auto & kmerSet : rawKmersPerInputPerSet){
+			for(const auto & kmer : kmerSet.second){
+				bool pass = true;
+				for(const auto & otherKmerSet : rawKmersPerInputPerSet){
+					if(otherKmerSet.first != kmerSet.first){
+						if(njh::in(kmer, otherKmerSet.second)){
+							pass = false;
+							nonUniqueKmersPerSet.emplace(kmer);
+							break;
+						}
+						if (countPars.noRevComp_) {
+							auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(kmer));
+							if(njh::in(revCompKmerHash, otherKmerSet.second)){
+								pass = false;
+								//putting the revCompHash in but could also consider placing the original kmer too
+								nonUniqueKmersPerSet.emplace(revCompKmerHash);
+								nonUniqueKmersPerSet.emplace(kmer);
+								break;
+							}
+						}
+					}
+				}
+				if(pass){
+					filt_rawKmersPerInputPerSet[kmerSet.first].emplace(kmer);
+				}
+			}
+		}
+	}
+
+
+
 	std::unordered_map<std::string, std::unordered_set<uint64_t>> outputUniqueKmersPerSet;
 
-	if(njh::in(regionName, uniqueKmersPerSet)){
-		outputUniqueKmersPerSet[regionName] = uniqueKmersPerSet[regionName];
+	// if the input region already exist add those kmers to the output to be added to in addition to the ones being added here
+	for (const auto & kmerSet : filt_rawKmersPerInputPerSet) {
+		if(njh::in(kmerSet.first, uniqueKmersPerSet)){
+			outputUniqueKmersPerSet[kmerSet.first] = uniqueKmersPerSet[kmerSet.first];
+		}
 	}
-	for (const auto finalNewKmer: rawKmersPerInput) {
-		bool pass = true;
-		if (njh::in(finalNewKmer, nonUniqueKmersPerSet)) {
-			pass = false;
-		} else {
-			for (const auto &set: uniqueKmersPerSet) {
-				if (set.first == regionName) {
-					continue;
-				}
-				if (njh::in(finalNewKmer, set.second)) {
-					pass = false;
-					nonUniqueKmersPerSet.emplace(finalNewKmer);
-					break;
-				}
-				if (countPars.noRevComp_) {
-					auto finalNewKmerRevComp = hasher.hash(hasher.revCompReverseHash(finalNewKmer));
-					if (njh::in(finalNewKmerRevComp, set.second)) {
+
+
+	//filter the new kmers against the already determined non-unique kmers
+	for (const auto & kmerSet : filt_rawKmersPerInputPerSet) {
+		for (const auto finalNewKmer: kmerSet.second) {
+			bool pass = true;
+			if (njh::in(finalNewKmer, nonUniqueKmersPerSet)) {
+				pass = false;
+			} else {
+				//check against the other kmer sets
+				for (const auto &set: uniqueKmersPerSet) {
+					if (set.first == kmerSet.first) {
+						continue;
+					}
+					if (njh::in(finalNewKmer, set.second)) {
 						pass = false;
-						nonUniqueKmersPerSet.emplace(finalNewKmerRevComp);
 						nonUniqueKmersPerSet.emplace(finalNewKmer);
 						break;
 					}
+					if (countPars.noRevComp_) {
+						auto finalNewKmerRevComp = hasher.hash(hasher.revCompReverseHash(finalNewKmer));
+						if (njh::in(finalNewKmerRevComp, set.second)) {
+							pass = false;
+							nonUniqueKmersPerSet.emplace(finalNewKmerRevComp);
+							nonUniqueKmersPerSet.emplace(finalNewKmer);
+							break;
+						}
+					}
 				}
 			}
-		}
-		if (pass) {
-			outputUniqueKmersPerSet[regionName].emplace(finalNewKmer);
+			if (pass) {
+				outputUniqueKmersPerSet[kmerSet.first].emplace(finalNewKmer);
+			}
 		}
 	}
 
 	//filter other sets
 	for (const auto &set: uniqueKmersPerSet) {
-		if (set.first == regionName) {
-			continue;
-		}
-		for(const auto & finalKmer : set.second){
-			// have to make sure it's not in both the forward and reverse comp of the input,
-			// rawKmersPerInput_revComForFiltering will be empty if the input was reverse complemented so can be
-			// used for filtering either way
-			if(!njh::in(finalKmer, rawKmersPerInput) && !njh::in(finalKmer, rawKmersPerInput_revComForFiltering)) {
-				outputUniqueKmersPerSet[set.first].emplace(finalKmer);
+		for (const auto & kmerSet : rawKmersPerInputPerSet) {
+			if (set.first == kmerSet.first) {
+				continue;
+			}
+			for(const auto & finalKmer : set.second){
+				// have to make sure it's not in both the forward and reverse comp of the input,
+				// rawKmersPerInput_revComForFiltering will be empty if the input was reverse complemented so can be
+				// used for filtering either way
+				auto finalNewKmerRevComp = hasher.hash(hasher.revCompReverseHash(finalKmer));
+				if(!njh::in(finalKmer, kmerSet.second) && !njh::in(finalNewKmerRevComp, kmerSet.second)) {
+					outputUniqueKmersPerSet[set.first].emplace(finalKmer);
+				} else {
+					nonUniqueKmersPerSet.emplace(finalNewKmerRevComp);
+					nonUniqueKmersPerSet.emplace(finalKmer);
+				}
 			}
 		}
 	}
@@ -263,9 +345,6 @@ int kmerSetExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputCom
 	}
 	return 0;
 }
-
-
-
 
 int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutils::CmdArgs & inputCommands){
 	std::string nonUniqueRegionName = "NON_UNIQUE";
@@ -293,6 +372,8 @@ int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progu
 
 	setUp.setOption(genomeFnp, "--genomeFnp", "genome file to extract from, a .2bit file needs to exist for the supplied genome", true);
 	setUp.setOption(regionTableFnp, "--bedFnp", "sub regions to extract to compare to the rest of the genome", true);
+	bfs::path kmerSetFnps;
+	bool kmerSetFnpsSet = setUp.setOption(kmerSetFnps, "--kmerSetFnps", "kmer Set Fnps", false);
 
 	setUp.setOption(gatherRestOfGenomeInOneGo, "--gatherRestOfGenomeInOneGo", "gather Rest Of Genome In One Go, can be memory expensive depending on genome");
 
@@ -483,6 +564,21 @@ int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progu
 	std::function<bool(const std::string&)> seqCheck = [&countPars](const std::string & k){
 		return std::all_of(k.begin(), k.end(), [&countPars](char base){return njh::in(base, countPars.allowableCharacters_);});
 	};
+
+
+	std::function<bool(std::string)> doesInputRegionKPass;
+	if (countPars.entropyFilter_ > 0) {
+		doesInputRegionKPass = [&seqCheck, &countPars](const std::string &k) {
+			kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
+			return kInfo.computeKmerEntropy() > countPars.entropyFilter_ && seqCheck(k);
+		};
+	} else {
+		doesInputRegionKPass = [&seqCheck](const std::string &k) {
+			return seqCheck(k);
+		};
+	}
+
+
 	//// hasher
 	SimpleKmerHash hasher;
 	//// get kmers for input bed regions
@@ -496,13 +592,19 @@ int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progu
 				}
 				for (uint32_t pos = 0; pos < len(currentSeq.seq_) - countPars.kmerLength_ + 1; ++pos) {
 					auto k = currentSeq.seq_.substr(pos, countPars.kmerLength_);
-					kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
-					if (kInfo.computeKmerEntropy() > countPars.entropyFilter_ && seqCheck(k)) {
+					if (doesInputRegionKPass(k)) {
 						rawKmersPerInput[regionBeds.first].emplace(hasher.hash(k));
 						if (getReverseCompOfInputRegions) {
 							rawKmersPerInput[regionBeds.first].emplace(hasher.revCompHash(k));
 						}
 					}
+					// kmerInfo kInfo(k, countPars.kmerLengthForEntropyCalc_, false);
+					// if (kInfo.computeKmerEntropy() > countPars.entropyFilter_ && seqCheck(k)) {
+					// 	rawKmersPerInput[regionBeds.first].emplace(hasher.hash(k));
+					// 	if (getReverseCompOfInputRegions) {
+					// 		rawKmersPerInput[regionBeds.first].emplace(hasher.revCompHash(k));
+					// 	}
+					// }
 					//rawKmersPerInput[regionBeds.first].emplace(hasher.hash(currentSeq.seq_.substr(pos, countPars.kmerLength_)));
 				}
 //				if (getReverseCompOfInputRegions) {
@@ -518,6 +620,51 @@ int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progu
 			}
 		}
 	}
+
+	std::unordered_map<std::string, SeqIOOptions> inputAddingRegions;
+	if (kmerSetFnpsSet) {
+		table kmerSetFnpsTable(kmerSetFnps, "\t", true);
+		kmerSetFnpsTable.checkForColumnsThrow(VecStr{"set", "fasta"}, __PRETTY_FUNCTION__);
+		for (const auto & row : kmerSetFnpsTable) {
+			inputAddingRegions[row[kmerSetFnpsTable.getColPos("set")]] = SeqIOOptions::genFastaIn(row[kmerSetFnpsTable.getColPos("fasta")]);
+			if(countPars.allUpper_){
+				inputAddingRegions[row[kmerSetFnpsTable.getColPos("set")]].lowerCaseBases_ = "upper";
+			}
+		}
+		for (const auto & regionSeqIoOpts : inputAddingRegions) {
+			seqInfo seq;
+			SeqInput reader(regionSeqIoOpts.second);
+			reader.openIn();
+			while (reader.readNextRead(seq)) {
+				if (len(seq.seq_) < countPars.kmerLength_) {
+					continue;
+				}
+				for (uint32_t pos = 0; pos < len(seq.seq_) - countPars.kmerLength_ + 1; ++pos) {
+					auto k = seq.seq_.substr(pos, countPars.kmerLength_);
+					if (doesInputRegionKPass(k)) {
+						rawKmersPerInput[regionSeqIoOpts.first].emplace(hasher.hash(k));
+					}
+					// kmerInfo kinfo(k, countPars.kmerLengthForEntropyCalc_, false);
+					// if (seqCheck(k) && kinfo.computeKmerEntropy() > countPars.entropyFilter_) {
+					// 	rawKmersPerInput[regionSeqIoOpts.first].emplace(hasher.hash(k));
+					// }
+				}
+				if (getReverseCompOfInputRegions) {
+					for (uint32_t pos = 0; pos < len(seq.seq_) - countPars.kmerLength_ + 1; ++pos) {
+						auto k = seq.seq_.substr(pos, countPars.kmerLength_);
+						if (doesInputRegionKPass(k)) {
+							rawKmersPerInput[regionSeqIoOpts.first].emplace(hasher.revCompHash(k));
+						}
+						// kmerInfo kinfo(k, countPars.kmerLengthForEntropyCalc_, false);
+						// if (seqCheck(k) && kinfo.computeKmerEntropy() > countPars.entropyFilter_) {
+						// 	rawKmersPerInput[regionSeqIoOpts.first].emplace(hasher.revCompHash(k));
+						// }
+					}
+				}
+			}
+		}
+	}
+
 	std::map<std::string, std::set<uint64_t>> finalKmersPerInput;
 
 	//initial filter to other groups
@@ -527,29 +674,8 @@ int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progu
 		for(const auto & kmerSet : rawKmersPerInput){
 			for(const auto & kmer : kmerSet.second){
 				bool pass = true;
-				if (setUp.pars_.debug_ && 4444344131411234113 == kmer) {
-					std::cout << __FILE__ << " : " << __LINE__ << std::endl;
-					std::cout << "kmer: " << kmer << std::endl;
-					std::cout << "hash kmer: " << hasher.reverseHash(kmer) << std::endl;
-
-					std::cout << "pass: " << njh::colorBool(pass) << std::endl;
-				}
 				for(const auto & otherKmerSet : rawKmersPerInput){
 					if(otherKmerSet.first != kmerSet.first){
-						if (setUp.pars_.debug_ && 4444344131411234113 == kmer) {
-							std::cout << __FILE__ << " : " << __LINE__ << std::endl;
-							std::cout << "kmer: " << kmer << std::endl;
-							std::cout << "hash kmer: " << hasher.reverseHash(kmer) << std::endl;
-
-							std::cout << "pass: " << njh::colorBool(pass) << std::endl;
-							std::cout << "otherKmerSet.first: " << otherKmerSet.first << std::endl;
-							std::cout << "kmerSet.first     : " << kmerSet.first << std::endl;
-							std::cout << "njh::in(kmer, otherKmerSet.second): " << njh::colorBool(njh::in(kmer, otherKmerSet.second)) << std::endl;
-							auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(kmer));
-							std::cout << "njh::in(revCompKmerHash, otherKmerSet.second): " << njh::colorBool(njh::in(revCompKmerHash, otherKmerSet.second)) << std::endl;
-							std::cout << std::endl;
-						}
-
 						if(njh::in(kmer, otherKmerSet.second)){
 							pass = false;
 							nonUniqueKmers.emplace(kmer);
@@ -566,10 +692,6 @@ int kmerSetExpRunner::findUniqKmersFromGenomeSubRegionsMultiple(const njh::progu
 							}
 						}
 					}
-				}
-				if (setUp.pars_.debug_ && 4444344131411234113 == kmer) {
-					std::cout << "kmer: " << kmer << std::endl;
-					std::cout << "pass: " << njh::colorBool(pass) << std::endl;
 				}
 				if(pass){
 					finalKmersPerInput[kmerSet.first].emplace(kmer);

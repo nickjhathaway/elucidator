@@ -23,13 +23,15 @@ int gffExpRunner::extractProteinsFromGff(const njh::progutils::CmdArgs & inputCo
 	std::set<char> allowableStarts = {'M'};
 	std::set<std::string> selectedGeneIDs;
 	auto seqOutOpts = SeqIOOptions::genFastaOutGz("out");
-
+	bool extractCDNAInstead = false;
 	OutOptions infoKeyOutOpts(bfs::path(""), ".tsv.gz");
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.setOption(gffFnp, "--gff", "GFF (gene feature format) file", true);
 	setUp.setOption(twoBitFnp, "--2bit", "2bit file of genome", true);
 	setUp.setOption(selectedGeneIDs, "--selectedGeneIDs", "only extract these selected gene IDs");
+
+	setUp.setOption(extractCDNAInstead, "--extractCDNAInstead", "extract cDNA Instead of the protein");
 	setUp.setOption(allowableFeatureType, "--allowableFeatureType", "allowable Feature Type for extracting");
 	setUp.setOption(acceptableMrnaLikeRecords, "--acceptableMrnaLikeRecords", "allowable mRNA like Type for extracting");
 	setUp.setOption(forceUntranslatableProteins, "--forceUntranslatableProteins", "force Untranslatable Proteins, even when feature is gene and not pseudogene the record is still a pseudogene and has premature stop codons");
@@ -170,7 +172,9 @@ int gffExpRunner::extractProteinsFromGff(const njh::progutils::CmdArgs & inputCo
 	std::mutex outMut;
 
 	std::function<void()> extractProteinSeq = [&geneRecordName,&outMut,
-														&gffRecs, &out, &extratedGeneIds, &forceUntranslatableProteins, &twoBitFnp, &acceptableMrnaLikeRecords, &infoOut, &allowableStarts, &addDescriptionToName](){
+														&gffRecs, &out, &extratedGeneIds, &forceUntranslatableProteins, &twoBitFnp,
+														&acceptableMrnaLikeRecords, &infoOut, &allowableStarts, &addDescriptionToName,
+														&extractCDNAInstead](){
 		TwoBit::TwoBitFile tReader(twoBitFnp);
 
 		std::string geneID;
@@ -210,7 +214,16 @@ int gffExpRunner::extractProteinsFromGff(const njh::progutils::CmdArgs & inputCo
 							modProtein.name_.append(geneInfo->getOneGeneDetailedName());
 						}
 						std::lock_guard<std::mutex> lock(outMut);
-						out.write(modProtein);
+						if (extractCDNAInstead) {
+							auto cdNA = genGeneInfo.second->cDna_;
+							if(addDescriptionToName){
+								cdNA.name_.append(" ");
+								cdNA.name_.append(geneInfo->getOneGeneDetailedName());
+								out.write(cdNA);
+							}
+						} else {
+							out.write(modProtein);
+						}
 						extratedGeneIds.emplace(geneID);
 
 						infoOut << geneID << "\t" << genGeneInfo.first << "\t" << geneInfo->getOneGeneDetailedName() << std::endl;

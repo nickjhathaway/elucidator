@@ -47,6 +47,8 @@ class geneExpRunner : public njh::progutils::ProgramRunner {
 	static int gffRecordIDToGeneInfo(const njh::progutils::CmdArgs & inputCommands);
 
 
+	static int multiGenomeExtractGenesWithDescription(const njh::progutils::CmdArgs & inputCommands);
+
 };
 } /* namespace njhseq */
 

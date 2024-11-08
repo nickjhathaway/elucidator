@@ -41,6 +41,7 @@ geneExpRunner::geneExpRunner()
 					 addFunc("getBedOfCDnaPositions", getBedOfCDnaPositions, false),
 					 addFunc("gffRecordIDToGeneInfo", gffRecordIDToGeneInfo, false),
           	addFunc("getBedOfAminoAcidPositionsFromGff", getBedOfAminoAcidPositionsFromGff, false),
+          	addFunc("multiGenomeExtractGenesWithDescription", multiGenomeExtractGenesWithDescription, false),
            },
           "geneExp") {}
 //
