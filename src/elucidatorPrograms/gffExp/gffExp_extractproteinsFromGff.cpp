@@ -219,8 +219,8 @@ int gffExpRunner::extractProteinsFromGff(const njh::progutils::CmdArgs & inputCo
 							if(addDescriptionToName){
 								cdNA.name_.append(" ");
 								cdNA.name_.append(geneInfo->getOneGeneDetailedName());
-								out.write(cdNA);
 							}
+							out.write(cdNA);
 						} else {
 							out.write(modProtein);
 						}
