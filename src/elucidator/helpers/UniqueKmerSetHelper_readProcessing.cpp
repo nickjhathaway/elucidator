@@ -25,11 +25,11 @@ UniqueKmerSetHelper::CompareReadToSetRes UniqueKmerSetHelper::compareReadToSets(
 	// check for presence of kmers in sets
 	ret.checkForPresenceOfHashedInputKmers(uniqueKmersPerSet);
 
-	uint32_t kmersPossible = (pseq.seqBase_.seq_.size() - compPars.klen + 1) + (pseq.mateSeqBase_.seq_.size() - compPars.klen + 1);
+	// uint32_t kmersPossible = (pseq.seqBase_.seq_.size() - compPars.klen + 1) + (pseq.mateSeqBase_.seq_.size() - compPars.klen + 1);
 
-	ret.preprocessedFoundKmers(compPars, kmersPossible);
+	// ret.preprocessedFoundKmers(compPars, kmersPossible);
 
-
+	ret.preprocessedFoundKmers(compPars, ret.hashedInputKmers.size());
 
 	//set a hard cut off or the fraction of possible kmers is less than frac cut off, reset counts to zero
 	// for (auto &perSet: ret.foundPerSet) {
@@ -67,14 +67,28 @@ UniqueKmerSetHelper::CompareReadToSetRes UniqueKmerSetHelper::compareReadToSets(
 
   // check for presence of kmers in sets
 	ret.checkForPresenceOfHashedInputKmers(uniqueKmersPerSet);
-
+	// if (seq.name_.find("PfSN01_13_2727936_2728809_PfSN01_130074700_id48_pos433_size440") != std::string::npos) {
+	// 	std::cout << njh::bashCT::blue << std::endl;
+	// 	std::cout << __FILE__ << " : " << __LINE__ << std::endl;
+	// 	std::cout << "kmersPossible: " << seq.seq_.size() - compPars.klen + 1 << std::endl;
+	// 	std::cout << "ret.hashedInputKmers.size(): " << ret.hashedInputKmers.size() << std::endl;
+	// 	std::cout << "extractingPars.compPars.hardCountOff: " << compPars.hardCountOff << std::endl;
+	// 	std::cout << "extractingPars.compPars.finalHardCountOff: " << compPars.finalHardCountOff << std::endl;
+	// 	std::cout << "extractingPars.compPars.fracCutOff: " << compPars.fracCutOff << std::endl;
+	// 	std::cout << "extractingPars.compPars.finalFracCutOff: " << compPars.finalFracCutOff << std::endl;
+	// 	ret.writeOutputHeader(std::cout, compPars);
+	// 	ret.writeOutput(std::cout, seq, uniqueKmersPerSet, compPars);
+	// 	std::cout << njh::bashCT::reset << std::endl;
+	// 	// auto compJson = njh::json::toJson(compRes);
+	// 	// std::cout <<  compJson<< std::endl;
+	// }
 //	bool print = false;
 //	VecStr testReadNames = {"ERR980507.sra.1612064_secondMate","ERR980507.sra.506751_secondMate","ERR980507.sra.1358147_firstMate","ERR980507.sra.101811_secondMate","ERR980507.sra.101803_secondMate"};
 //	if(njh::in(seq.name_, testReadNames)){
 //		print = true;
 //	}
 
-	uint32_t kmersPossible = seq.seq_.size() - compPars.klen + 1;
+	// uint32_t kmersPossible = seq.seq_.size() - compPars.klen + 1;
 	//set a hard cut-off or the fraction of possible kmers is less than frac cut off, reset counts to zero
 
 //	if(print){
@@ -92,7 +106,8 @@ UniqueKmerSetHelper::CompareReadToSetRes UniqueKmerSetHelper::compareReadToSets(
 //			std::cout << "\t" << ret.foundPerSetRevComp.at(name)/static_cast<double>(ret.hashedInputKmers.size()) << std::endl;
 //		}
 //	}
-	ret.preprocessedFoundKmers(compPars, kmersPossible);
+	// ret.preprocessedFoundKmers(compPars, kmersPossible);
+	ret.preprocessedFoundKmers(compPars, ret.hashedInputKmers.size());
 //	if(print){
 //		auto foundNames = njh::getSetOfMapKeys(ret.foundPerSet);
 //		std::cout << "forward" << std::endl;
@@ -108,7 +123,21 @@ UniqueKmerSetHelper::CompareReadToSetRes UniqueKmerSetHelper::compareReadToSets(
 //			std::cout << "\t" << ret.foundPerSetRevComp.at(name)/static_cast<double>(ret.hashedInputKmers.size()) << std::endl;
 //		}
 //	}
-
+	// if (seq.name_.find("PfSN01_13_2727936_2728809_PfSN01_130074700_id48_pos433_size440_firstMate") != std::string::npos) {
+	// 	std::cout << njh::bashCT::red << std::endl;
+	// 	std::cout << __FILE__ << " : " << __LINE__ << std::endl;
+	// 	std::cout << "kmersPossible: " << seq.seq_.size() - compPars.klen + 1 << std::endl;
+	// 	std::cout << "ret.hashedInputKmers.size(): " << ret.hashedInputKmers.size() << std::endl;
+	// 	std::cout << "extractingPars.compPars.hardCountOff: " << compPars.hardCountOff << std::endl;
+	// 	std::cout << "extractingPars.compPars.finalHardCountOff: " << compPars.finalHardCountOff << std::endl;
+	// 	std::cout << "extractingPars.compPars.fracCutOff: " << compPars.fracCutOff << std::endl;
+	// 	std::cout << "extractingPars.compPars.finalFracCutOff: " << compPars.finalFracCutOff << std::endl;
+	// 	ret.writeOutputHeader(std::cout, compPars);
+	// 	ret.writeOutput(std::cout, seq, uniqueKmersPerSet, compPars);
+	// 	std::cout << njh::bashCT::reset << std::endl;
+	// 	// auto compJson = njh::json::toJson(compRes);
+	// 	// std::cout <<  compJson<< std::endl;
+	// }
 	ret.determineWinner(uniqueKmersPerSet);
 
 //	if(print){
@@ -152,10 +181,19 @@ void UniqueKmerSetHelper::processReadForExtracting(seqInfo &seq,
 
 
 	auto compRes = UniqueKmerSetHelper::compareReadToSets(seq, uniqueKmersPerSet, extractingPars.compPars, hasher);
-	// std::cout << __FILE__ << " : " << __LINE__ << std::endl;
-	// std::cout << njh::json::toJson(compRes) << std::endl;
-	// compRes.writeOutputHeader(std::cout, extractingPars.compPars);
-	// compRes.writeOutput(std::cout, seq, uniqueKmersPerSet, extractingPars.compPars);
+	// if (seq.name_.find("PfSN01_13_2727936_2728809_PfSN01_130074700_id48_pos433_size440_firstMate") != std::string::npos) {
+	// 	std::cout << __FILE__ << " : " << __LINE__ << std::endl;
+	// 	std::cout << "extractingPars.compPars.hardCountOff: " << extractingPars.compPars.hardCountOff << std::endl;
+	// 	std::cout << "extractingPars.compPars.finalHardCountOff: " << extractingPars.compPars.finalHardCountOff << std::endl;
+	// 	std::cout << "extractingPars.compPars.fracCutOff: " << extractingPars.compPars.fracCutOff << std::endl;
+	// 	std::cout << "extractingPars.compPars.finalFracCutOff: " << extractingPars.compPars.finalFracCutOff << std::endl;
+	// 	compRes.writeOutputHeader(std::cout, extractingPars.compPars);
+	// 	compRes.writeOutput(std::cout, seq, uniqueKmersPerSet, extractingPars.compPars);
+	// 	// auto compJson = njh::json::toJson(compRes);
+	// 	// std::cout <<  compJson<< std::endl;
+	// }
+
+
 
 	if (extractingPars.filterMultiHitReads && compRes.allHits.size() > 1) {
 		++counts.multiHitReadCounts[njh::conToStr(compRes.allHits, "::")];

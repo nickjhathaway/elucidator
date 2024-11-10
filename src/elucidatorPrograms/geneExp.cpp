@@ -30,6 +30,7 @@
 #include "elucidator/seqToolsUtils/seqToolsUtils.hpp"
 
 #include <TwoBit.h>
+#include <njhseq/GenomeUtils/GenomeMapping/MultiGenomeMapper.hpp>
 #include <njhseq/objects/helperObjects/AminoAcidPositionInfo.hpp>
 
 namespace njhseq {
@@ -42,16 +43,221 @@ geneExpRunner::geneExpRunner()
 					 addFunc("gffRecordIDToGeneInfo", gffRecordIDToGeneInfo, false),
           	addFunc("getBedOfAminoAcidPositionsFromGff", getBedOfAminoAcidPositionsFromGff, false),
           	addFunc("multiGenomeExtractGenesWithDescription", multiGenomeExtractGenesWithDescription, false),
+          	addFunc("bedGetOverlappingAminoAcidPositions", bedGetOverlappingAminoAcidPositions, false),
            },
           "geneExp") {}
 //
 
 
+template <typename BEDREC>
+std::unordered_map<uint32_t, std::vector<GFFCore>> getGffRecordsIntersectWithBeds(
+		std::vector<BEDREC> & beds,
+		const bfs::path & gffFnp,
+		const VecStr & selectFeatures = VecStr{"gene", "protein_coding_gene"}){
+	std::unordered_map<uint32_t, std::vector<GFFCore>> ret;
 
+	std::unordered_map<std::string, std::vector<uint32_t>> bedsByChrome;
+
+	BioDataFileIO<GFFCore> reader { IoOptions(InOptions(gffFnp)) };
+	reader.openIn();
+	// uint32_t count = 0;
+	std::string line;
+	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
+	for (const auto bPos : iter::range(beds.size())) {
+		bedsByChrome[getRef(beds[bPos]).chrom_].emplace_back(bPos);
+	}
+
+	while (nullptr != gRecord) {
+		if (selectFeatures.empty() || njh::in(gRecord->type_, selectFeatures)) {
+			for (auto & inputRegionPos : bedsByChrome[gRecord->seqid_]) {
+				if (Bed3RecordCore::getOverlapLen(getRef(beds[inputRegionPos]).chrom_,
+					getRef(beds[inputRegionPos]).chromStart_,
+					getRef(beds[inputRegionPos]).chromEnd_,
+					gRecord->seqid_,
+					gRecord->start_ - 1,
+					gRecord->end_) >=1){
+					ret[inputRegionPos].emplace_back(*gRecord);
+				}
+			}
+		}
+		bool end = false;
+		while ('#' == reader.inFile_->peek()) {
+			if (njh::files::nextLineBeginsWith(*reader.inFile_, "##FASTA")) {
+				end = true;
+				break;
+			}
+			njh::files::crossPlatGetline(*reader.inFile_, line);
+		}
+		if (end) {
+			break;
+		}
+		gRecord = reader.readNextRecord();
+		// ++count;
+	}
+	return ret;
+}
+
+
+template<typename BEDREC>
+std::unordered_map<uint32_t, std::vector<MultiGenomeMapper::IntersectedProteinInfo>>
+addIntersectingGeneInfosToLocs(
+	std::vector<BEDREC>&regions,
+	const intersectBedLocsWtihGffRecordsPars & pars,
+	const bfs::path & twoBitFnp) {
+	std::unordered_map<uint32_t, std::vector<MultiGenomeMapper::IntersectedProteinInfo>> ret;
+	auto gffRecords = getGffRecordsIntersectWithBeds(regions, pars.gffFnp_, pars.selectFeatures_);
+	std::set<std::string> rawReneIdsSet;
+	for (const auto & gRecForBed : gffRecords) {
+		for (const auto & g : gRecForBed.second) {
+			rawReneIdsSet.insert(g.getIDAttr());
+		}
+	}
+
+	auto rawGenes = GeneFromGffs::getGenesFromGffForIds(pars.gffFnp_, rawReneIdsSet);
+	std::unordered_map<std::string, std::shared_ptr<GeneFromGffs>> genes;
+	for (const auto&gene: rawGenes) {
+		bool failFilter = false;
+		for (const auto&transcript: gene.second->mRNAs_) {
+			if (njh::in(njh::strToLowerRet(transcript->type_), VecStr{"rrna", "trna", "snorna", "snrna", "ncrna"})) {
+				failFilter = true;
+				break;
+			}
+		}
+		if (!failFilter) {
+			genes[gene.first] = gene.second;
+		}
+	}
+	for (const auto&regPos: iter::range(regions.size())) {
+		if (njh::notIn(regPos, gffRecords)) {
+			continue;
+		}
+
+		for (const auto & gffRec: gffRecords[regPos]) {
+			if (njh::in(gffRec.getIDAttr(), genes)) {
+				TwoBit::TwoBitFile tReader(twoBitFnp);
+				auto infos = njh::mapAt(genes, gffRec.getIDAttr())->generateGeneSeqInfo(tReader, false);
+				auto detailedName = njh::mapAt(genes, gffRec.getIDAttr())->getGeneDetailedName();
+				for (const auto&info: infos) {
+
+					auto posInfos = info.second->getInfosByGDNAPos();
+					auto minPos = vectorMinimum(getVectorOfMapKeys(posInfos));
+					auto maxPos = vectorMaximum(getVectorOfMapKeys(posInfos));
+					auto startPos = std::max(minPos, getRef(regions[regPos]).chromStart_);
+					auto stopPos = std::min(maxPos, getRef(regions[regPos]).chromEnd_);
+					if (stopPos == getRef(regions[regPos]).chromEnd_) {
+						stopPos = getRef(regions[regPos]).chromEnd_ - 1;
+					}
+					//stop position is inclusive
+					uint32_t aaStartPos = std::numeric_limits<uint32_t>::max();
+					uint32_t aaStopPos = 0;
+
+					for (const auto posInGene: iter::range(startPos, stopPos + 1)) {
+						if (std::numeric_limits<uint32_t>::max() != posInfos[posInGene].aaPos_) {
+							if (posInfos[posInGene].aaPos_ < aaStartPos) {
+								aaStartPos = posInfos[posInGene].aaPos_;
+							}
+							if (posInfos[posInGene].aaPos_ > aaStopPos) {
+								aaStopPos = posInfos[posInGene].aaPos_;
+							}
+						}
+					}
+					//if the region is completely within the intron the final stop and stops will be max() and 0;
+					if (std::numeric_limits<uint32_t>::max() == aaStartPos) {
+						aaStopPos = std::numeric_limits<uint32_t>::max();
+					} else {
+						//make 1 based
+						++aaStopPos;
+						++aaStartPos; //
+					}
+					ret[regPos].emplace_back(info.second->transcriptID_, aaStartPos, aaStopPos, detailedName[info.first]);
+					ret[regPos].back().allMeta_.meta_ = gffRec.attributes_;
+				}
+			}
+		}
+	}
+	return ret;
+}
+
+int geneExpRunner::bedGetOverlappingAminoAcidPositions(const njh::progutils::CmdArgs & inputCommands){
+	intersectBedLocsWtihGffRecordsPars pars;
+	pars.selectFeatures_ = VecStr{"gene", "protein_coding_gene"};
+	pars.extraAttributes_ = VecStr{"ID"};
+	bfs::path genomeTwoBit;
+	bfs::path input;
+	OutOptions outOpts(bfs::path(""), ".bed");
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.setOption(pars.gffFnp_, "--gff", "Input gff file", true);
+	setUp.setOption(genomeTwoBit, "--genomeTwoBit", "genome Two Bit", true);
+	setUp.setOption(pars.selectFeatures_, "--selectFeatures", "select gff Features");
+	setUp.setOption(pars.extraAttributes_, "--extraAttributes", "extra gff Attributes to add to output");
+
+
+	setUp.setOption(input, "--bed", "input bed", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	auto beds = getBeds(input);
+	uint32_t extraFieldsMaxCount = 0;
+	for (const auto & b : beds) {
+		if (b->extraFields_.size() > extraFieldsMaxCount) {
+			extraFieldsMaxCount = b->extraFields_.size();
+		}
+	}
+
+	OutputStream out(outOpts);
+	out << "#chrom\tstart\tend\tname\tscore\tstrand";
+	for (auto pos = 0U; pos < extraFieldsMaxCount; ++pos) {
+		out << "\t" << "extraField." << njh::leftPadNumStr(pos, extraFieldsMaxCount) ;
+	}
+	out << "\ttranscriptID\tAAStart-1based\tAAEnd-1based\tGeneDescription";
+	out << "\t" << njh::conToStr(pars.extraAttributes_, "\t");
+	out << std::endl;
+
+	auto results = addIntersectingGeneInfosToLocs(beds, pars, genomeTwoBit);
+	for (const auto bedPos: iter::range(beds.size())) {
+		if (njh::in(bedPos, results)) {
+			for (const auto & result: results[bedPos]) {
+				out << beds[bedPos]->toDelimStr();
+				for (const auto& extra: beds[bedPos]->extraFields_) {
+					out << "\t" << extra;
+				}
+				for (auto pos = 0U; pos < extraFieldsMaxCount - beds[bedPos]->extraFields_.size(); ++pos) {
+					out << "\tNA";
+				}
+				out << "\t" << result.id_
+				<< "\t" << result.aaStart_
+				<< "\t" << result.aaStop_
+				<< "\t" << result.description_;
+				for (const auto & field : pars.extraAttributes_) {
+					if (result.allMeta_.containsMeta(field)) {
+						out << "\t" << result.allMeta_.getMeta(field);
+					} else {
+						out << "\tNA";
+					}
+				}
+				out << std::endl;
+			}
+		} else {
+			out << beds[bedPos]->toDelimStr();
+			for (const auto& extra: beds[bedPos]->extraFields_) {
+				out << "\t" << extra;
+			}
+			for (auto pos = 0U; pos < extraFieldsMaxCount - beds[bedPos]->extraFields_.size(); ++pos) {
+				out << "\tNA";
+			}
+			for (auto emptyPos = 0; emptyPos < 4 + pars.extraAttributes_.size(); ++emptyPos) {
+				out << "\tNA";
+			}
+			out << std::endl;
+		}
+	}
+	return 0;
+}
 
 int geneExpRunner::gffRecordIDToGeneInfo(const njh::progutils::CmdArgs & inputCommands){
 	GeneFromGffs::gffRecordIDsToGeneInfoPars pars;
-	std::string idInput = "";
+	std::string idInput;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.setOption(pars.inputFile, "--gff", "Input gff file", true);
