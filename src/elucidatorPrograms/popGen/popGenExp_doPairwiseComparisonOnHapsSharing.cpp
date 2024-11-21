@@ -23,7 +23,8 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	bool writeOutDistMatrices = false;
 	bool clusterOnJacardIndexShared = false;
 	njhUndirWeightedGraph<double, std::shared_ptr<BasicPointMatrix<double>::BasicPoint>>::dbscanPars dbscanPars;
-	dbscanPars.eps_ = 0.50;
+	// dbscanPars.eps_ = 0.50;
+	dbscanPars.eps_ = 0.01;
 	dbscanPars.minEpNeighbors_ = 2;
 	bfs::path metaFnp;
 	VecStr metaFieldsToCalcPopDiffs{};
@@ -139,7 +140,54 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		std::vector<std::vector<double>> pairwiseRMSEs;
 		std::vector<std::vector<double>> hapsEncodeBySampRelAbund;
 		if(doNotBreakWithRmse) {
-			mat.setGraph(pars.numThreads, setUp.pars_.verbose_);
+			// mat.setGraph(pars.numThreads, setUp.pars_.verbose_);
+
+			mat.graph_ = std::make_unique<
+					njhUndirWeightedGraph<double,
+							std::shared_ptr<BasicPointMatrix<double>::BasicPoint>>>();
+
+			for (const auto & pos : iter::range(mat.points_.size())) {
+				mat.graph_->addNode(estd::to_string(pos), mat.points_[pos]);
+			}
+
+			uint32_t belowEp = 0;
+			/**@todo this appears to be actually fairly slow, i think it's mostly because the eu calculations is so fast, perhaps a better way of multithreading this can be done
+			 *
+			 */
+			PairwisePairFactory pairFactory(mat.points_.size());
+			uint32_t pairBatchCount = 100000;
+			std::mutex graphMut;
+			struct PairDist {
+				PairDist(const PairwisePairFactory::PairwisePair & pair, double dist) :
+						pair_(pair), dist_(dist) {
+				}
+				PairwisePairFactory::PairwisePair pair_;
+				double dist_;
+			};
+
+			std::function<void()> addToGraph =
+					[&graphMut, &pairFactory,&pairBatchCount,&belowEp,
+						&mat, &dbscanPars]() {
+						PairwisePairFactory::PairwisePairVec pairs;
+						std::vector<PairDist> belowEps;
+						while(pairFactory.setNextPairs(pairs, pairBatchCount)) {
+							for(const auto & pair : pairs.pairs_) {
+								auto dist = mat.points_[pair.row_]->vals_[pair.col_];
+								if (dist < dbscanPars.eps_) {
+									belowEps.emplace_back(PairDist{pair, dist});
+								}
+							}
+						}
+						if(!belowEps.empty()) {
+							std::lock_guard<std::mutex> lock(graphMut);
+							belowEp += belowEps.size();
+							for(const auto & bEps : belowEps) {
+								mat.graph_->addEdge(estd::to_string(bEps.pair_.row_), estd::to_string(bEps.pair_.col_),
+										bEps.dist_);
+							}
+						}
+			};
+			njh::concurrent::runVoidFunctionThreaded(addToGraph, pars.numThreads);
 		} else {
 			pairwiseRMSEs = std::vector<std::vector<double>>(haps.sampNames_.size(), std::vector<double>(haps.sampNames_.size(),1.0));
 			for(size_t pos = 0; pos < haps.sampNames_.size(); ++pos){
@@ -220,7 +268,8 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 						std::vector<PairDist> belowEps;
 						while(pairFactory.setNextPairs(pairs, pairBatchCount)) {
 							for(const auto & pair : pairs.pairs_) {
-								auto dist = mat.points_[pair.row_]->euDist(*mat.points_[pair.col_]);
+								//auto dist = mat.points_[pair.row_]->euDist(*mat.points_[pair.col_]);
+								auto dist = mat.points_[pair.row_]->vals_[pair.col_];
 								if (dist < mat.dbscanPars_.eps_) {
 									std::vector<double> rmses;
 									double sum = 0;
