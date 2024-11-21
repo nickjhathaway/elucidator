@@ -94,9 +94,15 @@ int geneExpRunner::multiGenomeExtractGenesWithDescription(const njh::progutils::
 			pars.twoBitFnp = g.second->fnpTwoBit_;
 			pars.outOpts.outFilename_ = njh::files::make_path(outputDir, g.first);
 			pars.ids = geneIDs;
+
 			GeneFromGffs::gffRecordIDsToGeneInfo(pars);
 			bfs::copy_file(njh::files::make_path(outputDir, g.first + "_allTranscripts.bed"),njh::files::make_path(setUp.pars_.directoryName_, njh::pasteAsStr(g.first, "_", geneName, "Genes.bed")));
-
+			
+			concatenateFiles(njh::files::gatherFiles(outputDir, "_cDNA.fasta", true), njh::files::make_path(outputDir, "allCDNA.fasta"));
+			concatenateFiles(njh::files::gatherFiles(outputDir, "_gDNA.fasta", true), njh::files::make_path(outputDir, "allGDNA.fasta"));
+			concatenateFiles(njh::files::gatherFiles(outputDir, "_protein.fasta", true), njh::files::make_path(outputDir, "allProtein.fasta"));
+			concatenateFiles(njh::files::gatherFiles(outputDir, "_withUTR.bed", true), njh::files::make_path(outputDir, "allWithUTR.bed"));
+			concatenateFiles(njh::files::gatherFiles(outputDir, "_exonIntronPositions.bed", true), njh::files::make_path(outputDir, "allExonIntronPositions.bed"));
 			allGeneIDs.insert(geneIDs.begin(), geneIDs.end());
 		}
 
