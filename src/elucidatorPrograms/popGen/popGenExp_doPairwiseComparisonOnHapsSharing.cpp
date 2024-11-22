@@ -15,6 +15,7 @@
 #include <njhseq/objects/dataContainers/BasicPointMatrix.hpp>
 
 
+
 namespace njhseq {
 
 
@@ -24,7 +25,8 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	bool clusterOnJacardIndexShared = false;
 	njhUndirWeightedGraph<double, std::shared_ptr<BasicPointMatrix<double>::BasicPoint>>::dbscanPars dbscanPars;
 	// dbscanPars.eps_ = 0.50;
-	dbscanPars.eps_ = 0.01;
+	dbscanPars.eps_ = 0.05;
+
 	dbscanPars.minEpNeighbors_ = 2;
 	bfs::path metaFnp;
 	VecStr metaFieldsToCalcPopDiffs{};
