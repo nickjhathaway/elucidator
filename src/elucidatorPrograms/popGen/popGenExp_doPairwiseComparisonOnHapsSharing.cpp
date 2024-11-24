@@ -389,10 +389,8 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		watch.startNewLap("output");
 		//mat.writeGraph(outFile);
 		outFile << "sample\tgroup";
-		if (!doNotBreakWithRmse) {
-			outFile << "\tmin_rmse\tmedian_rmse\tmean_rmse\tmax_rmse";
-		}
-		 outFile << std::endl;
+
+		outFile << std::endl;
 		std::map<uint32_t, std::vector<uint32_t>> groupIndexes;
 		std::vector<uint32_t> allGroupedIndices;
 		for(const auto & n : iter::enumerate(mat.graph_->nodes_)) {
@@ -437,8 +435,10 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 			njh::concurrent::runVoidFunctionThreaded(calcRMSEs, pars.numThreads);
 
 		}
+		std::unordered_map<uint32_t, std::map<std::string, double>> groups_jaccard_stats;
+		std::unordered_map<uint32_t, std::map<std::string, double>> groups_rmse_stats;
 		for(const auto & group : groupIndexes) {
-			std::map<std::string, double> stats;
+
 			if (!doNotBreakWithRmse && std::numeric_limits<uint32_t>::max() != group.first) {
 				std::vector<double> rmsesWithinGroup;
 				PairwisePairFactory pfac(group.second.size());
@@ -448,28 +448,31 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 					// std::cout << haps.sampNamesVec_[group.second[pair.col_]] << " vs " << haps.sampNamesVec_[group.second[pair.row_]] << " rmse: " << pairwiseRMSEs[group.second[pair.col_]][group.second[pair.row_]] << std::endl;
 					rmsesWithinGroup.emplace_back(pairwiseRMSEs[group.second[pair.col_]][group.second[pair.row_]]);
 				}
-				stats = getStatsOnVec(rmsesWithinGroup);
+				groups_rmse_stats[group.first] = getStatsOnVec(rmsesWithinGroup);
 				// std::cout << njh::conToStr(rmsesWithinGroup, ",") << std::endl;
 				// std::cout << "stats: " << njh::json::toJson(stats) << std::endl;
 				// std::cout << std::endl;
 			}
+
+
+			if (std::numeric_limits<uint32_t>::max() != group.first) {
+				std::vector<double> jacardWithinGroup;
+				PairwisePairFactory pfac(group.second.size());
+				PairwisePairFactory::PairwisePair pair;
+				// std::cout << "group: " << group.first << std::endl;
+				while (pfac.setNextPair(pair)) {
+					// std::cout << haps.sampNamesVec_[group.second[pair.col_]] << " vs " << haps.sampNamesVec_[group.second[pair.row_]] << " rmse: " << pairwiseRMSEs[group.second[pair.col_]][group.second[pair.row_]] << std::endl;
+					jacardWithinGroup.emplace_back(1 - mat.points_[group.second[pair.col_]]->vals_[group.second[pair.row_]]);
+				}
+				groups_jaccard_stats[group.first] = getStatsOnVec(jacardWithinGroup);
+			}
 			for (const auto &idx: group.second) {
 				if (group.first == std::numeric_limits<uint32_t>::max()) {
 					outFile << haps.sampNamesVec_[idx] << "\t" << "nogroup";
-					if (!doNotBreakWithRmse) {
-						outFile << "\t" << "NA"
-								<< "\t" << "NA"
-								<< "\t" << "NA"
-								<< "\t" << "NA";
-					}
+
 				} else {
 					outFile << haps.sampNamesVec_[idx] << "\t" << group.first;
-					if (!doNotBreakWithRmse) {
-						outFile << "\t" << stats["min"]
-								<< "\t" << stats["median"]
-								<< "\t" << stats["mean"]
-								<< "\t" << stats["max"];
-					}
+
 				}
 				outFile << std::endl;
 			}
@@ -490,12 +493,39 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 			}
 		}
 		OutputStream outGroupCountsFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_by_jacardTargetsShared_groupCounts.tsv")));
-		outGroupCountsFile << "group\tsampleCount" << std::endl;
+		outGroupCountsFile << "group\tsampleCount";
+		outGroupCountsFile << "\tmin_jaccard\tmedian_jaccard\tmean_jaccard\tmax_jaccard";
+		if (!doNotBreakWithRmse) {
+			outGroupCountsFile << "\tmin_rmse\tmedian_rmse\tmean_rmse\tmax_rmse";
+		}
+		outGroupCountsFile << std::endl;
 		for(const auto & group : groupIndexes) {
 			if(group.first == std::numeric_limits<uint32_t>::max()) {
-				outGroupCountsFile << "nogroup" << "\t" << group.second.size() << std::endl;
+				outGroupCountsFile << "nogroup" << "\t" << group.second.size();
+				outGroupCountsFile << "\t" << "NA"
+						<< "\t" << "NA"
+						<< "\t" << "NA"
+						<< "\t" << "NA";
+				if (!doNotBreakWithRmse) {
+					outGroupCountsFile << "\t" << "NA"
+							<< "\t" << "NA"
+							<< "\t" << "NA"
+							<< "\t" << "NA";
+				}
+				outGroupCountsFile << std::endl;
 			} else {
-				outGroupCountsFile << group.first << "\t" << group.second.size() << std::endl;
+				outGroupCountsFile << group.first << "\t" << group.second.size();
+				outGroupCountsFile << "\t" << groups_jaccard_stats[group.first]["min"]
+						<< "\t" << groups_jaccard_stats[group.first]["median"]
+						<< "\t" << groups_jaccard_stats[group.first]["mean"]
+						<< "\t" << groups_jaccard_stats[group.first]["max"];
+				if (!doNotBreakWithRmse) {
+					outGroupCountsFile << "\t" << groups_rmse_stats[group.first]["min"]
+							<< "\t" << groups_rmse_stats[group.first]["median"]
+							<< "\t" << groups_rmse_stats[group.first]["mean"]
+							<< "\t" << groups_rmse_stats[group.first]["max"];
+				}
+				outGroupCountsFile << std::endl;
 			}
 		}
 		if(setUp.pars_.verbose_){
