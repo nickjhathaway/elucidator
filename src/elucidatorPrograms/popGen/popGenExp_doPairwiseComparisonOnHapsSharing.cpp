@@ -20,13 +20,13 @@ namespace njhseq {
 
 
 
+
 int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::CmdArgs & inputCommands){
 	bool writeOutDistMatrices = false;
 	bool clusterOnJacardIndexShared = false;
 	njhUndirWeightedGraph<double, std::shared_ptr<BasicPointMatrix<double>::BasicPoint>>::dbscanPars dbscanPars;
 	// dbscanPars.eps_ = 0.50;
-	dbscanPars.eps_ = 0.05;
-
+	dbscanPars.eps_ = 0.10;
 	dbscanPars.minEpNeighbors_ = 2;
 	bfs::path metaFnp;
 	VecStr metaFieldsToCalcPopDiffs{};
@@ -34,7 +34,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	bool onlyPloidy2 = false;
 	bool writeOutTarsAbsoluteShared = false;
 	bool doNotBreakWithRmse = false;
-	double rmseCutOffToBreak = 0.075;
+	double rmseCutOffToBreak = 0.10;
 	bool doNotWriteOutGroupedRMSEs = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
