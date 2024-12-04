@@ -943,12 +943,15 @@ int metaExpRunner::createTableFromSeqs(const njh::progutils::CmdArgs & inputComm
 	auto tabOpts = TableIOOpts::genTabFileOut("", true);
 	std::string fields;
 	std::string excludeFields;
+	bool removeMetaFromName = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processReadInNames(true);
 	setUp.processWritingOptions(tabOpts.out_);
 	setUp.setOption(fields, "--fields", "Only export these fields");
 	setUp.setOption(excludeFields, "--excludeFields", "Exclude these fields");
+	setUp.setOption(removeMetaFromName, "--removeMetaFromName", "remove Meta From Name");
+
 	setUp.finishSetUp(std::cout);
 
 	SeqInput reader(setUp.pars_.ioOptions_);
@@ -987,6 +990,13 @@ int metaExpRunner::createTableFromSeqs(const njh::progutils::CmdArgs & inputComm
 		}
 	} else {
 		outTab = seqsToMetaTable(inReads, njh::in(setUp.pars_.ioOptions_.inFormat_, {SeqIOOptions::inFormats::FASTQ, SeqIOOptions::inFormats::FASTQGZ}));
+	}
+	if (removeMetaFromName) {
+		for (auto & row : outTab) {
+			if (MetaDataInName::nameHasMetaData(row[outTab.getColPos("name")])) {
+				MetaDataInName::removeMetaDataInName(row[outTab.getColPos("name")]);
+			}
+		}
 	}
 	outTab.outPutContents(out, "\t");
 	return 0;
