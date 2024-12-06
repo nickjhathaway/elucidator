@@ -576,6 +576,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path pairR2 = "";
 	bfs::path singles = "";
 	bool useSambamba = false;
+	bool useBwamem2 = false;
 	bfs::path logDir = "";
 	bool force = false;
 	uint32_t numThreads = 1;
@@ -594,6 +595,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 	setUp.setOption(singles, "--single", "AdapterRemoval output stub", !r1Set);
 	setUp.setOption(logDir, "--logDir", "Directory to put the log files");
 	setUp.setOption(useSambamba, "--useSambamba", "use  Sambamba");
+	setUp.setOption(useBwamem2, "--useBwamem2", "use bwa-mem2");
 
 	setUp.setOption(sampName, "--sampName", "Sample Name to give to final bam", true);
 	setUp.setOption(force, "--force", "force run even if file already exists");
@@ -611,9 +613,15 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path inputPairedFirstMates = pairR1;
 	bfs::path inputPairedSecondMates = pairR2;
 	njh::files::checkExistenceThrow(genomeFnp,__PRETTY_FUNCTION__);
-	bioRunner.RunBwaIndex(genomeFnp);
+	if (!useBwamem2) {
+		auto indexRes = bioRunner.RunBwaIndex(genomeFnp);
+		BioCmdsUtils::checkRunOutThrow(indexRes, __PRETTY_FUNCTION__);
+	} else {
+		auto indexRes = bioRunner.RunBwamem2Index(genomeFnp);
+		BioCmdsUtils::checkRunOutThrow(indexRes, __PRETTY_FUNCTION__);
+	}
 
-	if("" == outputFnp){
+	if(outputFnp.empty()){
 		outputFnp = njh::files::make_path(outputDir, sampName + ".sorted.bam");
 	}
 	bfs::path outputFnpBai = outputFnp.string() + ".bai";
@@ -633,10 +641,16 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 
 	std::stringstream singlesCmd;
 	auto singlesBwaLogFnp = bfs::path(singlesSortedBam.string() + ".bwa.log");
-	if("" != logDir){
+	if(!logDir.empty()){
 		singlesBwaLogFnp = njh::files::make_path(logDir, singlesSortedBam.filename().string() + ".bwa.log");
 	}
-	singlesCmd << "bwa mem  -M -t " << numThreads
+	if (useBwamem2) {
+		singlesCmd << "bwa-mem2 ";
+	} else {
+		singlesCmd << "bwa mem ";
+	}
+
+	singlesCmd << " -M -t " << numThreads
 			<< " -R " << R"("@RG\tID:)" << bfs::basename(singles) << "" << R"(\tSM:)"
 			<< sampName << R"(")"
 			<< " "   << extraBwaArgs
@@ -651,10 +665,15 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 
 	std::stringstream pairedCmd;
 	auto pairedBwaLogFnp = bfs::path(pairedSortedBam.string() + ".bwa.log");
-	if("" != logDir){
+	if(!logDir.empty()){
 		pairedBwaLogFnp = njh::files::make_path(logDir, pairedSortedBam.filename().string() + ".bwa.log");
 	}
-	pairedCmd << "bwa mem  -M -t " << numThreads
+	if (useBwamem2) {
+		pairedCmd << "bwa-mem2 ";
+	} else {
+		pairedCmd << "bwa mem ";
+	}
+	pairedCmd << "  -M -t " << numThreads
 			<< " -R " << R"("@RG\tID:)" << bfs::basename(pairR1) << "" << R"(\tSM:)"
 			<< sampName << R"(")"
 			<< " " << extraBwaArgs
@@ -688,7 +707,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 
 
 	if(needToRun){
-		bfs::path logFnp = njh::files::make_path("" == logDir ? outputDir: logDir, "alignTrimoOutputs_" + sampName + "_" + njh::getCurrentDate() + "_log.json");
+		bfs::path logFnp = njh::files::make_path(logDir.empty() ? outputDir: logDir, "alignTrimoOutputs_" + sampName + "_" + njh::getCurrentDate() + "_log.json");
 		logFnp = njh::files::findNonexitantFile(logFnp);
 		OutOptions logOpts(logFnp);
 		std::ofstream logFile;
@@ -752,6 +771,7 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSinglesCombined(const njh:
 	uint32_t numThreads = 1;
 	std::string sampName;
 	bool removeIntermediateFiles = false;
+	bool useBwamem2 = false;
 	bfs::path genomeFnp = "";
 	std::string extraBwaArgs;
 	std::string extraSamtoolsSortArgs;
@@ -763,6 +783,8 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSinglesCombined(const njh:
 	setUp.setOption(trimStub, "--trimStub", "AdapterRemoval output stub", true);
 	setUp.setOption(sampName, "--sampName", "Sample Name to give to final bam", true);
 	setUp.setOption(force, "--force", "force run even if file already exists");
+	setUp.setOption(useBwamem2, "--useBwamem2", "use bwa-mem2");
+
 	setUp.setOption(outputFnp, "--outputFnp", "output name, will default to sampName.sorted.bam");
 	setUp.setOption(extraBwaArgs, "--extraBwaArgs", "extra bwa arguments");
 	setUp.setOption(extraSamtoolsSortArgs, "--extraSamtoolsSortArgs", "extra samtools sort arguments");
@@ -772,12 +794,22 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSinglesCombined(const njh:
 	setUp.setOption(removeIntermediateFiles, "--removeIntermediateFiles", "remove the intermediate bam files and just keep the ");
 	setUp.finishSetUp(std::cout);
 	BioCmdsUtils bioRunner(setUp.pars_.verbose_);
-	njh::sys::requireExternalProgramsThrow(VecStr{"bwa", "bamtools", "samtools"});
+	if (useBwamem2) {
+		njh::sys::requireExternalProgramsThrow(VecStr{"bwa-mem2", "bamtools", "samtools"});
+	} else {
+		njh::sys::requireExternalProgramsThrow(VecStr{"bwa", "bamtools", "samtools"});
+	}
 	bfs::path inputSingles = njh::files::make_path(trimStub.string() + "_singles.fastq");
 	bfs::path inputPairedFirstMates = njh::files::make_path(trimStub.string() + "_1.fastq");
 	bfs::path inputPairedSecondMates = njh::files::make_path(trimStub.string() + "_2.fastq");
 	njh::files::checkExistenceThrow(genomeFnp,__PRETTY_FUNCTION__);
-	bioRunner.RunBwaIndex(genomeFnp);
+	if (!useBwamem2) {
+		auto indexRes = bioRunner.RunBwaIndex(genomeFnp);
+		BioCmdsUtils::checkRunOutThrow(indexRes, __PRETTY_FUNCTION__);
+	} else {
+		auto indexRes = bioRunner.RunBwamem2Index(genomeFnp);
+		BioCmdsUtils::checkRunOutThrow(indexRes, __PRETTY_FUNCTION__);
+	}
 
 	if (!bfs::exists(inputSingles)
 			&& !bfs::exists(inputPairedFirstMates)
@@ -798,7 +830,7 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSinglesCombined(const njh:
 			throw std::runtime_error { ss.str() };
 		}
 	}
-	if("" == outputFnp){
+	if(outputFnp.empty()){
 		outputFnp = njh::files::make_path(outputDir, sampName + ".sorted.bam");
 	}
 	bfs::path outputFnpBai = outputFnp.string() + ".bai";
@@ -818,7 +850,12 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSinglesCombined(const njh:
 
 	std::string bNameStub = trimStub.filename().string();
 	std::stringstream singlesCmd;
-	singlesCmd << "bwa mem  -M -t " << numThreads
+	if (useBwamem2) {
+		singlesCmd << "bwa-mem2 ";
+	} else {
+		singlesCmd << "bwa mem ";
+	}
+	singlesCmd << " -M -t " << numThreads
 			<< " -R " << R"("@RG\tID:)" << bNameStub << "_singles" << R"(\tSM:)"
 			<< sampName << R"(")"
 			<< " "   << extraBwaArgs
@@ -828,7 +865,12 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSinglesCombined(const njh:
 			<< " | samtools sort " << extraSamtoolsSortArgs << " -@ " << numThreads << " -o " << singlesSortedBam;
 
 	std::stringstream pairedCmd;
-	pairedCmd << "bwa mem  -M -t " << numThreads
+	if (useBwamem2) {
+		pairedCmd << "bwa-mem2 ";
+	} else {
+		pairedCmd << "bwa mem ";
+	}
+	pairedCmd << "  -M -t " << numThreads
 			<< " -R " << R"("@RG\tID:)" << bNameStub << "" << R"(\tSM:)"
 			<< sampName << R"(")"
 			<< " " << extraBwaArgs
