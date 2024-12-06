@@ -615,10 +615,10 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 	njh::files::checkExistenceThrow(genomeFnp,__PRETTY_FUNCTION__);
 	if (!useBwamem2) {
 		auto indexRes = bioRunner.RunBwaIndex(genomeFnp);
-		BioCmdsUtils::checkRunOutThrow(indexRes, __PRETTY_FUNCTION__);
+		// BioCmdsUtils::checkRunOutThrow(indexRes, __PRETTY_FUNCTION__);
 	} else {
 		auto indexRes = bioRunner.RunBwamem2Index(genomeFnp);
-		BioCmdsUtils::checkRunOutThrow(indexRes, __PRETTY_FUNCTION__);
+		// BioCmdsUtils::checkRunOutThrow(indexRes, __PRETTY_FUNCTION__);
 	}
 
 	if(outputFnp.empty()){
@@ -805,10 +805,10 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSinglesCombined(const njh:
 	njh::files::checkExistenceThrow(genomeFnp,__PRETTY_FUNCTION__);
 	if (!useBwamem2) {
 		auto indexRes = bioRunner.RunBwaIndex(genomeFnp);
-		BioCmdsUtils::checkRunOutThrow(indexRes, __PRETTY_FUNCTION__);
+		// BioCmdsUtils::checkRunOutThrow(indexRes, __PRETTY_FUNCTION__);
 	} else {
 		auto indexRes = bioRunner.RunBwamem2Index(genomeFnp);
-		BioCmdsUtils::checkRunOutThrow(indexRes, __PRETTY_FUNCTION__);
+		// BioCmdsUtils::checkRunOutThrow(indexRes, __PRETTY_FUNCTION__);
 	}
 
 	if (!bfs::exists(inputSingles)
