@@ -645,7 +645,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 		singlesBwaLogFnp = njh::files::make_path(logDir, singlesSortedBam.filename().string() + ".bwa.log");
 	}
 	if (useBwamem2) {
-		singlesCmd << "bwa-mem2 ";
+		singlesCmd << "bwa-mem2 mem ";
 	} else {
 		singlesCmd << "bwa mem ";
 	}
@@ -669,7 +669,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 		pairedBwaLogFnp = njh::files::make_path(logDir, pairedSortedBam.filename().string() + ".bwa.log");
 	}
 	if (useBwamem2) {
-		pairedCmd << "bwa-mem2 ";
+		pairedCmd << "bwa-mem2 mem ";
 	} else {
 		pairedCmd << "bwa mem ";
 	}
