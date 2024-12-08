@@ -851,7 +851,7 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSinglesCombined(const njh:
 	std::string bNameStub = trimStub.filename().string();
 	std::stringstream singlesCmd;
 	if (useBwamem2) {
-		singlesCmd << "bwa-mem2 ";
+		singlesCmd << "bwa-mem2 mem";
 	} else {
 		singlesCmd << "bwa mem ";
 	}
