@@ -866,7 +866,7 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSinglesCombined(const njh:
 
 	std::stringstream pairedCmd;
 	if (useBwamem2) {
-		pairedCmd << "bwa-mem2 ";
+		pairedCmd << "bwa-mem2 mem";
 	} else {
 		pairedCmd << "bwa mem ";
 	}
