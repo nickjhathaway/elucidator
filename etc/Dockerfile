@@ -37,6 +37,10 @@ RUN DEBIAN_FRONTEND=noninteractive TZ=$TIME_ZONE apt-get -y install tzdata
 RUN mkdir ~/.ssh/
 RUN ssh-keyscan github.com >> ~/.ssh/known_hosts
 
+# install bwa-mem2
+WORKDIR /opt
+RUN curl -L https://github.com/bwa-mem2/bwa-mem2/releases/download/v2.2.1/bwa-mem2-2.2.1_x64-linux.tar.bz2 | tar jxf -
+
 WORKDIR /opt
 RUN git clone https://github.com/nickjhathaway/elucidator.git
 WORKDIR /opt/elucidator
@@ -50,7 +54,7 @@ EXPOSE 8000-9999
 
 
 # update path
-ENV PATH "/opt/elucidator/bin:$PATH"
+ENV PATH "/opt/bwa-mem2-2.2.1_x64-linux:/opt/elucidator/bin:$PATH"
 
 # reset working directory
 WORKDIR /
