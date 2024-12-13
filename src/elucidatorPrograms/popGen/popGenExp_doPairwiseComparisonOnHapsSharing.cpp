@@ -28,6 +28,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	// dbscanPars.eps_ = 0.50;
 	dbscanPars.eps_ = 0.10;
 	dbscanPars.minEpNeighbors_ = 2;
+	double minimumLociCoverageToKeepSamples = 0.90;
 	bfs::path metaFnp;
 	VecStr metaFieldsToCalcPopDiffs{};
 	HapsEncodedMatrix::SetWithExternalPars pars;
@@ -39,6 +40,8 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
+	setUp.setOption(minimumLociCoverageToKeepSamples, "--minimumLociCoverageToKeepSamples", "minimum Loci Coverage To Keep Samples in post analysis steps, must have reads for at least this frction of the total loci");
+
 	setUp.setOption(clusterOnJacardIndexShared, "--clusterOnJacardIndexShared", "cluster On Jacard Index Shared");
 	setUp.setOption(doNotBreakWithRmse, "--doNotBreakWithRmse", "do Not Break With Rmse");
 	setUp.setOption(rmseCutOffToBreak, "--rmseCutOffToBreak", "rmse Cut Off To Break");
@@ -133,6 +136,11 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 				byHapTarSharedOut << njh::conToStr(outRow, "\t") << std::endl;
 			}
 		}
+		std::unordered_map<std::string, double> lociCoveragePerSample;
+
+		for (const auto row : iter::range(haps.targetsEncodeBySamp_.size())) {
+			lociCoveragePerSample[haps.sampNamesVec_[row]] = vectorSum(haps.targetsEncodeBySamp_[row])/static_cast<double>(haps.numberOfHapsPerTarget_.size());
+		}
 
 		OutputStream outFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_by_jacardTargetsShared.tsv")));
 		njh::stopWatch watch;
@@ -169,11 +177,18 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 
 			std::function<void()> addToGraph =
 					[&graphMut, &pairFactory,&pairBatchCount,&belowEp,
-						&mat, &dbscanPars]() {
+						&mat, &dbscanPars,
+						&haps,
+						&lociCoveragePerSample, &minimumLociCoverageToKeepSamples]() {
 						PairwisePairFactory::PairwisePairVec pairs;
 						std::vector<PairDist> belowEps;
 						while(pairFactory.setNextPairs(pairs, pairBatchCount)) {
+
 							for(const auto & pair : pairs.pairs_) {
+								if (lociCoveragePerSample[haps.sampNamesVec_[pair.row_]] < minimumLociCoverageToKeepSamples ||
+									lociCoveragePerSample[haps.sampNamesVec_[pair.col_]] < minimumLociCoverageToKeepSamples) {
+									continue;
+								}
 								auto dist = mat.points_[pair.row_]->vals_[pair.col_];
 								if (dist < dbscanPars.eps_) {
 									belowEps.emplace_back(PairDist{pair, dist});
@@ -265,11 +280,16 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 
 			std::function<void()> addToGraph =
 					[&graphMut, &pairFactory,&pairBatchCount,&belowEp,&mat, &haps,&hapsEncodeBySampRelAbund,&rmseCutOffToBreak,
-						&pairwiseRMSEs]() {
+						&pairwiseRMSEs, &lociCoveragePerSample,
+						&minimumLociCoverageToKeepSamples]() {
 						PairwisePairFactory::PairwisePairVec pairs;
 						std::vector<PairDist> belowEps;
 						while(pairFactory.setNextPairs(pairs, pairBatchCount)) {
-							for(const auto & pair : pairs.pairs_) {
+							for (const auto &pair: pairs.pairs_) {
+								if (lociCoveragePerSample[haps.sampNamesVec_[pair.row_]] < minimumLociCoverageToKeepSamples ||
+								    lociCoveragePerSample[haps.sampNamesVec_[pair.col_]] < minimumLociCoverageToKeepSamples) {
+									continue;
+								}
 								//auto dist = mat.points_[pair.row_]->euDist(*mat.points_[pair.col_]);
 								auto dist = mat.points_[pair.row_]->vals_[pair.col_];
 								if (dist < mat.dbscanPars_.eps_) {
