@@ -776,6 +776,7 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSinglesCombined(const njh:
 	std::string extraBwaArgs;
 	std::string extraSamtoolsSortArgs;
 	bfs::path outputFnp = "";
+
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -1001,20 +1002,24 @@ int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const n
 	bfs::path trimStub = "";
 	bool force = false;
 	uint32_t numThreads = 1;
-	std::string sampName = "";
+	std::string sampName;
 	bool removeIntermediateFiles = false;
-	bfs::path genomePrefix = "";
-	std::string extraBowtie2Args = "";
+	bfs::path genomeFnp = "";
+	std::string extraBowtie2Args;
 	bfs::path outputFnp = "";
+	std::string extraSamtoolsSortArgs;
+
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
-	setUp.setOption(genomePrefix, "--genomePrefix", "genome prefix for bowtie2", true);
+	setUp.setOption(genomeFnp, "--genomeFnp", "genome file for bowtie2", true);
 	setUp.setOption(trimStub, "--trimStub", "AdapterRemoval output stub", true);
 	setUp.setOption(sampName, "--sampName", "Sample Name to give to final bam", true);
 	setUp.setOption(force, "--force", "force run even if file already exists");
 	setUp.setOption(outputFnp, "--outputFnp", "output name, will default to sampName.sorted.bam");
 	setUp.setOption(extraBowtie2Args, "--extraBowtie2Args", "extra bowtie2 arguments");
+	setUp.setOption(extraSamtoolsSortArgs, "--extraSamtoolsSortArgs", "extra samtools sort arguments");
+
 	setUp.setOption(numThreads, "--numThreads", "Number of threads");
 	setUp.setOption(outputDir, "--outputDir", "output directory");
 	setUp.setOption(removeIntermediateFiles, "--removeIntermediateFiles", "remove the intermediate bam files and just keep the ");
@@ -1024,10 +1029,12 @@ int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const n
 	bfs::path inputSingles = njh::files::make_path(trimStub.string() + "_singles.fastq");
 	bfs::path inputPairedFirstMates = njh::files::make_path(trimStub.string() + "_1.fastq");
 	bfs::path inputPairedSecondMates = njh::files::make_path(trimStub.string() + "_2.fastq");
-	bfs::path genomeFnp = genomePrefix.string() + ".fasta";
+	// bfs::path genomeFnp = genomePrefix.string() + ".fasta";
+	bfs::path genomePrefix = genomeFnp.replace_extension("");
 	njh::files::checkExistenceThrow(genomeFnp,__PRETTY_FUNCTION__);
 	if(setUp.pars_.debug_){
 		std::cout << "genomeFnp: " << genomeFnp << std::endl;
+		std::cout << "genomePrefix: " << genomePrefix << std::endl;
 	}
 	bioRunner.RunBowtie2Index(genomeFnp);
 
@@ -1050,7 +1057,7 @@ int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const n
 			throw std::runtime_error { ss.str() };
 		}
 	}
-	if("" == outputFnp){
+	if(outputFnp.empty()){
 		outputFnp = njh::files::make_path(outputDir, sampName + ".sorted.bam");
 	}
 	bfs::path outputFnpBai = outputFnp.string() + ".bai";
@@ -1078,7 +1085,7 @@ int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const n
 			<< " -x "   << genomePrefix
 			<< " -U "   << inputSingles
 			<< " 2> " << bfs::path(singlesSortedBam.string() + ".bowtie2.log")
-			<< " | samtools sort -@ " << numThreads << " -o " << singlesSortedBam;
+			<< " | samtools sort  " << extraSamtoolsSortArgs << " -@ " << numThreads << " -o " << singlesSortedBam;
 
 	std::stringstream pairedCmd;
 	pairedCmd << "bowtie2 "
@@ -1090,7 +1097,7 @@ int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const n
 			<< " -1 "   << inputPairedFirstMates
 			<< " -2 "   << inputPairedSecondMates
 			<< " 2> " << bfs::path(pairedSortedBam.string() + ".bowtie2.log")
-			<< " | samtools sort -@ " << numThreads << " -o " << pairedSortedBam;
+			<< " | samtools sort  " << extraSamtoolsSortArgs << " -@ " << numThreads << " -o " << pairedSortedBam;
 
 
 	std::stringstream bamtoolsMergeAndIndexCmd;
