@@ -120,6 +120,7 @@ int readSimulatorRunner::shearSimIlluminaAlign(const njh::progutils::CmdArgs & i
 	uint32_t mean = 240;
 	uint32_t std = 81;//245.431 140.977
 	uint32_t minLen = 8;
+	bool useBwamem2 = false;
 	uint32_t readNumber = 100;
 	bfs::path illuminaProfileDir = njh::files::make_path(elucidator_INSTALLDIR, "etc/illumina_profiles/miseq_250");
 	uint32_t outLength = 150;
@@ -134,6 +135,7 @@ int readSimulatorRunner::shearSimIlluminaAlign(const njh::progutils::CmdArgs & i
 	setUp.setOption(sampleName, "--sampleName", "Sample Name to Give Bam", true);
 	setUp.setOption(genomeFnp, "--genomeFnp", "Genome File name to align to", true);
 	setUp.setOption(extraBwaArgs, "--extraBwaArgs", "Extra bwa arguments");
+	setUp.setOption(useBwamem2, "--useBwamem2", "use bwamem2");
 
 	setUp.processReadInNames();
 	setUp.setOption(markDups, "--markDups", "Mark Duplicate Seqs");
@@ -230,7 +232,10 @@ int readSimulatorRunner::shearSimIlluminaAlign(const njh::progutils::CmdArgs & i
 
 	std::stringstream runAlignmentCmd;
 	runAlignmentCmd << "cd " << tempDir << " && elucidator runBwaOnAdapterReomvalOutputSinglesCombined --removeIntermediateFiles --trimStub trimmed_seqeuncedShearedSeqs --genomeFnp "<< genomeFnp << " --sampName " << sampleName <<" --numThreads " << numThreads << " ";
-	if("" != extraBwaArgs){
+	if (useBwamem2) {
+		runAlignmentCmd << " --useBwamem2 ";
+	}
+	if(!extraBwaArgs.empty()){
 		runAlignmentCmd << " --extraBwaArgs=" << "\""<< extraBwaArgs <<  "\"";
 	}
 	auto runAlignmentCmd_runOut = njh::sys::run({runAlignmentCmd.str()});
