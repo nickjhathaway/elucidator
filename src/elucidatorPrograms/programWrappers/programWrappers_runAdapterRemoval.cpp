@@ -98,7 +98,7 @@ njh::sys::RunOutput RunAdapterRemoval(RunAdapterRemovalPars adapRemovPars){
 	njh::files::checkExistenceThrow(adapRemovPars.inOpts.secondName_, __PRETTY_FUNCTION__);
 	if("" == adapRemovPars.outOpts.outFilename_){
 		auto outName = bfs::path(bfs::basename(adapRemovPars.inOpts.firstName_)).filename().string();
-		adapRemovPars.outOpts.outFilename_ = "trimmed_" + outName.substr(0, outName.find("_"));
+		adapRemovPars.outOpts.outFilename_ = "trimmed_" + outName.substr(0, outName.rfind('_'));
 	}
 	//check if output exists already
 
@@ -236,7 +236,7 @@ njh::sys::RunOutput RunAdapterRemovalSE(RunAdapterRemovalPars adapRemovPars){
 	njh::files::checkExistenceThrow(adapRemovPars.inOpts.firstName_, __PRETTY_FUNCTION__);
 	if("" == adapRemovPars.outOpts.outFilename_){
 		auto outName = bfs::path(bfs::basename(adapRemovPars.inOpts.firstName_)).filename().string();
-		adapRemovPars.outOpts.outFilename_ = "trimmed_" + outName.substr(0, outName.find("_"));
+		adapRemovPars.outOpts.outFilename_ = "trimmed_" + outName.substr(0, outName.rfind('_'));
 	}
 	//check if output exists already
 
@@ -326,7 +326,7 @@ int programWrapperRunner::setUpRunAdapterRemoval(const njh::progutils::CmdArgs &
 
 	seqSetUp setUp(inputCommands);
 	adapRemovPars.processArgs(setUp);
-	setUp.setOption(detectPrimersDir, "--detectPrimersDir", "Detect Primers Dir");
+	setUp.setOption(detectPrimersDir, "--detectPrimersDir", "Detect Primers Dir");
 	setUp.setOption(r1Orphans, "--r1Orphans", "R1 Orphans");
 	setUp.setOption(r2Orphans, "--r2Orphans", "R2 Orphans");
 
@@ -350,8 +350,8 @@ int programWrapperRunner::setUpRunAdapterRemoval(const njh::progutils::CmdArgs &
 		SeqInput r1Reader(r1ConOpts);
 		r1Reader.openIn();
 		while(r1Reader.readNextRead(seq)){
-			if(std::string::npos != seq.seq_.find("N")){
-				seq.trimBack(seq.seq_.find("N"));
+			if(std::string::npos != seq.seq_.find('N')){
+				seq.trimBack(seq.seq_.find('N'));
 			}
 			for(const auto & accepSeq : acceptableSeqs){
 				if(std::string::npos != seq.seq_.find(accepSeq)){
@@ -373,8 +373,8 @@ int programWrapperRunner::setUpRunAdapterRemoval(const njh::progutils::CmdArgs &
 		SeqInput r2Reader(r2ConOpts);
 		r2Reader.openIn();
 		while(r2Reader.readNextRead(seq)){
-			if(std::string::npos != seq.seq_.find("N")){
-				seq.trimBack(seq.seq_.find("N"));
+			if(std::string::npos != seq.seq_.find('N')){
+				seq.trimBack(seq.seq_.find('N'));
 			}
 			for(const auto & accepSeq : acceptableSeqs){
 				if(std::string::npos != seq.seq_.find(accepSeq)){
@@ -392,7 +392,7 @@ int programWrapperRunner::setUpRunAdapterRemoval(const njh::progutils::CmdArgs &
 
 	if("" == adapRemovPars.outOpts.outFilename_){
 		auto outName = bfs::path(bfs::basename(adapRemovPars.inOpts.firstName_)).filename().string();
-		adapRemovPars.outOpts.outFilename_ = "trimmed_" + outName.substr(0, outName.find("_"));
+		adapRemovPars.outOpts.outFilename_ = "trimmed_" + outName.substr(0, outName.rfind('_'));
 	}
 
 	if(1 == acceptedR1Cons.size() && 1 == acceptedR2Cons.size()){
