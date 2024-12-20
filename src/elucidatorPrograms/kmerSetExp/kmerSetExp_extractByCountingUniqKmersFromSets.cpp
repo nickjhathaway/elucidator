@@ -151,7 +151,8 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 	extractingPars.compPars.hardCountOff = 20;
 	extractingPars.compPars.fracCutOff = 0.12;
 	extractingPars.compPars.finalHardCountOff = 20;
-	extractingPars.compPars.finalFracCutOff = 0.30;
+	extractingPars.compPars.finalFracCutOff = extractingPars.compPars.fracCutOff;
+	// extractingPars.compPars.finalFracCutOff = 0.30;
 	extractingPars.compPars.kmerLengthForEntropyCalc_ = 2;
 	extractingPars.compPars.entropyFilter_ = 1.20;
 

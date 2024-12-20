@@ -410,6 +410,7 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	uint32_t allowableSoftClipInAln = 10;
 	bool requireProperPair = false;
 	bool doNotWriteFilterOff = false;
+	bool filterWithUnmappedMate = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -418,6 +419,7 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	setUp.setOption(requireProperPair, "--requireProperPair", "Require Proper Pair to be filtered off");
 	setUp.setOption(doNotWriteFilterOff, "--doNotWriteFilterOff", "do Not Write Filter Off");
 	setUp.setOption(minMappingQuality, "--minMappingQuality", "min Mapping Quality");
+	setUp.setOption(filterWithUnmappedMate, "--filterWithUnmappedMate", "by default requires both mates to map to a filter chromosome, this will filter if one mate mapps and the other is unmapped");
 
 	setUp.processReadInNames({"--bam"}, true);
 	setUp.processWritingOptions(outOpts);
@@ -543,7 +545,6 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 					//pair hasn't been added to cache yet so add to cache
 					//this only works if mate and first mate have the same name
 					filterAlnCache.add(bAln);
-					continue;
 				} else {
 					auto search = filterAlnCache.get(bAln.Name);
 					if(doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality &&
@@ -567,25 +568,46 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 					}
 					// now that operations have been computed, remove their other mate found from cache
 					filterAlnCache.remove(search->Name);
-					continue;
 				}
 			}else{
 				if (!alnCache.has(bAln.Name)) {
 					//pair hasn't been added to cache yet so add to cache
 					//this only works if mate and first mate have the same name
 					alnCache.add(bAln);
-					continue;
 				} else {
 					auto search = alnCache.get(bAln.Name);
-					++kept.pairs_;++kept.pairs_;
-					if (bAln.IsFirstMate()) {
-						pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
+					if (filterWithUnmappedMate &&
+					      (
+						    (bAln.IsMapped() && !bAln.IsMateMapped() && njh::in(refData[bAln.RefID].RefName, chroms) && doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality) ||
+								(!bAln.IsMapped() && bAln.IsMateMapped() && njh::in(refData[bAln.MateRefID].RefName, chroms) && doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality)
+								)
+								) {
+						std::string filterChromName;
+						if (bAln.IsMapped() && !bAln.IsMateMapped()) {
+							filterChromName = njh::pasteAsStr("unmapped", "--", refData[bAln.RefID].RefName);
+						} else {
+							filterChromName = njh::pasteAsStr(refData[search->RefID].RefName, "--", "unmapped");
+						}
+						++filteredCountsByChrom[filterChromName].pairs_;
+						++filteredCountsByChrom[filterChromName].pairs_;
+						if(!doNotWriteFilterOff){
+							if (bAln.IsFirstMate()) {
+								filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
+							} else {
+								filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
+							}
+						}
 					} else {
-						pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
+						++kept.pairs_;
+						++kept.pairs_;
+						if (bAln.IsFirstMate()) {
+							pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
+						} else {
+							pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
+						}
 					}
 					// now that operations have been computed, remove ther other mate found from cache
 					alnCache.remove(search->Name);
-					continue;
 				}
 			}
 		}
