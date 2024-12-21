@@ -279,11 +279,12 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 
 	setUp.setOption(extractingPars.doReCheckExcludeSets, "--doReCheckExcludeSets", "do Re Check Exclude Sets on iterations, could lead to some reads being recruit away but will drastically speed up run time");
 
-	bool doNotFinalRecheckOfExcludeSeqs = false;
-	setUp.setOption(doNotFinalRecheckOfExcludeSeqs, "--doNotFinalRecheckOfExcludeSeqs", "redo a unique kmer filter on the exclusion sets during the final re-extraction process");
-
-	bool doFinalRecheckOfExcludeSeqs = !doNotFinalRecheckOfExcludeSeqs;
-//	setUp.setOption(doFinalRecheckOfExcludeSeqs, "--doFinalRecheckOfExcludeSeqs", "Normal the exclusion kmer set is left alone, if this flag is set, it will be filter during the final re-extraction process");
+	// bool doNotFinalRecheckOfExcludeSeqs = false;
+	// setUp.setOption(doNotFinalRecheckOfExcludeSeqs, "--doNotFinalRecheckOfExcludeSeqs", "redo a unique kmer filter on the exclusion sets during the final re-extraction process");
+	//
+	// bool doFinalRecheckOfExcludeSeqs = !doNotFinalRecheckOfExcludeSeqs;
+	bool doFinalRecheckOfExcludeSeqs = false;
+	setUp.setOption(doFinalRecheckOfExcludeSeqs, "--doFinalRecheckOfExcludeSeqs", "Normal the exclusion kmer set is left alone, if this flag is set, it will be filter during the final re-extraction process");
 
 	setUp.setOption(doNotDoFinalExtract, "--doNotDoFinalExtract", "do Not Do Final Extract");
 	//setUp.setOption(extractAfterIterating, "--extractAfterIterating", "Extract After Iterating");
