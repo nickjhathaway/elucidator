@@ -70,6 +70,9 @@ void seqUtilsConverterSetUp::setUpConvertFiles() {
   } else if (pars_.ioOptions_.inFormat_ == SeqIOOptions::inFormats::FASTA) {
   	pars_.ioOptions_.outFormat_ = SeqIOOptions::outFormats::FASTQ;
   	pars_.ioOptions_.out_.outExtention_ = SeqIOOptions::getOutExtension(pars_.ioOptions_.outFormat_);
+  } else if (pars_.ioOptions_.inFormat_ == SeqIOOptions::inFormats::FASTQGZ) {
+  	pars_.ioOptions_.outFormat_ = SeqIOOptions::outFormats::FASTAGZ;
+  	pars_.ioOptions_.out_.outExtention_ = SeqIOOptions::getOutExtension(pars_.ioOptions_.outFormat_);
   }
 
   /**@todo make it so you can set outFormat
