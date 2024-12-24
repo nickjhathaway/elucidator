@@ -944,6 +944,7 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 		}
 		++iterNumber;
 	}
+
 	if(!doNotDoFinalExtract){
 		initialSeqOut.closeOutForReopeningAll();
 
@@ -1161,6 +1162,7 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 			}
 		}
 	} else {
+		initialSeqOut.closeOutForReopeningAll();
 		auto readFiles = njh::files::listAllFiles(setUp.pars_.directoryName_,false,{std::regex{R"((.*)(\.(fast[aq]))$)"}});
 		for(const auto & f : readFiles){
 			njh::gzZipFile(njh::IoOptions{njh::InOptions(f.first), njh::OutOptions(bfs::path(f.first.string() + ".gz"))});
