@@ -688,45 +688,63 @@ std::unordered_map<std::string, std::unordered_set<uint64_t>> UniqueKmerSetHelpe
 			} else {
 				for (const auto &set: uniqueKmersPerSet) {
 					if (set.first == finalNewKmerSet.first) {
-						continue;
-					}
-					if (njh::in(finalNewKmer.first, set.second)) {
-						pass = false;
-						nonUniqueKmersPerSet.emplace(finalNewKmer.first);
+						//for uniqueness filtering need to make sure the rev comp from the same set isn't also in there
 						auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
-						nonUniqueKmersPerSet.emplace(revCompKmerHash);
-						break;
-					}
-					//for uniqueness filtering need to make sure the rev comp isn't also in there
-					auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
-					if(njh::in(revCompKmerHash, set.second)){
-						pass = false;
-						nonUniqueKmersPerSet.emplace(revCompKmerHash);
-						//putting the revCompHash in but could also consider whether or now placing the original kmer is needed too? currently doing so below
-						nonUniqueKmersPerSet.emplace(finalNewKmer.first);
-						break;
+						if(njh::in(revCompKmerHash, set.second)){
+							pass = false;
+							nonUniqueKmersPerSet.emplace(revCompKmerHash);
+							//putting the revCompHash in but could also consider whether or now placing the original kmer is needed too? currently doing so below
+							nonUniqueKmersPerSet.emplace(finalNewKmer.first);
+							break;
+						}
+					} else {
+						if (njh::in(finalNewKmer.first, set.second)) {
+							pass = false;
+							nonUniqueKmersPerSet.emplace(finalNewKmer.first);
+							auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
+							nonUniqueKmersPerSet.emplace(revCompKmerHash);
+							break;
+						}
+						//for uniqueness filtering need to make sure the rev comp isn't also in there
+						auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
+						if(njh::in(revCompKmerHash, set.second)){
+							pass = false;
+							nonUniqueKmersPerSet.emplace(revCompKmerHash);
+							//putting the revCompHash in but could also consider whether or now placing the original kmer is needed too? currently doing so below
+							nonUniqueKmersPerSet.emplace(finalNewKmer.first);
+							break;
+						}
 					}
 				}
 				//have to check against the other new adding k-mers
 				for (const auto &set: rawKmersPerInput) {
 					if (set.first == finalNewKmerSet.first) {
-						continue;
-					}
-					if (njh::in(finalNewKmer.first, set.second)) {
-						pass = false;
-						nonUniqueKmersPerSet.emplace(finalNewKmer.first);
+						//for uniqueness filtering need to make sure the rev comp from the same set isn't also in there
 						auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
-						nonUniqueKmersPerSet.emplace(revCompKmerHash);
-						break;
-					}
-					//for uniqueness filtering need to make sure the rev comp isn't also in there
-					auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
-					if(njh::in(revCompKmerHash, set.second)){
-						pass = false;
-						nonUniqueKmersPerSet.emplace(revCompKmerHash);
-						//putting the revCompHash in but could also consider whether or now placing the original kmer is needed too? currently doing so below
-						nonUniqueKmersPerSet.emplace(finalNewKmer.first);
-						break;
+						if(njh::in(revCompKmerHash, set.second)){
+							pass = false;
+							nonUniqueKmersPerSet.emplace(revCompKmerHash);
+							//putting the revCompHash in but could also consider whether or now placing the original kmer is needed too? currently doing so below
+							nonUniqueKmersPerSet.emplace(finalNewKmer.first);
+							break;
+						}
+					} else {
+						if (njh::in(finalNewKmer.first, set.second)) {
+							pass = false;
+							nonUniqueKmersPerSet.emplace(finalNewKmer.first);
+							auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
+							nonUniqueKmersPerSet.emplace(revCompKmerHash);
+							break;
+						}
+						//for uniqueness filtering need to make sure the rev comp isn't also in there
+						auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
+						if(njh::in(revCompKmerHash, set.second)){
+							pass = false;
+							nonUniqueKmersPerSet.emplace(revCompKmerHash);
+							//putting the revCompHash in but could also consider whether or now placing the original kmer is needed too? currently doing so below
+							nonUniqueKmersPerSet.emplace(finalNewKmer.first);
+							break;
+						}
 					}
 				}
 			}
@@ -795,46 +813,63 @@ std::unordered_map<std::string, std::unordered_set<uint64_t>> UniqueKmerSetHelpe
 			} else {
 				for (const auto &set: uniqueKmersPerSet) {
 					if (set.first == finalNewKmerSet.first) {
-						continue;
-					}
-					if (njh::in(finalNewKmer.first, set.second)) {
-						pass = false;
-						nonUniqueKmersPerSet.emplace(finalNewKmer.first);
-						//place rev-comp as well
+						//for uniqueness filtering need to make sure the rev comp from the same set isn't also in there
 						auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
-						nonUniqueKmersPerSet.emplace(revCompKmerHash);
-						break;
-					}
-					//for uniqueness filtering need to make sure the rev comp isn't also in there
-					auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
-					if(njh::in(revCompKmerHash, set.second)){
-						pass = false;
-						nonUniqueKmersPerSet.emplace(revCompKmerHash);
-						//putting the revCompHash in but could also consider whether or now placing the original kmer is needed too? currently doing so below
-						nonUniqueKmersPerSet.emplace(finalNewKmer.first);
-						break;
+						if(njh::in(revCompKmerHash, set.second)){
+							pass = false;
+							nonUniqueKmersPerSet.emplace(revCompKmerHash);
+							//putting the revCompHash in but could also consider whether or now placing the original kmer is needed too? currently doing so below
+							nonUniqueKmersPerSet.emplace(finalNewKmer.first);
+							break;
+						}
+					} else {
+						if (njh::in(finalNewKmer.first, set.second)) {
+							pass = false;
+							nonUniqueKmersPerSet.emplace(finalNewKmer.first);
+							auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
+							nonUniqueKmersPerSet.emplace(revCompKmerHash);
+							break;
+						}
+						//for uniqueness filtering need to make sure the rev comp isn't also in there
+						auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
+						if(njh::in(revCompKmerHash, set.second)){
+							pass = false;
+							nonUniqueKmersPerSet.emplace(revCompKmerHash);
+							//putting the revCompHash in but could also consider whether or now placing the original kmer is needed too? currently doing so below
+							nonUniqueKmersPerSet.emplace(finalNewKmer.first);
+							break;
+						}
 					}
 				}
 				//have to check against the other new adding k-mers
 				for (const auto &set: rawKmersPerInput) {
 					if (set.first == finalNewKmerSet.first) {
-						continue;
-					}
-					if (njh::in(finalNewKmer.first, set.second)) {
-						pass = false;
-						nonUniqueKmersPerSet.emplace(finalNewKmer.first);
+						//for uniqueness filtering need to make sure the rev comp from the same set isn't also in there
 						auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
-						nonUniqueKmersPerSet.emplace(revCompKmerHash);
-						break;
-					}
-					//for uniqueness filtering need to make sure the rev comp isn't also in there
-					auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
-					if(njh::in(revCompKmerHash, set.second)){
-						pass = false;
-						nonUniqueKmersPerSet.emplace(revCompKmerHash);
-						//putting the revCompHash in but could also consider whether or now placing the original kmer is needed too? currently doing so below
-						nonUniqueKmersPerSet.emplace(finalNewKmer.first);
-						break;
+						if(njh::in(revCompKmerHash, set.second)){
+							pass = false;
+							nonUniqueKmersPerSet.emplace(revCompKmerHash);
+							//putting the revCompHash in but could also consider whether or now placing the original kmer is needed too? currently doing so below
+							nonUniqueKmersPerSet.emplace(finalNewKmer.first);
+							break;
+						}
+					} else {
+						if (njh::in(finalNewKmer.first, set.second)) {
+							pass = false;
+							nonUniqueKmersPerSet.emplace(finalNewKmer.first);
+							auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
+							nonUniqueKmersPerSet.emplace(revCompKmerHash);
+							break;
+						}
+						//for uniqueness filtering need to make sure the rev comp isn't also in there
+						auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(finalNewKmer.first));
+						if(njh::in(revCompKmerHash, set.second)){
+							pass = false;
+							nonUniqueKmersPerSet.emplace(revCompKmerHash);
+							//putting the revCompHash in but could also consider whether or now placing the original kmer is needed too? currently doing so below
+							nonUniqueKmersPerSet.emplace(finalNewKmer.first);
+							break;
+						}
 					}
 				}
 			}
