@@ -25,7 +25,7 @@ int seqUtilsInfoRunner::getSlidingEntropy(const njh::progutils::CmdArgs & inputC
 	uint32_t windowSize = 50;
 	uint32_t kLen = 1;
 	seqSetUp setUp(inputCommands);
-	setUp.description_ = "Trim front and back of sequences with a sliding window for low entropy, seqs will be removed if all is low entropy";
+	setUp.description_ = "get the sliding entropy of input seqs";
 
 	setUp.processVerbose();
 	setUp.processDebug();

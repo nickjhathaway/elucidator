@@ -65,6 +65,7 @@ seqUtilsInfoRunner::seqUtilsInfoRunner()
 	addFunc("getSlidingEntropy", getSlidingEntropy, false),
 	addFunc("getSlidingEntropyGenomicRegion", getSlidingEntropyGenomicRegion, false),
     	addFunc("findExactMatches", findExactMatches, false),
+    	addFunc("countAPatternInSeqs", countAPatternInSeqs, false),
 	},
                     "seqUtilsInfo") {}
 //
