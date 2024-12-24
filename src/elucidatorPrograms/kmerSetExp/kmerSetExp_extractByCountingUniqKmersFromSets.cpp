@@ -956,6 +956,7 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 
 
 			watch.startNewLap(njh::pasteAsStr(iterNumber, "- final check new kmers against current set"));
+
 			std::unordered_map<std::string, std::unordered_set<uint64_t>> outputUniqueKmersPerSet = UniqueKmerSetHelper::filterReExtractedKmersForNonUniqueIncludeExcludedSets(
 							rawKmersPerInput,
 							extractingPars,
