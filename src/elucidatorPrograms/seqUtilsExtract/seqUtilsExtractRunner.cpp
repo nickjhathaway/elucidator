@@ -50,6 +50,7 @@ seqUtilsExtractRunner::seqUtilsExtractRunner()
   addFunc("countIlluminaAaptors", countIlluminaAaptors, false),
 	addFunc("extractByName", extractByName, false),
 	addFunc("clusterByKmerSim", clusterByKmerSim, false),
+    	addFunc("filterOffSeqsWithEndingMotif", filterOffSeqsWithEndingMotif, false),
 },
                     "seqUtilsExtract") {}
 //

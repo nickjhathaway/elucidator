@@ -52,5 +52,9 @@ class seqUtilsExtractRunner : public njh::progutils::ProgramRunner {
   static int countIlluminaAaptors(const njh::progutils::CmdArgs & inputCommands);
   static int extractByIlluminaAaptors(const njh::progutils::CmdArgs & inputCommands);
 
+
+	static int filterOffSeqsWithEndingMotif(const njh::progutils::CmdArgs & inputCommands);
+
+
 };
 } // namespace njhseq
