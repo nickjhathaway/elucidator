@@ -10,13 +10,35 @@
 namespace njhseq {
 
 int seqUtilsExtractRunner::filterOffSeqsWithEndingMotif(const njh::progutils::CmdArgs & inputCommands) {
-  OutOptions outOpts("", ".tsv");
-  std::string motifStr = "GGGGGGGGGGGGGG";
-  uint32_t motifAllowableError = 1;
 
-  std::string secondaryMotifStr = "GGGGGGGGGGGGGGGGGGGG";
-  uint32_t secondaryMotifAllowableError = 3;
-  bool noSecondMotif = false;
+  struct MotifError {
+    MotifError(const std::string & motifStr, uint32_t allowableError ): motifStr_(motifStr), allowableError_(allowableError) {}
+    std::string motifStr_;
+    uint32_t allowableError_{0};
+
+    uint32_t passingScore_ = std::numeric_limits<uint32_t>::max();
+    std::shared_ptr<motif> motif_;
+
+    void setMotif() {
+      motif_  = std::make_shared<motif>(motifStr_);
+      if (allowableError_ >= motif_->size()) {
+        std::stringstream ss;
+        ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error for motif: " << motifStr_ << "motifAllowableError: " << allowableError_ << " can't be equal or greater than filter_motif.size(): " << motif_->size() << "\n";
+        throw std::runtime_error{ss.str()};
+      }
+      passingScore_ = motif_->size() - allowableError_;
+    }
+  };
+
+  OutOptions outOpts("", ".tsv");
+
+  std::vector<MotifError> motifErrors{
+    MotifError("GGGGGGGGGGGGGG", 1),
+    MotifError("GGGGGGGGGGGGGGGGGGGG", 3),
+    MotifError("CCCCCCCCCCCCCC", 1),
+    MotifError("CCCCCCCCCCCCCCCCCCCC", 3),
+  };
+
   bool writeOutFiltered = false;
 
   bool needBothPairs = false;
@@ -61,23 +83,35 @@ int seqUtilsExtractRunner::filterOffSeqsWithEndingMotif(const njh::progutils::Cm
 
   std::string outputStub = "out";
 
+  bfs::path motifTableFnp;
+  setUp.setOption(motifTableFnp, "--motifTable", "a table with first column motif, second column amount of allowable error, this will replace the default motifs of Gs and Cs");
 
   setUp.setOption(outputStub, "--outputStub", "output stub for writing out the kept reads");
   setUp.setOption(outOpts.outFilename_, "--filteredCountsOutputFnp", "filtered Counts Output file");
-  setUp.setOption(motifStr, "--motif", "motif to search for");
-  setUp.setOption(motifAllowableError, "--motifAllowableError", "motif allowable Error");
 
-  setUp.setOption(noSecondMotif, "--noSecondMotif", "no Second Motif");
-  if (noSecondMotif) {
-    secondaryMotifStr = "";
-  }
-  setUp.setOption(secondaryMotifStr, "--secondaryMotif", "secondary Motif");
-  setUp.setOption(secondaryMotifAllowableError, "--secondaryMotifAllowableError", "secondary motif allowable error");
   setUp.setOption(writeOutFiltered, "--writeOutFiltered", "write Out Filtered");
   setUp.setOption(needBothPairs, "--needBothPairs", "need both pairs to have pattern, by default requires that just one has the pattern");
   setUp.setOption(numOfThreads, "--numOfThreads", "number of threads");
 
   setUp.finishSetUp(std::cout);
+
+
+  if ("" != motifTableFnp) {
+    table motifTab(motifTableFnp, "\t", false);
+    if (motifTab.nCol() != 2) {
+      std::stringstream ss;
+      ss << __PRETTY_FUNCTION__ << ", error " << "error, " << motifTableFnp << " should have 2 columns" << "\n";
+      throw std::runtime_error{ss.str()};
+    }
+    motifErrors.clear();
+    for (const auto & row : motifTab) {
+      motifErrors.emplace_back(row[0], njh::StrToNumConverter::stoToNum<uint32_t>(row[1]));
+    }
+  }
+  for (auto & m : motifErrors) {
+    m.setMotif();
+
+  }
 
   outOpts.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
 
@@ -93,225 +127,138 @@ int seqUtilsExtractRunner::filterOffSeqsWithEndingMotif(const njh::progutils::Cm
   if  (overWrite) {
     multi_seq_io.setAllReaderToOverwrite();
   }
-  motif filter_motif(motifStr);
-  if (motifAllowableError >= filter_motif.size()) {
-    std::stringstream ss;
-    ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << "motifAllowableError: " << motifAllowableError << " can't be equal or greater than filter_motif.size(): " << filter_motif.size() << "\n";
-    throw std::runtime_error{ss.str()};
-  }
-  uint32_t motif_passing_score = filter_motif.size() - motifAllowableError;
-  std::unique_ptr<motif> secondary_filter_motif;
-  if (!secondaryMotifStr.empty()) {
-    secondary_filter_motif = std::make_unique<motif>(secondaryMotifStr);
-    if (secondaryMotifAllowableError >= secondary_filter_motif->size()) {
-      std::stringstream ss;
-      ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << "secondaryMotifAllowableError: " << secondaryMotifAllowableError << " can't be equal or greater than secondary_filter_motif->size(): " << secondary_filter_motif->size() << "\n";
-      throw std::runtime_error{ss.str()};
-    }
-  }
-  uint32_t secondary_motif_passing_score = 0;
-  if (!secondaryMotifStr.empty()) {
-    secondary_motif_passing_score = secondary_filter_motif->size() - secondaryMotifAllowableError;
-  }
-  out << "inputFnp\ttotalReads\ttotalFiltered\ttotalSecondaryFiltered\n";
+
+  out << "inputFnp\ttotalReads\ttotalFiltered\tmotif\tmotifAllowError\tfilteredForMotif\n";
 
   if (!fastq1Fnp.empty() && bfs::exists(fastq1Fnp)) {
 
-    std::function<void()> filteredSeqs;
+
     uint32_t totalReads = 0;
     uint32_t totalFiltered = 0;
-    uint32_t totalSecondaryFiltered = 0;
+    std::unordered_map<uint32_t, uint32_t> filteredCounts;
+    for (const auto & e : iter::enumerate(motifErrors)) {
+      filteredCounts[e.index] = 0;
+    }
     std::mutex countMut;
     SeqInput reader(pairedIn);
     reader.openIn();
-    if (secondaryMotifStr.empty()) {
-      filteredSeqs = [&reader,&multi_seq_io,
-            &filter_motif, &motif_passing_score,
-            &writeOutFiltered,
-            &needBothPairs,
-            &totalReads, &totalFiltered, &countMut]() {
-            uint32_t current_totalReads = 0;
-            uint32_t current_totalFiltered = 0;
-            PairedRead pseq;
-            while (reader.readNextReadLock(pseq)) {
-              ++current_totalReads;
-              bool firstMateHasMotif = pseq.seqBase_.seq_.size() > filter_motif.size() &&
-                                       filter_motif.passMotifParameter(
-                                         pseq.seqBase_.seq_.begin() + (pseq.seqBase_.seq_.size() - filter_motif.size()),
-                                         pseq.seqBase_.seq_.end(), motif_passing_score);
-              bool secondMateHasMotif = pseq.mateSeqBase_.seq_.size() > filter_motif.size() &&
-                                        filter_motif.passMotifParameter(
-                                          pseq.mateSeqBase_.seq_.begin() + (
-                                            pseq.mateSeqBase_.seq_.size() - filter_motif.size()),
-                                          pseq.mateSeqBase_.seq_.end(), motif_passing_score);
-              if ((needBothPairs && firstMateHasMotif && secondMateHasMotif) || (
-                    !needBothPairs && (firstMateHasMotif || secondMateHasMotif))) {
-                if (writeOutFiltered) {
-                  multi_seq_io.openWrite("pairs-filtered", pseq);
-                }
-                ++current_totalFiltered;
-              } else {
-                multi_seq_io.openWrite("pairs",pseq);
-              }
-            }
-            {
-              std::lock_guard<std::mutex> lock(countMut);
-              totalFiltered += current_totalFiltered;
-              totalReads += current_totalReads;
-            }
-          };
 
-    } else {
-      filteredSeqs = [&reader, &multi_seq_io,
-            &filter_motif, &motif_passing_score,
-            &secondary_filter_motif, &secondary_motif_passing_score,
-            &writeOutFiltered,
-            &needBothPairs,
-            &totalReads, &totalFiltered, &totalSecondaryFiltered,&countMut]() {
-            uint32_t current_totalReads = 0;
-            uint32_t current_totalFiltered = 0;
-            uint32_t current_totalSecondaryFiltered = 0;
-            PairedRead pseq;
-            while (reader.readNextReadLock(pseq)) {
-              ++current_totalReads;
-
-              bool firstMateHasMotif = pseq.seqBase_.seq_.size() > filter_motif.size() &&
-                                       filter_motif.passMotifParameter(
-                                         pseq.seqBase_.seq_.begin() + (pseq.seqBase_.seq_.size() - filter_motif.size()),
-                                         pseq.seqBase_.seq_.end(), motif_passing_score);
-              bool secondMateHasMotif = pseq.mateSeqBase_.seq_.size() > filter_motif.size() &&
-                                        filter_motif.passMotifParameter(
-                                          pseq.mateSeqBase_.seq_.begin() + (
-                                            pseq.mateSeqBase_.seq_.size() - filter_motif.size()),
-                                          pseq.mateSeqBase_.seq_.end(), motif_passing_score);
-              if ((needBothPairs && firstMateHasMotif && secondMateHasMotif) || (
-                    !needBothPairs && (firstMateHasMotif || secondMateHasMotif))) {
-                if (writeOutFiltered) {
-                  multi_seq_io.openWrite("pairs-filtered", pseq);
-                }
-                ++current_totalFiltered;
-              } else {
-                bool firstMateHasSecondaryMotif = pseq.seqBase_.seq_.size() > secondary_filter_motif->size() &&
-                                                  secondary_filter_motif->passMotifParameter(
-                                                    pseq.seqBase_.seq_.begin() + (
-                                                      pseq.seqBase_.seq_.size() - secondary_filter_motif->size()),
-                                                    pseq.seqBase_.seq_.end(), secondary_motif_passing_score);
-                bool secondMateHasSecondaryMotif = pseq.mateSeqBase_.seq_.size() > secondary_filter_motif->size() &&
-                                                   secondary_filter_motif->passMotifParameter(
-                                                     pseq.mateSeqBase_.seq_.begin() + (
-                                                       pseq.mateSeqBase_.seq_.size() - secondary_filter_motif->size()),
-                                                     pseq.mateSeqBase_.seq_.end(), secondary_motif_passing_score);
-                if ((needBothPairs && firstMateHasSecondaryMotif && secondMateHasSecondaryMotif) || (
-                      !needBothPairs && (firstMateHasSecondaryMotif || secondMateHasSecondaryMotif))) {
-                  if (writeOutFiltered) {
-                    multi_seq_io.openWrite("pairs-filtered", pseq);
-                  }
-                  ++current_totalFiltered;
-                  ++current_totalSecondaryFiltered;
-                } else {
-                  multi_seq_io.openWrite("pairs",pseq);
-                }
-              }
-            }
-            {
-              std::lock_guard<std::mutex> lock(countMut);
-              totalFiltered += current_totalFiltered;
-              totalSecondaryFiltered += current_totalSecondaryFiltered;
-              totalReads += current_totalReads;
-            }
-          };
-    }
+    std::function<void()> filteredSeqs = [&reader,&multi_seq_io,
+          &filteredCounts,
+          &motifErrors,
+          &writeOutFiltered,
+          &needBothPairs,
+          &totalReads, &totalFiltered, &countMut]() {
+      uint32_t current_totalReads = 0;
+      uint32_t current_totalFiltered = 0;
+      std::unordered_map<uint32_t, uint32_t> current_filteredCounts;
+      PairedRead pseq;
+      while (reader.readNextReadLock(pseq)) {
+        ++current_totalReads;
+        bool pass = true;
+        for (const auto &e: iter::enumerate(motifErrors)) {
+          bool firstMateHasMotif = pseq.seqBase_.seq_.size() > e.element.motif_->size() &&
+                                   e.element.motif_->passMotifParameter(
+                                     pseq.seqBase_.seq_.begin() + (pseq.seqBase_.seq_.size() - e.element.motif_->size()),
+                                     pseq.seqBase_.seq_.end(), e.element.passingScore_ );
+          bool secondMateHasMotif = pseq.mateSeqBase_.seq_.size() > e.element.motif_->size() &&
+                                    e.element.motif_->passMotifParameter(
+                                      pseq.mateSeqBase_.seq_.begin() + (
+                                        pseq.mateSeqBase_.seq_.size() - e.element.motif_->size()),
+                                      pseq.mateSeqBase_.seq_.end(), e.element.passingScore_ );
+          if ((needBothPairs && firstMateHasMotif && secondMateHasMotif) || (
+                !needBothPairs && (firstMateHasMotif || secondMateHasMotif))) {
+            ++current_totalFiltered;
+            current_filteredCounts[e.index] += 1;
+            pass = false;
+            break;
+          }
+        }
+        if (pass) {
+          multi_seq_io.openWrite("pairs",pseq);
+        } else if (writeOutFiltered) {
+          multi_seq_io.openWrite("pairs-filtered", pseq);
+        }
+      }
+      {
+        std::lock_guard<std::mutex> lock(countMut);
+        totalFiltered += current_totalFiltered;
+        totalReads += current_totalReads;
+        for (const auto & count : current_filteredCounts) {
+          filteredCounts[count.first] += count.second;
+        }
+      }
+    };
     njh::concurrent::runVoidFunctionThreaded(filteredSeqs, numOfThreads);
-    out << fastq1Fnp << "\t" << totalReads << "\t" << totalFiltered << "\t" << totalSecondaryFiltered << std::endl;
+    for (const auto & motifError : iter::enumerate(motifErrors)) {
+      out << fastq1Fnp
+      << "\t" << totalReads
+      << "\t" << totalFiltered
+      << "\t" << motifError.element.motifStr_
+      << "\t" << motifError.element.allowableError_
+      << "\t" << filteredCounts[motifError.index] << std::endl;
+    }
   }
   if (!fastqFnp.empty() && bfs::exists(fastqFnp)) {
 
-    std::function<void()> filteredSeqs;
     uint32_t totalReads = 0;
     uint32_t totalFiltered = 0;
-    uint32_t totalSecondaryFiltered = 0;
+    std::unordered_map<uint32_t, uint32_t> filteredCounts;
+    for (const auto & e : iter::enumerate(motifErrors)) {
+      filteredCounts[e.index] = 0;
+    }
     std::mutex countMut;
     SeqInput reader(singleIn);
     reader.openIn();
-    if (secondaryMotifStr.empty()) {
-      filteredSeqs = [&reader,&multi_seq_io,
-            &filter_motif, &motif_passing_score,
-            &writeOutFiltered,
-            &totalReads, &totalFiltered,&countMut]() {
-            uint32_t current_totalReads = 0;
-            uint32_t current_totalFiltered = 0;
-            seqInfo seq;
-            while (reader.readNextReadLock(seq)) {
-              ++current_totalReads;
-              if (seq.seq_.size() > filter_motif.size() &&
-                                       filter_motif.passMotifParameter(
-                                         seq.seq_.begin() + (seq.seq_.size() - filter_motif.size()),
-                                         seq.seq_.end(), motif_passing_score)) {
-                if (writeOutFiltered) {
-                  multi_seq_io.openWrite("single-filtered", seq);
-                }
-                ++current_totalFiltered;
-              } else {
-                multi_seq_io.openWrite("single", seq);
-              }
-            }
-            {
-              std::lock_guard<std::mutex> lock(countMut);
-              totalFiltered += current_totalFiltered;
-              totalReads += current_totalReads;
-            }
-          };
 
-    } else {
-      filteredSeqs = [&reader, &multi_seq_io,
-            &filter_motif, &motif_passing_score,
-            &secondary_filter_motif, &secondary_motif_passing_score,
-            &writeOutFiltered,
-            &totalReads, &totalFiltered, &totalSecondaryFiltered,&countMut]() {
-            uint32_t current_totalReads = 0;
-            uint32_t current_totalFiltered = 0;
-            uint32_t current_totalSecondaryFiltered = 0;
-
-            seqInfo seq;
-            while (reader.readNextReadLock(seq)) {
-              ++current_totalReads;
-              if (seq.seq_.size() > filter_motif.size() &&
-                                       filter_motif.passMotifParameter(
-                                         seq.seq_.begin() + (seq.seq_.size() - filter_motif.size()),
-                                         seq.seq_.end(), motif_passing_score)) {
-                if (writeOutFiltered) {
-                  multi_seq_io.openWrite("single-filtered", seq);
-                }
-                ++current_totalFiltered;
-              } else {
-                if (seq.seq_.size() > secondary_filter_motif->size() &&
-                                                  secondary_filter_motif->passMotifParameter(
-                                                    seq.seq_.begin() + (
-                                                      seq.seq_.size() - secondary_filter_motif->size()),
-                                                    seq.seq_.end(), secondary_motif_passing_score)) {
-                  if (writeOutFiltered) {
-                    multi_seq_io.openWrite("single-filtered", seq);
-                  }
-                  ++current_totalFiltered;
-                  ++current_totalSecondaryFiltered;
-                } else {
-                  multi_seq_io.openWrite("single", seq);
-                }
-              }
-            }
-            {
-              std::lock_guard<std::mutex> lock(countMut);
-              totalFiltered += current_totalFiltered;
-              totalSecondaryFiltered += current_totalSecondaryFiltered;
-              totalReads += current_totalReads;
-            }
-          };
-    }
+    std::function<void()> filteredSeqs = [&reader,&multi_seq_io,
+          &filteredCounts,
+          &motifErrors,
+          &writeOutFiltered,
+          &totalReads, &totalFiltered, &countMut]() {
+      uint32_t current_totalReads = 0;
+      uint32_t current_totalFiltered = 0;
+      std::unordered_map<uint32_t, uint32_t> current_filteredCounts;
+      seqInfo seq;
+      while (reader.readNextReadLock(seq)) {
+        ++current_totalReads;
+        bool pass = true;
+        for (const auto &e: iter::enumerate(motifErrors)) {
+          if (seq.seq_.size() > e.element.motif_->size() &&
+                                   e.element.motif_->passMotifParameter(
+                                     seq.seq_.begin() + (seq.seq_.size() - e.element.motif_->size()),
+                                     seq.seq_.end(), e.element.passingScore_ )) {
+            ++current_totalFiltered;
+            current_filteredCounts[e.index] += 1;
+            pass = false;
+            break;
+          }
+        }
+        if (pass) {
+          multi_seq_io.openWrite("single",seq);
+        } else if (writeOutFiltered) {
+          multi_seq_io.openWrite("single-filtered", seq);
+        }
+      }
+      {
+        std::lock_guard<std::mutex> lock(countMut);
+        totalFiltered += current_totalFiltered;
+        totalReads += current_totalReads;
+        for (const auto & count : current_filteredCounts) {
+          filteredCounts[count.first] += count.second;
+        }
+      }
+    };
     njh::concurrent::runVoidFunctionThreaded(filteredSeqs, numOfThreads);
-    out << fastqFnp << "\t" << totalReads << "\t" << totalFiltered << "\t" << totalSecondaryFiltered<< std::endl;
+    for (const auto & motifError : iter::enumerate(motifErrors)) {
+      out << fastqFnp
+      << "\t" << totalReads
+      << "\t" << totalFiltered
+      << "\t" << motifError.element.motifStr_
+      << "\t" << motifError.element.allowableError_
+      << "\t" << filteredCounts[motifError.index] << std::endl;
+    }
   }
-
-
   return 0;
 }
 
