@@ -60,7 +60,9 @@ programWrapperRunner::programWrapperRunner()
 					 addFunc("generatingPrime3TemplatesBasedOnMALN", generatingPrime3TemplatesBasedOnMALN, false),
 					 addFunc("testHasProgram", testHasProgram, false),
 					 addFunc("runBowtieOnAdapterReomvalOutputSinglesCombined", runBowtieOnAdapterReomvalOutputSinglesCombined, false),
-					 addFunc("runPicardMarkDups", runPicardMarkDups, false),
+          	addFunc("runBowtie2", runBowtie2, false),
+
+          	addFunc("runPicardMarkDups", runPicardMarkDups, false),
 					 addFunc("processAdaptorRemovalLog", processAdaptorRemovalLog, false),
 						addFunc("runDada2", runDada2, false),
 						addFunc("runDada2SingleSamplePaired", runDada2SingleSamplePaired, false),
