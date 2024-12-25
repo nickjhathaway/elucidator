@@ -54,7 +54,8 @@ class seqUtilsExtractRunner : public njh::progutils::ProgramRunner {
 
 
 	static int filterOffSeqsWithEndingMotif(const njh::progutils::CmdArgs & inputCommands);
-
+	static int filterOffSeqsWithBeginningMotif(const njh::progutils::CmdArgs & inputCommands);
+	static int filterOffSeqsWithEdgeMotif(const njh::progutils::CmdArgs & inputCommands);
 
 };
 } // namespace njhseq

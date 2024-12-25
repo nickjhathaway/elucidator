@@ -34,26 +34,33 @@
 
 
 namespace njhseq {
-
 seqUtilsExtractRunner::seqUtilsExtractRunner()
-    : njh::progutils::ProgramRunner({
-	addFunc("extractBySeq", extractBySeq, false),
-  addFunc("extractSameSeqs", extractSameSeqs, false),
-  addFunc("extractByMIDs", extractByMIDs, false),
-  addFunc("binOnNucComp", binOnNucComp, false),
-  addFunc("binOnNucCompFaster", binOnNucCompFaster, false),
-	addFunc("greedyKmerCluster", greedyKmerCluster, false),
-  addFunc("extractSeqsBeginsWith", extractSeqsBeginsWith, false),
-	addFunc("extractSeqsEndsWith", extractSeqsEndsWith, false),
-	addFunc("extractSeqsBeginsWithEndsWith", extractSeqsBeginsWithEndsWith, false),
-	addFunc("extractByIlluminaAaptors", extractByIlluminaAaptors, false),
-  addFunc("countIlluminaAaptors", countIlluminaAaptors, false),
-	addFunc("extractByName", extractByName, false),
-	addFunc("clusterByKmerSim", clusterByKmerSim, false),
-    	addFunc("filterOffSeqsWithEndingMotif", filterOffSeqsWithEndingMotif, false),
-},
-                    "seqUtilsExtract") {}
+	: njh::progutils::ProgramRunner({
+		                                addFunc("extractBySeq", extractBySeq, false),
+		                                addFunc("extractSameSeqs", extractSameSeqs, false),
+		                                addFunc("extractByMIDs", extractByMIDs, false),
+		                                addFunc("binOnNucComp", binOnNucComp, false),
+		                                addFunc("binOnNucCompFaster", binOnNucCompFaster, false),
+		                                addFunc("greedyKmerCluster", greedyKmerCluster, false),
+		                                addFunc("extractSeqsBeginsWith", extractSeqsBeginsWith, false),
+		                                addFunc("extractSeqsEndsWith", extractSeqsEndsWith, false),
+		                                addFunc("extractSeqsBeginsWithEndsWith", extractSeqsBeginsWithEndsWith, false),
+		                                addFunc("extractByIlluminaAaptors", extractByIlluminaAaptors, false),
+		                                addFunc("countIlluminaAaptors", countIlluminaAaptors, false),
+		                                addFunc("extractByName", extractByName, false),
+		                                addFunc("clusterByKmerSim", clusterByKmerSim, false),
+		                                addFunc("filterOffSeqsWithEndingMotif", filterOffSeqsWithEndingMotif, false),
+		                                addFunc("filterOffSeqsWithBeginningMotif", filterOffSeqsWithBeginningMotif, false),
+		                                addFunc("filterOffSeqsWithEdgeMotif", filterOffSeqsWithEdgeMotif, false),
+
+	                                },
+	                                "seqUtilsExtract") {
+}
+
 //
+
+
+
 int seqUtilsExtractRunner::extractByName(const njh::progutils::CmdArgs & inputCommands){
 	seqSetUp setUp(inputCommands);
 	std::unordered_set <std::string> names;
