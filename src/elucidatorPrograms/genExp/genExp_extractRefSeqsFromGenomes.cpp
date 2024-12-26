@@ -122,8 +122,14 @@ int genExpRunner::bioIndexGenome(const njh::progutils::CmdArgs & inputCommands){
     while (programsQueue.getVal(program)) {
       if ("bowtie2" == program) {
         bioRunner.RunBowtie2Index(genomeFnp);
-      } else if ("bwa" == program) {
-        bioRunner.RunBwaIndex(genomeFnp);
+      } else if ("bwa" == program || "bwa-mem2" == program) {
+      	//have to runs things one after the other cause they create same files
+      	if (njh::sys::hasSysCommand("bwa-mem2")) {
+      		bioRunner.RunBwamem2Index(genomeFnp);
+      	}
+      	if (njh::sys::hasSysCommand("bwa")) {
+      		bioRunner.RunBwaIndex(genomeFnp);
+      	}
       } else if ("samtools" == program) {
         bioRunner.RunSamtoolsFastaIndex(genomeFnp);
       } else if ("picard" == program) {
