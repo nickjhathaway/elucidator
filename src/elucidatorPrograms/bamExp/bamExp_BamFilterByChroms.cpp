@@ -536,9 +536,14 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 							filteredSinglesWriter.openWrite(bamAlnToSeqInfo(bAln));
 						}
 						++filteredCountsByChrom[refData[bAln.RefID].RefName].singles_;
-					}else{
-						++kept.singles_;
-						singlesWriter.openWrite(bamAlnToSeqInfo(bAln));
+					} else {
+						if (writeOutUnmappedSeparately) {
+							++unmapped.singles_;
+							unmappedSinglesWriter->openWrite(bamAlnToSeqInfo(bAln));
+						} else {
+							++kept.singles_;
+							singlesWriter.openWrite(bamAlnToSeqInfo(bAln));
+						}
 					}
 				} else {
 					++kept.singles_;
@@ -569,12 +574,23 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 								filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
 							}
 						}
-					}else{
-						++kept.pairs_;++kept.pairs_;
-						if (bAln.IsFirstMate()) {
-							pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
+					} else {
+						if (writeOutUnmappedSeparately) {
+							++unmapped.pairs_;
+							++unmapped.pairs_;
+							if (bAln.IsFirstMate()) {
+								unmappedPairedWriter->openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
+							} else {
+								unmappedPairedWriter->openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
+							}
 						} else {
-							pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
+							++kept.pairs_;
+							++kept.pairs_;
+							if (bAln.IsFirstMate()) {
+								pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
+							} else {
+								pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
+							}
 						}
 					}
 					// now that operations have been computed, remove their other mate found from cache
@@ -588,11 +604,13 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 				} else {
 					auto search = alnCache.get(bAln.Name);
 					if (filterWithUnmappedMate &&
-					      (
-						    (bAln.IsMapped() && !bAln.IsMateMapped() && njh::in(refData[bAln.RefID].RefName, chroms) && doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality) ||
-								(!bAln.IsMapped() && bAln.IsMateMapped() && njh::in(refData[bAln.MateRefID].RefName, chroms) && doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality)
-								)
-								) {
+					    (
+						    (bAln.IsMapped() && !bAln.IsMateMapped() && njh::in(refData[bAln.RefID].RefName, chroms) &&
+						     doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality) ||
+						    (!bAln.IsMapped() && bAln.IsMateMapped() && njh::in(refData[bAln.MateRefID].RefName, chroms) &&
+						     doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality)
+					    )
+					) {
 						std::string filterChromName;
 						if (bAln.IsMapped() && !bAln.IsMateMapped()) {
 							filterChromName = njh::pasteAsStr("unmapped", "--", refData[bAln.RefID].RefName);
@@ -609,7 +627,14 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 							}
 						}
 					} else {
-						if (writeOutUnmappedSeparately && !bAln.IsMapped() && !bAln.IsMateMapped()) {
+						if (writeOutUnmappedSeparately &&
+							(
+								(!bAln.IsMapped() && !bAln.IsMateMapped()) ||
+							(
+								(bAln.IsMapped() && !bAln.IsMateMapped()  && njh::in(refData[bAln.RefID].RefName, chroms)) ||
+							 !bAln.IsMapped() &&  bAln.IsMateMapped()  && njh::in(refData[bAln.MateRefID].RefName, chroms))
+							 )
+							 ) {
 							++unmapped.pairs_;
 							++unmapped.pairs_;
 							if (bAln.IsFirstMate()) {
@@ -638,9 +663,15 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	if (len(alnCache) > 0) {
 		auto names = alnCache.getNames();
 		for (const auto & name : names) {
-			++keptOrphans_;
+
 			auto search = alnCache.get(name);
-			singlesWriter.openWrite(bamAlnToSeqInfo(*search));
+			if (writeOutUnmappedSeparately && !search->IsMapped()) {
+				++unmappedOrphans_;
+				unmappedSinglesWriter->openWrite(bamAlnToSeqInfo(*search));
+			} else {
+				++keptOrphans_;
+				singlesWriter.openWrite(bamAlnToSeqInfo(*search));
+			}
 			alnCache.remove(name);
 		}
 	}
@@ -654,7 +685,7 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 					filteredSinglesWriter.openWrite(bamAlnToSeqInfo(*search));
 				}
 			} else {
-				if (writeOutUnmappedSeparately && !search->IsMapped()) {
+				if (writeOutUnmappedSeparately) {
 					++unmappedOrphans_;
 					unmappedSinglesWriter->openWrite(bamAlnToSeqInfo(*search));
 				} else {
