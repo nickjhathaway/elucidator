@@ -629,7 +629,8 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 	if(bfs::exists(outputFnp) &&
 			bfs::exists(outputFnpBai) &&
 			njh::files::firstFileIsOlder(inputPairedFirstMates, outputFnp) &&
-			njh::files::firstFileIsOlder(inputPairedSecondMates, outputFnp)){
+			njh::files::firstFileIsOlder(inputPairedSecondMates, outputFnp) &&
+			njh::files::firstFileIsOlder(genomeFnp, outputFnp)){
 		needToRun = false;
 	}
 	if(force){
