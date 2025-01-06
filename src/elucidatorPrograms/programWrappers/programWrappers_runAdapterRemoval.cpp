@@ -531,7 +531,8 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSE(const njh::progutils::C
 	bool needToRun = true;
 	if(bfs::exists(outputFnp) &&
 			bfs::exists(outputFnpBai) &&
-			njh::files::firstFileIsOlder(inputSingles, outputFnp) ){
+			njh::files::firstFileIsOlder(inputSingles, outputFnp)  &&
+			njh::files::firstFileIsOlder(genomeFnp, outputFnp) ){
 		needToRun = false;
 	}
 	if(force){
@@ -630,7 +631,7 @@ int programWrapperRunner::runBwa(const njh::progutils::CmdArgs & inputCommands){
 			bfs::exists(outputFnpBai) &&
 			njh::files::firstFileIsOlder(inputPairedFirstMates, outputFnp) &&
 			njh::files::firstFileIsOlder(inputPairedSecondMates, outputFnp) &&
-			njh::files::firstFileIsOlder(genomeFnp, outputFnp)){
+			njh::files::firstFileIsOlder(genomeFnp, outputFnp) ) {
 		needToRun = false;
 	}
 	if(force){
@@ -840,7 +841,8 @@ int programWrapperRunner::runBwaOnAdapterReomvalOutputSinglesCombined(const njh:
 	if(bfs::exists(outputFnp) &&
 			bfs::exists(outputFnpBai) &&
 			njh::files::firstFileIsOlder(inputPairedFirstMates, outputFnp) &&
-			njh::files::firstFileIsOlder(inputPairedSecondMates, outputFnp)){
+			njh::files::firstFileIsOlder(inputPairedSecondMates, outputFnp)  &&
+			njh::files::firstFileIsOlder(genomeFnp, outputFnp) ){
 		needToRun = false;
 	}
 	if(force){
@@ -1058,7 +1060,8 @@ int programWrapperRunner::runBowtie2(const njh::progutils::CmdArgs & inputComman
 	if(bfs::exists(outputFnp) &&
 			bfs::exists(outputFnpBai) &&
 			njh::files::firstFileIsOlder(inputPairedFirstMates, outputFnp) &&
-			njh::files::firstFileIsOlder(inputPairedSecondMates, outputFnp)){
+			njh::files::firstFileIsOlder(inputPairedSecondMates, outputFnp) &&
+			njh::files::firstFileIsOlder(genomeFnp, outputFnp) ){
 		needToRun = false;
 	}
 	if(force){
@@ -1237,7 +1240,8 @@ int programWrapperRunner::runBowtieOnAdapterReomvalOutputSinglesCombined(const n
 	if(bfs::exists(outputFnp) &&
 			bfs::exists(outputFnpBai) &&
 			njh::files::firstFileIsOlder(inputPairedFirstMates, outputFnp) &&
-			njh::files::firstFileIsOlder(inputPairedSecondMates, outputFnp)){
+			njh::files::firstFileIsOlder(inputPairedSecondMates, outputFnp)  &&
+			njh::files::firstFileIsOlder(genomeFnp, outputFnp) ){
 		needToRun = false;
 	}
 	if(force){
