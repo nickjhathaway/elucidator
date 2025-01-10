@@ -147,6 +147,8 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 
 	//vcf
 	static int vcfToBed(const njh::progutils::CmdArgs & inputCommands);
+	static int combineVcfs(const njh::progutils::CmdArgs & inputCommands);
+
 };
 } /* namespace njhseq */
 

@@ -115,6 +115,7 @@ bedExpRunner::bedExpRunner()
 					 addFunc("bedBinCloseRegions", bedBinCloseRegions, false),
            addFunc("createBedRegionFromName", createBedRegionFromName, false),
           	addFunc("vcfToBed", vcfToBed, false),
+          	addFunc("combineVcfs", combineVcfs, false),
           	addFunc("bedRenameWithKey", bedRenameWithKey, false),
           	addFunc("bedMakeAllOneStrand", bedMakeAllOneStrand, false),
           	addFunc("getBestScoringRegionsPerChromosome", getBestScoringRegionsPerChromosome, false),
@@ -124,31 +125,7 @@ bedExpRunner::bedExpRunner()
 
 
 
-int bedExpRunner::vcfToBed(const njh::progutils::CmdArgs & inputCommands) {
-	bfs::path vcfFile;
-	bfs::path intersectWithBed;
-	OutOptions outOpts;
-	seqSetUp setUp(inputCommands);
-	setUp.processVerbose();
-	setUp.setOption(vcfFile, "--vcfFile", "vcfFile", true);
-	setUp.processWritingOptions(outOpts);
-	setUp.finishSetUp(std::cout);
 
-	OutputStream out(outOpts);
-
-	VCFOutput vcf = VCFOutput::readInHeader(vcfFile);
-	InputStream in(vcfFile);
-	std::string line;
-	// uint32_t count = 0;
-	while(njh::files::crossPlatGetline(in, line)) {
-		if(line.front() != '#') {
-			// std::cout << count++ << std::endl;
-			out << vcf.processRecordLineForFixedData(line).genRegion().genBedRecordCore().toDelimStrWithExtra() << std::endl;
-		}
-	}
-
-	return 0;
-}
 
 
 int bedExpRunner::bedRemoveOveringLappingRegions(const njh::progutils::CmdArgs & inputCommands) {

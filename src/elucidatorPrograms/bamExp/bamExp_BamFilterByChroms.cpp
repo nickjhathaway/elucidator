@@ -631,8 +631,9 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 							(
 								(!bAln.IsMapped() && !bAln.IsMateMapped()) ||
 							(
-								(bAln.IsMapped() && !bAln.IsMateMapped()  && njh::in(refData[bAln.RefID].RefName, chroms)) ||
-							 !bAln.IsMapped() &&  bAln.IsMateMapped()  && njh::in(refData[bAln.MateRefID].RefName, chroms))
+								( bAln.IsMapped() &&!bAln.IsMateMapped()  && njh::in(refData[bAln.RefID].RefName, chroms)) ||
+							  (!bAln.IsMapped() && bAln.IsMateMapped()  && njh::in(refData[bAln.MateRefID].RefName, chroms))
+							 )
 							 )
 							 ) {
 							++unmapped.pairs_;
