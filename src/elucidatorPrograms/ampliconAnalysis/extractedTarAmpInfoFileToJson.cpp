@@ -1,6 +1,7 @@
 //
 // Created by Nicholas Hathaway on 10/26/23.
 //
+
 #include <njhseq/IO/OutputStream.hpp>
 #include <njhseq/objects/dataContainers/tables/TableReader.hpp>
 #include <njhseq/objects/BioDataObject/GenomicRegion.hpp>
@@ -419,10 +420,14 @@ int ampliconAnalysisRunner::extractedTarAmpInfoFileToJson(const njh::progutils::
   OutOptions outOpts("", ".json");
   std::string panelName;
   bfs::path extractedInfoFnp;
+  bfs::path genomeTwoBit;
+  std::string targetColName = "target";
   ampliconAnalysisSetUp setUp(inputCommands);
   setUp.setOption(panelName, "--panelName", "Name of the panel", true);
   setUp.setOption(extractedInfoFnp, "--extractedInfoFnp", "Name extracted Info Fnp", true);
   setUp.setOption(genomeInfoJsonFnp, "--genomeInfoJsonFnp", "genome Info Json Fnp", true);
+  setUp.setOption(genomeTwoBit, "--2bit", "genome 2bit file, if supplied will add ref_seq to panel info");
+  setUp.setOption(targetColName, "--targetColName", "target Column Name");
 
   setUp.processWritingOptions(outOpts);
   setUp.finishSetUp(std::cout);
@@ -435,7 +440,10 @@ int ampliconAnalysisRunner::extractedTarAmpInfoFileToJson(const njh::progutils::
   outJson["panel_id"] = panelName;
   outJson["target_genome"] = genomeInfo;
 
-
+  std::shared_ptr<TwoBit::TwoBitFile> treader;
+  if (!genomeTwoBit.empty()) {
+    treader = std::make_shared<TwoBit::TwoBitFile>(genomeTwoBit);
+  }
   {
     std::unordered_map<std::string, std::vector<VecStr>> extractedRowsPerID;
     TableReader reader(TableIOOpts::genTabFileIn(extractedInfoFnp));
@@ -444,7 +452,7 @@ int ampliconAnalysisRunner::extractedTarAmpInfoFileToJson(const njh::progutils::
       VecStr row;
       //read in
       while(reader.getNextRow(row)){
-        extractedRowsPerID[row[reader.header_.getColPos("target")]].emplace_back(row);
+        extractedRowsPerID[row[reader.header_.getColPos(targetColName)]].emplace_back(row);
       }
     }
 
@@ -458,17 +466,17 @@ int ampliconAnalysisRunner::extractedTarAmpInfoFileToJson(const njh::progutils::
           targetName += "." + njh::pasteAsStr(targetCount);
         }
         ++targetCount;
-        GenomicRegion insert(row[reader.header_.getColPos("target")],
+        GenomicRegion insert(row[reader.header_.getColPos(targetColName)],
                              row[reader.header_.getColPos("#chrom")],
                              njh::StrToNumConverter::stoToNum<uint32_t>(row[reader.header_.getColPos("insertStart")]),
                              njh::StrToNumConverter::stoToNum<uint32_t>(row[reader.header_.getColPos("insertStop")]),
                              "-" == row[reader.header_.getColPos("strand")]);
-        GenomicRegion fprimer(row[reader.header_.getColPos("target")] + "-forwardPrimer",
+        GenomicRegion fprimer(row[reader.header_.getColPos(targetColName)] + "-forwardPrimer",
                               row[reader.header_.getColPos("#chrom")],
                               njh::StrToNumConverter::stoToNum<uint32_t>(row[reader.header_.getColPos("fPrimerStart")]),
                               njh::StrToNumConverter::stoToNum<uint32_t>(row[reader.header_.getColPos("fPrimerStop")]),
                               "-" == row[reader.header_.getColPos("strand")]);
-        GenomicRegion rprimer(row[reader.header_.getColPos("target")] + "-reversePrimer",
+        GenomicRegion rprimer(row[reader.header_.getColPos(targetColName)] + "-reversePrimer",
                               row[reader.header_.getColPos("#chrom")],
                               njh::StrToNumConverter::stoToNum<uint32_t>(row[reader.header_.getColPos("rPrimerStart")]),
                               njh::StrToNumConverter::stoToNum<uint32_t>(row[reader.header_.getColPos("rPrimerStop")]),
@@ -478,7 +486,11 @@ int ampliconAnalysisRunner::extractedTarAmpInfoFileToJson(const njh::progutils::
           insertLocs.emplace(njh::json::writeAsOneLine(insert.toJsonLocationOnly()));
           Json::Value tarInfo;
           tarInfo["target_id"] = targetName;
-          tarInfo["insert_location"] = insert.toJsonLocationOnly();
+          if (!genomeTwoBit.empty()) {
+            tarInfo["insert_location"] = insert.toJsonLocationOnly(*treader);
+          } else {
+            tarInfo["insert_location"] = insert.toJsonLocationOnly();
+          }
           if (!row[reader.header_.getColPos("insertGeneDescription")].empty()) {
             tarInfo["gene_id"] = row[reader.header_.getColPos("insertGeneID")];
           }
