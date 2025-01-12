@@ -65,8 +65,12 @@ int ampliconAnalysisRunner::combingAllIntoPMOJson(const njh::progutils::CmdArgs 
     Json::Value target_demultiplexed_experiment_samples_json = njh::json::parseFile(target_demultiplexed_experiment_samples_json_fnp.string());
     outJson["target_demultiplexed_experiment_samples"][target_demultiplexed_experiment_samples_json.get(std::string("tar_amp_bioinformatics_info_id"), "").asString()] = target_demultiplexed_experiment_samples_json;
   }
-
-  out << outJson << std::endl;
+  Json::StreamWriterBuilder builder;
+  builder["indentation"] = "\t";  // or whatever you like
+  std::unique_ptr<Json::StreamWriter> writer(
+     builder.newStreamWriter());
+  writer->write(outJson, &out);
+  out << std::endl;
   return 0;
 }
 
@@ -124,8 +128,13 @@ int ampliconAnalysisRunner::specimenInfoFileToJson(const njh::progutils::CmdArgs
       // outJson.append(sampleJson);
     }
   }
-
-  out << outJson << std::endl;
+  Json::StreamWriterBuilder builder;
+  builder["indentation"] = "\t";  // or whatever you like
+  std::unique_ptr<Json::StreamWriter> writer(
+     builder.newStreamWriter());
+  writer->write(outJson, &out);
+  out << std::endl;
+  // out << outJson << std::endl;
   return 0;
 }
 
@@ -193,8 +202,12 @@ int ampliconAnalysisRunner::demultiplexedExperimentSampleFileToJson(const njh::p
       target_id_json["raw_read_count"] = raw_read_count;
     }
   }
-
-  out << outJson << std::endl;
+  Json::StreamWriterBuilder builder;
+  builder["indentation"] = "\t";  // or whatever you like
+  std::unique_ptr<Json::StreamWriter> writer(
+     builder.newStreamWriter());
+  writer->write(outJson, &out);
+  out << std::endl;
   return 0;
 }
 
@@ -262,7 +275,13 @@ int ampliconAnalysisRunner::experimentInfoFileToJson(const njh::progutils::CmdAr
     }
   }
 
-  out << outJson << std::endl;
+  Json::StreamWriterBuilder builder;
+  builder["indentation"] = "\t";  // or whatever you like
+  std::unique_ptr<Json::StreamWriter> writer(
+     builder.newStreamWriter());
+  writer->write(outJson, &out);
+  out << std::endl;
+  // out << outJson << std::endl;
   return 0;
 }
 
@@ -410,7 +429,13 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
     }
   }
 
-  out << outJson << std::endl;
+  Json::StreamWriterBuilder builder;
+  builder["indentation"] = "\t";  // or whatever you like
+  std::unique_ptr<Json::StreamWriter> writer(
+     builder.newStreamWriter());
+  writer->write(outJson, &out);
+  out << std::endl;
+  // out << outJson << std::endl;
 
   return 0;
 }
@@ -515,7 +540,13 @@ int ampliconAnalysisRunner::extractedTarAmpInfoFileToJson(const njh::progutils::
 
   }
 
-  out << outJson << std::endl;
+  Json::StreamWriterBuilder builder;
+  builder["indentation"] = "\t";  // or whatever you like
+  std::unique_ptr<Json::StreamWriter> writer(
+     builder.newStreamWriter());
+  writer->write(outJson, &out);
+  out << std::endl;
+  // out << outJson << std::endl;
 
   return 0;
 
