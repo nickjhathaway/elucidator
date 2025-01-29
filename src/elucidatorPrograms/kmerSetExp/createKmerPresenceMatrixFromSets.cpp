@@ -10,7 +10,7 @@
 #include <njhseq/objects/kmer/KmerGatherer.hpp>
 #include <njhseq/objects/kmer/SimpleKmerHash.hpp>
 #include <SeekDeep/parameters/setUpPars.hpp>
-
+#include <boost/math/special_functions/binomial.hpp>
 
 namespace njhseq {
 
@@ -113,6 +113,117 @@ int kmerSetExpRunner::getUniqueKmersFromRandomSubsamples(const njh::progutils::C
   }
   return 0;
 }
+
+
+long double lchoose_aprox(uint64_t n, uint64_t k) {
+ // https://math.stackexchange.com/questions/64716/approximating-the-logarithm-of-the-binomial-coefficient?newreg=2fc6dc6d632741b88f67bb756f5354e3
+  return n * logl(n) - k * logl(k) - (n - k) * logl(n - k) + 0.5 * (logl(n) - logl(k) - logl(n - k) - logl(2 * M_PI));
+}
+
+
+int kmerSetExpRunner::estimateKmerSubSamples(const njh::progutils::CmdArgs & inputCommands) {
+  OutOptions outOpts("", ".tsv.gz");
+  uint32_t kmerLength = 16;
+  uint32_t subsampleStart = 10;
+  uint32_t subsampleEnd = 100;
+  uint32_t subsampleStep = 10;
+  bool byReadLength = false;
+  std::string id = "id";
+  seqSetUp setUp(inputCommands);
+  setUp.description_ = "Get info on how many kmers can be found and at what counts";
+  setUp.processVerbose();
+  setUp.processDebug();
+
+  setUp.setOption(id, "--id", "id for file", true);
+  setUp.setOption(byReadLength, "--byReadLength", "aproximate the sub-sampling k-mer count by stepping by aproximate read addition, e.g. if mean read length is 100 instead of stepping by step do (read_len - kmerlen +1) steps");
+
+
+  setUp.setOption(kmerLength, "--kmerLength", "kmer Length", true);
+  setUp.setOption(subsampleStart, "--subsampleStart", "subsample Start", true);
+  setUp.setOption(subsampleEnd, "--subsampleEnd", "subsample End", true);
+  setUp.setOption(subsampleStep, "--subsampleStep", "subsample Step", true);
+
+
+  setUp.processReadInNames(true);
+  setUp.processWritingOptions(outOpts);
+  setUp.finishSetUp(std::cout);
+
+  auto input = createKmerReadVec(SeqInput::getSeqVec<readObject>(setUp.pars_.ioOptions_), kmerLength, false);
+  std::vector<uint64_t> r_lengths;
+  r_lengths.reserve(input.size());
+  for (const auto & seq : input) {
+    r_lengths.emplace_back(len(seq->seqBase_));
+  }
+  uint64_t meanReadLen =static_cast<uint64_t>(std::round(vectorMedianCopy(r_lengths)));
+
+  std::unordered_map<std::string, uint64_t> allKmerCounts;
+  uint64_t totalKmers = 0;
+  for (const auto & seq : input) {
+    for (const auto & kmer : seq->kInfo_.kmers_) {
+      allKmerCounts[kmer.first] += kmer.second.count_;
+      totalKmers += kmer.second.count_;
+    }
+  }
+
+
+  if (setUp.pars_.verbose_) {
+    std::cout << "nput.size(): " << input.size() << std::endl;
+    std::cout << "meanReadLen: " << meanReadLen << std::endl;
+    std::cout << "totalKmers: " << totalKmers << std::endl;
+    std::cout << "allKmerCounts.size(): " << allKmerCounts.size() << std::endl;
+    if (byReadLength) {
+      std::cout << "lchoose_aprox(" << totalKmers << ", " << subsampleStart * (meanReadLen - kmerLength + 1) << ") " << ": " << lchoose_aprox(totalKmers, subsampleStart * (meanReadLen - kmerLength + 1)) << std::endl;
+      std::cout << "lchoose_aprox(" << totalKmers << ", " << subsampleEnd * (meanReadLen - kmerLength + 1)<< ") " << ": " << lchoose_aprox(totalKmers, subsampleEnd * (meanReadLen - kmerLength + 1)) << std::endl;
+    } else {
+      std::cout << "lchoose_aprox(" << totalKmers << ", " << subsampleStart << ") " << ": " << lchoose_aprox(totalKmers, subsampleStart) << std::endl;
+      std::cout << "lchoose_aprox(" << totalKmers << ", " << subsampleEnd << ") " << ": " << lchoose_aprox(totalKmers, subsampleEnd) << std::endl;
+    }
+  }
+
+  OutputStream out(outOpts);
+  if (byReadLength) {
+    out << "id\tkmerLength\tseqs\tsubSampleAmount\trarefiedUniqueKmerCount\ttotalKmers\ttotalUnique" << std::endl;
+    for(uint64_t read_sub = subsampleStart; read_sub < subsampleEnd && read_sub <= input.size() && read_sub * (meanReadLen - kmerLength + 1 ) < totalKmers; read_sub += subsampleStep) {
+      uint64_t sub = read_sub * (meanReadLen - kmerLength + 1);
+      long double bottom = lchoose_aprox(totalKmers, sub);
+      long double sum = 0;
+      for (const auto & k : allKmerCounts) {
+        uint64_t bigN_minus_species_n = totalKmers - k.second;
+        long double top = lchoose_aprox(bigN_minus_species_n, sub);
+        sum += 1 - exp(top - bottom);
+      }
+      out << id
+      << "\t" << kmerLength
+      << "\t" << read_sub
+      << "\t" << sub
+      << "\t" << sum
+      << "\t" << totalKmers
+      << "\t" << allKmerCounts.size() << std::endl;
+    }
+  } else {
+    out << "id\tkmerLength\tsubSampleAmount\trarefiedUniqueKmerCount\ttotalKmers\ttotalUnique" << std::endl;
+    for(uint64_t sub = subsampleStart; sub < subsampleEnd && sub <= totalKmers; sub += subsampleStep) {
+      long double bottom = lchoose_aprox(totalKmers, sub);
+      long double sum = 0;
+      for (const auto & k : allKmerCounts) {
+        uint64_t bigN_minus_species_n = totalKmers - k.second;
+        long double top = lchoose_aprox(bigN_minus_species_n, sub);
+        sum += 1 - exp(top - bottom);
+      }
+      out << id
+      << "\t" << kmerLength
+      << "\t" << sub
+      << "\t" << sum
+      << "\t" << totalKmers
+      << "\t" << allKmerCounts.size() << std::endl;
+    }
+  }
+
+
+
+  return 0;
+}
+
 
 
 

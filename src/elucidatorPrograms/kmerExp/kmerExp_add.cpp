@@ -48,7 +48,7 @@ int kmerExpRunner::convertKmerSearchToBinaryMatrix(const njh::progutils::CmdArgs
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.processSeq(true);
-	setUp.setOption(inputFnp, "--inputFnp", "Input Fnp", true);
+	setUp.setOption(inputFnp, "--inputFnp", "Input Fnp", true);
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 

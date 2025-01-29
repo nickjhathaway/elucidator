@@ -232,7 +232,7 @@ int popGenExpRunner::callVariantsAgainstRefSeq(const njh::progutils::CmdArgs & i
 	//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 	{
 		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
-		calcPopMeasuresPars.numSegSites_ = varInfo.getFinalNumberOfSegratingSites();
+		calcPopMeasuresPars.numSegSites_ = varInfo.getFinalNumberOfSegregatingSites();
 		//std::cout << __FILE__ << " " << __LINE__ << std::endl;
 		auto divMeasures = inputSeqs.getGeneralMeasuresOfDiversity(
 				calcPopMeasuresPars, alignerObj);

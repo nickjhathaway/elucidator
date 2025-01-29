@@ -43,6 +43,10 @@ public:
 	static int createKmerPresenceMatrixFromSets(const njh::progutils::CmdArgs & inputCommands);
 
 	static int getUniqueKmersFromRandomSubsamples(const njh::progutils::CmdArgs & inputCommands);
+
+	static int estimateKmerSubSamples(const njh::progutils::CmdArgs & inputCommands);
+
+
 };
 
 

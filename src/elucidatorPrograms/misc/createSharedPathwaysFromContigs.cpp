@@ -2216,7 +2216,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 						varInfo.setFinals(variantCallerRunPars);
 						{
 
-							calcPopMeasuresPars.numSegSites_ = varInfo.getFinalNumberOfSegratingSites();
+							calcPopMeasuresPars.numSegSites_ = varInfo.getFinalNumberOfSegregatingSites();
 							auto divMeasures = uniqSeqs.getGeneralMeasuresOfDiversity(
 									calcPopMeasuresPars, alignerObj);
 //							OutputStream divMeasuresOut(outOpts);

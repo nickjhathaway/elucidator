@@ -99,6 +99,10 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("countPerKmerPerSeq", countPerKmerPerSeq, false),
 
           	addFunc("getBestKmerDetailedKmerDistAgainstRef", getBestKmerDetailedKmerDistAgainstRef, false),
+          	// addFunc("compressPeptideKmersByScoring", compressPeptideKmersByScoring, false),
+          	addFunc("generatePeptideKmerDistMatrixByScore", generatePeptideKmerDistMatrixByScore, false),
+          	// addFunc("compressPeptideKmersByReducedLibrary", compressPeptideKmersByReducedLibrary, false),
+          	addFunc("compressPeptidesByReducedLibrary", compressPeptidesByReducedLibrary, false),
 
 //,
 									//
