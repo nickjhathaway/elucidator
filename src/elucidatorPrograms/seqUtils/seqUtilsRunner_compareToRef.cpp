@@ -38,6 +38,7 @@ namespace njhseq {
 int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) {
 	uint32_t numThreads = 1;
 	double kmerCutOff = 0.8;
+	double minAlnScore = 20;
 	bool forceMatch = false;
 	bool dontSkipSameName = false;
 	OutOptions outOpts(bfs::path("refComparisonInfo.tab.txt"));
@@ -51,6 +52,7 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
   setUp.setOption(numThreads, "--numThreads", "Number of threads to use when comparing");
   setUp.setOption(setReverse, "--checkReverseComplement", "Check reverse complement");
 	setUp.setOption(doDiagGlobal, "--doDiagGlobal", "do Diag Global");
+	setUp.setOption(minAlnScore, "--minAlnScore", "minimum Aln Score");
 
   setUp.processWritingOptions(outOpts);
   setUp.setUpCompareToRef();
@@ -136,7 +138,7 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
   std::function<void()> compareInput = [&dontSkipSameName,&outMut,&profileInfoFile,&tempFile,&alnPool,
 																				&setUp,&inputSeqs,&refSeqs,&counter,&pBar,&posQueue,&kmerCutOff,
 																				&forceMatch, &setReverse,
-																				&doDiagGlobal](){
+																				&doDiagGlobal, &minAlnScore](){
   	std::vector<uint32_t> subPositions;
   	auto curAligner = alnPool.popAligner();
   	while(posQueue.getVals(subPositions, 5	)){
@@ -147,6 +149,8 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 				const auto & input = inputSeqs[pos];
 
 		    double bestScore = std::numeric_limits<double>::lowest();
+			  double alnBestScore = std::numeric_limits<double>::lowest();
+
 		    std::vector<uint32_t> bestRefs;
 		    std::vector<uint32_t> bestRefsRevComp;
 
@@ -171,21 +175,26 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 				    	} else {
 				    		curAligner->alignCache(ref, input, setUp.pars_.local_);
 				    	}
-
+							if (curAligner->parts_.score_ < minAlnScore) {
+								continue;
+							}
 							double currentScore = 0;
+				    	double currentAlnScore = 0;
 							if(setUp.pars_.colOpts_.alignOpts_.eventBased_) {
 								curAligner->profileAlignment(ref, input, false, true, false);
 								currentScore = curAligner->comp_.distances_.eventBasedIdentity_;
+								currentAlnScore = curAligner->parts_.score_;
 							} else {
 								currentScore = curAligner->parts_.score_;
+								currentAlnScore = curAligner->parts_.score_;
 							}
 							if (currentScore == bestScore) {
 								bestRefs.push_back(refPos);
-							}
-							if (currentScore > bestScore) {
+							} else if (currentScore > bestScore || (currentScore == bestScore && currentAlnScore > alnBestScore)) {
 								bestRefs.clear();
 								bestRefs.push_back(refPos);
 								bestScore = currentScore;
+								alnBestScore = currentAlnScore;
 							}
 						}
 				    bestRefsForPos[pos] = bestRefs;
@@ -214,22 +223,32 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 				      if(ref->compareKmersRevComp(*input).second < currentKmerCutOff){
 				       	continue;
 				      }
-							curAligner->alignCache(ref, revComp, setUp.pars_.local_);
+				    	if(doDiagGlobal) {
+				    		curAligner->alignCacheGlobalDiag(ref, revComp);
+				    	} else {
+				    		curAligner->alignCache(ref, revComp, setUp.pars_.local_);
+				    	}
+				    	if (curAligner->parts_.score_ < minAlnScore) {
+				    		continue;
+				    	}
 							double currentScore = 0;
+				    	double currentAlnScore = 0;
 							if(setUp.pars_.colOpts_.alignOpts_.eventBased_) {
 								curAligner->profileAlignment(ref, revComp, false, true, false);
 								currentScore = curAligner->comp_.distances_.eventBasedIdentity_;
+								currentAlnScore = curAligner->parts_.score_;
 							} else {
 								currentScore = curAligner->parts_.score_;
+								currentAlnScore = curAligner->parts_.score_;
 							}
 							if (currentScore == bestScore) {
 								bestRefsRevComp.push_back(refPos);
-							}
-							if (currentScore > bestScore) {
+							} else if (currentScore > bestScore || (currentScore == bestScore && currentAlnScore > alnBestScore)) {
 								bestRefs.clear(); // better match than forward, clear it
 								bestRefsRevComp.clear();
 								bestRefsRevComp.push_back(refPos);
 								bestScore = currentScore;
+								alnBestScore = currentAlnScore;
 							}
 						}
 				    bestRefsForPos[pos] = bestRefs;
@@ -241,7 +260,7 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 				    currentKmerCutOff -= 0.05;
 			    }
 		    }
-			}//quickHaplotypeInformationDeeper
+			}
 			{
 				std::lock_guard<std::mutex> lock(outMut);
 				if(setUp.pars_.verbose_){
