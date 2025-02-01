@@ -188,13 +188,13 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 								currentScore = curAligner->parts_.score_;
 								currentAlnScore = curAligner->parts_.score_;
 							}
-							if (currentScore == bestScore) {
-								bestRefs.push_back(refPos);
-							} else if (currentScore > bestScore || (currentScore == bestScore && currentAlnScore > alnBestScore)) {
+							if (currentScore > bestScore || (currentScore == bestScore && currentAlnScore > alnBestScore)) {
 								bestRefs.clear();
 								bestRefs.push_back(refPos);
 								bestScore = currentScore;
 								alnBestScore = currentAlnScore;
+							} else if (currentScore == bestScore) {
+								bestRefs.push_back(refPos);
 							}
 						}
 				    bestRefsForPos[pos] = bestRefs;
@@ -241,14 +241,14 @@ int seqUtilsRunner::compareToRef(const njh::progutils::CmdArgs & inputCommands) 
 								currentScore = curAligner->parts_.score_;
 								currentAlnScore = curAligner->parts_.score_;
 							}
-							if (currentScore == bestScore) {
-								bestRefsRevComp.push_back(refPos);
-							} else if (currentScore > bestScore || (currentScore == bestScore && currentAlnScore > alnBestScore)) {
+				    	if (currentScore > bestScore || (currentScore == bestScore && currentAlnScore > alnBestScore)) {
 								bestRefs.clear(); // better match than forward, clear it
 								bestRefsRevComp.clear();
 								bestRefsRevComp.push_back(refPos);
 								bestScore = currentScore;
 								alnBestScore = currentAlnScore;
+							} else if (currentScore == bestScore) {
+								bestRefsRevComp.push_back(refPos);
 							}
 						}
 				    bestRefsForPos[pos] = bestRefs;
