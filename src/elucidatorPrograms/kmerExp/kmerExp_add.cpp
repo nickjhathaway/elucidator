@@ -33,7 +33,7 @@
 #include "elucidator/objects/MiscUtility/GenomeSeqSearch.hpp"
 #include "elucidator/objects/BioDataObject.h"
 
-
+#include <PathWeaver/objects/dataContainers/graphs/KmerPathwayGraph.hpp>
 
 namespace njhseq {
 
@@ -540,7 +540,318 @@ int kmerExpRunner::writeKmerAccerlation(const njh::progutils::CmdArgs & inputCom
 	return 0;
 }
 
+int kmerExpRunner::getKmerCountsPerLocationOnSeq(const njh::progutils::CmdArgs & inputCommands){
+	OutOptions outOpts(bfs::path("out.tab.txt"));
+	uint32_t kmerLength = 9;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.processSeq(true);
+	setUp.processWritingOptions(outOpts);
+	setUp.setOption(kmerLength, "--kmerLength", "Kmer Length");
+	bfs::path fastq1Fnp = "";
+	bfs::path fastq2Fnp = "";
+	bfs::path fastqFnp = "";
+	bool setFastq1 = setUp.setOption(fastq1Fnp, "--efastq1", "Fastq first mate File");
+	setUp.setOption(fastq2Fnp, "--efastq2", "Fastq second mate File", setFastq1);
+	bool revCompMate = false;
+	setUp.setOption(revCompMate, "--revCompMate", "Reverse Complement Sequences in mate file");
+	setUp.setOption(fastqFnp, "--efastq", "Fastq File", !setFastq1);
+	setUp.finishSetUp(std::cout);
 
+	OutputStream out(outOpts);
+	KmerPathwayGraph graph(kmerLength, 0);
+	// uint32_t totalInputBases = 0;
+	SeqInput pairedReader(
+			SeqIOOptions::genPairedIn(fastq1Fnp,
+					fastq2Fnp));
+	SeqInput singleReader(
+			SeqIOOptions::genFastqIn(fastqFnp) );
+	// uint64_t numOfPossibleKmers = 0;
+
+	if (pairedReader.ioOptions_.inExists()) {
+		PairedRead pSeq;
+		pairedReader.openIn();
+		while (pairedReader.readNextRead(pSeq)) {
+			if(len(pSeq.seqBase_) > kmerLength){
+				graph.increaseKCounts(pSeq.seqBase_.seq_);
+				// numOfPossibleKmers += len(pSeq.seqBase_) - kmerLength + 1;
+				// totalInputBases += pSeq.seqBase_.seq_.size();
+			}
+			if(len(pSeq.mateSeqBase_) > kmerLength){
+				graph.increaseKCounts(pSeq.mateSeqBase_.seq_);
+				// numOfPossibleKmers += len(pSeq.mateSeqBase_) - kmerLength + 1;
+				// totalInputBases += pSeq.mateSeqBase_.seq_.size();
+			}
+
+		}
+	}
+	if (singleReader.ioOptions_.inExists()) {
+		seqInfo seq;
+		singleReader.openIn();
+		while (singleReader.readNextRead(seq)) {
+			if(len(seq) > kmerLength){
+				graph.increaseKCounts(seq.seq_);
+				// numOfPossibleKmers += len(seq) - kmerLength + 1;
+				// totalInputBases += seq.seq_.size();
+			}
+		}
+	}
+	graph.populateNodesFromCounts();
+	if (pairedReader.ioOptions_.inExists()) {
+		PairedRead pSeq;
+		pairedReader.reOpenIn();
+		while (pairedReader.readNextRead(pSeq)) {
+			if(len(pSeq.seqBase_) > kmerLength){
+				graph.threadThroughSequence(pSeq.seqBase_);
+			}
+			if(len(pSeq.mateSeqBase_) > kmerLength){
+				graph.threadThroughSequence(pSeq.mateSeqBase_);
+			}
+		}
+	}
+	if (singleReader.ioOptions_.inExists()) {
+		seqInfo seq;
+		singleReader.reOpenIn();
+		while (singleReader.readNextRead(seq)) {
+			if(len(seq) > kmerLength){
+				graph.threadThroughSequence(seq);
+			}
+		}
+	}
+	//graph.resetNodePositions();
+	out << "seqName\tpos\tkmer\tcount\tconnectToNextCnt" << std::endl;
+	for(const auto pos : iter::range(len(setUp.pars_.seqObj_) - kmerLength + 1 )){
+		auto kmer = setUp.pars_.seqObj_.seqBase_.seq_.substr(pos, kmerLength);
+		uint32_t connectorCount = 0;
+		if(pos != len(setUp.pars_.seqObj_) - kmerLength){
+			auto nextKmer = setUp.pars_.seqObj_.seqBase_.seq_.substr(pos + 1, kmerLength);
+			auto n = graph.nodes_[graph.nodePositions_[kmer]];
+			for(const auto & e : n->tailEdges_){
+				auto tail = e->tail_.lock();
+				if(tail->k_ == nextKmer){
+					connectorCount += e->inReadNamesIdx_.size();
+				}
+			}
+		}
+		out << setUp.pars_.seqObj_.seqBase_.name_
+				<< "\t" << pos
+				<< "\t" << kmer
+				<< "\t" << graph.kCounts_[kmer]
+				<< "\t" << connectorCount
+				<< std::endl;
+	}
+
+	return 0;
+}
+
+int kmerExpRunner::getKmerCountsPerLocationOnSeqs(const njh::progutils::CmdArgs & inputCommands){
+	OutOptions outOpts(bfs::path("out.tab.txt"));
+	uint32_t kmerLength = 9;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.processReadInNames(true);
+	setUp.processWritingOptions(outOpts);
+	setUp.setOption(kmerLength, "--kmerLength", "Kmer Length");
+	bfs::path fastq1Fnp = "";
+	bfs::path fastq2Fnp = "";
+	bfs::path fastqFnp = "";
+	bool setFastq1 = setUp.setOption(fastq1Fnp, "--efastq1", "Fastq first mate File");
+	setUp.setOption(fastq2Fnp, "--efastq2", "Fastq second mate File", setFastq1);
+	bool revCompMate = false;
+	setUp.setOption(revCompMate, "--revCompMate", "Reverse Complement Sequences in mate file");
+	setUp.setOption(fastqFnp, "--efastq", "Fastq File", !setFastq1);
+	setUp.finishSetUp(std::cout);
+
+
+	if(!setUp.pars_.ioOptions_.inExists()){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ <<", error, " << setUp.pars_.ioOptions_.firstName_ << " needs to exist" << std::endl;
+		throw std::runtime_error{ss.str()};
+	}
+
+	OutputStream out(outOpts);
+
+
+	KmerPathwayGraph graph(kmerLength, 0);
+	// uint32_t totalInputBases = 0;
+	SeqInput pairedReader(
+			SeqIOOptions::genPairedIn(fastq1Fnp,
+					fastq2Fnp));
+	SeqInput singleReader(
+			SeqIOOptions::genFastqIn(fastqFnp) );
+	// uint64_t numOfPossibleKmers = 0;
+
+	if (pairedReader.ioOptions_.inExists()) {
+		PairedRead pSeq;
+		pairedReader.openIn();
+		while (pairedReader.readNextRead(pSeq)) {
+			if(len(pSeq.seqBase_) > kmerLength){
+				graph.increaseKCounts(pSeq.seqBase_.seq_);
+				// numOfPossibleKmers += len(pSeq.seqBase_) - kmerLength + 1;
+				// totalInputBases += pSeq.seqBase_.seq_.size();
+			}
+			if(len(pSeq.mateSeqBase_) > kmerLength){
+				graph.increaseKCounts(pSeq.mateSeqBase_.seq_);
+				// numOfPossibleKmers += len(pSeq.mateSeqBase_) - kmerLength + 1;
+				// totalInputBases += pSeq.mateSeqBase_.seq_.size();
+			}
+		}
+	}
+	if (singleReader.ioOptions_.inExists()) {
+		seqInfo seq;
+		singleReader.openIn();
+		while (singleReader.readNextRead(seq)) {
+			if(len(seq) > kmerLength){
+				graph.increaseKCounts(seq.seq_);
+				// numOfPossibleKmers += len(seq) - kmerLength + 1;
+				// totalInputBases += seq.seq_.size();
+			}
+		}
+	}
+	graph.populateNodesFromCounts();
+	if (pairedReader.ioOptions_.inExists()) {
+		PairedRead pSeq;
+		pairedReader.reOpenIn();
+		while (pairedReader.readNextRead(pSeq)) {
+			if(len(pSeq.seqBase_) > kmerLength){
+				graph.threadThroughSequence(pSeq.seqBase_);
+			}
+			if(len(pSeq.mateSeqBase_) > kmerLength){
+				graph.threadThroughSequence(pSeq.mateSeqBase_);
+			}
+		}
+	}
+	if (singleReader.ioOptions_.inExists()) {
+		seqInfo seq;
+		singleReader.reOpenIn();
+		while (singleReader.readNextRead(seq)) {
+			if(len(seq) > kmerLength){
+				graph.threadThroughSequence(seq);
+			}
+		}
+	}
+
+	//graph.resetNodePositions();
+	out << "seqName\tpos\tkmer\tcount\tconnectToNextCnt" << std::endl;
+	seqInfo seq;
+	SeqInput inputReader(setUp.pars_.ioOptions_);
+	inputReader.openIn();
+	while(inputReader.readNextRead(seq)){
+		for(const auto pos : iter::range(len(seq) - kmerLength + 1 )){
+			auto kmer = seq.seq_.substr(pos, kmerLength);
+			uint32_t connectorCount = 0;
+			if(pos != len(setUp.pars_.seqObj_) - kmerLength){
+				auto nextKmer = seq.seq_.substr(pos + 1, kmerLength);
+				auto n = graph.nodes_[graph.nodePositions_[kmer]];
+				for(const auto & e : n->tailEdges_){
+					auto tail = e->tail_.lock();
+					if(tail->k_ == nextKmer){
+						connectorCount += e->inReadNamesIdx_.size();
+					}
+				}
+			}
+			out << seq.name_
+					<< "\t" << pos
+					<< "\t" << kmer
+					<< "\t" << graph.kCounts_[kmer]
+					<< "\t" << connectorCount
+					<< std::endl;
+		}
+	}
+
+
+	return 0;
+}
+
+
+int kmerExpRunner::filterSeqsBelowMedianKmerCoverage(const njh::progutils::CmdArgs & inputCommands){
+	uint32_t kmerLength = 9;
+	uint32_t minMedianCount = 3;
+	auto filteredOut = SeqIOOptions::genFastqOut("");
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.setOption(kmerLength, "--kmerLength", "Kmer Length");
+
+	setUp.setOption(minMedianCount, "--minMedianCount", "Minimum median kmer coverage");
+	setUp.processDefaultReader(seqSetUp::singleInFormatsAvailable_, true);
+	setUp.setOption(filteredOut.out_.outFilename_, "--filteredOut", "Output file for filtered out sequences");
+	filteredOut.out_.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
+	setUp.finishSetUp(std::cout);
+
+
+	if(!setUp.pars_.ioOptions_.inExists()){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ <<", error, " << setUp.pars_.ioOptions_.firstName_ << " needs to exist" << std::endl;
+		throw std::runtime_error{ss.str()};
+	}
+
+
+
+	KmerPathwayGraph graph(kmerLength, 0);
+	{
+		SeqInput singleReader(setUp.pars_.ioOptions_);
+		if (singleReader.ioOptions_.inExists()) {
+			seqInfo seq;
+			singleReader.openIn();
+			while (singleReader.readNextRead(seq)) {
+				if(len(seq) > kmerLength){
+					graph.increaseKCounts(seq.seq_);
+					// numOfPossibleKmers += len(seq) - kmerLength + 1;
+					// totalInputBases += seq.seq_.size();
+				}
+			}
+		}
+		graph.populateNodesFromCounts();
+		if (singleReader.ioOptions_.inExists()) {
+			seqInfo seq;
+			singleReader.reOpenIn();
+			while (singleReader.readNextRead(seq)) {
+				if(len(seq) > kmerLength){
+					graph.threadThroughSequence(seq);
+				}
+			}
+		}
+	}
+	seqInfo seq;
+	SeqIO inputReader(setUp.pars_.ioOptions_);
+	inputReader.openIn();
+	inputReader.openOut();
+	std::unique_ptr<SeqOutput> filteredOutWriter;
+	if (!filteredOut.out_.outFilename_.empty()) {
+		filteredOutWriter = std::make_unique<SeqOutput>(filteredOut);
+		filteredOutWriter->openOut();
+	}
+	while(inputReader.readNextRead(seq)){
+		std::vector<uint32_t> counts;
+		std::vector<uint32_t> connectorCounts;
+		for(const auto pos : iter::range(len(seq) - kmerLength + 1 )){
+			auto kmer = seq.seq_.substr(pos, kmerLength);
+			uint32_t connectorCount = 0;
+			if(pos != len(setUp.pars_.seqObj_) - kmerLength){
+				auto nextKmer = seq.seq_.substr(pos + 1, kmerLength);
+				auto n = graph.nodes_[graph.nodePositions_[kmer]];
+				for(const auto & e : n->tailEdges_){
+					auto tail = e->tail_.lock();
+					if(tail->k_ == nextKmer){
+						connectorCount += e->inReadNamesIdx_.size();
+					}
+				}
+			}
+			connectorCounts.emplace_back(connectorCount);
+			counts.emplace_back(graph.kCounts_[kmer]);
+		}
+		auto medianCov = vectorMedianCopy(counts);
+		if (medianCov < minMedianCount && !filteredOut.out_.outFilename_.empty()) {
+			filteredOutWriter->write(seq);
+		} else {
+			inputReader.write(seq);
+		}
+	}
+	return 0;
+}
 
 }  // namespace njhseq
 

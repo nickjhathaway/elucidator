@@ -103,6 +103,9 @@ kmerExpRunner::kmerExpRunner()
           	addFunc("generatePeptideKmerDistMatrixByScore", generatePeptideKmerDistMatrixByScore, false),
           	// addFunc("compressPeptideKmersByReducedLibrary", compressPeptideKmersByReducedLibrary, false),
           	addFunc("compressPeptidesByReducedLibrary", compressPeptidesByReducedLibrary, false),
+          	addFunc("getKmerCountsPerLocationOnSeqs", getKmerCountsPerLocationOnSeqs, false),
+          	addFunc("getKmerCountsPerLocationOnSeq", getKmerCountsPerLocationOnSeq, false),
+          	addFunc("filterSeqsBelowMedianKmerCoverage", filterSeqsBelowMedianKmerCoverage, false),
 
 //,
 									//

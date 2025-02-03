@@ -72,7 +72,6 @@ int seqUtilsInfoRunner::countDiNucleotidePatternsInSeqs(const njh::progutils::Cm
   OutputStream out(outOpts);
   std::unordered_map<std::string, std::regex> repeatPatterns;
 
-
   for (const auto & repeat : repeats) {
 
     std::string patStr = njh::pasteAsStr("(.{", proceedingBases, ",", proceedingBases,"})(", njh::pasteAsStr(VecStr(minRepeatingAmount, repeat)), "(?:", repeat, ")+)(.{", trailingBases, ",", trailingBases, "})");
@@ -127,16 +126,20 @@ int seqUtilsInfoRunner::countHPPatternsInSeqs(const njh::progutils::CmdArgs & in
   uint32_t trailingBases = 5;
   uint32_t minHomopolymerLength = 5;
   std::vector<char> homopolymerBases = {'A', 'C', 'G', 'T'};
+  std::vector<char> allBases = {'A', 'C', 'G', 'T'};
+
   seqSetUp setUp(inputCommands);
   setUp.description_ = "count the pattern surrounding homopolymer runs";
 
   setUp.processVerbose();
   setUp.processDebug();
   setUp.processWritingOptions(outOpts);
-  setUp.setOption(proceedingBases, "--proceedingBases", "proceeding Bases");
-  setUp.setOption(trailingBases, "--trailingBases", "trailing Bases");
-  setUp.setOption(minHomopolymerLength, "--minHomopolymerLength", "min Homopolymer Length");
+  setUp.setOption(proceedingBases, "--proceedingBases", "proceeding Bases", njh::progutils::ProgramSetUp::CheckCase::GT1);
+  setUp.setOption(trailingBases, "--trailingBases", "trailing Bases", njh::progutils::ProgramSetUp::CheckCase::GT1);
+  setUp.setOption(minHomopolymerLength, "--minHomopolymerLength", "min Homopolymer Length", njh::progutils::ProgramSetUp::CheckCase::GT1);
   setUp.setOption(homopolymerBases, "--homopolymerBases", "homopolymer Bases");
+  setUp.setOption(allBases, "--allBases", "all Bases");
+
 
   setUp.processReadInNames(true);
   setUp.finishSetUp(std::cout);
@@ -145,8 +148,14 @@ int seqUtilsInfoRunner::countHPPatternsInSeqs(const njh::progutils::CmdArgs & in
   reader.openIn();
   OutputStream out(outOpts);
   std::unordered_map<char, std::regex> basePatterns;
+  std::string allBasesStr = njh::pasteAsStr(allBases);
+
   for (const auto base : homopolymerBases) {
-    std::string patStr = njh::pasteAsStr("(.{", proceedingBases, ",", proceedingBases,"})(", base, "{", minHomopolymerLength, ",})(.{", trailingBases, ",", trailingBases, "})");
+    auto allBasesButHpBase = allBases;
+    removeElement(allBasesButHpBase, base);
+    std::string allBasesButHpBaseStr = njh::pasteAsStr(allBasesButHpBase);
+
+    std::string patStr = njh::pasteAsStr("([", allBasesStr, "]", "{", proceedingBases - 1, ",", proceedingBases -1,"}","[", allBasesButHpBaseStr,"]",")(", base, "{", minHomopolymerLength, ",})(","[", allBasesButHpBaseStr,"]","[", allBasesStr, "]", "{", trailingBases - 1, ",", trailingBases - 1, "})");
     // std::cout << "patStr: " << patStr << std::endl;
     std::regex pattern(patStr);
     basePatterns.emplace(base, pattern);
@@ -154,12 +163,25 @@ int seqUtilsInfoRunner::countHPPatternsInSeqs(const njh::progutils::CmdArgs & in
   std::map<char, std::unordered_map<std::string,std::unordered_map<std::string, uint32_t>>> patternCounts;
   seqInfo seq;
   while(reader.readNextRead(seq)) {
-    for (const auto base : homopolymerBases) {
-      std::smatch match;
-      std::string::const_iterator searchStart(seq.seq_.cbegin());
-      while (std::regex_search(searchStart, seq.seq_.cend(), match, basePatterns.at(base))) {
-        patternCounts[base][njh::pasteAsStr(match[1],"-",match[3])][match[2]]++;
-        searchStart = match.suffix().first;
+    if (len(seq) > proceedingBases + trailingBases + minHomopolymerLength) {
+      for (const auto base : homopolymerBases) {
+        std::smatch match;
+        std::string::const_iterator searchStart(seq.seq_.cbegin());
+        while (std::regex_search(searchStart, seq.seq_.cend(), match, basePatterns.at(base))) {
+          patternCounts[base][njh::pasteAsStr(match[1],"-",match[3])][match[2]]++;
+          //searchStart = match.suffix().first;
+          if (match[1].str().back() == base || match[3].str().front() == base) {
+            std::cout << seq.name_ << std::endl;
+            std::cout << seq.seq_ << std::endl;
+            std::cout << "searchStart: " << searchStart - seq.seq_.cbegin() << std::endl;
+            std::cout << seq.seq_.substr(0, searchStart - seq.seq_.cbegin()) << std::endl;
+            std::cout << "\t" << njh::pasteAsStr(match[1],"-",match[3]) << std::endl;
+            std::cout << "\t" << njh::pasteAsStr(match[2]) << std::endl;
+            exit(1);
+          }
+          searchStart = seq.seq_.cbegin() + (match.prefix().second - seq.seq_.cbegin()) + match.length(2);
+
+        }
       }
     }
   }

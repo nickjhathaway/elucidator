@@ -11,18 +11,61 @@
 namespace njhseq {
 
 int seqUtilsModRunner::correctHPRunsBasedOnSurroundingBaseCounts(const njh::progutils::CmdArgs & inputCommands) {
-  uint32_t minReadCoverage = 50;
-  double minPatternFreq = 0.7;
+
+  // {
+    // std::regex pat("(.{5})(T{4,})(.{5})"); // Matches 5 bases, 4+ T's, then 5 bases
+    // std::smatch pat_match;
+    // std::string seq = "GAATTTTTTAAATTTACTTTTTTAAATGAAGGAAAGTATTGTAAAG";
+    //
+    // std::string::const_iterator searchStart(seq.cbegin());
+    //
+    // while (std::regex_search(searchStart, seq.cend(), pat_match, pat)) {
+    //   std::cout << "Match found: " << pat_match[0] << std::endl;
+    //   std::cout << "Group 1: " << pat_match[1] << std::endl;
+    //   std::cout << "Group 2: " << pat_match[2] << std::endl;
+    //   std::cout << "Group 3: " << pat_match[3] << std::endl;
+    //
+    //   // Move iterator to continue searching beyond the current match
+    //   std::cout << "(pat_match.prefix().second - seq.cbegin()) + pat_match.length(2): " << (pat_match.prefix().second - seq.cbegin()) + pat_match.length(2) << std::endl;
+    //   searchStart = seq.cbegin() + (pat_match.prefix().second - seq.cbegin()) + pat_match.length(2);
+    // }
+    // std::regex pat("([ACGT]{4}[ACG])(T{4,})([ACG][AGCT]{4})");
+    // std::smatch pat_match;
+    // std::string seq = "GAATTTTTTAAATTTACTTTTTTAAATGAAGGAAAGTATTGTAAAG";
+    //
+    // std::string::const_iterator searchStart(seq.cbegin());
+    //
+    // while (std::regex_search(searchStart, seq.cend(), pat_match, pat)) {
+    //   std::cout << "Match found: " << pat_match[0] << std::endl;
+    //   std::cout << "Group 1: " << (pat_match[1].matched ? pat_match[1].str() : "N/A") << std::endl;
+    //   std::cout << "Group 2: " << pat_match[2] << std::endl;
+    //   std::cout << "Group 3: " << (pat_match[3].matched ? pat_match[3].str() : "N/A") << std::endl;
+    //   std::cout << "--------------------------" << std::endl;
+    //
+    //   // Move iterator forward
+    //   searchStart = seq.cbegin() + (pat_match.prefix().second - seq.cbegin()) + pat_match.length(2);
+    // }
+  //   return 0;
+  // }
+
+
+  uint32_t minReadCoverage = 12;
+  double minPatternFreq = 0.3;
   OutOptions outOpts(bfs::path(""), ".tsv");
+  OutOptions correcting_outOpts(bfs::path(""), ".tsv");
+
   uint32_t proceedingBases = 5;
   uint32_t trailingBases = 5;
   uint32_t minHomopolymerLength = 5;
   std::vector<char> homopolymerBases = {'A', 'C', 'G', 'T'};
+  std::vector<char> allBases = {'A', 'C', 'G', 'T'};
+
   seqSetUp setUp(inputCommands);
   setUp.description_ = "count the pattern surrounding homopolymer runs";
 
   setUp.processVerbose();
   setUp.processDebug();
+  setUp.setOption(correcting_outOpts.outFilename_, "--outCorrecting", "output file for what will be corrected");
   setUp.setOption(outOpts.outFilename_, "--outCounts", "output file for counts of the patterns");
   setUp.setOption(minReadCoverage, "--minReadCoverage", "min Read Coverage");
   setUp.setOption(minPatternFreq, "--minPatternFreq", "min Pattern Freq");
@@ -31,9 +74,11 @@ int seqUtilsModRunner::correctHPRunsBasedOnSurroundingBaseCounts(const njh::prog
   setUp.setOption(trailingBases, "--trailingBases", "trailing Bases");
   setUp.setOption(minHomopolymerLength, "--minHomopolymerLength", "min Homopolymer Length");
   setUp.setOption(homopolymerBases, "--homopolymerBases", "homopolymer Bases");
+  setUp.setOption(allBases, "--allBases", "all Bases");
 
   setUp.processDefaultReader(true);
   outOpts.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
+  correcting_outOpts.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
   setUp.finishSetUp(std::cout);
 
   SeqIO reader(setUp.pars_.ioOptions_);
@@ -45,11 +90,31 @@ int seqUtilsModRunner::correctHPRunsBasedOnSurroundingBaseCounts(const njh::prog
     countsOut = std::make_unique<OutputStream>(outOpts);
   }
   std::unordered_map<char, std::regex> basePatterns;
+  std::string allBasesStr = njh::pasteAsStr(allBases);
+
   for (const auto base : homopolymerBases) {
-    std::string patStr = njh::pasteAsStr("(.{", proceedingBases, ",", proceedingBases,"})(", base, "{", minHomopolymerLength, ",})(.{", trailingBases, ",", trailingBases, "})");
+    // std::string patStr = njh::pasteAsStr("(.{", proceedingBases, ",", proceedingBases,"})(", base, "{", minHomopolymerLength, ",})(.{", trailingBases, ",", trailingBases, "})");
+    auto allBasesButHpBase = allBases;
+    removeElement(allBasesButHpBase, base);
+    std::string allBasesButHpBaseStr = njh::pasteAsStr(allBasesButHpBase);
+    std::string patStr = njh::pasteAsStr("([", allBasesStr, "]", "{", proceedingBases - 1, ",", proceedingBases -1,"}","[", allBasesButHpBaseStr,"]",")(", base, "{", minHomopolymerLength, ",})(","[", allBasesButHpBaseStr,"]","[", allBasesStr, "]", "{", trailingBases - 1, ",", trailingBases - 1, "})");
+
     // std::cout << "patStr: " << patStr << std::endl;
     std::regex pattern(patStr);
     basePatterns.emplace(base, pattern);
+  }
+
+  std::unordered_map<char, std::regex> basePatternsForCorrecting;
+  for (const auto base : homopolymerBases) {
+    auto allBasesButHpBase = allBases;
+    removeElement(allBasesButHpBase, base);
+    std::string allBasesButHpBaseStr = njh::pasteAsStr(allBasesButHpBase);
+    std::string patStr = njh::pasteAsStr("([", allBasesStr, "]", "{", proceedingBases - 1, ",", proceedingBases -1,"}","[", allBasesButHpBaseStr,"]",")(", base, "{", minHomopolymerLength - 1, ",})(","[", allBasesButHpBaseStr,"]","[", allBasesStr, "]", "{", trailingBases - 1, ",", trailingBases - 1, "})");
+
+    // std::string patStr = njh::pasteAsStr("(.{", proceedingBases, ",", proceedingBases,"})(", base, "{", minHomopolymerLength - 1, ",})(.{", trailingBases, ",", trailingBases, "})");
+    // std::cout << "patStr: " << patStr << std::endl;
+    std::regex pattern(patStr);
+    basePatternsForCorrecting.emplace(base, pattern);
   }
   std::map<char, std::unordered_map<std::string,std::unordered_map<std::string, uint32_t>>> patternCounts;
   {
@@ -61,7 +126,7 @@ int seqUtilsModRunner::correctHPRunsBasedOnSurroundingBaseCounts(const njh::prog
         std::string::const_iterator searchStart(seq.seq_.cbegin());
         while (std::regex_search(searchStart, seq.seq_.cend(), match, basePatterns.at(base))) {
           patternCounts[base][njh::pasteAsStr(match[1],"-",match[3])][match[2]]++;
-          searchStart = match.suffix().first;
+          searchStart = seq.seq_.cbegin() + (match.prefix().second - seq.seq_.cbegin()) + match.length(2);
         }
       }
     }
@@ -121,6 +186,18 @@ int seqUtilsModRunner::correctHPRunsBasedOnSurroundingBaseCounts(const njh::prog
       }
     }
   }
+  if (!correcting_outOpts.outFilename_.empty()) {
+    OutputStream correctingOut(correcting_outOpts);
+    correctingOut << "base\tproceeding_trailing_bases\tcorrection" << std::endl;
+    for (const auto & patternCorrection : patternCorrections) {
+      for (const auto & [pattern, correction] : patternCorrection.second) {
+        correctingOut << patternCorrection.first
+            << "\t" << pattern
+            << "\t" << correction
+            << std::endl;
+      }
+    }
+  }
   {
     //close and re-open
     reader.closeIn();
@@ -135,16 +212,54 @@ int seqUtilsModRunner::correctHPRunsBasedOnSurroundingBaseCounts(const njh::prog
       std::string new_full_pattern;
       std::string surroundingPattern;
       uint8_t qual = 40;
+      char base = ' ';
+      [[nodiscard]] Json::Value toJson() const {
+        Json::Value json;
+        json["class"] = njh::json::toJson(njh::getTypeName(*this));
+        json["full_pattern_start"] = njh::json::toJson(full_pattern_start);
+        json["hp_start"] = njh::json::toJson(hp_start);
+        json["hp_len"] = njh::json::toJson(hp_len);
+        json["previous_full_pattern"] = njh::json::toJson(previous_full_pattern);
+        json["new_full_pattern"] = njh::json::toJson(new_full_pattern);
+        json["surroundingPattern"] = njh::json::toJson(surroundingPattern);
+        json["qual"] = njh::json::toJson(qual);
+        json["base"] = njh::json::toJson(base);
 
+        return json;
+      }
     };
     while(reader.readNextRead(seq)) {
+      // bool print = "m84127_240426_214046_s2/242290354/ccs/11700_12792" == seq.name_;
+      bool print = false;
+      if (print) {
+        std::cout << seq.name_ << std::endl;
+      }
+      std::vector<HPPatternReplacement> replacements;
       for (const auto base : homopolymerBases) {
-        std::vector<HPPatternReplacement> replacements;
+        if (print) {
+          std::cout <<  "\t" << base << std::endl;
+        }
+
         std::smatch pat_match;
         std::string::const_iterator searchStart(seq.seq_.cbegin());
-        while (std::regex_search(searchStart, seq.seq_.cend(), pat_match, basePatterns.at(base))) {
+        while (std::regex_search(searchStart, seq.seq_.cend(), pat_match, basePatternsForCorrecting.at(base))) {
           auto surroundingPattern= njh::pasteAsStr(pat_match[1],"-",pat_match[3]);
-          auto nextSearchStart = pat_match.suffix().first;
+          if (print) {
+            std::cout << "\t\tcurrent_search: " << searchStart - seq.seq_.cbegin()  << std::endl;
+          }
+          searchStart = searchStart = seq.seq_.cbegin() + (pat_match.prefix().second - seq.seq_.cbegin()) + pat_match.length(2);
+          if (print) {
+            std::cout << "\t\tnext_search: " << searchStart - seq.seq_.cbegin()  << std::endl;
+          }
+          if (print) {
+            std::cout << "\t\tsurroundingPattern: " << surroundingPattern << std::endl;
+            std::cout << "\t\tnjh::in(surroundingPattern, patternCorrections[base]): " << njh::colorBool(njh::in(surroundingPattern, patternCorrections[base])) << std::endl;
+            if (njh::in(surroundingPattern, patternCorrections[base])) {
+              std::cout << "\t\tpat_match[0].str() != patternCorrections[base][surroundingPattern]: " << njh::colorBool(pat_match[0].str() != patternCorrections[base][surroundingPattern]) << std::endl;
+            }
+
+            // std::cout << "\t\tpat_match[0].str() != patternCorrections[base][surroundingPattern]: " << njh::colorBool(pat_match[0].str() != patternCorrections[base][surroundingPattern]) << std::endl;
+          }
           if (njh::in(surroundingPattern, patternCorrections[base]) && pat_match[0].str() != patternCorrections[base][surroundingPattern]) {
             HPPatternReplacement replacement;
             replacement.surroundingPattern = surroundingPattern;
@@ -154,8 +269,11 @@ int seqUtilsModRunner::correctHPRunsBasedOnSurroundingBaseCounts(const njh::prog
             replacement.hp_start = pat_match.prefix().second - seq.seq_.cbegin() + proceedingBases;
             replacement.hp_len = pat_match.length(2);
             replacement.qual = seq.qual_[replacement.hp_start + replacement.hp_len - 1];
+            replacement.base = base;
             replacements.emplace_back(replacement);
-
+            // if (pat_match[0] == "TAGCGTTTTTTTCCCCA") {
+            //   std::cout << "\t\treplacements.size(): " << replacements.size() << std::endl;
+            // }
             // if (replacements.empty()) {
             //   replacements.emplace_back(replacement);
             // } else {
@@ -212,58 +330,31 @@ int seqUtilsModRunner::correctHPRunsBasedOnSurroundingBaseCounts(const njh::prog
             //   // exit(1);
             // }
           }
-          searchStart = nextSearchStart;
         }
         //iterative over backwards so positions don't get messed up
-        for (const auto & replacement : iter::reversed(replacements)) {
-            //since we are dealing with homopolymer and we are checking the patterns aren't the same, only two scenarios are the correction is longer or shorter, can't be equal
-            if (replacement.previous_full_pattern.size() < replacement.new_full_pattern.size()) {
-              // std::cout << __FILE__ << " " << __LINE__ << std::endl;
-              //adding bases
-              auto diff = replacement.new_full_pattern.size() - replacement.previous_full_pattern.size();
-              // auto hp_start = match.position(2);
-              // auto hp_start = match.prefix().second - seq.seq_.cbegin() + proceedingBases;
-              // auto hp_len = match.length(2);
-              // auto qual = seq.qual_[hp_start + hp_len - 1];
-              // std::cout << "diff: " << diff << std::endl << " hp_start: " << hp_start << std::endl << " hp_len: " << hp_len << std::endl << " qual: " << static_cast<uint32_t>(qual) << std::endl;
-              // std::cout << "seq.seq_.find(match[0]): " << seq.seq_.find(replacement.previous_full_pattern) << std::endl;
-              // std::cout << "match.prefix().first - seq.seq_.cbegin(): " << match.prefix().first - seq.seq_.cbegin() << std::endl;
-              // std::cout << "match.prefix().second - seq.seq_.cbegin(): " << match.prefix().second - seq.seq_.cbegin() << std::endl;
-              // std::cout << "match.prefix().second - seq.seq_.cbegin(): " << match.prefix().second - seq.seq_.cbegin() + proceedingBases << std::endl;
-              // std::cout << "seq.seq_.substr(match.prefix().second - seq.seq_.cbegin(), proceedingBases): " << seq.seq_.substr(match.prefix().second - seq.seq_.cbegin(), proceedingBases) << std::endl;
-              // std::cout << "seq.seq_.substr(match.prefix().second - seq.seq_.cbegin() + proceedingBases, match.length(2)): " << seq.seq_.substr(match.prefix().second - seq.seq_.cbegin() + proceedingBases, match.length(2)) << std::endl;
-              // std::cout << "seq.seq_.substr(match.prefix().second - seq.seq_.cbegin() + proceedingBases + match.length(2), trailingBases): " << seq.seq_.substr(match.prefix().second - seq.seq_.cbegin() + proceedingBases + match.length(2), trailingBases) << std::endl;
-              // std::cout << "match.position(0): " << match.position(0) << std::endl;
-              // std::cout << "match.position(1): " << match.position(1) << std::endl;
-              // std::cout << "match.position(2): " << match.position(2) << std::endl;
-              // std::cout << "match.position(3): " << match.position(3) << std::endl;
-              // std::cout << "surroundingPattern: " << surroundingPattern << std::endl;
-              // std::cout << "previous_full_pattern: " << match[0] << std::endl;
-              // std::cout << "replacement.new_full_pattern: " << replacement.new_full_pattern << std::endl;
-              // std::cout << "seq: " << seq.seq_ << std::endl;
-              seq.insert(replacement.hp_start + replacement.hp_len, seqInfo("", std::string(diff,base), std::vector<uint8_t>(diff,replacement.qual)));
-              // std::cout << "seq: " << seq.seq_ << std::endl;
-              // exit(1);
-            } else {
-              //removing bases
-              auto diff = replacement.previous_full_pattern.size() - replacement.new_full_pattern.size();
-              // auto hp_start = match.position(2);
-              // auto hp_start = match.prefix().second - seq.seq_.cbegin() + proceedingBases;
-              // auto hp_len = match.length(2);
-              // std::cout << "diff: " << diff << std::endl << " hp_start: " << replacement.hp_start << std::endl << " hp_len: " << replacement.hp_len << std::endl;
-              // std::cout << "seq.seq_.find(match[0]): " << seq.seq_.find(replacement.previous_full_pattern) << std::endl;
-              // std::cout << "match.prefix().first - seq.seq_.cbegin(): " << match.prefix().first - seq.seq_.cbegin() << std::endl;
-              // std::cout << "match.prefix().second - seq.seq_.cbegin(): " << match.prefix().second - seq.seq_.cbegin() << std::endl;
-              // std::cout << "match.prefix().second - seq.seq_.cbegin(): " << match.prefix().second - seq.seq_.cbegin() + proceedingBases << std::endl;
-              // std::cout << "surroundingPattern: " << surroundingPattern << std::endl;
-              // std::cout << "previous_full_pattern: " << replacement.previous_full_pattern << std::endl;
-              // std::cout << "replacement.new_full_pattern: " << replacement.new_full_pattern << std::endl;
-              // std::cout << "seq: " << seq.seq_ << std::endl;
-              seq.removeBases(replacement.hp_start + replacement.hp_len - diff, diff);
-              // std::cout << "seq: " << seq.seq_ << std::endl;
-            }
+        if (print) {
+          std::cout << "\treplacements.size(): " << replacements.size() << std::endl;
+          for (const auto & replacement : iter::reversed(replacements)) {
+            std::cout << "\t\t" << njh::json::writeAsOneLine(replacement.toJson()) << std::endl;
+          }
         }
+      }
+      for (const auto& replacement: iter::reversed(replacements)) {
+        //since we are dealing with homopolymer and we are checking the patterns aren't the same, only two scenarios are the correction is longer or shorter, can't be equal
+        if (replacement.previous_full_pattern.size() < replacement.new_full_pattern.size()) {
+          //adding bases
+          auto diff = replacement.new_full_pattern.size() - replacement.previous_full_pattern.size();
+          seq.insert(replacement.hp_start + replacement.hp_len,
+                     seqInfo("", std::string(diff, replacement.base), std::vector<uint8_t>(diff, replacement.qual)));
+        } else {
+          //removing bases
+          auto diff = replacement.previous_full_pattern.size() - replacement.new_full_pattern.size();
+          seq.removeBases(replacement.hp_start + replacement.hp_len - diff, diff);
+        }
+      }
 
+      if (print) {
+        std::cout << std::endl;
       }
       reader.write(seq);
     }
