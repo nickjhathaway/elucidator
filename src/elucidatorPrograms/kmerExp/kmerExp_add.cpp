@@ -769,7 +769,6 @@ int kmerExpRunner::getKmerCountsPerLocationOnSeqs(const njh::progutils::CmdArgs 
 int kmerExpRunner::filterSeqsBelowMedianKmerCoverage(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t kmerLength = 9;
 	uint32_t minMedianCount = 3;
-	auto filteredOut = SeqIOOptions::genFastqOut("");
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -777,6 +776,8 @@ int kmerExpRunner::filterSeqsBelowMedianKmerCoverage(const njh::progutils::CmdAr
 
 	setUp.setOption(minMedianCount, "--minMedianCount", "Minimum median kmer coverage");
 	setUp.processDefaultReader(seqSetUp::singleInFormatsAvailable_, true);
+	auto filteredOut = SeqIOOptions("", setUp.pars_.ioOptions_.outFormat_);
+
 	setUp.setOption(filteredOut.out_.outFilename_, "--filteredOut", "Output file for filtered out sequences");
 	filteredOut.out_.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
 	setUp.finishSetUp(std::cout);
