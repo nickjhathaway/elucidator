@@ -54,6 +54,7 @@ class metaExpRunner : public njh::progutils::ProgramRunner {
   static int renameSeqsWithMetaField(const njh::progutils::CmdArgs & inputCommands);
 
 	static int convertOtherMetaInfoNjhMeta(const njh::progutils::CmdArgs & inputCommands);
+	static int convertOtherMetaWithPatternInfoNjhMeta(const njh::progutils::CmdArgs & inputCommands);
 
 };
 

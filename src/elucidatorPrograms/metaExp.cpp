@@ -50,9 +50,81 @@ metaExpRunner::metaExpRunner()
 					 addFunc("renameSeqsWithMetaField", renameSeqsWithMetaField, false),
 					 addFunc("addSeqNameAsSampleMeta", addSeqNameAsSampleMeta, false),
           	addFunc("convertOtherMetaInfoNjhMeta", convertOtherMetaInfoNjhMeta, false),
+          	addFunc("convertOtherMetaWithPatternInfoNjhMeta", convertOtherMetaWithPatternInfoNjhMeta, false),
 
            },//
           "metaExp") {}
+
+
+int metaExpRunner::convertOtherMetaWithPatternInfoNjhMeta(const njh::progutils::CmdArgs & inputCommands){
+
+// 	std::vector<std::string> sequences = {
+// 		"NODE_5_length_8248_cov_57.795715_g3_i0_Comp_",
+// 		"NODE_1_length_10480_g0_i0",
+// 		"misc NODE_3_length_8407_cov_28.163527_g1_i1"
+// };
+//
+// 	std::string reg_pat_str = "([A-Za-z0-9.-]+)_([A-Za-z0-9.-]+)";
+// 	std::regex pattern(reg_pat_str);
+// 	std::cout << "pattern.mark_count(): " << pattern.mark_count() << std::endl;
+// 	for (const auto& seq : sequences) {
+//
+//
+// 		std::cout << "Matched: " << seq << "\n";
+// 		for (std::sregex_iterator iter(seq.begin(), seq.end(), pattern); iter != std::sregex_iterator(); ++iter) {
+// 			std::cout << "iter->size(): " << iter->size() << std::endl;
+// 			std::cout << "  Group: " << (*iter)[1].str() << "\n";
+// 			std::cout << "  Group: " << (*iter)[2].str() << "\n";
+// 			std::cout << std::endl;
+// 		}
+// 		std::cout << "-----------------------\n";
+// 	}
+//
+//
+// 	return 0;
+
+	// std::string superPattern = "([A-z.-]+_[A-z.-]+)+.*";
+	std::string subPatternStr(R"(([A-Za-z0-9.-]+)_([A-Za-z0-9.-]+))");
+
+	// bool keepFullName = false;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+
+	setUp.processDebug();
+	// setUp.setOption(keepFullName, "--keepFullName", "keep the Full original Name and just append the meta");
+
+	// setUp.setOption(superPattern, "--superPattern", "Pattern that captures the whole name");
+	setUp.setOption(subPatternStr, "--subPattern", "");
+
+	setUp.processDefaultReader(true);
+	setUp.description_ = "convert other meta formating into njh meta format, the other meta to match a specific pattern";
+
+	setUp.finishSetUp(std::cout);
+
+	std::regex subPattern(subPatternStr);
+	if (subPattern.mark_count() != 2) {
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << " expecting two tokens for " << subPatternStr << " instead got " << subPattern.mark_count() << "\n";
+		throw std::runtime_error{ss.str()};
+	}
+	seqInfo seq;
+	SeqIO reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	reader.openOut();
+	while (reader.readNextRead(seq)) {
+		MetaDataInName seqMeta;
+		for (std::sregex_iterator iter(seq.name_.begin(), seq.name_.end(), subPattern); iter != std::sregex_iterator(); ++iter) {
+			seqMeta.addMeta((*iter)[1].str(), (*iter)[2].str());
+		}
+		std::string metaString;
+		if (!seqMeta.meta_.empty()) {
+			metaString = seqMeta.createMetaName();
+		}
+		seq.name_ += metaString;
+		reader.write(seq);
+	}
+	return 0;
+}
 
 
 int metaExpRunner::convertOtherMetaInfoNjhMeta(const njh::progutils::CmdArgs & inputCommands){
