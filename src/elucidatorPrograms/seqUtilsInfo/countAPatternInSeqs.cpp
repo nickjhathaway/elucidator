@@ -6,9 +6,190 @@
 
 #include "seqUtilsInfoRunner.hpp"
 #include <njhseq/IO/SeqIO/SeqIO.hpp>
+#include <njhseq/seqToolsUtils/tandemRepeatUtils.hpp>
 
 
 namespace njhseq {
+
+
+
+int seqUtilsInfoRunner::countDiNucleotidePatternsInSeqs(const njh::progutils::CmdArgs & inputCommands) {
+  SimpleTandemRepeatFinder::SimpleTRFinderLocsPars pars;
+
+  OutOptions outOpts(bfs::path(""), ".tsv");
+  uint32_t proceedingBases = 5;
+  uint32_t trailingBases = 5;
+  uint32_t minRepeatingAmount = 6;
+  pars.minRepeatUnitSize = 2;
+  pars.maxRepeatUnitSize = pars.minRepeatUnitSize;
+  std::set<std::string> repeats;
+  seqSetUp setUp(inputCommands);
+  setUp.description_ = "count the pattern surrounding dinucleotide runs";
+
+  setUp.processVerbose();
+  setUp.processDebug();
+  setUp.processWritingOptions(outOpts);
+  setUp.setOption(proceedingBases, "--proceedingBases", "proceeding Bases");
+  setUp.setOption(trailingBases, "--trailingBases", "trailing Bases");
+  setUp.setOption(minRepeatingAmount, "--minRepeatingAmount", "min repeating amount (length would be 2 x this values, e.g. a min repeat amount of 4 would be 4 x 2 length of 8 bases");
+
+  setUp.setOption(repeats, "--repeats", "repeats");
+  setUp.setOption(pars.alphabet, "--bases", "bases to combine to make the dinucleotide repeats");
+
+  setUp.processReadInNames(true);
+  setUp.finishSetUp(std::cout);
+
+  SeqIO reader(setUp.pars_.ioOptions_);
+  reader.openIn();
+
+  if (!repeats.empty()) {
+    VecStr Warnings;
+    for (const auto & repeat : repeats) {
+      if (repeat.size() != 2) {
+        Warnings.push_back("Warning: repeat " + repeat + " is not a valid repeat, must be of length 2");
+      }
+    }
+    if (!Warnings.empty()) {
+      std::stringstream ss;
+      ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error:" << "\n";
+      ss << njh::pasteAsStr(Warnings, "\n") << "\n";
+      throw std::runtime_error{ss.str()};
+    }
+  } else {
+
+    SimpleTandemRepeatFinder finder(pars);
+    auto minRepeats = finder.genMinimalUnitsNeededForSearch();
+    for (const auto & repeat : *minRepeats.allUnits) {
+      if (repeat.front() != repeat.back()) {
+        repeats.emplace(repeat);
+      }
+    }
+  }
+  if (setUp.pars_.verbose_) {
+    std::cout << njh::conToStr(repeats, "\n") << std::endl;
+  }
+
+  OutputStream out(outOpts);
+  std::unordered_map<std::string, std::regex> repeatPatterns;
+
+
+  for (const auto & repeat : repeats) {
+
+    std::string patStr = njh::pasteAsStr("(.{", proceedingBases, ",", proceedingBases,"})(", njh::pasteAsStr(VecStr(minRepeatingAmount, repeat)), "(?:", repeat, ")+)(.{", trailingBases, ",", trailingBases, "})");
+    if (setUp.pars_.verbose_) {
+      std::cout << "patStr: " << patStr << std::endl;
+    }
+    std::regex pattern(patStr);
+    repeatPatterns.emplace(repeat, pattern);
+  }
+  std::map<std::string, std::unordered_map<std::string,std::unordered_map<std::string, uint32_t>>> patternCounts;
+  seqInfo seq;
+  while(reader.readNextRead(seq)) {
+    for (const auto & repeat : repeats) {
+      std::smatch match;
+      std::string::const_iterator searchStart(seq.seq_.cbegin());
+      while (std::regex_search(searchStart, seq.seq_.cend(), match, repeatPatterns.at(repeat))) {
+        patternCounts[repeat][njh::pasteAsStr(match[1],"-",match[3])][match[2]]++;
+        searchStart = match.suffix().first;
+      }
+    }
+  }
+  out << "dinucleotide\tproceeding_trailing_bases\tfull_repeat\tcount\tfull_pattern" << std::endl;
+  for (const auto & repeat : repeats) {
+    if (njh::in(repeat, patternCounts)) {
+      for (const auto & [pattern, patternCountsMap]  : patternCounts.at(repeat)) {
+        if (patternCountsMap.size() > 1) {
+          double total = 0;
+          for (const auto & [pattern2, count] : patternCountsMap) {
+            total += count;
+          }
+          for (const auto & [pattern2, count] : patternCountsMap) {
+            out << repeat
+                << "\t" << pattern
+                << "\t" << pattern2
+                << "\t" << count
+                << "\t" << count / total
+                << "\t" << total
+                << "\t" << njh::replaceString(pattern, "-", pattern2)
+                << std::endl;
+          }
+        }
+      }
+    }
+  }
+  return 0;
+}
+
+int seqUtilsInfoRunner::countHPPatternsInSeqs(const njh::progutils::CmdArgs & inputCommands) {
+
+  OutOptions outOpts(bfs::path(""), ".tsv");
+  uint32_t proceedingBases = 5;
+  uint32_t trailingBases = 5;
+  uint32_t minHomopolymerLength = 5;
+  std::vector<char> homopolymerBases = {'A', 'C', 'G', 'T'};
+  seqSetUp setUp(inputCommands);
+  setUp.description_ = "count the pattern surrounding homopolymer runs";
+
+  setUp.processVerbose();
+  setUp.processDebug();
+  setUp.processWritingOptions(outOpts);
+  setUp.setOption(proceedingBases, "--proceedingBases", "proceeding Bases");
+  setUp.setOption(trailingBases, "--trailingBases", "trailing Bases");
+  setUp.setOption(minHomopolymerLength, "--minHomopolymerLength", "min Homopolymer Length");
+  setUp.setOption(homopolymerBases, "--homopolymerBases", "homopolymer Bases");
+
+  setUp.processReadInNames(true);
+  setUp.finishSetUp(std::cout);
+
+  SeqIO reader(setUp.pars_.ioOptions_);
+  reader.openIn();
+  OutputStream out(outOpts);
+  std::unordered_map<char, std::regex> basePatterns;
+  for (const auto base : homopolymerBases) {
+    std::string patStr = njh::pasteAsStr("(.{", proceedingBases, ",", proceedingBases,"})(", base, "{", minHomopolymerLength, ",})(.{", trailingBases, ",", trailingBases, "})");
+    // std::cout << "patStr: " << patStr << std::endl;
+    std::regex pattern(patStr);
+    basePatterns.emplace(base, pattern);
+  }
+  std::map<char, std::unordered_map<std::string,std::unordered_map<std::string, uint32_t>>> patternCounts;
+  seqInfo seq;
+  while(reader.readNextRead(seq)) {
+    for (const auto base : homopolymerBases) {
+      std::smatch match;
+      std::string::const_iterator searchStart(seq.seq_.cbegin());
+      while (std::regex_search(searchStart, seq.seq_.cend(), match, basePatterns.at(base))) {
+        patternCounts[base][njh::pasteAsStr(match[1],"-",match[3])][match[2]]++;
+        searchStart = match.suffix().first;
+      }
+    }
+  }
+
+  out << "base\tproceeding_trailing_bases\thomopolymer\tcount\tfreq\ttotal\tfull_pattern" << std::endl;
+  for (const auto base : homopolymerBases) {
+    if (njh::in(base, patternCounts)) {
+      for (const auto & [pattern, patternCountsMap]  : patternCounts.at(base)) {
+        if (patternCountsMap.size() > 1) {
+          double total = 0;
+          for (const auto & [pattern2, count] : patternCountsMap) {
+            total += count;
+          }
+          for (const auto & [pattern2, count] : patternCountsMap) {
+            out << base
+                << "\t" << pattern
+                << "\t" << pattern2
+                << "\t" << count
+                << "\t" << count / total
+                << "\t" << total
+                << "\t" << njh::replaceString(pattern, "-", pattern2)
+                << std::endl;
+          }
+        }
+      }
+    }
+  }
+  return 0;
+}
+
 
 int seqUtilsInfoRunner::countAPatternInSeqs(const njh::progutils::CmdArgs & inputCommands) {
 

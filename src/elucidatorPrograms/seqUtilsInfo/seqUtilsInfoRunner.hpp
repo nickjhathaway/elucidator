@@ -34,6 +34,9 @@ class seqUtilsInfoRunner : public njh::progutils::ProgramRunner {
 	static int countAllSeqs(const njh::progutils::CmdArgs & inputCommands);
 	static int countSeqsFile(const njh::progutils::CmdArgs & inputCommands);
 	static int countAPatternInSeqs(const njh::progutils::CmdArgs & inputCommands);
+	static int countHPPatternsInSeqs(const njh::progutils::CmdArgs & inputCommands);
+	static int countDiNucleotidePatternsInSeqs(const njh::progutils::CmdArgs & inputCommands);
+
 
 	static int printTandems(const njh::progutils::CmdArgs & inputCommands);
 	static int getHpProfile(const njh::progutils::CmdArgs & inputCommands);

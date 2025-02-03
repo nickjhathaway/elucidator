@@ -59,6 +59,7 @@ seqUtilsModRunner::seqUtilsModRunner()
     	addFunc("changeLetterToOtherLetter", changeLetterToOtherLetter, false),
     	addFunc("fragmentSequences", fragmentSequences, false),
     	addFunc("breakUpSeqsOnPattern", breakUpSeqsOnPattern, false),
+    	addFunc("correctHPRunsBasedOnSurroundingBaseCounts", correctHPRunsBasedOnSurroundingBaseCounts, false),
 
 
 },//

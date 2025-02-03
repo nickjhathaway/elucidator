@@ -66,6 +66,8 @@ seqUtilsInfoRunner::seqUtilsInfoRunner()
 	addFunc("getSlidingEntropyGenomicRegion", getSlidingEntropyGenomicRegion, false),
     	addFunc("findExactMatches", findExactMatches, false),
     	addFunc("countAPatternInSeqs", countAPatternInSeqs, false),
+    	addFunc("countHPPatternsInSeqs", countHPPatternsInSeqs, false),
+    	addFunc("countDiNucleotidePatternsInSeqs", countDiNucleotidePatternsInSeqs, false),
 	},
                     "seqUtilsInfo") {}
 //
@@ -532,36 +534,23 @@ int seqUtilsInfoRunner::countKmersPlusStats(const njh::progutils::CmdArgs & inpu
 
 int seqUtilsInfoRunner::countHPRuns(const njh::progutils::CmdArgs & inputCommands) {
 	seqSetUp setUp(inputCommands);
-	bool plot = false;
-	setUp.pars_.ioOptions_.out_.outFilename_ = "";
-	setUp.setOption(plot, "-plot", "plot");
-
-	setUp.processDefaultReader(true);
+	OutOptions outOpts;
+	setUp.processWritingOptions(outOpts);
+	setUp.processReadInNames(true);
 	setUp.finishSetUp(std::cout);
 	SeqInput reader(setUp.pars_.ioOptions_);
 	reader.openIn();
+	OutputStream out(outOpts);
 	auto inReads = reader.readAllReads<readObject>();
-
-	//std::unordered_map<char, std::unordered_map<uint32_t, uint32_t>> hCounts;
 	readVec::allSetCondensedSeq(inReads);
 	hrCounter counter;
 	counter.inceaseCountByReads(inReads);
-	table out(counter.hCounts_, VecStr{"char", "hpRunSize", "count"});
 	counter.setFractions();
-	table outFrac(counter.fractions_, VecStr{"char", "hpRunSize", "fractions"});
-	out.sortTable("hpRunSize", true);
-	out.sortTable("char", true);
-	if(setUp.pars_.ioOptions_.out_.outFilename_ == ""){
-		out.outPutContentOrganized(std::cout);
-		outFrac.outPutContentOrganized(std::cout);
-	}else{
-		TableIOOpts outOptCount = TableIOOpts(OutOptions(bfs::path(bfs::basename(setUp.pars_.ioOptions_.out_.outFilename_) + "_count"),
-				".tab.txt", "tab", false, setUp.pars_.ioOptions_.out_.overWriteFile_, false),"\t", out.hasHeader_);
-		out.outPutContents(outOptCount);
-		TableIOOpts outOptFrac = TableIOOpts(OutOptions(bfs::path(bfs::basename(setUp.pars_.ioOptions_.out_.outFilename_) + "_frac"),
-				".tab.txt", "tab",false, setUp.pars_.ioOptions_.out_.overWriteFile_, false),"\t", outFrac.hasHeader_);
-		outFrac.outPutContents(outOptFrac);
-	}
+	table counts(counter.hCounts_, VecStr{"char", "hpRunSize", "count"});
+	table fractions(table(counter.fractions_, VecStr{"char", "hpRunSize", "fractions"}));
+	auto combined_out = counts.leftJoin(fractions);
+	combined_out.sortTable("char", "hpRunSize", true);
+	combined_out.outPutContents(out, "\t");
 //	if(plot){
 //
 //		njhRInside::OwnRInside rSes;
