@@ -272,6 +272,8 @@ int seqUtilsRunner::checkTwoReadFiles(const njh::progutils::CmdArgs & inputComma
 int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommands) {
 	uint32_t numThreads = 1;
 	bool diagonal = false;
+	bool includeSelf = false;
+	bool writeOutOtherDiagnoal = false;
 	seqSetUp setUp(inputCommands);
 	setUp.pars_.ioOptions_.lowerCaseBases_ = "upper";
   setUp.processVerbose();
@@ -279,8 +281,11 @@ int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommand
   setUp.processDefaultReader(true);
   setUp.pars_.colOpts_.kmerOpts_.kLength_ = 5;
   setUp.pars_.ioOptions_.out_.outExtention_ = ".tab.txt";
+	setUp.setOption(includeSelf, "--includeSelf", "include Self");
 	setUp.setOption(numThreads, "--numThreads", "Number of Threads to Use");
 	setUp.setOption(diagonal,   "--diagonal",   "Just solve a global diagonal");
+	setUp.setOption(writeOutOtherDiagnoal,   "--writeOutOtherDiagnoal",   "writeOutOtherDiagnoal");
+
   setUp.pars_.gapLeft_ = "0,0";
   setUp.pars_.gapRight_ = "0,0";
   setUp.processAlignerDefualts();
@@ -363,7 +368,7 @@ int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommand
 	std::mutex fileMut;
 	njh::ProgressBar pbar(pairFac.totalCompares_);
 
-	std::function<void()> runCompare = [&pairFac,&fileMut,&profileInfoFile, &tempFile,&setUp,&seqs, &alnPool,&pbar,&alignFunc](){
+	std::function<void()> runCompare = [&pairFac,&fileMut,&profileInfoFile, &tempFile,&setUp,&seqs, &alnPool,&pbar,&alignFunc,&writeOutOtherDiagnoal](){
 
 		auto threadId = estd::to_string(std::this_thread::get_id());
 		PairwisePairFactory::PairwisePair pair;
@@ -397,6 +402,20 @@ int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommand
 					<< "\t" << currentAligner->comp_.lqMismatches_
 					<< "\t" << currentAligner->comp_.hqMismatches_
 					<< "\t" << currentAligner->comp_.distances_.getNumOfEvents(true) << std::endl;
+			if(writeOutOtherDiagnoal){
+				ssProfile << ref.seqBase_.name_
+										<< "\t" << ref.seqBase_.frac_
+										<< "\t" << input.seqBase_.name_
+										<< "\t" << currentAligner->comp_.alnScore_
+										<< "\t" << currentAligner->comp_.distances_.eventBasedIdentity_
+										<< "\t" << ref.compareKmers(input).second
+										<< "\t" << currentAligner->comp_.oneBaseIndel_
+										<< "\t" << currentAligner->comp_.twoBaseIndel_
+										<< "\t" << currentAligner->comp_.largeBaseIndel_
+										<< "\t" << currentAligner->comp_.lqMismatches_
+										<< "\t" << currentAligner->comp_.hqMismatches_
+										<< "\t" << currentAligner->comp_.distances_.getNumOfEvents(true) << std::endl;
+			}
 		}
 		{
 			std::lock_guard<std::mutex> fileLock(fileMut);
@@ -407,6 +426,55 @@ int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommand
 		}
 	};
 	njh::concurrent::runVoidFunctionThreaded(runCompare, numThreads);
+
+
+	if (includeSelf) {
+		std::vector<uint32_t> selfPositions(seqs.size());
+		njh::iota(selfPositions, 0U);
+		njh::concurrent::LockableQueue<uint32_t> selfQueue(selfPositions);
+		std::function<void()> runSelfCompare = [&selfQueue,&fileMut,&profileInfoFile, &tempFile,&setUp,&seqs, &alnPool,&alignFunc](){
+
+			auto threadId = estd::to_string(std::this_thread::get_id());
+			uint32_t pos = std::numeric_limits<uint32_t>::max();
+			std::stringstream ssProfile;
+			std::stringstream ssTempFile;
+			auto currentAligner = alnPool.popAligner();
+			while(selfQueue.getVal(pos)){
+				const auto & ref = seqs[pos];
+				const auto & input = seqs[pos];
+				//currentAligner->alignCache(ref, input, setUp.pars_.local_);
+				alignFunc(*currentAligner, ref.seqBase_, input.seqBase_, setUp.pars_.local_);
+				if(setUp.pars_.debug_){
+					ssTempFile << ">" << ref.seqBase_.name_ << std::endl;
+					ssTempFile << currentAligner->alignObjectA_.seqBase_.seq_ << std::endl;
+					ssTempFile << ">" << input.seqBase_.name_ << std::endl;
+					ssTempFile << currentAligner->alignObjectB_.seqBase_.seq_ << std::endl;
+				}
+				currentAligner->profilePrimerAlignment(ref, input);
+				ssProfile << input.seqBase_.name_
+						<< "\t" << input.seqBase_.frac_
+						<< "\t" << ref.seqBase_.name_
+						<< "\t" << currentAligner->comp_.alnScore_
+						<< "\t" << currentAligner->comp_.distances_.eventBasedIdentity_
+						<< "\t" << ref.compareKmers(input).second
+						<< "\t" << currentAligner->comp_.oneBaseIndel_
+						<< "\t" << currentAligner->comp_.twoBaseIndel_
+						<< "\t" << currentAligner->comp_.largeBaseIndel_
+						<< "\t" << currentAligner->comp_.lqMismatches_
+						<< "\t" << currentAligner->comp_.hqMismatches_
+						<< "\t" << currentAligner->comp_.distances_.getNumOfEvents(true) << std::endl;
+			}
+			{
+				std::lock_guard<std::mutex> fileLock(fileMut);
+				profileInfoFile << ssProfile.str();
+				if(setUp.pars_.debug_){
+					tempFile << ssTempFile.str();
+				}
+			}
+		};
+		njh::concurrent::runVoidFunctionThreaded(runSelfCompare, numThreads);
+	}
+
 	if(setUp.pars_.verbose_){
 		 setUp.logRunTime(std::cout);
 	}

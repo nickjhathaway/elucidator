@@ -141,6 +141,10 @@ int seqUtilsTrimRunner::trimToRefWithGlobalAlignmentToRefPositions(const njh::pr
 		readVecTrimmer::trimSeqToRefByGlobalAln(seq, refSeqs.front(), gTrimPars,
 				alignerObj);
 
+		//alignerObj.alignObjectA_.seqBase_.outPutSeq(std::cout);
+		//alignerObj.alignObjectB_.seqBase_.outPutSeq(std::cout);
+		//std::cout << std::endl;
+
 		if (!pars.keepOnlyOn || seq.on_) {
 			reader.write(seq);
 		}
