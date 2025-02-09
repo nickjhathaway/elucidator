@@ -239,7 +239,7 @@ int kmerExpRunner::generatePeptideKmerDistMatrixByScore(const njh::progutils::Cm
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.processReadInNames(true);
-
+	setUp.processWritingOptions(outOpts);
 	setUp.setOption(noHeader, "--noHeader", "no header");
 	setUp.setOption(numThreads, "--numThreads", "number of threads");
 	setUp.finishSetUp(std::cout);
