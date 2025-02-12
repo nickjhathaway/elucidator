@@ -1129,6 +1129,9 @@ int metaExpRunner::createSeqsFromTable(const njh::progutils::CmdArgs & inputComm
 
 	while(table_reader.getNextRow(row)) {
 		MetaDataInName meta;
+		if (MetaDataInName::nameHasMetaData(row[nameColPos])) {
+			meta = MetaDataInName(row[nameColPos]);
+		}
 		for(const auto & col : table_reader.header_.columnNames_) {
 			if(njh::notIn(col, requiredColumns) && (fields.empty() || njh::in(col, fields) ) && (excludeFields.empty() || njh::notIn(col, excludeFields)) ) {
 				meta.addMeta(col, row[table_reader.header_.getColPos(col)], true);
@@ -1136,7 +1139,7 @@ int metaExpRunner::createSeqsFromTable(const njh::progutils::CmdArgs & inputComm
 		}
 		auto name = row[nameColPos];
 		if(!meta.meta_.empty()) {
-			name += meta.createMetaName();
+			meta.resetMetaInName(name);
 		}
 		seqInfo seq;
 		if(qualColumn.empty()) {
