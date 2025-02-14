@@ -281,17 +281,20 @@ int bamExpRunner::determineRegionLastz(
 		const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path genomeFnp = "";
 	std::string name;
-	bool individual = false;
-	BioCmdsUtils::LastZPars lzPars;
+	OutOptions individualOutOpts("", ".bed");
+	// bool individual = false;
 	bool keepIntermediateFiles = false;
-
-
+	bool includeUnmapped = false;
+	MultiGenomeMapper::getRefSeqsWithPrimaryGenomePars determineSeqsPars;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
-	setUp.setOption(lzPars.coverage, "--coverage", "Coverage for lastz");
-	setUp.setOption(lzPars.identity, "--identity", "Identity for lastz");
-	setUp.setOption(lzPars.extraLastzArgs, "--extraLastzArgs", "Extra Lastz Arguments");
+	setUp.setOption(determineSeqsPars.keepBestOnly, "--keepBestOnly", "keep only the best matching (highest align score) hits for determining region");
+	setUp.setOption(includeUnmapped, "--includeUnmapped", "include unmapped");
+
+	setUp.setOption(determineSeqsPars.lzPars.coverage, "--coverage", "Coverage for lastz");
+	setUp.setOption(determineSeqsPars.lzPars.identity, "--identity", "Identity for lastz");
+	setUp.setOption(determineSeqsPars.lzPars.extraLastzArgs, "--extraLastzArgs", "Extra Lastz Arguments");
 	setUp.pars_.ioOptions_.out_.outFilename_ = "";
 	setUp.processDefaultReader(VecStr { "--fasta", "--fastq"});
 	setUp.pars_.ioOptions_.out_.outExtention_ = ".bed";
@@ -299,8 +302,10 @@ int bamExpRunner::determineRegionLastz(
 			"Path to a genome to determine the location in", true);
 	setUp.setOption(name, "--name",
 				"Name to give the determined region");
-	setUp.setOption(individual, "--individual",
-					"Report a region for each input sequence rather than just the best overall regions for all seqs");
+	// setUp.setOption(individual, "--individual",
+	// 				"Report a region for each input sequence rather than just the best overall regions for all seqs");
+	setUp.setOption(individualOutOpts.outFilename_, "--individualOut",
+			"write out all determined regions of each input seq to this file");
 	setUp.setOption(keepIntermediateFiles, "--keepIntermediateFiles",
 									"keep Intermediate Files");
 	setUp.finishSetUp(std::cout);
@@ -308,8 +313,8 @@ int bamExpRunner::determineRegionLastz(
 	njh::files::checkExistenceThrow(genomeFnp, __PRETTY_FUNCTION__);
 
 	auto genomeName = bfs::basename(genomeFnp);
-	if (std::string::npos != genomeName.rfind(".")) {
-		genomeName = genomeName.substr(0, genomeName.rfind("."));
+	if (std::string::npos != genomeName.rfind('.')) {
+		genomeName = genomeName.substr(0, genomeName.rfind('.'));
 	}
 	MultiGenomeMapper genomeMapper(genomeFnp.parent_path(),
 			genomeName);
@@ -321,8 +326,12 @@ int bamExpRunner::determineRegionLastz(
 		throw std::runtime_error{ss.str()};
 	}
 
+	uint64_t maxSize = 0;
 	//work around for read names that are too long
 	auto tempSeqOpts = SeqIOOptions::genFastaOut(njh::files::findNonexitantFile(njh::files::prependFileBasename(setUp.pars_.ioOptions_.firstName_, "temp_")));
+	tempSeqOpts.out_.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
+	auto tempRefAlignDir = njh::files::prependFileBasename(setUp.pars_.ioOptions_.firstName_, "tempdir_");
+	njh::files::makeDir(njh::files::MkdirPar(tempRefAlignDir, setUp.pars_.ioOptions_.out_.overWriteFile_));
 	std::unordered_map<std::string, std::string> nameKey;
 	{
 		SeqOutput tempWriter(tempSeqOpts);
@@ -336,69 +345,105 @@ int bamExpRunner::determineRegionLastz(
 			seq.name_ = estd::to_string(count);
 			tempWriter.write(seq);
 			++count;
-
+			readVec::getMaxLength(seq, maxSize);
 		}
 	}
+	maxSize += determineSeqsPars.extendAndTrimLen*2;
 
+	aligner alignerObj(maxSize, gapScoringParameters::genSemiGlobalQueryOnly(5,1), substituteMatrix::createDegenScoreMatrixNoNInRef(2, -2));
 	//open out file
-	std::ofstream outFile;
 	OutputStream out(setUp.pars_.ioOptions_.out_);
-
+	std::unique_ptr<OutputStream> individualOut;
+	if (!individualOutOpts.outFilename_.empty()) {
+		individualOutOpts.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
+		individualOut = std::make_unique<OutputStream>(individualOutOpts);
+	}
 
 	//map reads
 	auto tempInOpts = SeqIOOptions::genFastaIn(tempSeqOpts.out_.outName());
 	tempInOpts.out_.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
-	auto outputs = genomeMapper.alignToGenomesLastz(tempInOpts, bfs::basename(setUp.pars_.ioOptions_.out_.outFilename_) + "_", lzPars);
-	std::unordered_map<std::string, bfs::path> bamFnps;
-	for (const auto & output : outputs) {
-		bamFnps[output.first] = output.second.alignedFnp_;
-	}
 
-	//get regions
-	if(individual){
-
-		VecStr added;
-		auto bamFnp = bamFnps.begin()->second;
-		BamTools::BamReader bReader;
-		BamTools::BamAlignment bAln;
-		bReader.Open(bamFnp.string());
-		checkBamOpenThrow(bReader, bamFnp.string());
-		auto refDAta = bReader.GetReferenceData();
-		while(bReader.GetNextAlignment(bAln)){
-			GenomicRegion region{bAln, refDAta};
-			region.uid_ = nameKey[region.uid_];
-			out << region.genBedRecordCore().toDelimStr() << std::endl;
-			added.emplace_back(region.uid_);
-		}
-		seqInfo seq;
-		SeqInput reader(setUp.pars_.ioOptions_);
-		reader.openIn();
-		while(reader.readNextRead(seq)){
-			if(!njh::in(seq.name_, added)){
-				GenomicRegion region{seq.name_, "*", std::numeric_limits<uint32_t>::max()-1, std::numeric_limits<uint32_t>::max(), false};
-				out << region.genBedRecordCore().toDelimStr() << std::endl;
+	auto res = genomeMapper.determineRegionsLastzAgainstGenomes(tempInOpts,tempRefAlignDir, determineSeqsPars,alignerObj);
+	if (njh::in(genomeName, res)) {
+		if (!individualOutOpts.outFilename_.empty()) {
+			VecStr hits;
+			for (const auto& reg: res.at(genomeName).all_individual_regions) {
+				auto bedReg = reg.genBedRecordCore();
+				hits.emplace_back(bedReg.name_);
+				bedReg.name_ = nameKey[bedReg.name_];
+				*individualOut << bedReg.toDelimStrWithExtra() << std::endl;
+			}
+			if (includeUnmapped) {
+				for (const auto & seq_name : nameKey) {
+					if (njh::notIn(seq_name.first, hits)) {
+						*individualOut  << "*\t*\t*\t" << seq_name.second << "\t*\t*" << std::endl;
+					}
+				}
 			}
 		}
-	} else {
-		auto determinedRegions = genomeMapper.getRegionsFromBams(bamFnps);
-		if(!determinedRegions.at(genomeName).empty()){
-			auto region = determinedRegions.at(genomeName).front();
-			if(!name.empty()){
-				region.uid_ = name;
-			}
-			//write out all the regions determined
-			out << region.genBedRecordCore().toDelimStr() << std::endl;
+		if (!name.empty()) {
+			res.at(genomeName).most_common_region.uid_ = name;
 		}
+		out << res.at(genomeName).most_common_region.genBedRecordCore().toDelimStrWithExtra() << std::endl;
+	} else if (includeUnmapped) {
+		if (!individualOutOpts.outFilename_.empty()) {
+			for (const auto & seq_name : nameKey) {
+				*individualOut  << "*\t*\t*\t" << seq_name.second << "\t*\t*" << std::endl;
+			}
+		}
+		out << "*\t*\t*\t" << "\t" << (name.empty() ? "*" : name ) << "\t*\t*" << std::endl;
 	}
 
+	// auto outputs = genomeMapper.alignToGenomesLastz(tempInOpts, bfs::basename(setUp.pars_.ioOptions_.out_.outFilename_) + "_", lzPars);
+	// std::unordered_map<std::string, bfs::path> bamFnps;
+	// for (const auto & output : outputs) {
+	// 	bamFnps[output.first] = output.second.alignedFnp_;
+	// }
 
+	// //get regions
+	// if(individual){
+	//
+	// 	VecStr added;
+	// 	auto bamFnp = bamFnps.begin()->second;
+	// 	BamTools::BamReader bReader;
+	// 	BamTools::BamAlignment bAln;
+	// 	bReader.Open(bamFnp.string());
+	// 	checkBamOpenThrow(bReader, bamFnp.string());
+	// 	auto refDAta = bReader.GetReferenceData();
+	// 	while(bReader.GetNextAlignment(bAln)){
+	// 		GenomicRegion region{bAln, refDAta};
+	// 		region.uid_ = nameKey[region.uid_];
+	// 		out << region.genBedRecordCore().toDelimStr() << std::endl;
+	// 		added.emplace_back(region.uid_);
+	// 	}
+	// 	seqInfo seq;
+	// 	SeqInput reader(setUp.pars_.ioOptions_);
+	// 	reader.openIn();
+	// 	while(reader.readNextRead(seq)){
+	// 		if(!njh::in(seq.name_, added)){
+	// 			GenomicRegion region{seq.name_, "*", std::numeric_limits<uint32_t>::max()-1, std::numeric_limits<uint32_t>::max(), false};
+	// 			out << region.genBedRecordCore().toDelimStr() << std::endl;
+	// 		}
+	// 	}
+	// } else {
+	// 	auto determinedRegions = genomeMapper.getRegionsFromBams(bamFnps);
+	// 	if(!determinedRegions.at(genomeName).empty()){
+	// 		auto region = determinedRegions.at(genomeName).front();
+	// 		if(!name.empty()){
+	// 			region.uid_ = name;
+	// 		}
+	// 		//write out all the regions determined
+	// 		out << region.genBedRecordCore().toDelimStr() << std::endl;
+	// 	}
+	// }
 
 	if(!keepIntermediateFiles){
-		for(const auto & bamFnp : bamFnps){
-			bfs::remove(bamFnp.second);
-			bfs::remove(bamFnp.second.string() + ".bai");
-			bfs::remove(tempSeqOpts.out_.outName());
-		}
+		// for(const auto & bamFnp : bamFnps){
+		// 	bfs::remove(bamFnp.second);
+		// 	bfs::remove(bamFnp.second.string() + ".bai");
+		// }
+		bfs::remove(tempSeqOpts.out_.outName());
+		njh::files::rmDirForce(tempRefAlignDir);
 	}
 	return 0;
 }
