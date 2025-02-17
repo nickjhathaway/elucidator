@@ -135,8 +135,9 @@ addIntersectingGeneInfosToLocs(
 		for (const auto & gffRec: gffRecords[regPos]) {
 			if (njh::in(gffRec.getIDAttr(), genes)) {
 				TwoBit::TwoBitFile tReader(twoBitFnp);
-				auto infos = njh::mapAt(genes, gffRec.getIDAttr())->generateGeneSeqInfo(tReader, false);
-				auto detailedName = njh::mapAt(genes, gffRec.getIDAttr())->getGeneDetailedName();
+				const auto & gene = njh::mapAt(genes, gffRec.getIDAttr());
+				auto infos = gene->generateGeneSeqInfo(tReader, false);
+				auto detailedName = gene->getGeneDetailedName();
 				for (const auto&info: infos) {
 
 					auto posInfos = info.second->getInfosByGDNAPos();
@@ -169,7 +170,11 @@ addIntersectingGeneInfosToLocs(
 						++aaStopPos;
 						++aaStartPos; //
 					}
-					ret[regPos].emplace_back(info.second->transcriptID_, aaStartPos, aaStopPos, detailedName[info.first]);
+					std::string geneName = gffRec.getIDAttr();
+					if (gene->gene_->hasAttr("Name") && "NA" != gene->gene_->getAttr("Name") && !gene->gene_->getAttr("Name").empty()) {
+						geneName = gene->gene_->getAttr("Name");
+					}
+					ret[regPos].emplace_back(info.second->transcriptID_, geneName, aaStartPos, aaStopPos, detailedName[info.first]);
 					ret[regPos].back().allMeta_.meta_ = gffRec.attributes_;
 				}
 			}
