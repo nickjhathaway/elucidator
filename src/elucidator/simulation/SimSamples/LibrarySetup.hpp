@@ -736,7 +736,7 @@ public:
 		njh::json::MemberChecker memcheck(librarySetUp);
 		memcheck.failMemberCheckThrow(jsonMembers(), __PRETTY_FUNCTION__);
 
-		ids_ = std::make_unique<PrimersAndMids>(std::unordered_map<std::string, PrimersAndMids::Target>{});
+		ids_ = std::make_unique<PrimersAndMids>(std::map<std::string, PrimersAndMids::Target>{});
 		for(const auto & sample : librarySetUp["samples"]){
 			njh::json::MemberChecker sampleChecker(sample);
 			sampleChecker.failMemberCheckThrow({"name", "mixtures"}, __PRETTY_FUNCTION__);

@@ -176,7 +176,7 @@ int genExpRunner::extractRefSeqsFromGenomesWithPrimers(
 		primerTable.addRow(targetName, njh::conToStr(forwardPrimers, ","), njh::conToStr(reversePrimers, ","));
 	}
 
-	std::unordered_map<std::string, PrimersAndMids::Target> targets;
+	std::map<std::string, PrimersAndMids::Target> targets;
 
 	for(const auto & row : primerTable){
 		if(njh::in(row[0], targets)){
