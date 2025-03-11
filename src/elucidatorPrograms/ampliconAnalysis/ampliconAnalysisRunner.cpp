@@ -45,7 +45,7 @@ ampliconAnalysisRunner::ampliconAnalysisRunner()
                       addFunc("experimentInfoFileToJson", experimentInfoFileToJson, false),
                       addFunc("demultiplexedExperimentSampleFileToJson", demultiplexedExperimentSampleFileToJson, false),
                       addFunc("determinePossibleMaskFromSeqs", determinePossibleMaskFromSeqs, false),
-                      addFunc("maskRegionBasedOnRefSubRegions", maskRegionBasedOnRefSubRegions, false),
+													addFunc("maskRegionBasedOnRefSubRegions", maskRegionBasedOnRefSubRegions, false),
 										 },//
                     "ampliconAnalysis") {}
 

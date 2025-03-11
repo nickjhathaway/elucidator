@@ -16,7 +16,9 @@ struct RefDeterminedMaskingInfo {
 	uint32_t ref_start{std::numeric_limits<uint32_t>::max()};
 	uint32_t ref_segment_size{std::numeric_limits<uint32_t>::max()};
 	uint32_t replacement_size{std::numeric_limits<uint32_t>::max()};
-
+	uint32_t end() const {
+		return ref_start + ref_segment_size;
+	}
 	[[nodiscard]] Json::Value toJson() const {
 		Json::Value ret;
 		ret["class"] = njh::getTypeName(*this);
@@ -32,7 +34,9 @@ struct MaskingInfo {
 	uint32_t seq_start{std::numeric_limits<uint32_t>::max()};
 	uint32_t seq_segment_size{std::numeric_limits<uint32_t>::max()};
 	uint32_t replacement_size{std::numeric_limits<uint32_t>::max()};
-
+	uint32_t end() const {
+		return seq_start + seq_segment_size;
+	}
 	char replacement = 'N';
 
 	[[nodiscard]] Json::Value toJson() const {
@@ -228,7 +232,7 @@ int ampliconAnalysisRunner::determinePossibleMaskFromSeqs(
 
 int ampliconAnalysisRunner::maskRegionBasedOnRefSubRegions(
 				const njh::progutils::CmdArgs & inputCommands) {
-
+	bool maskByAligningWithNs = false;
 	bfs::path maskingInfoRegionFnp;
 	char masking = 'N';
 	bfs::path genome2bitFnp;
@@ -246,6 +250,7 @@ int ampliconAnalysisRunner::maskRegionBasedOnRefSubRegions(
 	setUp.setOption(masking, "--masking", "what is being used to mask");
 	setUp.setOption(numThreads, "--threads", "Number of Threads");
 	setUp.setOption(outputMaskingFnp, "--outputMaskingFnp", "output Masking Fnp, if left blank, info will not be written");
+	setUp.setOption(maskByAligningWithNs, "--maskByAligningWithNs", "mask by aligning with Ns");
 
 	setUp.pars_.gapInfo_ = gapScoringParameters::genSemiGlobal(5,1);
 	setUp.pars_.scoring_ = substituteMatrix::createDegenScoreMatrixLessN(2, -2);
@@ -314,7 +319,9 @@ int ampliconAnalysisRunner::maskRegionBasedOnRefSubRegions(
 					ss << __PRETTY_FUNCTION__ << ", error " << "masking start + length great than length, mask.ref_start + mask.ref_segment_size: " << mask.ref_start + mask.ref_segment_size << ", reference length: " << len(*refSeq) << "\n";
 					throw std::runtime_error{ss.str()};
 				}
-				refSeq->seq_.replace(mask.ref_start, mask.ref_segment_size, std::string(mask.replacement_size, masking));
+				if (maskByAligningWithNs) {
+					refSeq->seq_.replace(mask.ref_start, mask.ref_segment_size, std::string(mask.replacement_size, masking));
+				}
 			}
 		}
 		if(setUp.pars_.debug_) {
@@ -335,7 +342,7 @@ int ampliconAnalysisRunner::maskRegionBasedOnRefSubRegions(
 	aligner alignerObj(maxLen, setUp.pars_.gapInfo_, setUp.pars_.scoring_);
 	std::shared_ptr<aligner> debug_alignerObj;
 	if(setUp.pars_.debug_) {
-		debug_alignerObj = std::make_shared<aligner>(maxLen, setUp.pars_.gapInfo_, substituteMatrix(2,-2));
+		debug_alignerObj = std::make_shared<aligner>(maxLen, setUp.pars_.gapInfo_, substituteMatrix::createDegenScoreMatrixLessN(2,-2));
 	}
 
 	// std::regex pattern("(" + std::string(1, masking) + "+(-+" + std::string(1, masking) + "+)*)");
@@ -358,56 +365,90 @@ int ampliconAnalysisRunner::maskRegionBasedOnRefSubRegions(
 		while(reader.readNextRead(seq)) {
 			std::shared_ptr<seqInfo> refSeq;
 			std::string regionUID = "region";
-			if(!MetaDataInName::nameHasMetaData(seq.name_)) {
+
+			if(!MetaDataInName::nameHasMetaData(seq.name_) && ref_seqs.size() > 1) {
 				std::stringstream ss;
 				ss << __PRETTY_FUNCTION__ << ", error " << seq.name_ << " doesn't have meta, need to have meta data to match to which seq to determine masking" << "" << "\n";
 				throw std::runtime_error{ss.str()};
 			}
-			MetaDataInName meta(seq.name_);
-			if(!meta.containsMeta(regionMetaField)) {
-				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", error " << "need to have " << regionMetaField <<", only found: " << njh::conToStr(njh::getVecOfMapKeys(meta.meta_), ",") << "" << "\n";
-				throw std::runtime_error{ss.str()};
+			if (ref_seqs.size() > 1) {
+				MetaDataInName meta(seq.name_);
+				if(!meta.containsMeta(regionMetaField)) {
+					std::stringstream ss;
+					ss << __PRETTY_FUNCTION__ << ", error " << "need to have " << regionMetaField <<", only found: " << njh::conToStr(njh::getVecOfMapKeys(meta.meta_), ",") << "" << "\n";
+					throw std::runtime_error{ss.str()};
+				}
+				regionUID = meta.getMeta(regionMetaField);
+			} else {
+				regionUID = ref_seqs.begin()->first;
 			}
-			regionUID = meta.getMeta(regionMetaField);
-			//no masking info for this seq, will write out without any masking applied;
+			//if no masking info for this seq, will write out without any masking applied
 			if(njh::in(regionUID, ref_seqs)) {
 				refSeq = ref_seqs[regionUID];
 				alignerObj.alignCacheGlobal(refSeq, seq);
 				alignerObj.rearrangeObjsGlobal(*refSeq, seq);
 				std::vector<MaskingInfo> maskingInfos;
-				njh::PatPosFinder finder(pattern);
-				auto masked_positions = finder.getPatPositions(alignerObj.alignObjectA_.seqBase_.seq_);
-				for(const auto & position : masked_positions) {
-					MaskingInfo mask;
-					mask.replacement = masking;
-					mask.seq_start = alignerObj.getSeqPosForAlnBPos(position.pos_);
-					auto seqSubSeq = alignerObj.alignObjectB_.seqBase_.getSubRead(position.pos_, position.pat_.size());
-					auto refSubSeq = alignerObj.alignObjectA_.seqBase_.getSubRead(position.pos_, position.pat_.size());
-					if(setUp.pars_.debug_) {
-						std::cout << "position.pat_: " << position.pat_ << std::endl;
-						seqSubSeq.outPutSeqAnsi(std::cout);
-						refSubSeq.outPutSeqAnsi(std::cout);
+				if (maskByAligningWithNs) {
+					njh::PatPosFinder finder(pattern);
+					auto masked_positions = finder.getPatPositions(alignerObj.alignObjectA_.seqBase_.seq_);
+					for(const auto & position : masked_positions) {
+						MaskingInfo mask;
+						mask.replacement = masking;
+						mask.seq_start = alignerObj.getSeqPosForAlnBPos(position.pos_);
+						auto seqSubSeq = alignerObj.alignObjectB_.seqBase_.getSubRead(position.pos_, position.pat_.size());
+						auto refSubSeq = alignerObj.alignObjectA_.seqBase_.getSubRead(position.pos_, position.pat_.size());
+						if(setUp.pars_.debug_) {
+							std::cout << "position.pat_: " << position.pat_ << std::endl;
+							seqSubSeq.outPutSeqAnsi(std::cout);
+							refSubSeq.outPutSeqAnsi(std::cout);
+						}
+						seqSubSeq.removeGaps();
+						refSubSeq.removeGaps();
+						mask.seq_segment_size = seqSubSeq.seq_.size();
+						mask.replacement_size = refSubSeq.seq_.size();
+						maskingInfos.emplace_back(mask);
+						outMaskInfo.addRow(
+							regionUID,
+							seq.name_,
+							mask.seq_start,
+							mask.seq_segment_size,
+							mask.replacement_size,
+							mask.replacement
+						);
 					}
-
-
-					seqSubSeq.removeGaps();
-					refSubSeq.removeGaps();
-
-					mask.seq_segment_size = seqSubSeq.seq_.size();
-					mask.replacement_size = refSubSeq.seq_.size();
-					maskingInfos.emplace_back(mask);
-					outMaskInfo.addRow(
-						regionUID,
-						seq.name_,
-						mask.seq_start,
-						mask.seq_segment_size,
-						mask.replacement_size,
-						mask.replacement
-					);
+				} else {
+					uint32_t refAlignStart = 0;
+					uint32_t refAlignEnd = ref_seqs[regionUID]->seq_.size();
+					if ('-' == alignerObj.alignObjectB_.seqBase_.seq_.front()) {
+						refAlignStart = getRealPosForAlnPos(alignerObj.alignObjectA_.seqBase_.seq_, alignerObj.alignObjectB_.seqBase_.seq_.find_first_not_of('-'));
+					}
+					if ('-' == alignerObj.alignObjectB_.seqBase_.seq_.back()) {
+						refAlignEnd = getRealPosForAlnPos(alignerObj.alignObjectA_.seqBase_.seq_, alignerObj.alignObjectB_.seqBase_.seq_.find_last_not_of('-')) + 1;
+					}
+					for(const auto & refMask : iter::reversed(referenceMasking[regionUID])) {
+						MaskingInfo seqMask;
+						if (refMask.end() > refAlignStart && refMask.ref_start < refAlignEnd) {
+							auto seqStart = getRealPosForAlnPos(alignerObj.alignObjectB_.seqBase_.seq_, getAlnPosForRealPos(alignerObj.alignObjectA_.seqBase_.seq_, refMask.ref_start));
+							auto seqEnd = getRealPosForAlnPos(alignerObj.alignObjectB_.seqBase_.seq_, getAlnPosForRealPos(alignerObj.alignObjectA_.seqBase_.seq_, refMask.end() - 1)) + 1;
+							seqMask.seq_start = seqStart;
+							seqMask.seq_segment_size = seqEnd - seqStart;
+							seqMask.replacement_size = refMask.replacement_size;
+							seqMask.replacement = masking;
+							maskingInfos.emplace_back(seqMask);
+							outMaskInfo.addRow(
+								regionUID,
+								seq.name_,
+								seqMask.seq_start,
+								seqMask.seq_segment_size,
+								seqMask.replacement_size,
+								seqMask.replacement
+							);
+						}
+					}
 				}
 
 				MaskingInfo::applyMasks(seq, maskingInfos);
+
 				if(setUp.pars_.debug_) {
 					alignerObj.alignObjectA_.seqBase_.outPutSeqAnsi(std::cout);
 					alignerObj.alignObjectB_.seqBase_.outPutSeqAnsi(std::cout);
