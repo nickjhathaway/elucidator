@@ -40,12 +40,11 @@ ampliconAnalysisRunner::ampliconAnalysisRunner()
                       addFunc("processRawExtractByKmerPathWeaverResults", processRawExtractByKmerPathWeaverResults, false),
                       addFunc("extractedTarAmpInfoFileToJson", extractedTarAmpInfoFileToJson, false),
                       addFunc("finalClustersFileToJson", finalClustersFileToJson, false),
-                      addFunc("specimenInfoFileToJson", specimenInfoFileToJson, false),
+                      addFunc("specimenExperimentInfoFileToJson", specimenExperimentInfoFileToJson, false),
                       addFunc("combingAllIntoPMOJson", combingAllIntoPMOJson, false),
-                      addFunc("experimentInfoFileToJson", experimentInfoFileToJson, false),
-                      addFunc("demultiplexedExperimentSampleFileToJson", demultiplexedExperimentSampleFileToJson, false),
+                      addFunc("readsByStageToJson", readsByStageToJson, false),
                       addFunc("determinePossibleMaskFromSeqs", determinePossibleMaskFromSeqs, false),
-													addFunc("maskRegionBasedOnRefSubRegions", maskRegionBasedOnRefSubRegions, false),
+    									addFunc("maskRegionBasedOnRefSubRegions", maskRegionBasedOnRefSubRegions, false),
 										 },//
                     "ampliconAnalysis") {}
 

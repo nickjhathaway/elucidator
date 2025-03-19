@@ -115,6 +115,7 @@ bedExpRunner::bedExpRunner()
 					 addFunc("bedBinCloseRegions", bedBinCloseRegions, false),
            addFunc("createBedRegionFromName", createBedRegionFromName, false),
           	addFunc("vcfToBed", vcfToBed, false),
+          	addFunc("printVcfSamples", printVcfSamples, false),
           	addFunc("combineVcfs", combineVcfs, false),
           	addFunc("bedRenameWithKey", bedRenameWithKey, false),
           	addFunc("bedMakeAllOneStrand", bedMakeAllOneStrand, false),

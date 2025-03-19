@@ -40,6 +40,26 @@ int bedExpRunner::vcfToBed(const njh::progutils::CmdArgs & inputCommands) {
 	return 0;
 }
 
+int bedExpRunner::printVcfSamples(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path vcfFile;
+	bfs::path intersectWithBed;
+	OutOptions outOpts;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.setOption(vcfFile, "--vcfFile", "vcfFile", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	OutputStream out(outOpts);
+
+	VCFOutput vcf = VCFOutput::readInHeader(vcfFile);
+	out << njh::conToStr(vcf.samples_, "\n") << std::endl;
+	return 0;
+}
+
+
+
+
 int bedExpRunner::combineVcfs(const njh::progutils::CmdArgs & inputCommands) {
 	std::vector<bfs::path> vcfFnps;
 	bfs::path intersectWithBed;
