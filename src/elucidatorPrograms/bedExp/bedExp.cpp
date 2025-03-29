@@ -117,6 +117,10 @@ bedExpRunner::bedExpRunner()
           	addFunc("vcfToBed", vcfToBed, false),
           	addFunc("printVcfSamples", printVcfSamples, false),
           	addFunc("combineVcfs", combineVcfs, false),
+          	addFunc("simpleVCFDetermineMonoclonals", simpleVCFDetermineMonoclonals, false),
+
+
+
           	addFunc("bedRenameWithKey", bedRenameWithKey, false),
           	addFunc("bedMakeAllOneStrand", bedMakeAllOneStrand, false),
           	addFunc("getBestScoringRegionsPerChromosome", getBestScoringRegionsPerChromosome, false),
