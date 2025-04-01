@@ -311,16 +311,22 @@ int ampliconAnalysisRunner::specimenExperimentInfoFileToJson(const njh::progutil
   setUp.finishSetUp(std::cout);
 
   OutputStream out(outOpts);
+  VecStr plateInfoCols{"plate_name", "plate_row", "plate_col"};
 
   Json::Value outJson;
   auto & specimen_info = outJson["specimen_info"];
   auto & experiment_info = outJson["experiment_info"];
   std::unordered_map<std::string, uint32_t> specimen_name_indexes;
   {
-    VecStr plateInfoCols{"plate_name", "plate_row", "plate_col"};
     table reader(TableIOOpts::genTabFileIn(specimenInfoFnp));
     auto numeric_cols = reader.getNumericColumnPositions();
-    VecStr specimenRequiredCols{"specimen_name", "samp_taxon_id", "collection_date", "collection_country", "collector", "samp_store_loc", "samp_collect_device", "project_name"};
+    // VecStr specimenRequiredCols{"specimen_name", "samp_taxon_id", "collection_date", "collection_country", "collector", "samp_store_loc", "samp_collect_device", "project_name"};
+   VecStr specimenRequiredCols{"specimen_name",
+                    "specimen_taxon_id",
+                    "host_taxon_id",
+                    "collection_date",
+                    "collection_country",
+                    "project_name"};
     reader.checkForColumnsThrow(specimenRequiredCols, __PRETTY_FUNCTION__ );
 
 
@@ -338,7 +344,12 @@ int ampliconAnalysisRunner::specimenExperimentInfoFileToJson(const njh::progutil
       for(const auto & colName : reader.columnNames_){
         if(colName == "specimen_name"){
           sampleJson[colName] = row[reader.getColPos(colName)];
-        } else if (colName == "parasite_density_method" || colName == "parasite_density") {
+        } else if (colName == "specimen_taxon_id") {
+          auto colPos = reader.getColPos(colName);
+          const auto & currentColValue = row[colPos];
+          Json::Value specimen_taxon_id = njh::json::toJson(njh::StrToNumConverter::stoToNum<uint32_t>(currentColValue));
+          sampleJson["specimen_taxon_id"].append(specimen_taxon_id);
+        } else if (njh::in(colName, VecStr{"parasite_density_method", "parasite_density"}) || njh::in(colName, plateInfoCols)) {
           //do nothing
         } else {
           auto colPos = reader.getColPos(colName);
@@ -363,14 +374,13 @@ int ampliconAnalysisRunner::specimenExperimentInfoFileToJson(const njh::progutil
         }
       }
 
-      if(row[reader.getColPos("plate_name")] == "NA") {
-        sampleJson.removeMember("plate_name");
-        sampleJson.removeMember("plate_row");
-        sampleJson.removeMember("plate_col");
-      } else {
-        sampleJson["plate_name"] = row[reader.getColPos("plate_name")];
-        sampleJson["plate_row"] = row[reader.getColPos("plate_row")];
-        sampleJson["plate_col"] = njh::json::toJson(njh::StrToNumConverter::stoToNum<uint32_t>(row[reader.getColPos("plate_col")]));
+
+      if(row[reader.getColPos("plate_name")] != "NA") {
+        Json::Value plateJson;
+        plateJson["plate_name"] = row[reader.getColPos("plate_name")];
+        plateJson["plate_row"] = row[reader.getColPos("plate_row")];
+        plateJson["plate_col"] = njh::json::toJson(njh::StrToNumConverter::stoToNum<uint32_t>(row[reader.getColPos("plate_col")]));
+        sampleJson["plate_info"] = plateJson;
       }
       specimen_info.append(sampleJson);
     }
@@ -404,6 +414,8 @@ int ampliconAnalysisRunner::specimenExperimentInfoFileToJson(const njh::progutil
           experimentSampleJson[colName] = row[reader.getColPos(colName)];
         } else if (colName == "specimen_name") {
           experimentSampleJson["specimen_id"] = specimen_name_indexes[row[reader.getColPos(colName)]];
+        } else if ( njh::in(colName, plateInfoCols)) {
+          //do nothing
         } else {
           auto colPos = reader.getColPos(colName);
           const auto& currentColValue = row[colPos];
@@ -420,14 +432,13 @@ int ampliconAnalysisRunner::specimenExperimentInfoFileToJson(const njh::progutil
           }
         }
       }
-      if(row[reader.getColPos("plate_name")] == "NA") {
-        experimentSampleJson.removeMember("plate_name");
-        experimentSampleJson.removeMember("plate_row");
-        experimentSampleJson.removeMember("plate_col");
-      } else {
-        experimentSampleJson["plate_name"] = row[reader.getColPos("plate_name")];
-        experimentSampleJson["plate_row"] = row[reader.getColPos("plate_row")];
-        experimentSampleJson["plate_col"] = njh::json::toJson(njh::StrToNumConverter::stoToNum<uint32_t>(row[reader.getColPos("plate_col")]));
+      if(row[reader.getColPos("plate_name")] != "NA") {
+        Json::Value plateJson;
+
+        plateJson["plate_name"] = row[reader.getColPos("plate_name")];
+        plateJson["plate_row"] = row[reader.getColPos("plate_row")];
+        plateJson["plate_col"] = njh::json::toJson(njh::StrToNumConverter::stoToNum<uint32_t>(row[reader.getColPos("plate_col")]));
+        experimentSampleJson["sequencing_prep_plate_info"] = plateJson;
       }
       experiment_info.append(experimentSampleJson);
     }

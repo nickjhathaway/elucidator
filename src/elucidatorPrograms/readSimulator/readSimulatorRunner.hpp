@@ -67,6 +67,8 @@ class readSimulatorRunner : public njh::progutils::ProgramRunner {
 
   static int shearSimIlluminaAlign(const njh::progutils::CmdArgs & inputCommands);
 
+
+	static int simulateSpecificSamples(const njh::progutils::CmdArgs & inputCommands);
 };
 }  // namespace njhseq
 

@@ -53,6 +53,7 @@ readSimulatorRunner::readSimulatorRunner()
 	addFunc("shearSequences", shearSequences, false),
 	addFunc("shearSimIlluminaAlign", shearSimIlluminaAlign, false),
 	addFunc("createLibrarySimMultipleMixtureSpiecesMixture", createLibrarySimMultipleMixtureSpiecesMixture, false),
+    	addFunc("simulateSpecificSamples", simulateSpecificSamples, false),
 },
                     "readSimulator") {}
 //
