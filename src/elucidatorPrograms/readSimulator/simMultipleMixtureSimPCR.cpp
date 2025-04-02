@@ -297,8 +297,8 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 				}
 				uint64_t readSimAmount = mixture.second->finalReadAmount_;
 				if(std::numeric_limits<double>::max() != finalReadAmountSDFrac){
-					std::normal_distribution<double> ndist(readSimAmount, finalReadAmountSDFrac * readSimAmount);
-					double newReadSimAmount = 0;
+					std::normal_distribution<long double> ndist(readSimAmount, finalReadAmountSDFrac * readSimAmount);
+					long double newReadSimAmount = 0;
 					while(newReadSimAmount <= 0){
 						newReadSimAmount = std::round(ndist(rGen.mtGen_));
 					}
@@ -313,7 +313,7 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 				std::string PrimerPair = mixture.second->meta_->getMeta("PrimerPair");
 				std::string experiment = mixture.second->meta_->getMeta("experiment");
 				std::string sampName   = mixture.second->meta_->getMeta("sampName_");
-				uint32_t runNumber     = mixture.second->meta_->getMeta<uint32_t>("runNumber");
+				auto runNumber         = mixture.second->meta_->getMeta<uint32_t>("runNumber");
 				for(const auto & sequenced : pcrSimAmounts.sampledForSequencing_){
 					njh::mapAt(njh::mapAt(njh::mapAt(lSetup.pop_.samples_, sampName).expRuns_,experiment)[runNumber].hapRegionAmplified_, PrimerPair).hapAbundSequenced_[sequenced.first] = sequenced.second.mutated_ + sequenced.second.nonMutated_;
 					//lSetup.pop_.samples_.at(sampName).expRuns_.at(experiment)[runNumber].hapRegionAmplified_.at(PrimerPair).hapAbundSequenced_.at(sequenced.first) = sequenced.second.mutated_ + sequenced.second.nonMutated_;
