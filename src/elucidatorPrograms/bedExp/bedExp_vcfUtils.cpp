@@ -58,6 +58,148 @@ int bedExpRunner::printVcfSamples(const njh::progutils::CmdArgs & inputCommands)
 }
 
 
+int bedExpRunner::vcfRenameChroms(const njh::progutils::CmdArgs & inputCommands) {
+	bfs::path vcfFile;
+	bfs::path nameKeyFnp;
+	std::string old_name_column_name;
+	std::string new_name_column_name;
+
+	OutOptions outOpts;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.setOption(vcfFile, "--vcfFile", "vcfFile", true);
+	setUp.setOption(nameKeyFnp, "--nameKeyFnp", "name Key Fnp, tab-delimited file either no column file with col1 being old name and col2 being new name or can supply which column names are old and new names with flags --oldNameColumnName and --newNameColumnName", true);
+	setUp.setOption(old_name_column_name, "--oldNameColumnName", "the name of a column to be the old name");
+	setUp.setOption(new_name_column_name, "--newNameColumnName", "the name of the column to be the new/replacement name", "" != old_name_column_name);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	std::unordered_map<std::string, std::string> nameKeyMap;
+	std::unordered_map<std::string, std::string> replacementNameToOriginalName;
+	if (new_name_column_name.empty()) {
+		table keyTab(nameKeyFnp, "\t", false);
+		if (keyTab.nCol() != 2) {
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << nameKeyFnp <<
+					" should have two columns, not: " << keyTab.nCol() << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		auto old_name_col_pos = 0;
+		auto new_name_col_pos = 1;
+		for (const auto & row : keyTab) {
+			if (njh::in(row[old_name_col_pos], nameKeyMap)) {
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "already have " << row[old_name_col_pos] << " in replacement map" << "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			if (njh::in(row[new_name_col_pos], replacementNameToOriginalName)) {
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "already have replacement name: " << row[new_name_col_pos] << " for " << replacementNameToOriginalName[row[new_name_col_pos]] << "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			nameKeyMap[row[old_name_col_pos]] = row[new_name_col_pos];
+			replacementNameToOriginalName[row[new_name_col_pos]] = row[old_name_col_pos];
+		}
+	} else {
+		table keyTab(nameKeyFnp, "\t", true);
+		keyTab.checkForColumnsThrow(VecStr{old_name_column_name, new_name_column_name}, __PRETTY_FUNCTION__);
+		auto old_name_col_pos = keyTab.getColPos(old_name_column_name);
+		auto new_name_col_pos = keyTab.getColPos(new_name_column_name);
+		for (const auto & row : keyTab) {
+			if (njh::in(row[old_name_col_pos], nameKeyMap)) {
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "already have " << row[old_name_col_pos] << " in replacement map" << "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			if (njh::in(row[new_name_col_pos], replacementNameToOriginalName)) {
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "already have replacement name: " << row[new_name_col_pos] << " for " << replacementNameToOriginalName[row[new_name_col_pos]] << "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			nameKeyMap[row[old_name_col_pos]] = row[new_name_col_pos];
+			replacementNameToOriginalName[row[new_name_col_pos]] = row[old_name_col_pos];
+		}
+	}
+
+	auto original_vcf_header = VCFOutput::readInHeader(vcfFile);
+	auto output_vcf_header = original_vcf_header;
+	output_vcf_header.changeContigNames(nameKeyMap);
+	OutputStream out(outOpts);
+	output_vcf_header.writeOutFixedAndSampleMeta(out);
+
+	InputStream in(vcfFile);
+	std::string line;
+	std::string formatOut;
+	VecStr formatOutputOrder;
+	//force GT to be first field
+	if(njh::in(std::string("GT"), output_vcf_header.formatEntries_)) {
+		formatOutputOrder.emplace_back("GT");
+	}
+	for (const auto & infoKey: output_vcf_header.formatEntries_) {
+		if(infoKey.first != "GT") {
+			formatOutputOrder.emplace_back(infoKey.first);
+		}
+	}
+	for (const auto & infoKey: formatOutputOrder) {
+		const auto & format = output_vcf_header.formatEntries_.at(infoKey);
+		if(!formatOut.empty()) {
+			formatOut +=":";
+		}
+		formatOut += format.id_;
+	}
+	while (njh::files::crossPlatGetline(in, line)) {
+		if(line.front() != '#') {
+			auto record = original_vcf_header.processRecordLineForFixedDataAndSampleMetaData(line);
+			if (njh::notIn(record.chrom_, nameKeyMap)) {
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "don't have chrom " << record.chrom_ << " in name key, options are: " << njh::conToStr(njh::getVecOfMapKeys(nameKeyMap), ",") << "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			record.chrom_ = nameKeyMap[record.chrom_];
+			out << record.chrom_
+					<< "\t" << record.pos_
+					<< "\t" << record.id_
+					<< "\t" << record.ref_
+					<< "\t" << njh::conToStr(record.alts_, ",")
+					<< "\t" << (record.qual_ == std::numeric_limits<uint32_t>::max() ? "." : estd::to_string(record.qual_))
+					<< "\t" << record.filter_;
+			std::string infoOut;
+			for (const auto& infoKey: output_vcf_header.infoEntries_) {
+				const auto& info = infoKey.second;
+				if (infoKey.second.type_ == "Flag") {
+					if (record.info_.containsMeta(info.id_)) {
+						if (!infoOut.empty()) {
+							infoOut += ";";
+						}
+						infoOut += info.id_;
+					}
+				} else {
+					if (!infoOut.empty()) {
+						infoOut += ";";
+					}
+					infoOut += info.id_ + "=" + record.info_.getMeta(info.id_);
+				}
+			}
+			out << "\t" << infoOut;
+			out << "\t" << formatOut;
+			for (const auto& sampleName: output_vcf_header.samples_) {
+				const auto& sample = record.sampleFormatInfos_.at(sampleName);
+				std::string formatOutForSample;
+				for (const auto& infoKey: formatOutputOrder) {
+					const auto& format = output_vcf_header.formatEntries_.at(infoKey);
+					if (!formatOutForSample.empty()) {
+						formatOutForSample += ":";
+					}
+					formatOutForSample += sample.getMeta(format.id_);
+				}
+				out << "\t" << formatOutForSample;
+			}
+			out << std::endl;
+		}
+	}
+	return 0;
+}
+
 
 
 int bedExpRunner::combineVcfs(const njh::progutils::CmdArgs & inputCommands) {

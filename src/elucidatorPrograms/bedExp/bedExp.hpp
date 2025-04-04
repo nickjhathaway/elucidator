@@ -146,6 +146,7 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
   static int createBedRegionFromName(const njh::progutils::CmdArgs & inputCommands);
 
 	//vcf
+	static int vcfRenameChroms(const njh::progutils::CmdArgs & inputCommands);
 	static int vcfToBed(const njh::progutils::CmdArgs & inputCommands);
 	static int combineVcfs(const njh::progutils::CmdArgs & inputCommands);
 	static int printVcfSamples(const njh::progutils::CmdArgs & inputCommands);
