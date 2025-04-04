@@ -171,10 +171,12 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 										&keepPCRSeqs, &pcrNumThreads,&pcrEfficiency,&simAmountsDir,
 										&chimeraDirectory,&templateCap,&noChimeras,&chimeraBasesIn,&initialPcrRoundsMap,
 										&finalReadAmountSDFrac](){
+
 		std::string sampleKey = "";
 		njh::randObjectGen<char,uint32_t> baseRGen({'A', 'C', 'G', 'T'}, {1,1,1,1});
 		RoughIlluminaSimulator simulator(illuminaProfileDir);
 		njh::randomGenerator rGen;
+
 		while(samplesQueue.getVal(sampleKey)){
 			uint32_t sampleCount = sampleCountAtom++;
 			OutOptions targetOutOpts(njh::files::make_path(fastqDirectory, njh::pasteAsStr(sampleKey, "_S", sampleCount + 1, extension)));

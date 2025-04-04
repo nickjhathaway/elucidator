@@ -268,7 +268,7 @@ int seqUtilsSplitRunner::getSimilarSequencesByKDist(const njh::progutils::CmdArg
 	setUp.setOption(cutOff, "--kmerDistCutOff", "Kmer Similarity Score Cut off");
 	setUp.setOption(checkComplement, "--checkComplement", "checkComplement");
 	setUp.setOption(kmerLen, "--kLen", "Kmer Length");
-	setUp.processKmerLenOptions();
+	// setUp.processKmerLenOptions();
 	setUp.processDefaultReader(true);
 	setUp.processRefFilename(true);
 	setUp.finishSetUp(std::cout);

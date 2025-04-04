@@ -64,6 +64,7 @@ class seqUtilsModRunner : public njh::progutils::ProgramRunner {
   static int dereplicate(const njh::progutils::CmdArgs & inputCommands);
 
 	static int fragmentSequences(const njh::progutils::CmdArgs & inputCommands);
+	static int fragmentSequencesForPhipSeq(const njh::progutils::CmdArgs & inputCommands);
 
 	static int breakUpSeqsOnPattern(const njh::progutils::CmdArgs & inputCommands);
 
