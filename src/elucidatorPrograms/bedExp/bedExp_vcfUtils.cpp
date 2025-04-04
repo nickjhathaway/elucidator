@@ -9,6 +9,7 @@
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/BioRecordsUtils/BedUtility.hpp"
 #include <njhseq/objects/Gene/TranslatorByAlignment.hpp>
+#include <njhseq/objects/helperObjects/RenamingKeyUtil.hpp>
 
 
 
@@ -60,70 +61,22 @@ int bedExpRunner::printVcfSamples(const njh::progutils::CmdArgs & inputCommands)
 
 int bedExpRunner::vcfRenameChroms(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path vcfFile;
-	bfs::path nameKeyFnp;
-	std::string old_name_column_name;
-	std::string new_name_column_name;
+	RenamingKeyUtil::RenamingKeyUtilPars renameKeyPars;
 
 	OutOptions outOpts;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.setOption(vcfFile, "--vcfFile", "vcfFile", true);
-	setUp.setOption(nameKeyFnp, "--nameKeyFnp", "name Key Fnp, tab-delimited file either no column file with col1 being old name and col2 being new name or can supply which column names are old and new names with flags --oldNameColumnName and --newNameColumnName", true);
-	setUp.setOption(old_name_column_name, "--oldNameColumnName", "the name of a column to be the old name");
-	setUp.setOption(new_name_column_name, "--newNameColumnName", "the name of the column to be the new/replacement name", "" != old_name_column_name);
+	renameKeyPars.setOptions(setUp);
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 
-	std::unordered_map<std::string, std::string> nameKeyMap;
-	std::unordered_map<std::string, std::string> replacementNameToOriginalName;
-	if (new_name_column_name.empty()) {
-		table keyTab(nameKeyFnp, "\t", false);
-		if (keyTab.nCol() != 2) {
-			std::stringstream ss;
-			ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << nameKeyFnp <<
-					" should have two columns, not: " << keyTab.nCol() << "\n";
-			throw std::runtime_error{ss.str()};
-		}
-		auto old_name_col_pos = 0;
-		auto new_name_col_pos = 1;
-		for (const auto & row : keyTab) {
-			if (njh::in(row[old_name_col_pos], nameKeyMap)) {
-				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", error " << "already have " << row[old_name_col_pos] << " in replacement map" << "\n";
-				throw std::runtime_error{ss.str()};
-			}
-			if (njh::in(row[new_name_col_pos], replacementNameToOriginalName)) {
-				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", error " << "already have replacement name: " << row[new_name_col_pos] << " for " << replacementNameToOriginalName[row[new_name_col_pos]] << "\n";
-				throw std::runtime_error{ss.str()};
-			}
-			nameKeyMap[row[old_name_col_pos]] = row[new_name_col_pos];
-			replacementNameToOriginalName[row[new_name_col_pos]] = row[old_name_col_pos];
-		}
-	} else {
-		table keyTab(nameKeyFnp, "\t", true);
-		keyTab.checkForColumnsThrow(VecStr{old_name_column_name, new_name_column_name}, __PRETTY_FUNCTION__);
-		auto old_name_col_pos = keyTab.getColPos(old_name_column_name);
-		auto new_name_col_pos = keyTab.getColPos(new_name_column_name);
-		for (const auto & row : keyTab) {
-			if (njh::in(row[old_name_col_pos], nameKeyMap)) {
-				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", error " << "already have " << row[old_name_col_pos] << " in replacement map" << "\n";
-				throw std::runtime_error{ss.str()};
-			}
-			if (njh::in(row[new_name_col_pos], replacementNameToOriginalName)) {
-				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", error " << "already have replacement name: " << row[new_name_col_pos] << " for " << replacementNameToOriginalName[row[new_name_col_pos]] << "\n";
-				throw std::runtime_error{ss.str()};
-			}
-			nameKeyMap[row[old_name_col_pos]] = row[new_name_col_pos];
-			replacementNameToOriginalName[row[new_name_col_pos]] = row[old_name_col_pos];
-		}
-	}
+	RenamingKeyUtil renamer(renameKeyPars);
+
 
 	auto original_vcf_header = VCFOutput::readInHeader(vcfFile);
 	auto output_vcf_header = original_vcf_header;
-	output_vcf_header.changeContigNames(nameKeyMap);
+	output_vcf_header.changeContigNames(renamer.nameKeyMap_);
 	OutputStream out(outOpts);
 	output_vcf_header.writeOutFixedAndSampleMeta(out);
 
@@ -150,12 +103,12 @@ int bedExpRunner::vcfRenameChroms(const njh::progutils::CmdArgs & inputCommands)
 	while (njh::files::crossPlatGetline(in, line)) {
 		if(line.front() != '#') {
 			auto record = original_vcf_header.processRecordLineForFixedDataAndSampleMetaData(line);
-			if (njh::notIn(record.chrom_, nameKeyMap)) {
+			if (njh::notIn(record.chrom_,renamer.nameKeyMap_)) {
 				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", error " << "don't have chrom " << record.chrom_ << " in name key, options are: " << njh::conToStr(njh::getVecOfMapKeys(nameKeyMap), ",") << "\n";
+				ss << __PRETTY_FUNCTION__ << ", error " << "don't have chrom " << record.chrom_ << " in name key, options are: " << njh::conToStr(njh::getVecOfMapKeys(renamer.nameKeyMap_), ",") << "\n";
 				throw std::runtime_error{ss.str()};
 			}
-			record.chrom_ = nameKeyMap[record.chrom_];
+			record.chrom_ = renamer.nameKeyMap_[record.chrom_];
 			out << record.chrom_
 					<< "\t" << record.pos_
 					<< "\t" << record.id_

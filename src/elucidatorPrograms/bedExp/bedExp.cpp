@@ -37,6 +37,7 @@
 
 #include <TwoBit.h>
 #include <njhseq/objects/Gene/TranslatorByAlignment.hpp>
+#include <njhseq/objects/helperObjects/RenamingKeyUtil.hpp>
 
 
 namespace njhseq {
@@ -635,80 +636,32 @@ int bedExpRunner::bedRenameWithKey(const njh::progutils::CmdArgs & inputCommands
 	return 0;
 }
 
+
+
+
 int bedExpRunner::bedRenameChromosomes(const njh::progutils::CmdArgs & inputCommands) {
-	bfs::path nameKeyFnp;
-	std::string old_name_column_name;
-	std::string new_name_column_name;
+	RenamingKeyUtil::RenamingKeyUtilPars rename_pars;
 	bfs::path bedFile;
 	OutOptions outOpts;
 	outOpts.outExtention_ = ".bed";
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(bedFile, "--bed", "Bed file", true);
-	setUp.setOption(nameKeyFnp, "--nameKeyFnp", "name Key Fnp, tab-delimited file either no column file with col1 being old name and col2 being new name or can supply which column names are old and new names with flags --oldNameColumnName and --newNameColumnName", true);
-	setUp.setOption(old_name_column_name, "--oldNameColumnName", "the name of a column to be the old name");
-	setUp.setOption(new_name_column_name, "--newNameColumnName", "the name of the column to be the new/replacement name", "" != old_name_column_name);
+	rename_pars.setOptions(setUp);
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
-
-	std::unordered_map<std::string, std::string> nameKeyMap;
-	std::unordered_map<std::string, std::string> replacementNameToOriginalName;
-	if (new_name_column_name.empty()) {
-		table keyTab(nameKeyFnp, "\t", false);
-		if (keyTab.nCol() != 2) {
-			std::stringstream ss;
-			ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << nameKeyFnp <<
-					" should have two columns, not: " << keyTab.nCol() << "\n";
-			throw std::runtime_error{ss.str()};
-		}
-		auto old_name_col_pos = 0;
-		auto new_name_col_pos = 1;
-		for (const auto & row : keyTab) {
-			if (njh::in(row[old_name_col_pos], nameKeyMap)) {
-				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", error " << "already have " << row[old_name_col_pos] << " in replacement map" << "\n";
-				throw std::runtime_error{ss.str()};
-			}
-			if (njh::in(row[new_name_col_pos], replacementNameToOriginalName)) {
-				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", error " << "already have replacement name: " << row[new_name_col_pos] << " for " << replacementNameToOriginalName[row[new_name_col_pos]] << "\n";
-				throw std::runtime_error{ss.str()};
-			}
-			nameKeyMap[row[old_name_col_pos]] = row[new_name_col_pos];
-			replacementNameToOriginalName[row[new_name_col_pos]] = row[old_name_col_pos];
-		}
-	} else {
-		table keyTab(nameKeyFnp, "\t", true);
-		keyTab.checkForColumnsThrow(VecStr{old_name_column_name, new_name_column_name}, __PRETTY_FUNCTION__);
-		auto old_name_col_pos = keyTab.getColPos(old_name_column_name);
-		auto new_name_col_pos = keyTab.getColPos(new_name_column_name);
-		for (const auto & row : keyTab) {
-			if (njh::in(row[old_name_col_pos], nameKeyMap)) {
-				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", error " << "already have " << row[old_name_col_pos] << " in replacement map" << "\n";
-				throw std::runtime_error{ss.str()};
-			}
-			if (njh::in(row[new_name_col_pos], replacementNameToOriginalName)) {
-				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << ", error " << "already have replacement name: " << row[new_name_col_pos] << " for " << replacementNameToOriginalName[row[new_name_col_pos]] << "\n";
-				throw std::runtime_error{ss.str()};
-			}
-			nameKeyMap[row[old_name_col_pos]] = row[new_name_col_pos];
-			replacementNameToOriginalName[row[new_name_col_pos]] = row[old_name_col_pos];
-		}
-	}
-
+	RenamingKeyUtil renamer(rename_pars);
 	BioDataFileIO<Bed3RecordCore> reader{IoOptions(InOptions(bedFile), outOpts)};
 	reader.openIn();
 	reader.openOut();
 	std::shared_ptr<Bed3RecordCore> b = reader.readNextRecord();
 	while(nullptr != b){
-		if(!njh::in(b->chrom_, nameKeyMap)){
+		if(!njh::in(b->chrom_, renamer.nameKeyMap_)){
 			std::stringstream ss;
 			ss << __PRETTY_FUNCTION__ << ", error couldn't find " << b->chrom_ << " in table, options are:" << "\n";
-			ss << njh::conToStr(njh::getVecOfMapKeys(nameKeyMap) , ", ") << '\n';
+			ss << njh::conToStr(njh::getVecOfMapKeys(renamer.nameKeyMap_) , ", ") << '\n';
 			throw std::runtime_error{ss.str()};
 		}
-		b->chrom_ = nameKeyMap[b->chrom_];
+		b->chrom_ = renamer.nameKeyMap_[b->chrom_];
 		reader.write(*b, [](const Bed3RecordCore & bed, std::ostream & out){
 			out << bed.toDelimStrWithExtra() << std::endl;
 		});
