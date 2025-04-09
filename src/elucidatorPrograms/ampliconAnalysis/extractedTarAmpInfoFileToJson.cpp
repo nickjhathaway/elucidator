@@ -634,7 +634,7 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
       samp_info["experiment_sample_id"] = experiment_sample_indexes[samp.first];
       for (const auto & tar : samp.second) {
         Json::Value tar_info;
-        tar_info["mhaps_target_id"] = target_indexes[tar.first];
+        tar_info["mhaps_target_id"] = popSeqsByTargetIndex[tar.first];
         tar_info["haps"] = tar.second;
         samp_info["target_results"].append(tar_info);
       }
