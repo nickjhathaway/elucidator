@@ -43,6 +43,7 @@ class seqSearchingRunner : public njh::progutils::ProgramRunner {
 
   static int findHomopolymerLocations(const njh::progutils::CmdArgs & inputCommands);
 
+	static int extractBetweenTwoMotifLocations(const njh::progutils::CmdArgs & inputCommands);
 
   static int findMotifLocations(const njh::progutils::CmdArgs & inputCommands);
   static int findTandemMotifLocations(const njh::progutils::CmdArgs & inputCommands);
