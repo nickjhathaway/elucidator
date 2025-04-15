@@ -247,6 +247,8 @@ int seqSearchingRunner::findTandemMotifLocations(const njh::progutils::CmdArgs &
 
 
 int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::CmdArgs & inputCommands){
+	bool add_seq = false;
+	bool take_inner = false;
 	uint32_t numThreads = 1;
 	std::vector<bfs::path> fasta_list;
 	bfs::path motif_pair_table;
@@ -262,7 +264,8 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 	setUp.pars_.ioOptions_.includeWhiteSpaceInName_ = false;
 	bool fasta_list_set = setUp.setOption(fasta_list, "--fasta_list", "a list of fasta files to read from");
 	bool motif_pair_table_set = setUp.setOption(motif_pair_table, "--motif_pair_table", "a table with 3 column, 1)target,2)motif1(5`-3` direction), 3)motif2 (5`-3` direction)");
-
+	setUp.setOption(add_seq, "--add_seq", "add seq to output");
+	setUp.setOption(take_inner, "--take_inner", "take inner location (exclude motif locations)");
 	setUp.processReadInNames({"--fasta", "--fastagz"}, !fasta_list_set);
 	setUp.processSeq(motif1Obj, "--motif1", "The first motif to look for", !motif_pair_table_set);
 	setUp.processSeq(motif2Obj, "--motif2", "The second motif to look for, should be in reverse complement to motif1", !motif_pair_table_set);
@@ -401,11 +404,15 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 	if (fasta_list_set) {
 		njh::concurrent::LockableVec<bfs::path> fasta_inputs(fasta_list);
 		std::mutex out_mut;
-		std::function search_for_motifs = [&out_mut, &fasta_inputs,&motifs, insertSizeCutOff, &out, allowableErrors]() {
+		std::function search_for_motifs = [&out_mut, &fasta_inputs,&motifs, insertSizeCutOff, &out, allowableErrors,
+			&setUp,
+			&take_inner, &add_seq]() {
 			bfs::path current_fasta;
 			while (fasta_inputs.getVal(current_fasta)) {
 				seqInfo fwd_seq;
-				SeqInput reader(SeqIOOptions::genFastaIn(current_fasta));
+				auto current_opts = SeqIOOptions::genFastaIn(current_fasta);
+				current_opts.includeWhiteSpaceInName_ = setUp.pars_.ioOptions_.includeWhiteSpaceInName_;
+				SeqInput reader(current_opts);
 				reader.openIn();
 				while(reader.readNextRead(fwd_seq)){
 					auto revComp = seqUtil::reverseComplement(fwd_seq.seq_,"DNA");
@@ -430,12 +437,22 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 							for(const auto & loc : revLocs_2){
 								motif2Positions.emplace_back(motif_pair.first, fwd_seq.name_,len(fwd_seq) - (loc + motif_pair.second.revs_.front().mot_.size()), len(fwd_seq) - loc, true);
 							}
-							auto possible_extractions = MotifPairSearchResults::getPossibleGenomeExtracts(motif1Positions, motif2Positions, insertSizeCutOff);
 							{
+								auto possible_extractions = MotifPairSearchResults::getPossibleGenomeExtracts(motif1Positions, motif2Positions, insertSizeCutOff);
 								std::lock_guard<std::mutex> lock(out_mut);
 								for (const auto & extract : possible_extractions) {
-									auto out_bed = extract.gRegion_->genBedRecordCore();
+									Bed6RecordCore out_bed = extract.gRegion_->genBedRecordCore();
+									if (take_inner) {
+										out_bed = extract.gRegionInner_->genBedRecordCore();
+									}
 									out_bed.extraFields_.emplace_back(current_fasta.string());
+									if (add_seq) {
+										if (out_bed.reverseStrand()) {
+											out_bed.extraFields_.emplace_back(seqUtil::reverseComplement(fwd_seq.seq_.substr(out_bed.chromStart_, out_bed.length()), "DNA"));
+										} else {
+											out_bed.extraFields_.emplace_back(fwd_seq.seq_.substr(out_bed.chromStart_, out_bed.length()));
+										}
+									}
 									out << out_bed.toDelimStrWithExtra() << std::endl;
 								}
 							}
@@ -475,7 +492,18 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 					}
 					auto possible_extractions = MotifPairSearchResults::getPossibleGenomeExtracts(motif1Positions, motif2Positions, insertSizeCutOff);
 					for (const auto & extract : possible_extractions) {
-						out << extract.gRegion_->genBedRecordCore().toDelimStrWithExtra() << std::endl;
+						Bed6RecordCore out_bed = extract.gRegion_->genBedRecordCore();
+						if (take_inner) {
+							out_bed = extract.gRegionInner_->genBedRecordCore();
+						}
+						if (add_seq) {
+							if (out_bed.reverseStrand()) {
+								out_bed.extraFields_.emplace_back(seqUtil::reverseComplement(fwd_seq.seq_.substr(out_bed.chromStart_, out_bed.length()), "DNA"));
+							} else {
+								out_bed.extraFields_.emplace_back(fwd_seq.seq_.substr(out_bed.chromStart_, out_bed.length()));
+							}
+						}
+						out << out_bed.toDelimStrWithExtra() << std::endl;
 					}
 				}
 			}
