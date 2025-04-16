@@ -83,7 +83,9 @@ void randomSampleSeqFile(const SeqIOOptions & opts, const std::string& sample, b
 void randomSampleFastFile(const SeqIOOptions & opts,
 		const std::string& sample){
 	if (opts.inFormat_ != SeqIOOptions::inFormats::FASTQ
-			&& opts.inFormat_ != SeqIOOptions::inFormats::FASTA) {
+			&& opts.inFormat_ != SeqIOOptions::inFormats::FASTQGZ
+			&& opts.inFormat_ != SeqIOOptions::inFormats::FASTA
+			&& opts.inFormat_ != SeqIOOptions::inFormats::FASTAGZ) {
 		std::stringstream ss;
 		ss << __PRETTY_FUNCTION__ << ": format should be fastq or fasta\n";
 		throw std::runtime_error{ss.str()};
@@ -108,9 +110,9 @@ void randomSampleFastFile(const SeqIOOptions & opts,
 
 int simulatorRunner::randomSampleFast(const njh::progutils::CmdArgs & inputCommands){
 	seqSetUp setUp(inputCommands);
-	std::string sample = "";
+	std::string sample;
 	setUp.setOption(sample, "-n,--sample", "Sample, either absolute number or a percentage", true);
-	setUp.processDefaultReader(VecStr{"-fasta", "-fastq"}, true);
+	setUp.processDefaultReader(VecStr{"--fasta", "--fastq", "--fastqgz", "--fastagz"}, true);
 	setUp.processVerbose();
 	setUp.processDebug();
   setUp.finishSetUp(std::cout);
