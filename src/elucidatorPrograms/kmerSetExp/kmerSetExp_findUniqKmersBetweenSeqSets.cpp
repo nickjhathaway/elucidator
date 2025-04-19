@@ -1029,6 +1029,228 @@ int kmerSetExpRunner::countingUniqKmersFromSetsBestSet(const njh::progutils::Cmd
 	return 0;
 }
 
+
+
+int kmerSetExpRunner::findKmersUniqueAndConservedToSet(const njh::progutils::CmdArgs & inputCommands){
+	KmerGatherer::KmerGathererPars countPars;
+	bfs::path seqSetTableFnp = "";
+	bfs::path seqSetSuppFastaTableFnp = "";
+	bool fasta = false;
+	bool noFilters = false;
+	bool exportNonUniqueKmers = false;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+	setUp.description_ = "Get kmers that appear within the sequences supplied and are unique to that set compared to the other sets";
+	setUp.setOption(fasta, "--fasta", "file contains fasta files instead of 2bit files");
+	setUp.setOption(noFilters, "--noFilters", "Don't do filtering on kmers sets");
+	setUp.setOption(exportNonUniqueKmers, "--exportNonUniqueKmers", "export Non Unique Kmers");
+
+	if(noFilters){
+		countPars.entropyFilter_ = 0;
+		countPars.allowableCharacters_ = njh::genSetOfAnsiPrintable();
+	}
+	std::string columnsHelp = njh::pasteAsStr("1)set,2)", fasta? "fasta": "2bit");
+	setUp.setOption(seqSetTableFnp, "--seqSetTableFnp", "Seq Set Table, 2 columns, " + columnsHelp, true);
+	setUp.setOption(seqSetSuppFastaTableFnp, "--seqSetSuppFastaTableFnp", "Seq Set Table supplement small fasta files, 2 columns, 1)set,2)fasta");
+	countPars.setOptions(setUp);
+	setUp.processDirectoryOutputName(njh::pasteAsStr(bfs::basename(seqSetTableFnp), "_TODAY"), true);
+	setUp.finishSetUp(std::cout);
+
+	setUp.startARunLog(setUp.pars_.directoryName_);
+
+	VecStr columnRequired{"set", "2bit"};
+	if(fasta){
+		columnRequired = {"set", "fasta"};
+	}
+	KmerGatherer kGather(countPars);
+
+	std::unordered_map<std::string, std::set<std::string>> seqFilesForSet;
+	{
+		table input(seqSetTableFnp, "\t", true);
+		input.checkForColumnsThrow(columnRequired, __PRETTY_FUNCTION__);
+		for(const auto & row : input){
+			seqFilesForSet[row[input.getColPos("set")]].emplace(row[input.getColPos(columnRequired[1])]);
+		}
+	}
+
+	table inputFastaSupp;
+	if(!seqSetSuppFastaTableFnp.empty()){
+		inputFastaSupp= table(seqSetSuppFastaTableFnp, "\t", true);
+		inputFastaSupp.checkForColumnsThrow(VecStr{"set", "fasta"}, __PRETTY_FUNCTION__);
+	}
+
+	setUp.rLog_.setCurrentLapName("initial");
+
+	std::vector<bfs::path> seqFiles;
+	for(const auto & seqSet : seqFilesForSet){
+		for(const auto & fnp : seqSet.second){
+			seqFiles.emplace_back(fnp);
+		}
+	}
+	std::map<std::string, std::set<uint64_t>> kmersPerSet;
+
+	std::function<bool(const std::string&)> seqCheck = [&countPars](const std::string & k){
+		return std::all_of(k.begin(), k.end(), [&countPars](char base){return njh::in(base, countPars.allowableCharacters_);});
+	};
+
+
+	{
+		setUp.rLog_.logCurrentTime("count_all");
+		setUp.rLog_.runLogFile_.flush();
+		std::unordered_map<std::string, std::set<uint64_t>> allKmers;
+		if (!fasta) {
+			allKmers = kGather.getUniqueKmersSetHashWithFilters(seqFiles);
+		} else {
+			allKmers = kGather.getUniqueKmersSetHashWithFiltersFromFastas(seqFiles);
+		}
+		if(!seqSetSuppFastaTableFnp.empty()){
+			std::vector<bfs::path> fastaFiles;
+			for(const auto & row : inputFastaSupp){
+				seqFilesForSet[row[inputFastaSupp.getColPos("set")]].emplace(row[inputFastaSupp.getColPos("fasta")]);
+				fastaFiles.emplace_back(row[inputFastaSupp.getColPos("fasta")]);
+			}
+			auto suppKmers = kGather.getUniqueKmersSetHashWithFiltersFromFastas(fastaFiles);
+			for(const auto & supp : suppKmers){
+				allKmers[supp.first].insert(supp.second.begin(), supp.second.end());
+			}
+		}
+
+		OutputStream countOut_per_file(njh::files::make_path(setUp.pars_.directoryName_, "counts_per_input.tsv.gz"));
+		countOut_per_file << "set\tcount" << std::endl;
+		for(const auto & allKmers_for_file : allKmers){
+			countOut_per_file << allKmers_for_file.first << "\t" << allKmers_for_file.second.size() << std::endl;
+		}
+		setUp.rLog_.logCurrentTime("condense");
+		setUp.rLog_.runLogFile_.flush();
+		njh::concurrent::LockableQueue<std::string> seqSetNamesQueue(getVectorOfMapKeys(seqFilesForSet));
+		for(const auto & name : seqFilesForSet){
+			kmersPerSet[name.first] = std::set<uint64_t>{};
+		}
+		std::function<void()> condenseKmers = [&seqSetNamesQueue,&allKmers,&seqFilesForSet,&kmersPerSet](){
+			std::string name;
+			while(seqSetNamesQueue.getVal(name)){
+				std::unordered_map<uint64_t, uint32_t> counts;
+				for(const auto & twobit : seqFilesForSet.at(name)){
+					for (const auto k : allKmers.at(twobit)) {
+						++counts[k];
+					}
+				}
+				//right now looking for perfectly conserved but could expand to doing a percentage
+				for (const auto & count : counts) {
+					if (count.second == seqFilesForSet.at(name).size()) {
+						kmersPerSet[name].emplace(count.first);
+					}
+				}
+			}
+		};
+		njh::concurrent::runVoidFunctionThreaded(condenseKmers, countPars.numThreads_);
+
+		OutputStream countOut_per_set(njh::files::make_path(setUp.pars_.directoryName_, "counts_per_set.tsv.gz"));
+		countOut_per_set << "set\tcount" << std::endl;
+		for(const auto & allKmers_per_set : kmersPerSet){
+			countOut_per_set << allKmers_per_set.first << "\t" << allKmers_per_set.second.size() << std::endl;
+		}
+	}
+	std::map<std::string, std::set<uint64_t>> uniqueKmersFinal;
+	setUp.rLog_.logCurrentTime("compare");
+	setUp.rLog_.runLogFile_.flush();
+	for(const auto & kmersForSet : kmersPerSet){
+		uniqueKmersFinal[kmersForSet.first] = std::set<uint64_t>{};
+	}
+	std::mutex mut;
+	std::set<uint64_t> nonUniqueKmers;
+	{
+		auto namesFound = getVectorOfMapKeys(kmersPerSet);
+		if (namesFound.size() > 1) {
+			njh::concurrent::LockableQueue<std::string> seqSetNamesQueue(namesFound);
+
+			std::function<void()> compareKmers = [&seqSetNamesQueue, &kmersPerSet, &uniqueKmersFinal,
+																						&mut, &nonUniqueKmers, &exportNonUniqueKmers]() {
+				std::string name;
+				std::unordered_set<uint64_t> currentNonUnique;
+				while (seqSetNamesQueue.getVal(name)) {
+					std::set<uint64_t> uniqueKmers;
+					uint32_t count = 0;
+
+					for (const auto &otherSet: kmersPerSet) {
+						if (otherSet.first == name) {
+							continue;
+						}
+						if (0 == count) {
+							std::vector<uint64_t> notShared;
+							std::set_difference(
+											kmersPerSet.at(name).begin(), kmersPerSet.at(name).end(),
+											otherSet.second.begin(), otherSet.second.end(),
+											std::back_inserter(notShared));
+							uniqueKmers = njh::vecToSet(notShared);
+							if(exportNonUniqueKmers){
+								std::vector<uint64_t> shared;
+								std::set_intersection(
+												kmersPerSet.at(name).begin(), kmersPerSet.at(name).end(),
+												otherSet.second.begin(), otherSet.second.end(),
+												std::back_inserter(shared));
+								njh::addVecToUOSet(shared, currentNonUnique);
+							}
+						} else {
+							std::vector<uint64_t> notShared;
+
+							std::set_difference(
+											uniqueKmers.begin(), uniqueKmers.end(),
+											otherSet.second.begin(), otherSet.second.end(),
+											std::back_inserter(notShared));
+							uniqueKmers = njh::vecToSet(notShared);
+							if(exportNonUniqueKmers){
+								std::vector<uint64_t> shared;
+								std::set_intersection(
+												uniqueKmers.begin(), uniqueKmers.end(),
+												otherSet.second.begin(), otherSet.second.end(),
+												std::back_inserter(shared));
+								njh::addVecToUOSet(shared, currentNonUnique);
+							}
+						}
+						++count;
+					}
+					uniqueKmersFinal[name] = uniqueKmers;
+				}
+				if(exportNonUniqueKmers){
+					std::lock_guard<std::mutex> lock(mut);
+					nonUniqueKmers.insert(currentNonUnique.begin(), currentNonUnique.end());
+				}
+			};
+			njh::concurrent::runVoidFunctionThreaded(compareKmers, countPars.numThreads_);
+		} else if (namesFound.size() == 1) {
+			uniqueKmersFinal[namesFound.front()] = kmersPerSet[namesFound.front()];
+		}
+	}
+
+	std::map<std::string, uint64_t> kmerPerSetCounts;
+	SimpleKmerHash hasher;
+	OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "kmerSets.tsv.gz"));
+	for(const auto & kmersForSet : uniqueKmersFinal){
+		kmerPerSetCounts[kmersForSet.first] = kmersForSet.second.size();
+		for(const auto & kmer : kmersForSet.second){
+			out << kmersForSet.first << "\t" << hasher.reverseHash(kmer) << "\n";
+
+		}
+	}
+	if(exportNonUniqueKmers){
+		std::string nonUniqueRegionName = "NON_UNIQUE";
+		OutputStream nonUniquOut(njh::files::make_path(setUp.pars_.directoryName_, "nonUniqueKmers_kmerSets.tsv.gz"));
+		kmerPerSetCounts[nonUniqueRegionName] = nonUniqueKmers.size();
+		for(const auto & kmer : nonUniqueKmers){
+			nonUniquOut << nonUniqueRegionName << "\t" << hasher.reverseHash(kmer) << "\n";
+		}
+	}
+	OutputStream countOut(njh::files::make_path(setUp.pars_.directoryName_, "counts.tsv.gz"));
+	countOut << "set\tcount" << std::endl;
+	for(const auto & kmerPerSetCount : kmerPerSetCounts){
+		countOut << kmerPerSetCount.first << "\t" << kmerPerSetCount.second << std::endl;
+	}
+	return 0;
+}
+
+
 int kmerSetExpRunner::findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands){
 	KmerGatherer::KmerGathererPars countPars;
 	bfs::path seqSetTableFnp = "";

@@ -19,6 +19,7 @@ public:
 
 	static int findUniqKmersFromGenomeSubRegionsMultiple(const njh::progutils::CmdArgs & inputCommands);
 	static int findUniqKmersBetweenSeqSetsMulti(const njh::progutils::CmdArgs & inputCommands);
+	static int findKmersUniqueAndConservedToSet(const njh::progutils::CmdArgs & inputCommands);
 
 	static int filterUniqueKmerSetForEntropy(const njh::progutils::CmdArgs & inputCommands);
 	static int addToUniqKmersSet(const njh::progutils::CmdArgs & inputCommands);

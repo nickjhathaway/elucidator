@@ -40,6 +40,7 @@ kmerSetExpRunner::kmerSetExpRunner()
           	addFunc("createKmerPresenceMatrixFromSets", createKmerPresenceMatrixFromSets, false),
           	addFunc("getUniqueKmersFromRandomSubsamples", getUniqueKmersFromRandomSubsamples, false),
           	addFunc("estimateKmerSubSamples", estimateKmerSubSamples, false),
+          	addFunc("findKmersUniqueAndConservedToSet", findKmersUniqueAndConservedToSet, false),
           	// addFunc("createMinimallyNonRedundantDownSampledSetAfterFragmentation", createMinimallyNonRedundantDownSampledSetAfterFragmentation, false),
 
 //,
