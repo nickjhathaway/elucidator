@@ -1206,7 +1206,7 @@ int kmerSetExpRunner::findKmersUniqueAndConservedToSet(const njh::progutils::Cmd
 					nonUniqueKmers.insert(currentNonUnique.begin(), currentNonUnique.end());
 				}
 			};
-			njh::concurrent::runVoidFunctionThreaded(compareKmers, countPars.numThreads_);
+			njh::concurrent::runVoidFunctionThreaded(compareKmers, countPars.numThreads_ + topThreadCount);
 		} else if (namesFound.size() == 1) {
 			uniqueKmersFinal[namesFound.front()] = kmersPerSet[namesFound.front()];
 		}
