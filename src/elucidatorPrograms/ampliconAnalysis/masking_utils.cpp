@@ -327,7 +327,6 @@ int ampliconAnalysisRunner::maskRegionBasedOnRefSubRegions(
 		if(setUp.pars_.debug_) {
 			refSeq->outPutSeqAnsi(std::cout);
 		}
-
 		ref_seqs[region->name_] = refSeq;
 		ref_regions[region->name_] = region;
 	}
