@@ -27,7 +27,8 @@ RUN apt-get -yq dist-upgrade
 RUN apt-get install -yq --no-install-recommends autotools-dev autoconf libtool automake build-essential curl wget file tree\
     git locales libssl-dev libcurl4-gnutls-dev ca-certificates xz-utils zlib1g-dev libbz2-dev liblzma5 liblzma-doc\
     liblzma-dev openssh-client gcc-10 g++-10 ccache git-lfs libxml2-dev libfontconfig1-dev libcairo2-dev\
-    python3-dev python3-pip python3-nbclient python3-nbconvert python3-ipykernel python3-jupyter-client python3-jupyter-core
+    python3-dev python3-pip python3-nbclient python3-nbconvert python3-ipykernel python3-jupyter-client python3-jupyter-core\
+    libharfbuzz-dev libfribidi-dev
 
 # install common bio tools
 RUN apt-get install -yq --no-install-recommends lastz ncbi-blast+ ncbi-tools-bin hmmer minimap2 bwa bowtie2 cmake  \
@@ -66,6 +67,8 @@ RUN rm quarto-1.6.40-linux-amd64.tar.gz
 RUN /opt/quarto-1.6.40/bin/quarto check
 
 # pmotools
+## remove python3-jsonschema, the combination of apt-get installing it and pip installing clash
+RUN apt-get remove -yq --no-install-recommends python3-jsonschema
 WORKDIR /opt
 RUN git clone  https://github.com/PlasmoGenEpi/pmotools-python.git
 WORKDIR /opt/pmotools-python
@@ -133,14 +136,15 @@ RUN R -e 'library("formatR")'
 RUN R -e 'library("markdown")'
 RUN R -e 'library("bigmds")'
 
-# Bioconductor packages (have to install 3.19 because that's needed for pwalign)
+# Bioconductor packages (have to install >=3.19, 3.21 requried for R 4.5 the current default version of R because that's needed for pwalign)
 RUN Rscript -e 'if (!require("BiocManager", quietly = TRUE)) { install.packages("BiocManager"); };  \
-    BiocManager::install(version = "3.19", ask = FALSE);'
+    BiocManager::install(version = "3.21", ask = FALSE);'
 RUN Rscript -e 'BiocManager::install("Biostrings", ask = FALSE)'
 RUN Rscript -e 'BiocManager::install("pwalign", ask = FALSE)'
 RUN Rscript -e 'BiocManager::install("ggtree", ask = FALSE)'
 RUN Rscript -e 'BiocManager::install("ggtreeExtra", ask = FALSE)'
 RUN Rscript -e 'BiocManager::install("ComplexHeatmap", ask = FALSE)'
+RUN Rscript -e 'BiocManager::install("dada2", ask = FALSE)'
 
 ## attempt to load libraries to make sure they installed
 RUN R -e 'library("Biostrings")'
@@ -148,6 +152,7 @@ RUN R -e 'library("pwalign")'
 RUN R -e 'library("ggtree")'
 RUN R -e 'library("ggtreeExtra")'
 RUN R -e 'library("ComplexHeatmap")'
+RUN R -e 'library("dada2")'
 
 # install github r packages
 RUN Rscript -e "remotes::install_github('nickjhathaway/HaplotypeRainbows@develop')"
