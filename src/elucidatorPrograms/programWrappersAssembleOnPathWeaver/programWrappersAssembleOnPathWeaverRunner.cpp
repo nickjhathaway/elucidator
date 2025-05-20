@@ -3906,7 +3906,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 
 	std::string extraVelvetOptimiserOptions;
 	bfs::path VelvetOptimiserOutDir = "VelvetOptimiserOutDir";
-
+	std::string velvet_optimiser_cmd = "velvetoptimiser";
 
 	uint32_t reOrientingKmerLength = 9;
 	uint32_t minFinalLength = 40;
@@ -3914,6 +3914,8 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
 	setUp.processVerbose();
+	setUp.setOption(velvet_optimiser_cmd, "--velvet_optimiser_cmd", "velvet optimiser cmd, e.g velvetoptimiser, VelvetOptimiser.pl", true);
+
 	setUp.setOption(bedFile, "--bed", "The Regions to analyze", true);
 	setUp.setOption(pwOutputDir, "--pwOutputDir", "The PathWeaver directory", true);
 	setUp.setOption(sample, "--sample", "sample name", true);
@@ -3947,7 +3949,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 
 
 	setUp.setOption(extraVelvetOptimiserOptions, "--extraVelvetOptimiserOptions", "Extra options to give to spades");
-	setUp.setOption(VelvetOptimiserOutDir,     "--VelvetOptimiserOutDir",     "VelvetOptimiser.pl Out Directory name, will be relative to final pass directory");
+	setUp.setOption(VelvetOptimiserOutDir,     "--VelvetOptimiserOutDir",     "VelvetOptimiser Out Directory name, will be relative to final pass directory");
 	if("VelvetOptimiserOutDir" == VelvetOptimiserOutDir){
 		if(!njh::in(optFuncKmer, optimizerFuncsAvail) || !njh::in(optFuncCov, optimizerFuncsAvail)){
 			VelvetOptimiserOutDir = VelvetOptimiserOutDir.string() + "_complex";
@@ -3970,7 +3972,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	njh::sys::requireExternalProgramThrow("meta-velvetg");
 	njh::sys::requireExternalProgramThrow("velveth");
 	njh::sys::requireExternalProgramThrow("velvetg");
-	njh::sys::requireExternalProgramThrow("VelvetOptimiser.pl");
+	njh::sys::requireExternalProgramThrow(velvet_optimiser_cmd);
 
 
 	auto inputRegions = gatherRegions(bedFile.string(), "", setUp.pars_.verbose_);
@@ -4072,7 +4074,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 				}
 
 				std::stringstream vOptCmdStream;
-				vOptCmdStream << "cd " << regionOutputDir << " && VelvetOptimiser.pl -f '";
+				vOptCmdStream << "cd " << regionOutputDir << " && " << velvet_optimiser_cmd << " -f '";
 				if(exists(pairedR1)){
 					if(!exists(pairedR2)){
 						std::stringstream ss;
@@ -4086,7 +4088,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 					vOptCmdStream << " -fastq -short " << singles.filename() << " " ;
 				}
 				vOptCmdStream << "'";
-				//VelvetOptimiser.pl  -x 2 -f ' '  --d withRevComp_optimize_n50
+				//velvet_optimiser_cmd  -x 2 -f ' '  --d withRevComp_optimize_n50
 
 				vOptCmdStream  << " -t " << velvetNumOfThreads
 											<< " -s " << velvetStartKmer
