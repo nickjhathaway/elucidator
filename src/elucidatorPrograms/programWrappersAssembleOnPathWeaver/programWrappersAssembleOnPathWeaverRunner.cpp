@@ -3914,7 +3914,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	seqSetUp setUp(inputCommands);
 	setUp.processDebug();
 	setUp.processVerbose();
-	setUp.setOption(velvet_optimiser_cmd, "--velvet_optimiser_cmd", "velvet optimiser cmd, e.g velvetoptimiser, VelvetOptimiser.pl", true);
+	setUp.setOption(velvet_optimiser_cmd, "--velvet_optimiser_cmd", "velvet optimiser cmd, e.g velvetoptimiser, VelvetOptimiser.pl");
 
 	setUp.setOption(bedFile, "--bed", "The Regions to analyze", true);
 	setUp.setOption(pwOutputDir, "--pwOutputDir", "The PathWeaver directory", true);
