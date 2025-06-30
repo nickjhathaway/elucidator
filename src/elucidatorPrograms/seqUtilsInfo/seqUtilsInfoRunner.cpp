@@ -43,6 +43,9 @@ seqUtilsInfoRunner::seqUtilsInfoRunner()
   addFunc("uniqueSeqInfo", fastaIdenticalInfo, false),
   addFunc("countLetters", countLetters, false),
   addFunc("countSeqPortion", countSeqPortion, false),
+    	addFunc("countSeqPortionsStepped", countSeqPortionsStepped, false),
+
+
   addFunc("printTandems", printTandems, false),
   addFunc("countOtus", countOtus, false),
   addFunc("quickLenInfo", quickLenInfo, false),
@@ -709,6 +712,49 @@ int seqUtilsInfoRunner::printTandems(
 			rep.outPutInfoFormated(out, "seq", "\t");
 		}
 	}
+	return 0;
+}
+
+
+int seqUtilsInfoRunner::countSeqPortionsStepped(const njh::progutils::CmdArgs & inputCommands) {
+	seqSetUp setUp(inputCommands);
+	uint32_t window_size = 20;
+	uint32_t window_step = 1;
+	OutOptions outOpts;
+	setUp.processReadInNames(seqSetUp::singleInFormatsAvailable_, true);
+	setUp.setOption(window_size, "--window_size", "Window Size of the portion to count");
+	setUp.setOption(window_step, "--window_step", "Window Step of the portion to count");
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+	std::map<uint32_t, std::unordered_map<std::string, uint32_t>> counts_per_position;
+	SeqIO reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+	OutputStream out(outOpts);
+	seqInfo seq;
+	strCounter counter;
+	while(reader.readNextRead(seq)){
+		for (uint32_t pos = 0; pos + window_size < len(seq); pos += window_step) {
+			++counts_per_position[pos][seq.seq_.substr(pos, window_size)];
+		}
+	}
+	counter.setFractions();
+	table outTable(VecStr { "position", "seq", "count", "total", "freq" });
+	for (const auto & count : counts_per_position) {
+		double total = 0;
+		for (const auto & seq_count : count.second) {
+			total += seq_count.second;
+		}
+		for (const auto & seq_count : count.second) {
+			outTable.addRow(
+				count.first,
+				seq_count.first,
+				seq_count.second,
+				total,
+				seq_count.second/total
+				);
+		}
+	}
+	outTable.outPutContents(out,"\t");
 	return 0;
 }
 

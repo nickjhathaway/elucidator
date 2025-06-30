@@ -174,7 +174,7 @@ addIntersectingGeneInfosToLocs(
 					if (gene->gene_->hasAttr("Name") && "NA" != gene->gene_->getAttr("Name") && !gene->gene_->getAttr("Name").empty()) {
 						geneName = gene->gene_->getAttr("Name");
 					}
-					ret[regPos].emplace_back(info.second->transcriptID_, geneName, aaStartPos, aaStopPos, detailedName[info.first]);
+					ret[regPos].emplace_back(info.second->geneID_, info.second->transcriptID_, geneName, aaStartPos, aaStopPos, detailedName[info.first]);
 					ret[regPos].back().allMeta_.meta_ = gffRec.attributes_;
 				}
 			}

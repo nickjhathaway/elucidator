@@ -339,9 +339,10 @@ int kmerExpRunner::genomeKmerCompare(const njh::progutils::CmdArgs & inputComman
 
 
 int kmerExpRunner::findingMinimumKLenForNoRedundantKmers(const njh::progutils::CmdArgs & inputCommands){
-
+	uint32_t klen = 2;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
+	setUp.setOption(klen, "--kLen", "Kmer Length to start the search from");
 	setUp.processReadInNames(true);
 	setUp.finishSetUp(std::cout);
 
@@ -357,7 +358,7 @@ int kmerExpRunner::findingMinimumKLenForNoRedundantKmers(const njh::progutils::C
 		readVec::getMaxLength(seq, maxLen);
 	}
 
-	uint32_t klen = 2;
+
 	bool foundLength = false;
 	while (klen < maxLen && !foundLength) {
 		if (setUp.pars_.verbose_) {
@@ -370,9 +371,9 @@ int kmerExpRunner::findingMinimumKLenForNoRedundantKmers(const njh::progutils::C
 			for (const auto &k : kinfo.kmers_) {
 				if (k.second.count_ > 1) {
 					allPass = false;
-					if (setUp.pars_.verbose_) {
-						std::cout << "\t" << seq.name_ << std::endl;
-					}
+					// if (setUp.pars_.verbose_) {
+					// 	std::cout << "\t" << seq.name_ << std::endl;
+					// }
 					break;
 				}
 			}

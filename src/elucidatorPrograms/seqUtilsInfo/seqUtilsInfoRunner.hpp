@@ -30,6 +30,7 @@ class seqUtilsInfoRunner : public njh::progutils::ProgramRunner {
  public:
   seqUtilsInfoRunner();
 
+	static int countSeqPortionsStepped(const njh::progutils::CmdArgs & inputCommands);
 	static int countSeqPortion(const njh::progutils::CmdArgs & inputCommands);
 	static int countAllSeqs(const njh::progutils::CmdArgs & inputCommands);
 	static int countSeqsFile(const njh::progutils::CmdArgs & inputCommands);
