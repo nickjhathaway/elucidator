@@ -66,7 +66,7 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 	bfs::path target_read_count_factor_fnp;
 	VecStr target_read_count_factor_required_cols{"target", "factor", "factor_stddev"};
 	bfs::path idFile;
-	bfs::path illuminaProfileDir;
+	bfs::path illuminaProfileDir = njh::pasteAsStr(elucidator_INSTALLDIR, "/etc/illumina_profiles/nextseq_150");
 
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -74,7 +74,7 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 	setUp.setOption(sim_lib_pars.addBluntEndingArtifact_, "--addBluntEndingArtifact", "add Blunt Ending Artifact");
 	setUp.setOption(sim_lib_pars.addReverseComplement_, "--addReverseComplement", "add Reverse Complement");
 
-	setUp.setOption(illuminaProfileDir, "--illuminaProfileDir", "Illumina Profile Dir", true);
+	setUp.setOption(illuminaProfileDir, "--illuminaProfileDir", "Illumina Profile Dir");
 	setUp.setOption(idFile, "--idFile", "Primer MID Fnp", true);
 	setUp.setOption(population_haps_fnp, "--population_haps_fnp", njh::pasteAsStr("population haplotype sequences file, required columns: ", njh::conToStr(sample_set_up_required_cols, ",")), true);
 	setUp.setOption(sample_set_up_fnp, "--sample_set_up_fnp", njh::pasteAsStr("sample setup file, required columns: ", njh::conToStr(sample_set_up_required_cols, ",")), true);
