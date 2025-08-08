@@ -74,5 +74,10 @@ class seqUtilsModRunner : public njh::progutils::ProgramRunner {
 	static int changeLetterToOtherLetter(const njh::progutils::CmdArgs & inputCommands);
 
 	static int correctHPRunsBasedOnSurroundingBaseCounts(const njh::progutils::CmdArgs & inputCommands);
+
+
+	static int generateAllPossibleNucleotidePossibleFromProtein(const njh::progutils::CmdArgs & inputCommands);
+
+
 };
 } // namespace njhseq

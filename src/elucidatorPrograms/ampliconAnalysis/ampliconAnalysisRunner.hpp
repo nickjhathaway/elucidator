@@ -48,7 +48,7 @@ class ampliconAnalysisRunner : public njh::progutils::ProgramRunner {
 	// PMO
   static int extractedTarAmpInfoFileToJson(const njh::progutils::CmdArgs & inputCommands);
   static int finalClustersFileToJson(const njh::progutils::CmdArgs & inputCommands);
-	static int specimenExperimentInfoFileToJson(const njh::progutils::CmdArgs & inputCommands);
+	static int specimenLibraryInfoFileToJson(const njh::progutils::CmdArgs & inputCommands);
 
 	static int readsByStageToJson(const njh::progutils::CmdArgs & inputCommands);
 

@@ -107,7 +107,10 @@ bedExpRunner::bedExpRunner()
 					 addFunc("bedFilterRegionsStartingOrEndingInOther", bedFilterRegionsStartingOrEndingInOther, false),
 					 addFunc("bedKeepRegionsStartingOrEndingInOther", bedKeepRegionsStartingOrEndingInOther, false),
 					 addFunc("getAverageDistanceToOtherRegions", getAverageDistanceToOtherRegions, false),
-					 addFunc("getDistanceToClostestRegion", getDistanceToClostestRegion, false),
+					 addFunc("getDistanceToClosestRegion", getDistanceToClosestRegion, false),
+          	addFunc("getAllDistancesToOtherRegions", getAllDistancesToOtherRegions, false),
+
+
 					 addFunc("getIntersectionBetweenTwoBedFiles", getIntersectionBetweenTwoBedFiles, false),
 					 addFunc("removeSubRegionsFromBedFile", removeSubRegionsFromBedFile, false),
 					 addFunc("getDegreeOfOverlappingBedRegions", getDegreeOfOverlappingBedRegions, false),

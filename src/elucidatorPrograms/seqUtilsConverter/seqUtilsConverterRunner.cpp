@@ -107,23 +107,21 @@ int seqUtilsConverterRunner::convertFiles(const njh::progutils::CmdArgs & inputC
 int seqUtilsConverterRunner::convertTxtToFasta(const njh::progutils::CmdArgs & inputCommands) {
   seqUtilsConverterSetUp setUp(inputCommands);
   std::string fileName = "";
-  std::string outFileName = "";
   std::string stub = "Seq";
-  bool overWrite = false;
-  setUp.setOption(fileName, "-file", "Filename", true);
-  if (!setUp.setOption(outFileName, "-out", "Oufilename")) {
-    outFileName = bfs::basename(fileName) + ".fasta";
+	OutOptions outOpts("", ".fasta");
+  setUp.setOption(fileName, "--file", "Filename", true);
+  if (!setUp.setOption(outOpts.outFilename_, "--out", "Oufilename")) {
+    outOpts.outFilename_ = bfs::basename(fileName) + ".fasta";
   }
-  setUp.setOption(overWrite, "-overWrite", "overWriteCurrentFile");
+  setUp.setOption(outOpts.overWriteFile_, "--overWrite", "overWriteCurrentFile");
   setUp.finishSetUp(std::cout);
   VecStr dnaStrings;
   table inTab(fileName);
-  std::ofstream outFile;
-  openTextFile(outFile, outFileName, ".fasta", overWrite, false);
+	OutputStream out(outOpts);
   int count = 0;
   for (const auto &line : inTab.content_) {
-    outFile << ">" << stub << "." << count << std::endl;
-    outFile << line[0] << std::endl;
+    out << ">" << stub << "." << count << std::endl;
+    out << line[0] << std::endl;
     ++count;
   }
   return 0;

@@ -61,6 +61,7 @@ seqUtilsModRunner::seqUtilsModRunner()
     	addFunc("breakUpSeqsOnPattern", breakUpSeqsOnPattern, false),
     	addFunc("correctHPRunsBasedOnSurroundingBaseCounts", correctHPRunsBasedOnSurroundingBaseCounts, false),
     	addFunc("fragmentSequencesForPhipSeq", fragmentSequencesForPhipSeq, false),
+    	addFunc("generateAllPossibleNucleotidePossibleFromProtein", generateAllPossibleNucleotidePossibleFromProtein, false),
 
 
 },//

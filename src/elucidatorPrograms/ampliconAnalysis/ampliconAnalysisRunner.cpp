@@ -40,7 +40,7 @@ ampliconAnalysisRunner::ampliconAnalysisRunner()
                       addFunc("processRawExtractByKmerPathWeaverResults", processRawExtractByKmerPathWeaverResults, false),
                       addFunc("extractedTarAmpInfoFileToJson", extractedTarAmpInfoFileToJson, false),
                       addFunc("finalClustersFileToJson", finalClustersFileToJson, false),
-                      addFunc("specimenExperimentInfoFileToJson", specimenExperimentInfoFileToJson, false),
+                      addFunc("specimenLibraryInfoFileToJson", specimenLibraryInfoFileToJson, false),
                       addFunc("combingAllIntoPMOJson", combingAllIntoPMOJson, false),
                       addFunc("readsByStageToJson", readsByStageToJson, false),
                       addFunc("determinePossibleMaskFromSeqs", determinePossibleMaskFromSeqs, false),
