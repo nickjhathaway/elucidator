@@ -328,6 +328,7 @@ int simulatorRunner::randomSeqFile(const njh::progutils::CmdArgs & inputCommands
   bool processed = false;
   bool fasta = false;
   uint32_t width = 50;
+	OutOptions outOpts;
   setUp.setOption(width, "-width","Line length for when outputting fasta");
   setUp.setOption(fasta, "-fasta", "Output fasta instead of fastq");
   setUp.setOption(qualStart, "-qualStart", "qualStart");
@@ -339,15 +340,16 @@ int simulatorRunner::randomSeqFile(const njh::progutils::CmdArgs & inputCommands
   setUp.setOption(topAmount, "-topAmount", "topAmount");
   setUp.setOption(bottomAmount, "-bottomAmount", "bottomAmount");
   setUp.setOption(alphabetStr, "-alphabet","alphabetStr");
+	setUp.processWritingOptions(outOpts);
   setUp.finishSetUp(std::cout);
   auto alphabetCounts = processAlphStrVecCharCounts(alphabetStr, ",");
   if(setUp.pars_.verbose_){
   	printVector(alphabetCounts.first, ",");
   	printVector(alphabetCounts.second, ",");
   }
-
+	OutputStream out(outOpts);
   randomFileCreator fileGen(alphabetCounts.first, alphabetCounts.second, qualStart, qualStop);
-  fileGen.randomFile(len, lenStop, seqNum, processed, bottomAmount, topAmount,!fasta, std::cout	);
+  fileGen.randomFile(len, lenStop, seqNum, processed, bottomAmount, topAmount,!fasta, out	);
   return 0;
 }
 

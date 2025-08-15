@@ -77,6 +77,7 @@ class seqUtilsModRunner : public njh::progutils::ProgramRunner {
 
 
 	static int generateAllPossibleNucleotidePossibleFromProtein(const njh::progutils::CmdArgs & inputCommands);
+	static int generateNucleotidePossibleFromProteins(const njh::progutils::CmdArgs & inputCommands);
 
 
 };

@@ -62,6 +62,7 @@ seqUtilsModRunner::seqUtilsModRunner()
     	addFunc("correctHPRunsBasedOnSurroundingBaseCounts", correctHPRunsBasedOnSurroundingBaseCounts, false),
     	addFunc("fragmentSequencesForPhipSeq", fragmentSequencesForPhipSeq, false),
     	addFunc("generateAllPossibleNucleotidePossibleFromProtein", generateAllPossibleNucleotidePossibleFromProtein, false),
+    	addFunc("generateNucleotidePossibleFromProteins", generateNucleotidePossibleFromProteins, false),
 
 
 },//

@@ -86,7 +86,40 @@ namespace njhseq {
 
 
 
-
+// int test() {
+// 	std::string seq = "AGAATTCTTAAGAAACTCGAGAAGAA";
+//
+// 	std::vector<uint32_t> site_positions(10);
+// 	njh::iota<uint32_t>(site_positions, 0);
+//
+// 	for (const auto & pos : site_positions) {
+// 		uint32_t site_size = 9;
+// 		auto end = pos + site_size;
+// 		auto new_start = pos - (pos % 3);
+// 		auto new_end =  (end % 3 == 0) ? end : end + (3 - (end % 3));
+// 		std::string sub_str_to_modify = seq.substr(new_start, new_end - new_start);
+// 		std::vector<uint32_t> positons_to_attempt_to_recode;
+// 		for (uint32_t i = 0; i + 1 < sub_str_to_modify.size(); i += 3) {
+// 			positons_to_attempt_to_recode.emplace_back(i);
+// 		}
+// 		njh::sort(positons_to_attempt_to_recode, [&pos, &new_start,&site_size](uint32_t i1, uint32_t i2) {
+// 			auto i1_from_start = uAbsdiff(i1, pos - new_start);
+// 			auto i1_from_end = uAbsdiff(i1 + 3, pos  - new_start + site_size);
+// 			auto i2_from_start = uAbsdiff(i2, pos - new_start);
+// 			auto I2_from_end = uAbsdiff(i2 + 3, pos  - new_start + site_size);
+// 			if (i1_from_start + i1_from_end == i2_from_start + I2_from_end) {
+// 				return uAbsdiff(i1_from_start, i1_from_end) < uAbsdiff(i2_from_start, I2_from_end);
+// 			}
+// 			return i1_from_start + i1_from_end <= i2_from_start + I2_from_end;
+// 		});
+//
+//
+// 		std::cout << "site_positions: " << njh::conToStr(positons_to_attempt_to_recode, ",") << std::endl << std::endl;
+//
+// 	}
+//
+// 	return 0;
+// }
 
 
 

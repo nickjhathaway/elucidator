@@ -78,10 +78,8 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	setUp.timer_.startNewLap("get hap probabilities");
 	haps.calcHapProbs();
 	setUp.timer_.startNewLap("writing sample info");
-	auto numTargetsPerSample = haps.getNumberTargetsPerSample();
-	numTargetsPerSample.sortTable("sample", true);
-	OutputStream outSamplesPerTarget(njh::files::make_path(setUp.pars_.directoryName_, "numTargetsPerSample.tab.txt"));
-	numTargetsPerSample.outPutContents(outSamplesPerTarget, "\t");
+
+
 	setUp.timer_.startNewLap("get index measures");
 	auto indexRes = haps.genIndexMeasures(setUp.pars_.verbose_);
 	OutputStream outSampNamesOut(njh::files::make_path(setUp.pars_.directoryName_, "sampleNames.tab.txt"));
@@ -123,6 +121,14 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		}
 	}
 
+	std::unordered_map<std::string, double> lociCoveragePerSample = haps.getTargetCoveragePerSample();
+
+	{
+		table numTargetsPerSample = haps.getTableNumberTargetsPerSample(minimumLociCoverageToKeepSamples);
+		OutputStream lociCoverageOut(njh::files::make_path(setUp.pars_.directoryName_, "loci_coverage_per_sample_info.tsv"));
+		numTargetsPerSample.outPutContents(lociCoverageOut, "\t");
+	}
+
 	if(clusterOnJacardIndexShared) {
 		auto distFnp = njh::files::make_path(setUp.pars_.directoryName_, "1MinusjacardByHapsTarShared.tab.txt.gz");
 		{
@@ -136,11 +142,8 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 				byHapTarSharedOut << njh::conToStr(outRow, "\t") << std::endl;
 			}
 		}
-		std::unordered_map<std::string, double> lociCoveragePerSample;
 
-		for (const auto row : iter::range(haps.targetsEncodeBySamp_.size())) {
-			lociCoveragePerSample[haps.sampNamesVec_[row]] = vectorSum(haps.targetsEncodeBySamp_[row])/static_cast<double>(haps.numberOfHapsPerTarget_.size());
-		}
+
 
 		OutputStream outFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_by_jacardTargetsShared.tsv")));
 		njh::stopWatch watch;
@@ -183,7 +186,6 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 						PairwisePairFactory::PairwisePairVec pairs;
 						std::vector<PairDist> belowEps;
 						while(pairFactory.setNextPairs(pairs, pairBatchCount)) {
-
 							for(const auto & pair : pairs.pairs_) {
 								if (lociCoveragePerSample[haps.sampNamesVec_[pair.row_]] < minimumLociCoverageToKeepSamples ||
 									lociCoveragePerSample[haps.sampNamesVec_[pair.col_]] < minimumLociCoverageToKeepSamples) {
@@ -309,6 +311,15 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 									//if(vectorMean(rmses) < rmseCutOffToBreak) {
 									pairwiseRMSEs[pair.col_][pair.row_] = std::sqrt(sum/rmses.size());
 									pairwiseRMSEs[pair.row_][pair.col_] = std::sqrt(sum/rmses.size());
+									// std::cout << __FILE__ << " : " << __LINE__ << std::endl;
+									// std::cout << "lociCoveragePerSample[haps.sampNamesVec_[pair.row_]]: " << lociCoveragePerSample[haps.sampNamesVec_[pair.row_]] << std::endl;
+									// std::cout << "lociCoveragePerSample[haps.sampNamesVec_[pair.col_]]: " << lociCoveragePerSample[haps.sampNamesVec_[pair.col_]] << std::endl;
+									// std::cout << "haps.sampNamesVec_[pair.row_]: " << haps.sampNamesVec_[pair.row_] << std::endl;
+									// std::cout << "haps.sampNamesVec_[pair.col_]: " << haps.sampNamesVec_[pair.col_] << std::endl;
+									// std::cout << "rmses.size(): " << rmses.size() << std::endl;
+									// std::cout << "std::sqrt(sum/rmses.size()): " << std::sqrt(sum/rmses.size()) << std::endl;
+									// std::cout << "rmseCutOffToBreak          : " << rmseCutOffToBreak << std::endl << std::endl;
+
 									if(std::sqrt(sum/rmses.size()) < rmseCutOffToBreak){
 										belowEps.emplace_back(PairDist{pair, dist});
 									}
