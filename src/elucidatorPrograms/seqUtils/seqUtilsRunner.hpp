@@ -40,6 +40,8 @@ class seqUtilsRunner : public njh::progutils::ProgramRunner {
 
   static int alignToSequence(const njh::progutils::CmdArgs & inputCommands);
   static int checkTwoReadFiles(const njh::progutils::CmdArgs & inputCommands);
+
+  static int generateAllPossibleStringsFromAlphabet(const njh::progutils::CmdArgs & inputCommands);
 };
 
 

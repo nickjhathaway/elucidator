@@ -106,13 +106,14 @@ int seqUtilsConverterRunner::convertFiles(const njh::progutils::CmdArgs & inputC
 
 int seqUtilsConverterRunner::convertTxtToFasta(const njh::progutils::CmdArgs & inputCommands) {
   seqUtilsConverterSetUp setUp(inputCommands);
-  std::string fileName = "";
+  std::string fileName;
   std::string stub = "Seq";
 	OutOptions outOpts("", ".fasta");
   setUp.setOption(fileName, "--file", "Filename", true);
-  if (!setUp.setOption(outOpts.outFilename_, "--out", "Oufilename")) {
-    outOpts.outFilename_ = bfs::basename(fileName) + ".fasta";
-  }
+	setUp.setOption(outOpts.outFilename_, "--out", "Oufilename");
+	if (njh::endsWith(outOpts.outFilename_.string(), ".gz")) {
+		outOpts.outExtention_ = ".fasta.gz";
+	}
   setUp.setOption(outOpts.overWriteFile_, "--overWrite", "overWriteCurrentFile");
   setUp.finishSetUp(std::cout);
   VecStr dnaStrings;

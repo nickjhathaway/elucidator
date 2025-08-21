@@ -53,6 +53,7 @@ seqUtilsSplitRunner::seqUtilsSplitRunner()
 			addFunc("SeqSplitOnCount", SeqSplitOnCount, false),
 			addFunc("SeqSplitOnNameContainsPattern", SeqSplitOnNameContainsPattern, false),
 			addFunc("SeqSplitOnQualityCheck", SeqSplitOnQualityCheck, false),
+    	addFunc("filterSameSizeSeqsEditDistance", filterSameSizeSeqsEditDistance, false),
 
 
 },
@@ -1023,6 +1024,97 @@ int seqUtilsSplitRunner::SeqSplitOnNucelotideComp(const njh::progutils::CmdArgs 
   }
   return 0;
 }
+
+
+int seqUtilsSplitRunner::filterSameSizeSeqsEditDistance(const njh::progutils::CmdArgs & inputCommands) {
+	SeqIOOptions comp_seqs_opts;
+	uint32_t edit_distance_cut_off = 0;
+	defaultSplitPars dSplitPars;
+	seqSetUp setUp(inputCommands);
+	defaultSplitSetUpOptions(setUp, dSplitPars);
+  setUp.setOption(edit_distance_cut_off, "--edit_distance_cut_off", "edit_distance_cut_off", true);
+	setUp.processSeqIoFilename(comp_seqs_opts, "compSeqs", true);
+	setUp.finishSetUp(std::cout);
+
+	MultiSeqOutCache<seqInfo> seqOuts;
+	seqOuts.addReader("include", dSplitPars.incOpts_);
+	seqOuts.addReader("exclude", dSplitPars.excOpts_);
+
+	SeqInput comp_seqs_reader(comp_seqs_opts);
+	comp_seqs_reader.openIn();
+	auto comp_seqs = comp_seqs_reader.readAllReads<seqInfo>();
+	bool check_pass = true;
+	for (const auto & seq : comp_seqs) {
+		if (seq.seq_.size() != comp_seqs.front().seq_.size()) {
+			check_pass = false;
+			break;
+		}
+	}
+	if (!check_pass) {
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << " input comp seqs need to be same length " << "\n";
+		for (const auto & seq : comp_seqs) {
+			ss << seq.name_ << " length: " << seq.seq_.size() << "\n";
+		}
+		throw std::runtime_error{ss.str()};
+	}
+	SeqIO reader(setUp.pars_.ioOptions_);
+	reader.openIn();
+
+	seqInfo seq;
+	aligner alignObj(comp_seqs.front().seq_.size() * 2, gapScoringParameters(5,1),
+		substituteMatrix::createScoreMatrix(1, -1, false, false, true));
+	while(reader.readNextRead(seq)){
+		if (seq.seq_.size() != comp_seqs.front().seq_.size()) {
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << seq.name_ << " is length: " <<
+					seq.seq_.size() << ", does not match expected length of " << comp_seqs.front().seq_.size() << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		for (const auto & comp_seq : comp_seqs) {
+			alignObj.alignObjectA_ = comp_seq;
+			alignObj.alignObjectB_ = seq;
+			alignObj.profilePrimerAlignment(comp_seq, seq);
+			// if (alignObj.comp_.hqMismatches_ == 0) {
+			// 	alignObj.alignObjectA_.seqBase_.outPutSeqAnsi(std::cout);
+			// 	alignObj.alignObjectB_.seqBase_.outPutSeqAnsi(std::cout);
+			// 	std::cout << alignObj.comp_.toJson() << std::endl;
+			// 	exit(1);
+			// }
+			if (alignObj.comp_.hqMismatches_ <= edit_distance_cut_off) {
+				seq.on_ = false;
+				if (dSplitPars.mark_) {
+					MetaDataInName meta;
+					if (MetaDataInName::nameHasMetaData(seq.name_)) {
+						meta = MetaDataInName(seq.name_);
+					}
+					meta.addMeta("com_seq_name", comp_seq.name_, true);
+					meta.addMeta("com_seq_seq", comp_seq.seq_, true);
+					meta.addMeta("edit_distance", alignObj.comp_.hqMismatches_, true);
+					meta.resetMetaInName(seq.name_);
+				}
+				break;
+			}
+		}
+
+		if(dSplitPars.include_) {
+			seq.on_ = !seq.on_;
+		}
+		std::string condition;
+		if(seq.on_){
+			condition = "include";
+		}else{
+			condition = "exclude";
+		}
+		seqOuts.add(condition, seq);
+	}
+
+	if(setUp.pars_.verbose_){
+		setUp.logRunTime(std::cout);
+	}
+	return 0;
+}
+
 
 
 

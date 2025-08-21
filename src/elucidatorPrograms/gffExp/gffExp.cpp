@@ -858,10 +858,15 @@ int gffExpRunner::gffToBed(const njh::progutils::CmdArgs & inputCommands){
 	bfs::path inputFile;
 	OutOptions outOpts(bfs::path("out"));
 	outOpts.outExtention_ = ".bed";
+	VecStr extraAttributes;
 
+	bool doNotWriteJson = false;
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(inputFile, "--gff", "Input gff file", true);
 	setUp.processWritingOptions(outOpts);
+
+	setUp.setOption(extraAttributes, "--extraAttributes", "Extra Attributes to output");
+	setUp.setOption(doNotWriteJson, "--doNotWriteJson", "do Not Write Json");
 	setUp.finishSetUp(std::cout);
 
 	BioDataFileIO<GFFCore> reader((IoOptions(InOptions(inputFile))));
@@ -869,20 +874,39 @@ int gffExpRunner::gffToBed(const njh::progutils::CmdArgs & inputCommands){
 	// uint32_t count = 0;
 	std::string line;
 	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
-	std::ofstream outFile;
-	outOpts.openFile(outFile);
+	OutputStream outFile(outOpts);
 
 	OutOptions outOptsJson(outOpts.outFilename_);
-	outOptsJson.outExtention_ = ".json";
+	outOptsJson.outExtention_ = njh::endsWith(outOpts.outFilename_.string(), ".gz") ? ".json.gz" : ".json";
 	outOptsJson.transferOverwriteOpts(outOpts);
-	std::ofstream outJsonFile;
-	outOptsJson.openFile(outJsonFile);
-
+	std::unique_ptr<OutputStream> outJsonFile;
+	if (!doNotWriteJson) {
+		outJsonFile = std::make_unique<OutputStream>(outOptsJson);
+	}
 	Json::Value outJson;
 	while (nullptr != gRecord) {
 
 		outJson[gRecord->getAttr("Name")] = gRecord->toJson();
-		outFile << GenomicRegion(*gRecord).genBedRecordCore().toDelimStr() << std::endl;
+		auto bedOut = GenomicRegion(*gRecord).genBedRecordCore();
+
+		std::string extraField = njh::pasteAsStr("[", "ID=", gRecord->getAttr("ID"), ";");
+		extraField.append("feature=" + gRecord->type_ + ";");
+		if(gRecord->hasAttr("description")){
+			extraField = njh::pasteAsStr(extraField, "description=", gRecord->getAttr("description"), ";");
+		}
+		if(!extraAttributes.empty()){
+			for(const auto & attr : extraAttributes){
+				if (njh::notIn(attr, VecStr{"ID", "description"}));
+				if(gRecord->hasAttr(attr)){
+					extraField.append(attr + "=" + gRecord->getAttr(attr) + ";");
+				}else{
+					extraField.append(attr + "=" + "NA" + ";");
+				}
+			}
+		}
+		extraField += "]";
+		bedOut.extraFields_.emplace_back(extraField);
+		outFile << bedOut.toDelimStrWithExtra() << std::endl;
 		bool end = false;
 		while ('#' == reader.inFile_->peek()) {
 			if (njh::files::nextLineBeginsWith(*reader.inFile_, "##FASTA")) {
@@ -897,7 +921,9 @@ int gffExpRunner::gffToBed(const njh::progutils::CmdArgs & inputCommands){
 		gRecord = reader.readNextRecord();
 		// ++count;
 	}
-	outJsonFile << outJson << std::endl;
+	if (!doNotWriteJson) {
+		*outJsonFile << outJson << std::endl;
+	}
 	return 0;
 }
 
@@ -941,6 +967,7 @@ int gffExpRunner::gffToBedByFeature(
 			if (njh::in(gRecord->type_, features)) {
 				outJson[gRecord->getAttr("ID")] = gRecord->toJson();
 				auto bedOut = GenomicRegion(*gRecord).genBedRecordCore();
+
 				std::string extraField = njh::pasteAsStr("[", "ID=", gRecord->getAttr("ID"), ";");
 				extraField.append("feature=" + gRecord->type_ + ";");
 				if(gRecord->hasAttr("description")){

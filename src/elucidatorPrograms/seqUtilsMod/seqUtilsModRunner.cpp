@@ -60,9 +60,7 @@ seqUtilsModRunner::seqUtilsModRunner()
     	addFunc("fragmentSequences", fragmentSequences, false),
     	addFunc("breakUpSeqsOnPattern", breakUpSeqsOnPattern, false),
     	addFunc("correctHPRunsBasedOnSurroundingBaseCounts", correctHPRunsBasedOnSurroundingBaseCounts, false),
-    	addFunc("fragmentSequencesForPhipSeq", fragmentSequencesForPhipSeq, false),
-    	addFunc("generateAllPossibleNucleotidePossibleFromProtein", generateAllPossibleNucleotidePossibleFromProtein, false),
-    	addFunc("generateNucleotidePossibleFromProteins", generateNucleotidePossibleFromProteins, false),
+
 
 
 },//
@@ -959,10 +957,22 @@ int seqUtilsModRunner::renameIDs(const njh::progutils::CmdArgs & inputCommands) 
   bfs::path keyIn = "";
   seqUtilsModSetUp setUp(inputCommands);
   setUp.setOption(keyIn, "--keyIn", "A file with a key to rename seqs with, no header, first column is old name, second column is the new name");
-  setUp.setOption(outOptsKey.out_.outFilename_, "--keyOut", "A filename to write a key for the original name to");
+
   setUp.setOption(keepComplementFlag, "--keepComplementFlag", "Keep any reads marked with _Comp");
   setUp.processVerbose();
+	if (setUp.setOption(outOptsKey.out_.outFilename_, "--keyOut", "A filename to write a key for the original name to")) {
+		if (outOptsKey.out_.outFilename_.filename().string().rfind('.') != std::string::npos) {
+			outOptsKey.out_.outExtention_ = "." + njh::files::getExtension(outOptsKey.out_.outFilename_);
+			if (njh::endsWith(outOptsKey.out_.outFilename_.string(), ".gz") ){
+				outOptsKey.out_.outExtention_ =  "." +  njh::files::getExtension(njh::files::replaceExtension(outOptsKey.out_.outFilename_, "")) + ".gz";
+			}
+		}
+	}
   setUp.setUpRenameIDs(stub, sortBy, keepChimeraFlag);
+
+	if (njh::endsWith(setUp.pars_.ioOptions_.firstName_.string(), ".gz")) {
+		njh::appendAsNeeded(outOptsKey.out_.outExtention_, ".gz");
+	}
   outOptsKey.out_.overWriteFile_ = setUp.pars_.ioOptions_.out_.overWriteFile_;
   SeqIO reader(setUp.pars_.ioOptions_);
 

@@ -121,7 +121,7 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	// static int compressPeptideKmersByReducedLibrary(const njh::progutils::CmdArgs & inputCommands);
 	static int compressPeptidesByReducedLibrary(const njh::progutils::CmdArgs & inputCommands);
 
-	static int generatePeptideKmerDistMatrixByScore(const njh::progutils::CmdArgs & inputCommands);
+	static int comparePeptidesDistMatrixByBlosumScore(const njh::progutils::CmdArgs & inputCommands);
 	static int getKmerCountsPerLocationOnSeq(const njh::progutils::CmdArgs & inputCommands);
 	static int getKmerCountsPerLocationOnSeqs(const njh::progutils::CmdArgs & inputCommands);
 

@@ -71,6 +71,7 @@ seqUtilsInfoRunner::seqUtilsInfoRunner()
     	addFunc("countAPatternInSeqs", countAPatternInSeqs, false),
     	addFunc("countHPPatternsInSeqs", countHPPatternsInSeqs, false),
     	addFunc("countDiNucleotidePatternsInSeqs", countDiNucleotidePatternsInSeqs, false),
+    	addFunc("countEditDistancesSameLenSeqs", countEditDistancesSameLenSeqs, false),
 	},
                     "seqUtilsInfo") {}
 //

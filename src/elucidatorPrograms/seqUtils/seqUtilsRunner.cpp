@@ -43,8 +43,8 @@ seqUtilsRunner::seqUtilsRunner()
            addFunc("createDegenerativeStr", createDegenerativeStr, false),
            addFunc("checkTwoReadFiles", checkTwoReadFiles, false),
            addFunc("alignToSequence", alignToSequence, false),
-
-          },
+          	addFunc("generateAllPossibleStringsFromAlphabet", generateAllPossibleStringsFromAlphabet, false),
+          }, //
           "seqUtils") {}
 
 
@@ -1080,8 +1080,56 @@ int seqUtilsRunner::alignToSequence(const njh::progutils::CmdArgs & inputCommand
 }
 
 
+template <typename F>
+void generate_combinations(const std::vector<char>& alphabet,
+													 std::size_t length,
+													 F&& consume) {
+	if (alphabet.empty()) return;
 
+	// Edge-case: length 0 => single empty string
+	if (length == 0) { consume(std::string()); return; }
 
+	const std::size_t k = alphabet.size();
+	std::string s(length, alphabet[0]);         // reused output buffer
+	std::vector<std::size_t> idx(length, 0);    // digits in base k
+
+	bool done = false;
+	while (!done) {
+		consume(s); // use the current combination
+
+		// increment "odometer" (rightmost digit first)
+		for (std::size_t pos = length; pos-- > 0; ) {
+			if (++idx[pos] < k) {
+				s[pos] = alphabet[idx[pos]];
+				break; // no carry; continue generating
+			} else {
+				idx[pos] = 0;
+				s[pos] = alphabet[0]; // carry to the next more-significant digit
+				if (pos == 0) done = true; // overflowed the most-significant digit
+			}
+		}
+	}
+}
+
+int seqUtilsRunner::generateAllPossibleStringsFromAlphabet(const njh::progutils::CmdArgs & inputCommands) {
+	std::vector<char> alphabet;
+	uint32_t len = std::numeric_limits<uint32_t>::max();
+	OutOptions outOpts("", ".txt");
+	seqUtilsSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.setOption(alphabet, "--alphabet", "alphabet", true);
+	setUp.setOption(len, "--len", "length of output strings", true);
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+	OutputStream out(outOpts);
+
+	generate_combinations(alphabet, len, [&out](const std::string& s){
+			out << s << std::endl;
+	});
+
+	return 0;
+}
 
 
 

@@ -64,7 +64,6 @@ class seqUtilsModRunner : public njh::progutils::ProgramRunner {
   static int dereplicate(const njh::progutils::CmdArgs & inputCommands);
 
 	static int fragmentSequences(const njh::progutils::CmdArgs & inputCommands);
-	static int fragmentSequencesForPhipSeq(const njh::progutils::CmdArgs & inputCommands);
 
 	static int breakUpSeqsOnPattern(const njh::progutils::CmdArgs & inputCommands);
 
@@ -76,8 +75,6 @@ class seqUtilsModRunner : public njh::progutils::ProgramRunner {
 	static int correctHPRunsBasedOnSurroundingBaseCounts(const njh::progutils::CmdArgs & inputCommands);
 
 
-	static int generateAllPossibleNucleotidePossibleFromProtein(const njh::progutils::CmdArgs & inputCommands);
-	static int generateNucleotidePossibleFromProteins(const njh::progutils::CmdArgs & inputCommands);
 
 
 };

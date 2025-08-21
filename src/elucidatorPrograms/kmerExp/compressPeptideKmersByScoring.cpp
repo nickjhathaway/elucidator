@@ -230,7 +230,7 @@ int kmerExpRunner::compressPeptideKmersByScoring(const njh::progutils::CmdArgs &
 }
 */
 
-int kmerExpRunner::generatePeptideKmerDistMatrixByScore(const njh::progutils::CmdArgs &inputCommands) {
+int kmerExpRunner::comparePeptidesDistMatrixByBlosumScore(const njh::progutils::CmdArgs &inputCommands) {
 	OutOptions outOpts(bfs::path(""), ".tsv");
 
 	bool noHeader = false;
