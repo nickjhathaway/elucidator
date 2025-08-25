@@ -50,7 +50,7 @@ class seqUtilsSplitRunner : public njh::progutils::ProgramRunner {
   static int SeqSplitOnNucelotideComp(const njh::progutils::CmdArgs & inputCommands);
   static int SeqSplitOnCount(const njh::progutils::CmdArgs & inputCommands);
 
-	static int filterSameSizeSeqsEditDistance(const njh::progutils::CmdArgs & inputCommands);
+	static int filterSameSizeSeqsHammingDistance(const njh::progutils::CmdArgs & inputCommands);
 
   static int getSimilarSequences(const njh::progutils::CmdArgs & inputCommands);
   static int getSimilarSequencesByKDist(const njh::progutils::CmdArgs & inputCommands);

@@ -13,9 +13,9 @@
 
 namespace njhseq {
 
-int seqUtilsInfoRunner::countEditDistancesSameLenSeqs(const njh::progutils::CmdArgs &inputCommands) {
+int seqUtilsInfoRunner::countHammingDistancesSameLenSeqs(const njh::progutils::CmdArgs &inputCommands) {
 	OutOptions outOpts(bfs::path(""), ".tsv");
-
+	uint32_t batch_size = 1000;
 	uint32_t numThreads = 1;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -23,6 +23,8 @@ int seqUtilsInfoRunner::countEditDistancesSameLenSeqs(const njh::progutils::CmdA
 	setUp.processReadInNames(true);
 	setUp.processWritingOptions(outOpts);
 	setUp.setOption(numThreads, "--numThreads", "number of threads");
+	setUp.setOption(batch_size, "--batch_size", "batch size for when threading");
+
 	setUp.finishSetUp(std::cout);
 
 
@@ -48,19 +50,21 @@ int seqUtilsInfoRunner::countEditDistancesSameLenSeqs(const njh::progutils::CmdA
 	aligner_pool.initAligners();
 	std::unordered_map<uint32_t, uint32_t> counts;
 	std::mutex counts_mut;
-	std::function<void()> getEditDistances = [&counts,&counts_mut,&pairFactory,&input,&aligner_pool,&setUp, &pBar]() {
-		PairwisePairFactory::PairwisePair pair;
+	std::function<void()> getEditDistances = [&counts,&counts_mut,&pairFactory,&input,&aligner_pool,&setUp, &pBar,&batch_size]() {
+		PairwisePairFactory::PairwisePairVec pairs;
 		auto current_aligner = aligner_pool.popAligner();
 		std::unordered_map<uint32_t, uint32_t> current_counts;
-		while (pairFactory.setNextPair(pair)) {
+		while (pairFactory.setNextPairs(pairs, batch_size)) {
 			if (setUp.pars_.verbose_) {
-				pBar.outputProgAdd(std::cout, 1, true);
+				pBar.outputProgAdd(std::cout, pairs.pairs_.size(), true);
 			}
-			current_aligner->noAlignSetAndScore(input[pair.col_], input[pair.row_]);
-			//with match score being 1 and mismatch being 0, the edit distance (number of snps) will be length minus score
-			++current_counts[input[pair.col_].seq_.size() - current_aligner->parts_.score_];
-			// current_aligner->profilePrimerAlignment(input[pair.col_], input[pair.row_]);
-			// ++current_counts[current_aligner->comp_.hqMismatches_];
+			for (const auto & pair : pairs.pairs_) {
+				current_aligner->noAlignSetAndScore(input[pair.col_], input[pair.row_]);
+				//with match score being 1 and mismatch being 0, the edit distance (number of snps) will be length minus score
+				++current_counts[input[pair.col_].seq_.size() - current_aligner->parts_.score_];
+				// current_aligner->profilePrimerAlignment(input[pair.col_], input[pair.row_]);
+				// ++current_counts[current_aligner->comp_.hqMismatches_];
+			}
 		}
 		{
 			std::lock_guard lock(counts_mut);
@@ -71,7 +75,7 @@ int seqUtilsInfoRunner::countEditDistancesSameLenSeqs(const njh::progutils::CmdA
 	};
 
 	njh::concurrent::runVoidFunctionThreaded(getEditDistances, numThreads);
-	out << "edit_distance\tcount" << std::endl;
+	out << "hamming_distance\tcount" << std::endl;
 	auto counts_key = njh::getSetOfMapKeys(counts);
 	for (const auto & dist : counts_key) {
 		out << dist << "\t" << counts[dist] << std::endl;

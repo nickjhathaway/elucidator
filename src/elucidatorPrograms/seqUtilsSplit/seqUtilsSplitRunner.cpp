@@ -53,7 +53,7 @@ seqUtilsSplitRunner::seqUtilsSplitRunner()
 			addFunc("SeqSplitOnCount", SeqSplitOnCount, false),
 			addFunc("SeqSplitOnNameContainsPattern", SeqSplitOnNameContainsPattern, false),
 			addFunc("SeqSplitOnQualityCheck", SeqSplitOnQualityCheck, false),
-    	addFunc("filterSameSizeSeqsEditDistance", filterSameSizeSeqsEditDistance, false),
+    	addFunc("filterSameSizeSeqsHammingDistance", filterSameSizeSeqsHammingDistance, false),
 
 
 },
@@ -1026,7 +1026,7 @@ int seqUtilsSplitRunner::SeqSplitOnNucelotideComp(const njh::progutils::CmdArgs 
 }
 
 
-int seqUtilsSplitRunner::filterSameSizeSeqsEditDistance(const njh::progutils::CmdArgs & inputCommands) {
+int seqUtilsSplitRunner::filterSameSizeSeqsHammingDistance(const njh::progutils::CmdArgs & inputCommands) {
 	SeqIOOptions comp_seqs_opts;
 	uint32_t edit_distance_cut_off = 0;
 	defaultSplitPars dSplitPars;

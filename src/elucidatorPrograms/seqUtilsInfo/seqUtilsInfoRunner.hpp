@@ -79,7 +79,7 @@ class seqUtilsInfoRunner : public njh::progutils::ProgramRunner {
 	static int findExactMatches(const njh::progutils::CmdArgs & inputCommands);
 	static int findSeq(const njh::progutils::CmdArgs & inputCommands);
 
-	static int countEditDistancesSameLenSeqs(const njh::progutils::CmdArgs & inputCommands);
+	static int countHammingDistancesSameLenSeqs(const njh::progutils::CmdArgs & inputCommands);
 
 
 };
