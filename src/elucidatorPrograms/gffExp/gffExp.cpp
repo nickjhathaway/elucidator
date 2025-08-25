@@ -896,11 +896,12 @@ int gffExpRunner::gffToBed(const njh::progutils::CmdArgs & inputCommands){
 		}
 		if(!extraAttributes.empty()){
 			for(const auto & attr : extraAttributes){
-				if (njh::notIn(attr, VecStr{"ID", "description"}));
-				if(gRecord->hasAttr(attr)){
-					extraField.append(attr + "=" + gRecord->getAttr(attr) + ";");
-				}else{
-					extraField.append(attr + "=" + "NA" + ";");
+				if (njh::notIn(attr, VecStr{"ID", "description"})) {
+					if(gRecord->hasAttr(attr)){
+						extraField.append(attr + "=" + gRecord->getAttr(attr) + ";");
+					}else{
+						extraField.append(attr + "=" + "NA" + ";");
+					}
 				}
 			}
 		}
