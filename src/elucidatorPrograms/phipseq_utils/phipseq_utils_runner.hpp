@@ -18,6 +18,8 @@ public:
   static int generateAllPossibleNucleotidePossibleFromProtein(const njh::progutils::CmdArgs & inputCommands);
   static int generateNucleotidePossibleFromProteins(const njh::progutils::CmdArgs & inputCommands);
 
+  static int markGroupsByHammingDistanceCutOff(const njh::progutils::CmdArgs & inputCommands);
+
   static int appendRandomBarcode(const njh::progutils::CmdArgs & inputCommands);
   static int countPossiblePhipSeqRandomBarcodes(const njh::progutils::CmdArgs & inputCommands);
 

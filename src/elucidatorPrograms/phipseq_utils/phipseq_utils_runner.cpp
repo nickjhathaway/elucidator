@@ -16,6 +16,7 @@ PhipSeqUtilsRunner::PhipSeqUtilsRunner()
                 addFunc("generateNucleotidePossibleFromProteins", generateNucleotidePossibleFromProteins, false),
         	addFunc("appendRandomBarcode", appendRandomBarcode, false),
         	addFunc("countPossiblePhipSeqRandomBarcodes", countPossiblePhipSeqRandomBarcodes, false),
+        	addFunc("markGroupsByHammingDistanceCutOff", markGroupsByHammingDistanceCutOff, false),
 
         },//
         "PhipSeqUtils") {}
@@ -129,6 +130,7 @@ int PhipSeqUtilsRunner::generateAllPossibleNucleotidePossibleFromProtein(const n
 
 	return 0;
 }
+
 
 int PhipSeqUtilsRunner::generateNucleotidePossibleFromProteins(const njh::progutils::CmdArgs & inputCommands) {
 

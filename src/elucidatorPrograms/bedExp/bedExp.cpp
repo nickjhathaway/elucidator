@@ -2083,10 +2083,12 @@ int bedExpRunner::getFastaWithBed(const njh::progutils::CmdArgs & inputCommands)
 	OutOptions outOpts(bfs::path(""));
 	outOpts.outExtention_ = ".fasta";
 	bfs::path twoBitFilename = "";
-
+	bool prepend_with_chrom_name = false;
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(twoBitFilename, "--twoBit", "File path of the 2bit file", true);
 	setUp.setOption(filename, "--bed", "BED6 file", true);
+	setUp.setOption(prepend_with_chrom_name, "--prepend_with_chrom_name", "prepend with chrom name");
+
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 	OutputStream out(outOpts);
@@ -2109,7 +2111,12 @@ int bedExpRunner::getFastaWithBed(const njh::progutils::CmdArgs & inputCommands)
 			if (record.reverseStrand()) {
 				seq = seqUtil::reverseComplement(seq, "DNA");
 			}
-			out << ">" << record.name_ << std::endl;
+
+			out << ">";
+			if (prepend_with_chrom_name) {
+				out << record.chrom_ << "_";
+			}
+			out << record.name_ << std::endl;
 			out << seq << std::endl;
 		}
 	}
