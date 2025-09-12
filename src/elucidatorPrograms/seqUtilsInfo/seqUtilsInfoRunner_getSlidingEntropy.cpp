@@ -19,7 +19,7 @@ namespace njhseq {
 
 
 int seqUtilsInfoRunner::getSlidingEntropy(const njh::progutils::CmdArgs & inputCommands) {
-
+	bool add_gc_content = false;
 	OutOptions outOpts(bfs::path(""), ".tab.txt");
 	uint32_t windowStep = 5;
 	uint32_t windowSize = 50;
@@ -30,6 +30,8 @@ int seqUtilsInfoRunner::getSlidingEntropy(const njh::progutils::CmdArgs & inputC
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.processWritingOptions(outOpts);
+	setUp.setOption(add_gc_content, "--add_gc_content", "add_gc_content");
+
 	setUp.setOption(windowStep, "--windowStep", "Window Step");
 	setUp.setOption(windowSize, "--windowSize", "Window Size");
 	setUp.setOption(kLen, "--kLen", "Kmer length for entropy calculation");
@@ -41,15 +43,26 @@ int seqUtilsInfoRunner::getSlidingEntropy(const njh::progutils::CmdArgs & inputC
 	reader.openIn();
 	seqInfo seq;
 	OutputStream out(outOpts);
-	out << "name\tposition\tsubseq\tentropy" << std::endl;
+	out << "name\tposition\tsubseq\tentropy";
+	if (add_gc_content) {
+		out << "\tgc_content";
+	}
+	out << std::endl;
 	while(reader.readNextRead(seq)){
 		if(len(seq) >= windowSize){
 			for (auto pos : iter::range<uint32_t>(0, len(seq) - windowSize + 1, windowStep)) {
-				kmerInfo kInfo(seq.seq_.substr(pos, windowSize), kLen, false);
+				auto sub_str = seq.seq_.substr(pos, windowSize);
+				kmerInfo kInfo(sub_str, kLen, false);
 				out << seq.name_
 						<< "\t" << pos
-						<< "\t" << seq.seq_.substr(pos, windowSize)
-						<< "\t" << kInfo.computeKmerEntropy() << std::endl;
+						<< "\t" << sub_str
+						<< "\t" << kInfo.computeKmerEntropy();
+				if (add_gc_content) {
+					charCounter counter(sub_str);
+					counter.calcGcContent();
+					out << "\t" << counter.gcContent_;
+				}
+				out << std::endl;
 			}
 		}
 	}

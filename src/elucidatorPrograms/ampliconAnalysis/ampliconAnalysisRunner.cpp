@@ -46,7 +46,10 @@ ampliconAnalysisRunner::ampliconAnalysisRunner()
                       addFunc("determinePossibleMaskFromSeqs", determinePossibleMaskFromSeqs, false),
     									addFunc("maskRegionBasedOnRefSubRegions", maskRegionBasedOnRefSubRegions, false),
     	addFunc("phasingAlleleTable", phasingAlleleTable, false),
-										 },//
+    	addFunc("sraMetaToJson", sraMetaToJson, false),
+
+
+										 },//sraMetaToJson
                     "ampliconAnalysis") {}
 
 //

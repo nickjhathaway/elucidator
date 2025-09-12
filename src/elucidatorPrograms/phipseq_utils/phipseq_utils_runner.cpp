@@ -5,6 +5,7 @@
 #include "phipseq_utils_runner.hpp"
 
 #include <njhseq/IO/SeqIO/SeqIO.hpp>
+#include <njhseq/objects/counters/hrCounter.hpp>
 #include <njhseq/objects/Gene/CodonSampler.hpp>
 
 namespace njhseq {
@@ -117,7 +118,7 @@ int PhipSeqUtilsRunner::generateAllPossibleNucleotidePossibleFromProtein(const n
 				}
 			} else {
 				VecStr new_output;
-				for (auto current_out : output) {
+				for (const auto & current_out : output) {
 					for (const auto & dna_codon : aminoAcidInfo::infos::allInfo.at(aa).dnaCodons_) {
 						new_output.emplace_back(current_out + dna_codon);
 					}
@@ -138,6 +139,16 @@ int PhipSeqUtilsRunner::generateNucleotidePossibleFromProteins(const njh::progut
 	// ecor1 = "GAATTC"
 	// xho1 = "CTCGAG"
 	// hindIII = "AAGCCT"
+
+	uint32_t max_homopolymer = 8;
+
+	double max_gc_content_window = 0.70;
+	double min_gc_content_window = 0.20;
+	uint32_t gc_content_window_size = 25;
+	uint32_t gc_content_window_step = 10;
+
+	uint32_t max_seq_attempts = 50;
+
 	bool use_e_coli_optimized_codons = false;
 	bool do_not_set_optimal_stop_codon = false;
 
@@ -151,6 +162,15 @@ int PhipSeqUtilsRunner::generateNucleotidePossibleFromProteins(const njh::progut
 	setUp.setOption(do_not_set_optimal_stop_codon, "--do_not_set_optimal_stop_codon", "use a random selection of stop codons rather than only the AMBER optimal stop codon: TAG");
 	setUp.setOption(seed, "--seed", "seed for random generators");
 	setUp.setOption(restriction_sites_to_remove, "--restriction_sites_to_remove", "restriction_sites_to_remove");
+
+	setUp.setOption(max_seq_attempts, "--max_seq_attempts", "max_seq_attempts");
+
+	setUp.setOption(max_homopolymer, "--max_homopolymer", "max_homopolymer");
+	setUp.setOption(max_gc_content_window, "--max_gc_content_window", "max_gc_content_window");
+	setUp.setOption(min_gc_content_window, "--min_gc_content_window", "min_gc_content_window");
+
+	setUp.setOption(gc_content_window_size, "--gc_content_window_size", "gc_content_window_size");
+	setUp.setOption(gc_content_window_step, "--gc_content_window_step", "gc_content_window_step");
 
 	setUp.finishSetUp(std::cout);
 
@@ -312,23 +332,69 @@ int PhipSeqUtilsRunner::generateNucleotidePossibleFromProteins(const njh::progut
 		}
 	};
 
-	while (reader.readNextRead(seq)) {
-		seqInfo out_seq(seq.name_, sampler->gen(seq.seq_));
-		uint32_t attempts = 0;
-		while (has_restriction_sites_both_directions_checked(out_seq.seq_)) {
-			++attempts;
-			if (attempts >= 5) {
-				std::stringstream ss;
-				ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << " attempted 5 times to recode to remove restriction sites and failed for\nnuc:"
-				<< out_seq.seq_ << "\n"
-				<< "protein: " << seq.seq_ << "\n";
-				throw std::runtime_error{ss.str()};
-			}
-			recode_to_remove_sites(out_seq, restriction_sites_to_remove);
-			if (has_restriction_sites_rev_comp(out_seq.seq_) ) {
-				recode_to_remove_sites(out_seq, restriction_sites_to_remove_rev_comp);
+
+	auto check_seq = [&max_homopolymer,
+		&max_gc_content_window,
+		&min_gc_content_window,
+		&gc_content_window_size, &gc_content_window_step](const seqInfo & seq){
+
+		readObject seq_info(seq);
+		seq_info.setLetterCount();
+		seq_info.counter_.calcGcContent();
+		bool pass = seq_info.counter_.gcContent_ < max_gc_content_window && seq_info.counter_.gcContent_ > min_gc_content_window;
+		if (pass) {
+			seq_info.createCondensedSeq();
+			for (const auto & count : seq_info.condensedSeqCount) {
+				if (count > max_homopolymer) {
+					pass = false;
+					break;
+				}
 			}
 		}
+		if (pass) {
+			if (len(seq) > gc_content_window_size) {
+				for (const auto pos : iter::range<uint32_t>(0, len(seq) - gc_content_window_size + 1, gc_content_window_step)) {
+					charCounter window_count(seq.seq_.substr(pos, gc_content_window_size));
+					window_count.calcGcContent();
+					if (window_count.gcContent_ > max_gc_content_window || window_count.gcContent_ < min_gc_content_window) {
+						pass = false;
+						break;
+					}
+				}
+			}
+		}
+		return pass;
+	};
+
+
+	while (reader.readNextRead(seq)) {
+		seqInfo out_seq(seq.name_, sampler->gen(seq.seq_));
+
+		{
+			uint32_t seq_attempts = 0;
+			while (seq_attempts < max_seq_attempts && !check_seq(out_seq)) {
+				out_seq = seqInfo(seq.name_, sampler->gen(seq.seq_));
+				{
+					uint32_t attempts = 0;
+					while (has_restriction_sites_both_directions_checked(out_seq.seq_) ) {
+						++attempts;
+						if (attempts >= 5) {
+							std::stringstream ss;
+							ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << " attempted 5 times to recode to remove restriction sites and failed for\nnuc:"
+							<< out_seq.seq_ << "\n"
+							<< "protein: " << seq.seq_ << "\n";
+							throw std::runtime_error{ss.str()};
+						}
+						recode_to_remove_sites(out_seq, restriction_sites_to_remove);
+						if (has_restriction_sites_rev_comp(out_seq.seq_) ) {
+							recode_to_remove_sites(out_seq, restriction_sites_to_remove_rev_comp);
+						}
+					}
+				}
+				++seq_attempts;
+			}
+		}
+
 		if (out_seq.translateRet(false, false).seq_ != seq.seq_) {
 			std::stringstream ss;
 			auto new_trans = out_seq.translateRet(false, false);
@@ -347,6 +413,6 @@ int PhipSeqUtilsRunner::generateNucleotidePossibleFromProteins(const njh::progut
 	return 0;
 }
 
-
-
 } //namespace njhseq
+
+

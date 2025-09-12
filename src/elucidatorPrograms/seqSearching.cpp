@@ -47,6 +47,7 @@ seqSearchingRunner::seqSearchingRunner()
 					 addFunc("chopAndMapAndRefineInvidual", chopAndMapAndRefineInvidual, false),
 					 addFunc("findSimpleTandemRepeatLocations", findSimpleTandemRepeatLocations, false),
           	addFunc("extractBetweenTwoMotifLocations", extractBetweenTwoMotifLocations, false),
+          	addFunc("extractBetweenTwoMotifLocationsLightWeight", extractBetweenTwoMotifLocationsLightWeight, false),
            },//
           "seqSearching") {}
 
@@ -244,9 +245,292 @@ int seqSearchingRunner::findTandemMotifLocations(const njh::progutils::CmdArgs &
 }
 
 
-
-
 int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::CmdArgs & inputCommands){
+	bool add_inner_seq = false;
+	bool add_full_seq = false;
+	uint32_t fasta_batch_size = 20;
+	uint32_t numThreads = 1;
+	std::vector<bfs::path> fasta_list;
+	bfs::path motif_pair_table;
+	std::string motif_pair_name = "motif";
+	seqInfo motif1Obj;
+	seqInfo motif2Obj;
+	//bfs::path genomeFnp = "";
+	uint32_t allowableErrors = 0;
+	size_t insertSizeCutOff = std::numeric_limits<size_t>::max();
+	OutOptions outOpts(bfs::path(""));
+	outOpts.outExtention_ = ".bed";
+	seqSetUp setUp(inputCommands);
+	setUp.pars_.ioOptions_.includeWhiteSpaceInName_ = false;
+	bool fasta_list_set = setUp.setOption(fasta_list, "--fasta_list", "a list of fasta files to read from");
+	bool motif_pair_table_set = setUp.setOption(motif_pair_table, "--motif_pair_table", "a table with 3 column, 1)target,2)motif1(5`-3` direction), 3)motif2 (5`-3` direction)");
+	setUp.setOption(add_inner_seq, "--add_inner_seq", "add_inner_seq to output");
+	setUp.setOption(add_full_seq, "--add_full_seq", "add_full_seq to output");
+	setUp.setOption(fasta_batch_size, "--fasta_batch_size", "fasta_batch_size");
+
+	setUp.processReadInNames({"--fasta", "--fastagz"}, !fasta_list_set);
+	setUp.processSeq(motif1Obj, "--motif1", "The first motif to look for", !motif_pair_table_set);
+	setUp.processSeq(motif2Obj, "--motif2", "The second motif to look for, should be in reverse complement to motif1", !motif_pair_table_set);
+	setUp.setOption(motif_pair_name, "--motif_pair_name", "motif pair name", false);
+	setUp.setOption(allowableErrors, "--allowableErrors", "allowable errors in motif");
+	setUp.setOption(insertSizeCutOff, "--insertSizeCutOff", "max insert Size Cut Off");
+	setUp.setOption(numThreads, "--numThreads", "number of threads to use when processing a list of fasta files");
+
+	setUp.processWritingOptions(outOpts);
+	setUp.finishSetUp(std::cout);
+
+
+	if (!fasta_list_set) {
+		fasta_list.emplace_back(setUp.pars_.ioOptions_.firstName_);
+	}
+
+	std::shared_ptr<PrimersAndMids> motifs;
+	if (motif_pair_table_set) {
+		motifs = std::make_shared<PrimersAndMids>(motif_pair_table);
+	} else {
+		motifs = std::make_shared<PrimersAndMids>(std::map{
+			std::make_pair(motif_pair_name, PrimersAndMids::Target(motif_pair_name, motif1Obj.seq_, motif2Obj.seq_))
+		});
+	}
+
+	motifs->initPrimerDeterminator();
+
+	// for (const auto & motif_pair : motifs->pDeterminator_->primers_) {
+	// 	std::cout << "name: " << motif_pair.first << std::endl;
+	// 	std::cout << "motif_pair.second.fwds_.size(): " << motif_pair.second.fwds_.size() << std::endl;
+	// 	std::cout << "motif_pair.second.revs_.size(): " << motif_pair.second.revs_.size() << std::endl;
+	// }
+	// exit(1);
+
+
+
+	OutputStream out(outOpts);
+
+	out << "#chrom\tstart_full\tend_full\tname\tfull_length\tstrand";
+	out << "\tstart_inner\tend_inner\tinner_length";
+
+	out << "\tmotif1_seq\tmotif1_seq_extracted\tmotif1_seq_start\tmotif1_seq_end\tmotif1_seq_strand\tmotif1_seq_error";
+	out << "\tmotif2_seq\tmotif2_seq_extracted\tmotif2_seq_start\tmotif2_seq_end\tmotif2_seq_strand\tmotif2_seq_error";
+	out << "\tinput_fnp";
+	if (add_full_seq) {
+		out << "\tfull_seq";
+	}
+	if (add_inner_seq) {
+		out << "\tinner_seq";
+	}
+	out << std::endl;
+
+	struct MotifPairSearchResults {
+        std::vector<GenomicRegion> fPrimerPositions_;
+        std::vector<GenomicRegion> rPrimerPositions_;
+        class GenomeExtractResultByMotifPair {
+        public:
+          GenomeExtractResultByMotifPair(GenomicRegion  fPrimerReg,
+                                          GenomicRegion  rPrimerReg): fPrimerReg_(std::move(fPrimerReg)),rPrimerReg_(std::move(rPrimerReg)){
+            setRegion();
+          }
+          GenomicRegion fPrimerReg_;
+          GenomicRegion rPrimerReg_;
+
+          std::shared_ptr<GenomicRegion> gRegion_;
+          std::shared_ptr<GenomicRegion> gRegionInner_ ;
+
+          void setRegion(){
+            if (fPrimerReg_.chrom_ != rPrimerReg_.chrom_) {
+              std::stringstream ss;
+              ss << __PRETTY_FUNCTION__ << ", error extension chrom, "
+                 << fPrimerReg_.chrom_ << "doesn't equal ligation chrom "
+                 << rPrimerReg_.chrom_ << "\n";
+              throw std::runtime_error { ss.str() };
+            }
+            if (fPrimerReg_.reverseSrand_ == rPrimerReg_.reverseSrand_) {
+              std::stringstream ss;
+              ss << __PRETTY_FUNCTION__
+                 << ", error extention and ligation are on the same strand, should be mapping to opposite strands"
+                 << "\n";
+              throw std::runtime_error { ss.str() };
+            }
+            if (fPrimerReg_.reverseSrand_) {
+              if (fPrimerReg_.start_ < rPrimerReg_.start_) {
+                std::stringstream ss;
+                ss << __PRETTY_FUNCTION__
+                   << ", error if extention is mapping to the reverse strand, it's start, "
+                   << fPrimerReg_.start_
+                   << ", should be greater than ligation start, "
+                   << rPrimerReg_.start_ << "\n";
+                throw std::runtime_error { ss.str() };
+              }
+            }else{
+              if (fPrimerReg_.start_ > rPrimerReg_.start_) {
+                std::stringstream ss;
+                ss << __PRETTY_FUNCTION__
+                   << ", error if extention is mapping to the plus strand, it's start, "
+                   << fPrimerReg_.start_
+                   << ", should be less than than ligation start, "
+                   << rPrimerReg_.start_ << "\n";
+                throw std::runtime_error { ss.str() };
+              }
+            }
+            size_t start = fPrimerReg_.start_;
+            size_t end = rPrimerReg_.end_;
+            size_t innerStart = fPrimerReg_.end_;
+            size_t innerEnd = rPrimerReg_.start_;
+            if(fPrimerReg_.reverseSrand_){
+              start = rPrimerReg_.start_;
+              end = fPrimerReg_.end_;
+              innerStart = rPrimerReg_.end_;
+              innerEnd = fPrimerReg_.start_;
+            }
+            gRegion_ = std::make_shared<GenomicRegion>(fPrimerReg_.uid_ + "-" + rPrimerReg_.uid_, fPrimerReg_.chrom_, start, end, fPrimerReg_.reverseSrand_);
+            gRegionInner_ = std::make_shared<GenomicRegion>(fPrimerReg_.uid_ + "-" + rPrimerReg_.uid_, fPrimerReg_.chrom_, innerStart, innerEnd, fPrimerReg_.reverseSrand_);
+          }
+        };
+
+
+        static std::vector<GenomeExtractResultByMotifPair> getPossibleGenomeExtracts(const std::vector<GenomicRegion> & fPrimerPositions,
+                                                                                      const std::vector<GenomicRegion> & rPrimerPositions,
+                                                                                      const size_t insertSizeCutOff = std::numeric_limits<size_t>::max()){
+          std::vector<GenomeExtractResultByMotifPair> ret;
+          //same chrom, opposite strands, less than the insert size
+          for (const auto & fwd : fPrimerPositions) {
+            for (const auto & rev : rPrimerPositions) {
+              //need to be on the same chromosome
+              //need to be on opposite strands (should both should be in 5'->3' direction
+              //and they shouldn't overlap
+              if (fwd.chrom_ == rev.chrom_
+                  && fwd.reverseSrand_ != rev.reverseSrand_
+                  && !fwd.overlaps(rev)
+                  && fwd.start_ != rev.end_
+                  && fwd.end_ != rev.start_ ) {
+
+                if(fwd.reverseSrand_){
+                  if(fwd.start_ > rev.start_){
+                    GenomeExtractResultByMotifPair extraction(fwd, rev);
+                    if (extraction.gRegion_->getLen() <= insertSizeCutOff) {
+                      ret.emplace_back(extraction);
+                    }
+                  }
+                }else{
+                  if(fwd.start_ < rev.start_){
+                    GenomeExtractResultByMotifPair extraction(fwd, rev);
+                    if (extraction.gRegion_->getLen() <= insertSizeCutOff) {
+                      ret.emplace_back(extraction);
+                    }
+                  }
+                }
+              }
+            }
+          }
+          return ret;
+        }
+        std::vector<GenomeExtractResultByMotifPair> regions_;
+      };
+
+	njh::concurrent::LockableQueue<bfs::path> fasta_inputs(fasta_list);
+	std::mutex out_mut;
+	std::function search_for_motifs = [&out_mut, &fasta_inputs,&motifs,
+		insertSizeCutOff, &out, allowableErrors,
+		&setUp,
+		&add_full_seq,
+		&add_inner_seq, fasta_batch_size]() {
+		std::vector<bfs::path> current_fastas;
+		while (fasta_inputs.getVals(current_fastas, fasta_batch_size)) {
+			std::stringstream current_out;
+			for (const auto & current_fasta : current_fastas) {
+				seqInfo current_seq;
+				auto current_opts = SeqIOOptions::genFastaIn(current_fasta);
+				current_opts.includeWhiteSpaceInName_ = setUp.pars_.ioOptions_.includeWhiteSpaceInName_;
+				SeqInput reader(current_opts);
+				reader.openIn();
+				while(reader.readNextRead(current_seq)){
+					auto revComp = seqUtil::reverseComplement(current_seq.seq_,"DNA");
+					for (const auto & motif_pair : motifs->pDeterminator_->primers_) {
+						auto locs_1 = motif_pair.second.fwds_.front().mot_.findPositionsFull(current_seq.seq_, allowableErrors);
+						auto locs_2 = motif_pair.second.revs_.front().mot_.findPositionsFull(current_seq.seq_, allowableErrors);
+						auto revLocs_1 = motif_pair.second.fwds_.front().mot_.findPositionsFull(revComp, allowableErrors);
+						auto revLocs_2 = motif_pair.second.revs_.front().mot_.findPositionsFull(revComp, allowableErrors);
+
+						if ((!locs_1.empty() && !revLocs_2 .empty()) ||
+								(!revLocs_1.empty() && !locs_2.empty())) {
+							std::vector<GenomicRegion> motif1Positions;
+							std::vector<GenomicRegion> motif2Positions;
+							for(const auto & loc : locs_1){
+								motif1Positions.emplace_back(motif_pair.first, current_seq.name_,loc, loc + motif_pair.second.fwds_.front().mot_.size(), false);
+							}
+							for(const auto & loc : revLocs_1){
+								motif1Positions.emplace_back(motif_pair.first, current_seq.name_, len(current_seq) - (loc + motif_pair.second.fwds_.front().mot_.size()), len(current_seq) - loc, true);
+							}
+							for(const auto & loc : locs_2){
+								motif2Positions.emplace_back(motif_pair.first, current_seq.name_,loc, loc + motif_pair.second.revs_.front().mot_.size(), false);
+							}
+							for(const auto & loc : revLocs_2){
+								motif2Positions.emplace_back(motif_pair.first, current_seq.name_,len(current_seq) - (loc + motif_pair.second.revs_.front().mot_.size()), len(current_seq) - loc, true);
+							}
+							{
+								auto possible_extractions = MotifPairSearchResults::getPossibleGenomeExtracts(motif1Positions, motif2Positions, insertSizeCutOff);
+
+								for (const auto & extract : possible_extractions) {
+									Bed6RecordCore full_bed = extract.gRegion_->genBedRecordCore();
+									Bed6RecordCore inner_bed = extract.gRegionInner_->genBedRecordCore();
+									full_bed.name_ = motif_pair.first;
+									inner_bed.name_ = motif_pair.first;
+
+									std::string inner_seq;
+									std::string full_seq;
+									std::string moftif1_extracted_seq = extract.fPrimerReg_.extractSeq(current_seq.seq_);
+									std::string moftif2_extracted_seq = extract.rPrimerReg_.extractSeq(current_seq.seq_);
+									if (add_inner_seq) {
+										inner_seq = extract.gRegion_->extractSeq(current_seq.seq_);
+									}
+									if (add_full_seq) {
+										full_seq = extract.gRegion_->extractSeq(current_seq.seq_);
+									}
+									auto moftif1_error = motif_pair.second.fwds_.front().mot_.size() - motif_pair.second.fwds_.front().mot_.scoreMotif(moftif1_extracted_seq);
+									auto moftif2_error = motif_pair.second.revs_.front().mot_.size() - motif_pair.second.revs_.front().mot_.scoreMotif(moftif2_extracted_seq);
+
+									current_out << full_bed.toDelimStr();
+									current_out << "\t" << inner_bed.chromStart_
+											<< "\t" << inner_bed.chromEnd_
+											<< "\t" << inner_bed.length();
+									current_out << "\t" << motif_pair.second.fwds_.front().primer_
+											<< "\t" << moftif1_extracted_seq
+											<< "\t" << extract.fPrimerReg_.start_
+											<< "\t" << extract.fPrimerReg_.end_
+											<< "\t" << (extract.fPrimerReg_.reverseSrand_ ? '-': '+')
+											<< "\t" << moftif1_error;
+									current_out << "\t" << motif_pair.second.revs_.front().primer_
+											<< "\t" << moftif2_extracted_seq
+											<< "\t" << extract.rPrimerReg_.start_
+											<< "\t" << extract.rPrimerReg_.end_
+											<< "\t" << (extract.rPrimerReg_.reverseSrand_ ? '-': '+')
+											<< "\t" << moftif2_error;
+									current_out << "\t" << current_fasta.string();
+									if (add_full_seq) {
+										current_out << "\t" << full_seq;
+									}
+									if (add_inner_seq) {
+										current_out << "\t" << inner_seq;
+									}
+									current_out << "\n";
+								}
+							}
+						}
+					}
+				}
+			}
+			{
+				std::lock_guard lock(out_mut);
+				out << current_out.str();
+			}
+		}
+	};
+	njh::concurrent::runVoidFunctionThreaded(search_for_motifs, numThreads);
+	return 0;
+}
+
+
+
+int seqSearchingRunner::extractBetweenTwoMotifLocationsLightWeight(const njh::progutils::CmdArgs & inputCommands){
 	bool add_seq = false;
 	bool take_inner = false;
 	uint32_t numThreads = 1;
@@ -291,6 +575,9 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 	OutputStream out(outOpts);
 
 
+
+
+
 	struct MotifPairSearchResults {
         std::vector<GenomicRegion> fPrimerPositions_;
         std::vector<GenomicRegion> rPrimerPositions_;
@@ -309,7 +596,7 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
           void setRegion(){
             if (fPrimerReg_.chrom_ != rPrimerReg_.chrom_) {
               std::stringstream ss;
-              ss << __PRETTY_FUNCTION__ << ", error extention chrom, "
+              ss << __PRETTY_FUNCTION__ << ", error extension chrom, "
                  << fPrimerReg_.chrom_ << "doesn't equal ligation chrom "
                  << rPrimerReg_.chrom_ << "\n";
               throw std::runtime_error { ss.str() };
@@ -345,18 +632,16 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
             size_t start = fPrimerReg_.start_;
             size_t end = rPrimerReg_.end_;
             size_t innerStart = fPrimerReg_.end_;
-            size_t innereEnd = rPrimerReg_.start_;
+            size_t innerEnd = rPrimerReg_.start_;
             if(fPrimerReg_.reverseSrand_){
               start = rPrimerReg_.start_;
               end = fPrimerReg_.end_;
               innerStart = rPrimerReg_.end_;
-              innereEnd = fPrimerReg_.start_;
+              innerEnd = fPrimerReg_.start_;
             }
-
             gRegion_ = std::make_shared<GenomicRegion>(fPrimerReg_.uid_ + "-" + rPrimerReg_.uid_, fPrimerReg_.chrom_, start, end, fPrimerReg_.reverseSrand_);
-            gRegionInner_ = std::make_shared<GenomicRegion>(fPrimerReg_.uid_ + "-" + rPrimerReg_.uid_, fPrimerReg_.chrom_, innerStart, innereEnd, fPrimerReg_.reverseSrand_);
+            gRegionInner_ = std::make_shared<GenomicRegion>(fPrimerReg_.uid_ + "-" + rPrimerReg_.uid_, fPrimerReg_.chrom_, innerStart, innerEnd, fPrimerReg_.reverseSrand_);
           }
-
         };
 
 
@@ -396,10 +681,7 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
           }
           return ret;
         }
-
         std::vector<GenomeExtractResultByMotifPair> regions_;
-
-
       };
 	if (fasta_list_set) {
 		njh::concurrent::LockableVec<bfs::path> fasta_inputs(fasta_list);
@@ -439,7 +721,7 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 							}
 							{
 								auto possible_extractions = MotifPairSearchResults::getPossibleGenomeExtracts(motif1Positions, motif2Positions, insertSizeCutOff);
-								std::lock_guard<std::mutex> lock(out_mut);
+								std::lock_guard lock(out_mut);
 								for (const auto & extract : possible_extractions) {
 									Bed6RecordCore out_bed = extract.gRegion_->genBedRecordCore();
 									if (take_inner) {

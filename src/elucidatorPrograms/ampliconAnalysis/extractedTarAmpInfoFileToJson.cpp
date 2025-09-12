@@ -14,6 +14,220 @@
 namespace njhseq {
 
 
+int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCommands) {
+  OutOptions outOpts("", ".json");
+  std::string project_name;
+  uint32_t panel_id = 0;
+  bfs::path sra_meta_fnp;
+  ampliconAnalysisSetUp setUp(inputCommands);
+  setUp.setOption(sra_meta_fnp, "--sra_meta_fnp", "sra_meta_fnp", true);
+  setUp.setOption(project_name, "--project_name", "project_name", true);
+  setUp.setOption(panel_id, "--panel_id", "panel_id", true);
+  setUp.processWritingOptions(outOpts);
+  outOpts.outFilename_ = njh::files::prependFileBasename(outOpts.outName(), "project_specimen_library_info_");
+
+  setUp.finishSetUp(std::cout);
+
+  OutputStream out_project_specimen_library(outOpts);
+  outOpts.outFilename_ = njh::files::prependFileBasename(outOpts.outName(), "sequencing_info_");
+  OutputStream out_seq_info(outOpts);
+
+
+  Json::Value outJson_project_specimen_library;
+  Json::Value outJson_seq_info;
+
+  table sra_meta_table(sra_meta_fnp, "\t", true);
+  sra_meta_table.checkForColumnsThrow(VecStr{
+    "library_name","experiment_accession","fastq_ftp","run_accession",
+
+    "sample_alias","tax_id","host_tax_id","collection_date","country","environment_biome",
+    "environment_feature","environmental_medium","host_gravidity","age","host_sex","lat","lon",
+    "sample_accession","sample_storage",
+
+    "instrument_platform","instrument_model","library_layout","library_strategy","library_source",
+    "library_selection",
+
+    "study_title","study_alias","collected_by"}, __PRETTY_FUNCTION__);
+
+  // project_info, ProjectInfo
+  auto project_info_tab = sra_meta_table.getColumns(VecStr{"study_title","study_alias","collected_by"}).getUniqueRows();
+  Json::Value project_info_jsons;
+  Json::Value project_info_json;
+  project_info_json["project_name"] = project_name;
+  project_info_json["project_description"] = njh::conToStr(getUniqueStrings(project_info_tab.getColumn("study_title")), ";");
+  project_info_json["BioProject_accession"] = njh::conToStr(getUniqueStrings(project_info_tab.getColumn("study_alias")), ";");
+  project_info_json["project_contributors"] = njh::json::toJson(getUniqueStrings(project_info_tab.getColumn("collected_by")));
+  project_info_jsons.append(project_info_json);
+  outJson_project_specimen_library["project_info"] = project_info_jsons;
+
+
+  std::unordered_map<std::string, uint32_t> seq_info_key_to_id;
+
+  {
+    //sequencing_info, SequencingInfo
+    auto sequencing_info_tab = sra_meta_table.getColumns(VecStr{
+      "instrument_platform","instrument_model",
+      "library_layout","library_strategy","library_source",
+      "library_selection"}).getUniqueRows();
+    Json::Value sequencing_info_jsons;
+    uint32_t seq_info_count = 0;
+    for (const auto & row : sequencing_info_tab) {
+      Json::Value sequencing_info_json;
+      auto sequencing_info_name =  project_name + "_seq_info";
+      if (seq_info_count > 0) {
+        sequencing_info_name += "_" + estd::to_string(seq_info_count);
+      }
+      auto seq_info_key = njh::conToStr(VecStr{
+        row[sequencing_info_tab.getColPos("instrument_platform")],
+        row[sequencing_info_tab.getColPos("instrument_model")],
+        row[sequencing_info_tab.getColPos("library_layout")],
+        row[sequencing_info_tab.getColPos("library_strategy")],
+        row[sequencing_info_tab.getColPos("library_source")],
+        row[sequencing_info_tab.getColPos("library_selection")]
+      },
+        "-");
+      sequencing_info_json["sequencing_info_name"] = sequencing_info_name;
+      sequencing_info_json["seq_platform"] = row[sequencing_info_tab.getColPos("instrument_platform")];
+      sequencing_info_json["seq_instrument_model"] = row[sequencing_info_tab.getColPos("instrument_model")];
+      sequencing_info_json["library_layout"] = row[sequencing_info_tab.getColPos("library_layout")];
+      sequencing_info_json["library_strategy"] = row[sequencing_info_tab.getColPos("library_strategy")];
+      sequencing_info_json["library_source"] = row[sequencing_info_tab.getColPos("library_source")];
+      sequencing_info_json["library_selection"] = row[sequencing_info_tab.getColPos("library_selection")];
+      seq_info_key_to_id[seq_info_key] = seq_info_count;
+      ++seq_info_count;
+      sequencing_info_jsons.append(sequencing_info_json);
+    }
+    outJson_seq_info["sequencing_info"] = sequencing_info_jsons;
+  }
+  //SpecimenInfo, specimen_info
+  std::unordered_map<std::string, uint32_t> specimen_info_name_to_id;
+
+  {
+
+    auto specimen_info_tab = sra_meta_table.getColumns(VecStr{
+      "sample_alias","tax_id","host_tax_id","collection_date","country",
+      "environment_biome", "environment_feature","environmental_medium",
+      "host_gravidity","age",
+      "host_sex",
+      "lat","lon",
+    "sample_accession","sample_storage"
+    }).getUniqueRows();
+
+    std::unordered_map<std::string, bool> column_testing;
+    column_testing["environment_biome"] = specimen_info_tab.column_all_na("environment_biome");
+    column_testing["environment_feature"] = specimen_info_tab.column_all_na("environment_feature");
+    column_testing["environmental_medium"] = specimen_info_tab.column_all_na("environmental_medium");
+    column_testing["host_gravidity"] = specimen_info_tab.column_all_na("host_gravidity");
+    column_testing["age"] = specimen_info_tab.column_all_na("age");
+    column_testing["host_sex"] = specimen_info_tab.column_all_na("host_sex");
+    column_testing["lat"] = specimen_info_tab.column_all_na("lat");
+    column_testing["sample_accession"] = specimen_info_tab.column_all_na("sample_accession");
+    column_testing["sample_storage"] = specimen_info_tab.column_all_na("sample_storage");
+
+
+    Json::Value specimen_info_jsons;
+    uint32_t specimen_info_count = 0;
+
+    for (const auto & row : specimen_info_tab) {
+      Json::Value specimen_info_json;
+
+      specimen_info_json["specimen_name"] = row[specimen_info_tab.getColPos("sample_alias")];
+      specimen_info_json["specimen_taxon_id"].append(njh::json::toJson(njh::StrToNumConverter::stoToNum<uint32_t>(row[specimen_info_tab.getColPos("tax_id")])));
+      if ("NA" == row[specimen_info_tab.getColPos("host_tax_id")]) {
+        specimen_info_json["host_taxon_id"] = njh::json::toJson(std::numeric_limits<uint32_t>::max());
+      } else {
+        specimen_info_json["host_taxon_id"] = njh::json::toJson(njh::StrToNumConverter::stoToNum<uint32_t>(row[specimen_info_tab.getColPos("host_tax_id")]) );
+      }
+
+      specimen_info_json["collection_date"] = row[specimen_info_tab.getColPos("collection_date")];
+      specimen_info_json["collection_country"] = row[specimen_info_tab.getColPos("country")];
+
+
+      if (column_testing["environment_biome"]) specimen_info_json["env_broad_scale"] = row[specimen_info_tab.getColPos("environment_biome")];
+      if (column_testing["environment_feature"]) specimen_info_json["env_local_scale"] = row[specimen_info_tab.getColPos("environment_feature")];
+      if (column_testing["environmental_medium"]) specimen_info_json["env_medium"] = row[specimen_info_tab.getColPos("environmental_medium")];
+      if (row[specimen_info_tab.getColPos("country")].find(':') != std::string::npos &&
+        row[specimen_info_tab.getColPos("country")].find(':') + 1 != row[specimen_info_tab.getColPos("country")].size()) {
+        specimen_info_json["geo_admin1"] = row[specimen_info_tab.getColPos("country")].substr(row[specimen_info_tab.getColPos("country")].find(':') + 1);
+      }
+      if (column_testing["host_gravidity"]) specimen_info_json["gravidity"] = row[specimen_info_tab.getColPos("host_gravidity")];
+      if (column_testing["host_age"]) specimen_info_json["host_age"] = row[specimen_info_tab.getColPos("host_age")];
+      if (column_testing["host_sex"]) specimen_info_json["host_sex"] = row[specimen_info_tab.getColPos("host_sex")];
+      if (column_testing["sample_accession"]) specimen_info_json["specimen_accession"] = row[specimen_info_tab.getColPos("sample_accession")];
+      if (column_testing["sample_storage"]) specimen_info_json["specimen_store_loc"] = row[specimen_info_tab.getColPos("sample_storage")];
+      if (column_testing["lat"])
+        specimen_info_json["lat_lon"] = njh::pasteAsStr(row[specimen_info_tab.getColPos("lat")],
+                                                        ",",
+                                                        row[specimen_info_tab.getColPos("lon")]);
+      specimen_info_json["project_id"] = njh::json::toJson(0);
+      specimen_info_name_to_id[row[specimen_info_tab.getColPos("sample_alias")]] = specimen_info_count;
+      ++specimen_info_count;
+      specimen_info_jsons.append(specimen_info_json);
+    }
+    outJson_project_specimen_library["specimen_info"] = specimen_info_jsons;
+  }
+
+  // LibrarySampleInfo, library_sample_info
+  {
+    auto library_sample_info_tab = sra_meta_table.getColumns(VecStr{
+      "library_name",
+      "experiment_accession","fastq_ftp","run_accession",
+
+      "sample_alias",
+      "instrument_platform","instrument_model","library_layout","library_strategy","library_source",
+      "library_selection",
+    }).getUniqueRows();
+    Json::Value library_sample_info_jsons;
+
+    for (const auto &row: library_sample_info_tab) {
+      Json::Value library_sample_info_json;
+
+      auto seq_info_key = njh::conToStr(VecStr{
+                                          row[library_sample_info_tab.getColPos("instrument_platform")],
+                                          row[library_sample_info_tab.getColPos("instrument_model")],
+                                          row[library_sample_info_tab.getColPos("library_layout")],
+                                          row[library_sample_info_tab.getColPos("library_strategy")],
+                                          row[library_sample_info_tab.getColPos("library_source")],
+                                          row[library_sample_info_tab.getColPos("library_selection")]
+                                        },
+                                        "-");
+      auto seq_info_index = seq_info_key_to_id[seq_info_key];
+      auto specimen_id = specimen_info_name_to_id[row[library_sample_info_tab.getColPos("sample_alias")]];
+
+      library_sample_info_json["specimen_id"] = njh::json::toJson(specimen_id);
+      library_sample_info_json["sequencing_info_id"] = njh::json::toJson(seq_info_index);
+      library_sample_info_json["panel_id"] = njh::json::toJson(panel_id);
+
+      library_sample_info_json["library_sample_name"] = row[library_sample_info_tab.getColPos("library_name")];
+      library_sample_info_json["experiment_accession"] = row[library_sample_info_tab.getColPos("experiment_accession")];
+      library_sample_info_json["fastqs_loc"] = row[library_sample_info_tab.getColPos("fastq_ftp")];
+      library_sample_info_json["run_accession"] = row[library_sample_info_tab.getColPos("run_accession")];
+
+      library_sample_info_jsons.append(library_sample_info_json);
+    }
+    outJson_project_specimen_library["library_sample_info"] = library_sample_info_jsons;
+  }
+
+  {
+    Json::StreamWriterBuilder builder;
+    builder["indentation"] = "\t";  // or whatever you like
+    std::unique_ptr<Json::StreamWriter> writer(
+       builder.newStreamWriter());
+    writer->write(outJson_project_specimen_library, &out_project_specimen_library);
+    out_project_specimen_library << std::endl;
+  }
+
+  {
+    Json::StreamWriterBuilder builder;
+    builder["indentation"] = "\t";  // or whatever you like
+    std::unique_ptr<Json::StreamWriter> writer(
+       builder.newStreamWriter());
+    writer->write(outJson_seq_info, &out_seq_info);
+    out_seq_info << std::endl;
+  }
+
+  return 0;
+}
 
 int ampliconAnalysisRunner::combingAllIntoPMOJson(const njh::progutils::CmdArgs &inputCommands) {
   OutOptions outOpts("", ".json");

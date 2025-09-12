@@ -13,7 +13,7 @@ namespace njhseq {
 
 
 
-int seqUtilsInfoRunner::countDiNucleotidePatternsInSeqs(const njh::progutils::CmdArgs & inputCommands) {
+int seqUtilsInfoRunner::countEncompassedTandemRepeatPatternsInSeqs(const njh::progutils::CmdArgs & inputCommands) {
   SimpleTandemRepeatFinder::SimpleTRFinderLocsPars pars;
 
   OutOptions outOpts(bfs::path(""), ".tsv");
@@ -21,7 +21,6 @@ int seqUtilsInfoRunner::countDiNucleotidePatternsInSeqs(const njh::progutils::Cm
   uint32_t trailingBases = 5;
   uint32_t minRepeatingAmount = 6;
   pars.minRepeatUnitSize = 2;
-  pars.maxRepeatUnitSize = pars.minRepeatUnitSize;
   std::set<std::string> repeats;
   seqSetUp setUp(inputCommands);
   setUp.description_ = "count the pattern surrounding dinucleotide runs";
@@ -31,6 +30,9 @@ int seqUtilsInfoRunner::countDiNucleotidePatternsInSeqs(const njh::progutils::Cm
   setUp.processWritingOptions(outOpts);
   setUp.setOption(proceedingBases, "--proceedingBases", "proceeding Bases");
   setUp.setOption(trailingBases, "--trailingBases", "trailing Bases");
+  setUp.setOption(pars.minRepeatUnitSize, "--repeatUnitSize", "repeating unit size, e.g. 2 = dinucleotide, 3 = trinucleotide");
+  pars.maxRepeatUnitSize = pars.minRepeatUnitSize;
+
   setUp.setOption(minRepeatingAmount, "--minRepeatingAmount", "min repeating amount (length would be 2 x this values, e.g. a min repeat amount of 4 would be 4 x 2 length of 8 bases");
 
   setUp.setOption(repeats, "--repeats", "repeats");
@@ -43,20 +45,19 @@ int seqUtilsInfoRunner::countDiNucleotidePatternsInSeqs(const njh::progutils::Cm
   reader.openIn();
 
   if (!repeats.empty()) {
-    VecStr Warnings;
+    VecStr warnings;
     for (const auto & repeat : repeats) {
-      if (repeat.size() != 2) {
-        Warnings.push_back("Warning: repeat " + repeat + " is not a valid repeat, must be of length 2");
+      if (repeat.size() != pars.minRepeatUnitSize) {
+        warnings.emplace_back(njh::pasteAsStr("Warning: repeat " ,repeat , " is not a valid repeat, must be of length ", pars.minRepeatUnitSize));
       }
     }
-    if (!Warnings.empty()) {
+    if (!warnings.empty()) {
       std::stringstream ss;
       ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error:" << "\n";
-      ss << njh::pasteAsStr(Warnings, "\n") << "\n";
+      ss << njh::pasteAsStr(warnings, "\n") << "\n";
       throw std::runtime_error{ss.str()};
     }
   } else {
-
     SimpleTandemRepeatFinder finder(pars);
     auto minRepeats = finder.genMinimalUnitsNeededForSearch();
     for (const auto & repeat : *minRepeats.allUnits) {
@@ -73,7 +74,6 @@ int seqUtilsInfoRunner::countDiNucleotidePatternsInSeqs(const njh::progutils::Cm
   std::unordered_map<std::string, std::regex> repeatPatterns;
 
   for (const auto & repeat : repeats) {
-
     std::string patStr = njh::pasteAsStr("(.{", proceedingBases, ",", proceedingBases,"})(", njh::pasteAsStr(VecStr(minRepeatingAmount, repeat)), "(?:", repeat, ")+)(.{", trailingBases, ",", trailingBases, "})");
     if (setUp.pars_.verbose_) {
       std::cout << "patStr: " << patStr << std::endl;
@@ -93,7 +93,7 @@ int seqUtilsInfoRunner::countDiNucleotidePatternsInSeqs(const njh::progutils::Cm
       }
     }
   }
-  out << "dinucleotide\tproceeding_trailing_bases\tfull_repeat\tcount\tfull_pattern" << std::endl;
+  out << "repeatUnit\tproceeding_trailing_bases\tfull_repeat\tcount\tfull_pattern" << std::endl;
   for (const auto & repeat : repeats) {
     if (njh::in(repeat, patternCounts)) {
       for (const auto & [pattern, patternCountsMap]  : patternCounts.at(repeat)) {

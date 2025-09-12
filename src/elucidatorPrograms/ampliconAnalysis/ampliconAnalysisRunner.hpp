@@ -52,6 +52,7 @@ class ampliconAnalysisRunner : public njh::progutils::ProgramRunner {
 
 	static int readsByStageToJson(const njh::progutils::CmdArgs & inputCommands);
 
+	static int sraMetaToJson(const njh::progutils::CmdArgs & inputCommands);
 	static int combingAllIntoPMOJson(const njh::progutils::CmdArgs & inputCommands);
 
 };

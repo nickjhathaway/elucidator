@@ -70,7 +70,7 @@ seqUtilsInfoRunner::seqUtilsInfoRunner()
     	addFunc("findExactMatches", findExactMatches, false),
     	addFunc("countAPatternInSeqs", countAPatternInSeqs, false),
     	addFunc("countHPPatternsInSeqs", countHPPatternsInSeqs, false),
-    	addFunc("countDiNucleotidePatternsInSeqs", countDiNucleotidePatternsInSeqs, false),
+    	addFunc("countEncompassedTandemRepeatPatternsInSeqs", countEncompassedTandemRepeatPatternsInSeqs, false),
     	addFunc("countHammingDistancesSameLenSeqs", countHammingDistancesSameLenSeqs, false),
 	},
                     "seqUtilsInfo") {}

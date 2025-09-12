@@ -1268,7 +1268,7 @@ int programWrapperRunner::genPossiblePrimerPairsWithPrimer3(const njh::progutils
 		std::mutex divMut;
 
 		table divTable(
-						VecStr{"SeqIDPrimerPairName", "totalHaplotypes", "uniqueHaplotypes", "singlets", "doublets", "expShannonEntropy",
+						VecStr{"SeqIDPrimerPairName", "totalSamples", "totalHaplotypes", "uniqueHaplotypes", "singlets", "doublets", "expShannonEntropy",
 									 "ShannonEntropyE", "effectiveNumOfAlleles", "SimpsonIndex", "he", "ExpP3", "ExpP4", "ExpP5",
 									 "lengthPolymorphism"});
 
