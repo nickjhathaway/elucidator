@@ -246,6 +246,7 @@ int seqSearchingRunner::findTandemMotifLocations(const njh::progutils::CmdArgs &
 
 
 int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::CmdArgs & inputCommands){
+	bool export_individual_motif_locs = false;
 	bool add_inner_seq = false;
 	bool add_full_seq = false;
 	uint32_t fasta_batch_size = 20;
@@ -264,6 +265,7 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 	setUp.pars_.ioOptions_.includeWhiteSpaceInName_ = false;
 	bool fasta_list_set = setUp.setOption(fasta_list, "--fasta_list", "a list of fasta files to read from");
 	bool motif_pair_table_set = setUp.setOption(motif_pair_table, "--motif_pair_table", "a table with 3 column, 1)target,2)motif1(5`-3` direction), 3)motif2 (5`-3` direction)");
+	setUp.setOption(export_individual_motif_locs, "--export_individual_motif_locs", "export_individual_motif_locs even if the pair doesn't create an export");
 	setUp.setOption(add_inner_seq, "--add_inner_seq", "add_inner_seq to output");
 	setUp.setOption(add_full_seq, "--add_full_seq", "add_full_seq to output");
 	setUp.setOption(fasta_batch_size, "--fasta_batch_size", "fasta_batch_size");
@@ -306,6 +308,17 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 
 	OutputStream out(outOpts);
 
+	std::unique_ptr<OutputStream> out_motif1_locs;
+	std::unique_ptr<OutputStream> out_motif2_locs;
+	if (export_individual_motif_locs) {
+		auto motif1_opts = outOpts;
+		motif1_opts.outFilename_ = njh::files::prependFileBasename(outOpts.outFilename_, "motif1_");
+		auto motif2_opts = outOpts;
+		motif2_opts.outFilename_ = njh::files::prependFileBasename(outOpts.outFilename_, "motif2_");
+		out_motif1_locs = std::make_unique<OutputStream>(motif1_opts);
+		out_motif2_locs = std::make_unique<OutputStream>(motif2_opts);
+	}
+
 	out << "#chrom\tstart_full\tend_full\tname\tfull_length\tstrand";
 	out << "\tstart_inner\tend_inner\tinner_length";
 
@@ -319,6 +332,18 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 		out << "\tinner_seq";
 	}
 	out << std::endl;
+
+	if (export_individual_motif_locs) {
+		*out_motif1_locs << "#chrom\tmotif1_seq_start\tmotif1_seq_end\tmotif1_name\tmotif1_length\tmotif1_strand";
+		*out_motif1_locs << "\tmotif1_seq\tmotif1_seq_extracted\tmotif1_seq_error";
+		*out_motif1_locs << "\tinput_fnp";
+		*out_motif1_locs << std::endl;
+
+		*out_motif2_locs << "#chrom\tmotif2_seq_start\tmotif2_seq_end\tmotif2_name\tmotif2_length\tmotif2_strand";
+		*out_motif2_locs << "\tmotif2_seq\tmotif2_seq_extracted\tmotif2_seq_error";
+		*out_motif2_locs << "\tinput_fnp";
+		*out_motif2_locs << std::endl;
+	}
 
 	struct MotifPairSearchResults {
         std::vector<GenomicRegion> fPrimerPositions_;
@@ -410,7 +435,7 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
                       ret.emplace_back(extraction);
                     }
                   }
-                }else{
+                } else {
                   if(fwd.start_ < rev.start_){
                     GenomeExtractResultByMotifPair extraction(fwd, rev);
                     if (extraction.gRegion_->getLen() <= insertSizeCutOff) {
@@ -432,10 +457,13 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 		insertSizeCutOff, &out, allowableErrors,
 		&setUp,
 		&add_full_seq,
-		&add_inner_seq, fasta_batch_size]() {
+		&add_inner_seq, fasta_batch_size,
+		export_individual_motif_locs, &out_motif1_locs, &out_motif2_locs]() {
 		std::vector<bfs::path> current_fastas;
 		while (fasta_inputs.getVals(current_fastas, fasta_batch_size)) {
 			std::stringstream current_out;
+			std::stringstream current_out_motif1;
+			std::stringstream current_out_motif2;
 			for (const auto & current_fasta : current_fastas) {
 				seqInfo current_seq;
 				auto current_opts = SeqIOOptions::genFastaIn(current_fasta);
@@ -513,6 +541,36 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 									}
 									current_out << "\n";
 								}
+								if (export_individual_motif_locs) {
+									for (const auto & motif1_loc : motif1Positions) {
+										std::string motif1_extracted_seq = motif1_loc.extractSeq(current_seq.seq_);
+										auto motif1_error = motif_pair.second.fwds_.front().mot_.size() - motif_pair.second.fwds_.front().mot_.scoreMotif(motif1_extracted_seq);
+
+										auto motif_bed_out = motif1_loc.genBedRecordCore();
+										motif_bed_out.name_ = motif_pair.first;
+										current_out_motif1 << motif_bed_out.toDelimStr();
+										current_out_motif1
+												<< "\t" << motif_pair.second.fwds_.front().primer_
+												<< "\t" << motif1_extracted_seq
+												<< "\t" << motif1_error;
+										current_out_motif1 << "\t" << current_fasta.string();
+										current_out_motif1 << "\n";
+									}
+									for (const auto & motif2_loc : motif2Positions) {
+										std::string motif2_extracted_seq = motif2_loc.extractSeq(current_seq.seq_);
+										auto motif2_error = motif_pair.second.fwds_.front().mot_.size() - motif_pair.second.fwds_.front().mot_.scoreMotif(motif2_extracted_seq);
+
+										auto motif_bed_out = motif2_loc.genBedRecordCore();
+										motif_bed_out.name_ = motif_pair.first;
+										current_out_motif2 << motif_bed_out.toDelimStr();
+										current_out_motif2
+												<< "\t" << motif_pair.second.fwds_.front().primer_
+												<< "\t" << motif2_extracted_seq
+												<< "\t" << motif2_error;
+										current_out_motif2 << "\t" << current_fasta.string();
+										current_out_motif2 << "\n";
+									}
+								}
 							}
 						}
 					}
@@ -521,6 +579,8 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 			{
 				std::lock_guard lock(out_mut);
 				out << current_out.str();
+				*out_motif1_locs << current_out_motif1.str();
+				*out_motif2_locs << current_out_motif2.str();
 			}
 		}
 	};
