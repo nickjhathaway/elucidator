@@ -558,13 +558,13 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 									}
 									for (const auto & motif2_loc : motif2Positions) {
 										std::string motif2_extracted_seq = motif2_loc.extractSeq(current_seq.seq_);
-										auto motif2_error = motif_pair.second.fwds_.front().mot_.size() - motif_pair.second.fwds_.front().mot_.scoreMotif(motif2_extracted_seq);
+										auto motif2_error = motif_pair.second.revs_.front().mot_.size() - motif_pair.second.revs_.front().mot_.scoreMotif(motif2_extracted_seq);
 
 										auto motif_bed_out = motif2_loc.genBedRecordCore();
 										motif_bed_out.name_ = motif_pair.first;
 										current_out_motif2 << motif_bed_out.toDelimStr();
 										current_out_motif2
-												<< "\t" << motif_pair.second.fwds_.front().primer_
+												<< "\t" << motif_pair.second.revs_.front().primer_
 												<< "\t" << motif2_extracted_seq
 												<< "\t" << motif2_error;
 										current_out_motif2 << "\t" << current_fasta.string();
