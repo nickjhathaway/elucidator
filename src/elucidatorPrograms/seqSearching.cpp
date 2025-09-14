@@ -260,7 +260,7 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 	uint32_t allowableErrors = 0;
 	size_t insertSizeCutOff = std::numeric_limits<size_t>::max();
 	OutOptions outOpts(bfs::path(""));
-	outOpts.outExtention_ = ".bed";
+	outOpts.outExtention_ = ".tsv.gz";
 	seqSetUp setUp(inputCommands);
 	setUp.pars_.ioOptions_.includeWhiteSpaceInName_ = false;
 	bool fasta_list_set = setUp.setOption(fasta_list, "--fasta_list", "a list of fasta files to read from");

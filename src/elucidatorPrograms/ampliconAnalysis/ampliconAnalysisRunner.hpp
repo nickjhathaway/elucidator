@@ -44,6 +44,7 @@ class ampliconAnalysisRunner : public njh::progutils::ProgramRunner {
 
 	static int phasingAlleleTable(const njh::progutils::CmdArgs & inputCommands);
 
+	static int combineSeparatePrimerFastaInfoPrimerFiler(const njh::progutils::CmdArgs & inputCommands);
 
 	// PMO
   static int extractedTarAmpInfoFileToJson(const njh::progutils::CmdArgs & inputCommands);

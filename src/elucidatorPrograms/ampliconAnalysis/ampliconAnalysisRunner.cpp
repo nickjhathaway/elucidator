@@ -47,13 +47,99 @@ ampliconAnalysisRunner::ampliconAnalysisRunner()
     									addFunc("maskRegionBasedOnRefSubRegions", maskRegionBasedOnRefSubRegions, false),
     	addFunc("phasingAlleleTable", phasingAlleleTable, false),
     	addFunc("sraMetaToJson", sraMetaToJson, false),
+    	addFunc("combineSeparatePrimerFastaInfoPrimerFiler", combineSeparatePrimerFastaInfoPrimerFiler, false),
 
 
 										 },//sraMetaToJson
                     "ampliconAnalysis") {}
 
-//
 
+int ampliconAnalysisRunner::combineSeparatePrimerFastaInfoPrimerFiler(
+		const njh::progutils::CmdArgs & inputCommands) {
+
+	bfs::path forward_primer_fasta_file;
+	bfs::path reverse_primer_fasta_file;
+
+	bool rev_comp_rev = false;
+
+	OutOptions out_opts("", ".tsv");
+
+	ampliconAnalysisSetUp setUp(inputCommands);
+	setUp.setOption(forward_primer_fasta_file, "--forward_primer_fasta_file", "forward_primer_fasta_file", true);
+	setUp.setOption(reverse_primer_fasta_file, "--reverse_primer_fasta_file", "reverse_primer_fasta_file", true);
+	setUp.setOption(rev_comp_rev, "--rev_comp_rev", "rev_comp_rev");
+	setUp.processWritingOptions(out_opts);
+
+	setUp.finishSetUp(std::cout);
+
+	auto forward_seqs = SeqInput::getSeqVec<seqInfo>(SeqIOOptions::genFastaIn(forward_primer_fasta_file));
+	auto reverse_seqs = SeqInput::getSeqVec<seqInfo>(SeqIOOptions::genFastaIn(reverse_primer_fasta_file));
+	if (rev_comp_rev) {
+		readVec::allReverseComplement(reverse_seqs, false);
+	}
+	auto forward_seq_names = readVec::getNames(forward_seqs);
+	auto reverse_seq_names = readVec::getNames(reverse_seqs);
+	VecStr only_in_forward;
+	VecStr only_in_reverse;
+	VecStr in_both;
+
+	njh::decompose_sets(forward_seq_names.begin(), forward_seq_names.end(), reverse_seq_names.begin(),
+	                    reverse_seq_names.end(),
+	                    std::back_insert_iterator(only_in_forward),
+	                    std::back_insert_iterator(only_in_reverse),
+	                    std::back_insert_iterator(in_both));
+	if (!only_in_forward.empty() || ! only_in_reverse.empty()) {
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error "<< "\n";
+		if (!only_in_forward.empty()) {
+			ss << "Found the following names in forward but not in reverse: " << njh::conToStr(only_in_forward, ",") << "\n";
+		}
+		if (!only_in_reverse.empty()) {
+			ss << "Found the following names in reverse but not in forward: " << njh::conToStr(only_in_reverse, ",") << "\n";
+		}
+		throw std::runtime_error{ss.str()};
+	}
+
+	auto forward_seq_counts = countVec(forward_seq_names);
+	auto reverse_seq_counts =  countVec(reverse_seq_names);
+
+	VecStr dup_forward_names;
+	VecStr dup_reverse_names;
+	for (const auto & count : forward_seq_counts) {
+		if (count.second > 1) {
+			dup_forward_names.emplace_back(count.first);
+		}
+	}
+	for (const auto & count : reverse_seq_counts) {
+		if (count.second > 1) {
+			dup_reverse_names.emplace_back(count.first);
+		}
+	}
+	if (!dup_forward_names.empty() || !dup_reverse_names.empty()) {
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error "<< "\n";
+		if (!dup_forward_names.empty()) {
+			ss << "Found the following names in forward more than once: " << njh::conToStr(dup_forward_names, ",") << "\n";
+		}
+		if (!dup_reverse_names.empty()) {
+			ss << "Found the following names in reverse more than once: " << njh::conToStr(dup_reverse_names, ",") << "\n";
+		}
+		throw std::runtime_error{ss.str()};
+	}
+	OutputStream out(out_opts);
+	std::unordered_map<std::string, uint32_t> reverse_seq_index;
+	for (const auto & pos : iter::range(reverse_seq_names.size())) {
+		reverse_seq_index[reverse_seq_names[pos]] = pos;
+	}
+	table out_table(VecStr{"target", "forward", "reverse"});
+	for (const auto & forward : forward_seqs) {
+		out_table.addRow(forward.name_, forward.seq_, reverse_seqs[reverse_seq_index[forward.name_]].seq_);
+	}
+	out_table.outPutContents(out, "\t");
+
+	
+	return 0;
+}
 
 int ampliconAnalysisRunner::singleLinkageClusteringOnPerId(
 		const njh::progutils::CmdArgs & inputCommands) {
