@@ -137,7 +137,7 @@ int ampliconAnalysisRunner::combineSeparatePrimerFastaInfoPrimerFiler(
 	}
 	out_table.outPutContents(out, "\t");
 
-	
+
 	return 0;
 }
 

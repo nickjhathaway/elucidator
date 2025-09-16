@@ -274,6 +274,8 @@ int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommand
 	bool diagonal = false;
 	bool includeSelf = false;
 	bool writeOutOtherDiagnoal = false;
+
+	uint32_t batch_size = 100;
 	seqSetUp setUp(inputCommands);
 	setUp.pars_.ioOptions_.lowerCaseBases_ = "upper";
   setUp.processVerbose();
@@ -284,6 +286,8 @@ int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommand
 	setUp.setOption(includeSelf, "--includeSelf", "include Self");
 	setUp.setOption(numThreads, "--numThreads", "Number of Threads to Use");
 	setUp.setOption(diagonal,   "--diagonal",   "Just solve a global diagonal");
+	setUp.setOption(batch_size,   "--batch_size",   "batch_size");
+
 	setUp.setOption(writeOutOtherDiagnoal,   "--writeOutOtherDiagnoal",   "writeOutOtherDiagnoal");
 
   setUp.pars_.gapLeft_ = "0,0";
@@ -368,53 +372,56 @@ int seqUtilsRunner::compareAllByAll(const njh::progutils::CmdArgs & inputCommand
 	std::mutex fileMut;
 	njh::ProgressBar pbar(pairFac.totalCompares_);
 
-	std::function<void()> runCompare = [&pairFac,&fileMut,&profileInfoFile, &tempFile,&setUp,&seqs, &alnPool,&pbar,&alignFunc,&writeOutOtherDiagnoal](){
+	std::function<void()> runCompare = [batch_size,&pairFac,&fileMut,&profileInfoFile, &tempFile,&setUp,&seqs, &alnPool,&pbar,&alignFunc,&writeOutOtherDiagnoal](){
 
 		auto threadId = estd::to_string(std::this_thread::get_id());
-		PairwisePairFactory::PairwisePair pair;
+		PairwisePairFactory::PairwisePairVec pairs;
 		std::stringstream ssProfile;
 		std::stringstream ssTempFile;
 		auto currentAligner = alnPool.popAligner();
-		while(pairFac.setNextPair(pair)){
-			if(setUp.pars_.verbose_){
-				pbar.outputProgAdd(std::cout, 1, true);
+		while(pairFac.setNextPairs(pairs, batch_size)){
+
+			for (const auto & pair : pairs.pairs_) {
+				const auto & ref = seqs[pair.row_];
+				const auto & input = seqs[pair.col_];
+				//currentAligner->alignCache(ref, input, setUp.pars_.local_);
+				alignFunc(*currentAligner, ref.seqBase_, input.seqBase_, setUp.pars_.local_);
+				if(setUp.pars_.debug_){
+					ssTempFile << ">" << ref.seqBase_.name_ << std::endl;
+					ssTempFile << currentAligner->alignObjectA_.seqBase_.seq_ << std::endl;
+					ssTempFile << ">" << input.seqBase_.name_ << std::endl;
+					ssTempFile << currentAligner->alignObjectB_.seqBase_.seq_ << std::endl;
+				}
+				currentAligner->profilePrimerAlignment(ref, input);
+				ssProfile << input.seqBase_.name_
+						<< "\t" << input.seqBase_.frac_
+						<< "\t" << ref.seqBase_.name_
+						<< "\t" << currentAligner->comp_.alnScore_
+						<< "\t" << currentAligner->comp_.distances_.eventBasedIdentity_
+						<< "\t" << ref.compareKmers(input).second
+						<< "\t" << currentAligner->comp_.oneBaseIndel_
+						<< "\t" << currentAligner->comp_.twoBaseIndel_
+						<< "\t" << currentAligner->comp_.largeBaseIndel_
+						<< "\t" << currentAligner->comp_.lqMismatches_
+						<< "\t" << currentAligner->comp_.hqMismatches_
+						<< "\t" << currentAligner->comp_.distances_.getNumOfEvents(true) << std::endl;
+				if(writeOutOtherDiagnoal){
+					ssProfile << ref.seqBase_.name_
+											<< "\t" << ref.seqBase_.frac_
+											<< "\t" << input.seqBase_.name_
+											<< "\t" << currentAligner->comp_.alnScore_
+											<< "\t" << currentAligner->comp_.distances_.eventBasedIdentity_
+											<< "\t" << ref.compareKmers(input).second
+											<< "\t" << currentAligner->comp_.oneBaseIndel_
+											<< "\t" << currentAligner->comp_.twoBaseIndel_
+											<< "\t" << currentAligner->comp_.largeBaseIndel_
+											<< "\t" << currentAligner->comp_.lqMismatches_
+											<< "\t" << currentAligner->comp_.hqMismatches_
+											<< "\t" << currentAligner->comp_.distances_.getNumOfEvents(true) << std::endl;
+				}
 			}
-			const auto & ref = seqs[pair.row_];
-			const auto & input = seqs[pair.col_];
-			//currentAligner->alignCache(ref, input, setUp.pars_.local_);
-			alignFunc(*currentAligner, ref.seqBase_, input.seqBase_, setUp.pars_.local_);
-      if(setUp.pars_.debug_){
-      	ssTempFile << ">" << ref.seqBase_.name_ << std::endl;
-      	ssTempFile << currentAligner->alignObjectA_.seqBase_.seq_ << std::endl;
-      	ssTempFile << ">" << input.seqBase_.name_ << std::endl;
-      	ssTempFile << currentAligner->alignObjectB_.seqBase_.seq_ << std::endl;
-      }
-      currentAligner->profilePrimerAlignment(ref, input);
-      ssProfile << input.seqBase_.name_
-					<< "\t" << input.seqBase_.frac_
-					<< "\t" << ref.seqBase_.name_
-					<< "\t" << currentAligner->comp_.alnScore_
-					<< "\t" << currentAligner->comp_.distances_.eventBasedIdentity_
-					<< "\t" << ref.compareKmers(input).second
-					<< "\t" << currentAligner->comp_.oneBaseIndel_
-					<< "\t" << currentAligner->comp_.twoBaseIndel_
-					<< "\t" << currentAligner->comp_.largeBaseIndel_
-					<< "\t" << currentAligner->comp_.lqMismatches_
-					<< "\t" << currentAligner->comp_.hqMismatches_
-					<< "\t" << currentAligner->comp_.distances_.getNumOfEvents(true) << std::endl;
-			if(writeOutOtherDiagnoal){
-				ssProfile << ref.seqBase_.name_
-										<< "\t" << ref.seqBase_.frac_
-										<< "\t" << input.seqBase_.name_
-										<< "\t" << currentAligner->comp_.alnScore_
-										<< "\t" << currentAligner->comp_.distances_.eventBasedIdentity_
-										<< "\t" << ref.compareKmers(input).second
-										<< "\t" << currentAligner->comp_.oneBaseIndel_
-										<< "\t" << currentAligner->comp_.twoBaseIndel_
-										<< "\t" << currentAligner->comp_.largeBaseIndel_
-										<< "\t" << currentAligner->comp_.lqMismatches_
-										<< "\t" << currentAligner->comp_.hqMismatches_
-										<< "\t" << currentAligner->comp_.distances_.getNumOfEvents(true) << std::endl;
+			if(setUp.pars_.verbose_){
+				pbar.outputProgAdd(std::cout, pairs.pairs_.size(), true);
 			}
 		}
 		{
