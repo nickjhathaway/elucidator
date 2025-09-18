@@ -284,7 +284,9 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 	if (!fasta_list_set) {
 		fasta_list.emplace_back(setUp.pars_.ioOptions_.firstName_);
 	}
-
+	if (static_cast<double>(fasta_list.size())/fasta_batch_size < numThreads ) {
+		fasta_batch_size = 1;
+	}
 	std::shared_ptr<PrimersAndMids> motifs;
 	if (motif_pair_table_set) {
 		motifs = std::make_shared<PrimersAndMids>(motif_pair_table);
@@ -482,13 +484,21 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 						for (const auto & fwd_primer : iter::enumerate(primer_pair.second.fwds_)) {
 							auto locs_1 = fwd_primer.element.mot_.findPositionsFull(current_seq.seq_, allowableErrors);
 							for(const auto & loc : locs_1){
-								motif1Positions.emplace_back(primer_pair.first, current_seq.name_,loc, loc +fwd_primer.element.mot_.size(), false);
+								GenomicRegion current_motif_loc(primer_pair.first, current_seq.name_, loc,
+								                                loc + fwd_primer.element.mot_.size(), false);
+								current_motif_loc.score_ = fwd_primer.element.mot_.scoreMotif(current_seq.seq_.begin() + loc,
+									current_seq.seq_.begin() + loc + fwd_primer.element.mot_.size());
+								motif1Positions.emplace_back(current_motif_loc);
 								motif1Positions.back().meta_.addMeta("fwd_primer_pos", fwd_primer.index);
 								locs_1_empty = false;
 							}
 							auto revLocs_1 = fwd_primer.element.mot_.findPositionsFull(revComp, allowableErrors);
 							for(const auto & loc : revLocs_1){
-								motif1Positions.emplace_back(primer_pair.first, current_seq.name_, len(current_seq) - (loc +fwd_primer.element.mot_.size()), len(current_seq) - loc, true);
+								GenomicRegion current_motif_loc(primer_pair.first, current_seq.name_, len(current_seq) - (loc +fwd_primer.element.mot_.size()), len(current_seq) - loc, true);
+								current_motif_loc.score_ = fwd_primer.element.mot_.scoreMotif(revComp.begin() + loc,
+								                                                              revComp.begin() + loc +
+								                                                              fwd_primer.element.mot_.size());
+								motif1Positions.emplace_back(current_motif_loc);
 								motif1Positions.back().meta_.addMeta("fwd_primer_pos", fwd_primer.index);
 								revLocs_1_empty = false;
 							}
@@ -497,17 +507,46 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 						for (const auto & rev_primer : iter::enumerate(primer_pair.second.revs_)) {
 							auto locs_2 = rev_primer.element.mot_.findPositionsFull(current_seq.seq_, allowableErrors);
 							for(const auto & loc : locs_2){
-								motif2Positions.emplace_back(primer_pair.first, current_seq.name_,loc, loc +rev_primer.element.mot_.size(), false);
+								GenomicRegion current_motif_loc(primer_pair.first, current_seq.name_,loc, loc +rev_primer.element.mot_.size(), false);
+								current_motif_loc.score_ = rev_primer.element.mot_.scoreMotif(current_seq.seq_.begin() + loc,
+								                                                              current_seq.seq_.begin() + loc +
+								                                                              rev_primer.element.mot_.size());
+								motif2Positions.emplace_back(current_motif_loc);
 								motif2Positions.back().meta_.addMeta("rev_primer_pos", rev_primer.index);
 								locs_2_empty = false;
 							}
 							auto revLocs_2 = rev_primer.element.mot_.findPositionsFull(revComp, allowableErrors);
 							for(const auto & loc : revLocs_2){
-								motif2Positions.emplace_back(primer_pair.first, current_seq.name_, len(current_seq) - (loc +rev_primer.element.mot_.size()), len(current_seq) - loc, true);
+								GenomicRegion current_motif_loc(primer_pair.first, current_seq.name_, len(current_seq) - (loc +rev_primer.element.mot_.size()), len(current_seq) - loc, true);
+								current_motif_loc.score_ = rev_primer.element.mot_.scoreMotif(revComp.begin() + loc,
+																															revComp.begin() + loc +
+																															rev_primer.element.mot_.size());
+								motif2Positions.emplace_back(current_motif_loc);
 								motif2Positions.back().meta_.addMeta("rev_primer_pos", rev_primer.index);
 								revLocs_2_empty = false;
 							}
 						}
+						//sort so that the same positions are next to each other and higher scoring regions are first, remove any duplicate regions
+						njh::sort(motif1Positions);
+						if (motif1Positions.size() > 1) {
+							for (const auto pos : iter::range(2UL, motif1Positions.size())) {
+								if (motif1Positions[pos - 1] == motif1Positions[pos]) {
+									motif1Positions[pos].off_ = true;
+								}
+							}
+						}
+						motif1Positions.erase(std::remove_if(motif1Positions.begin(), motif1Positions.end(), [](const GenomicRegion & reg){ return reg.off_; }), motif1Positions.end());
+						//motif2 positions
+						njh::sort(motif2Positions);
+						if (motif2Positions.size() > 1) {
+							for (const auto pos : iter::range(2UL, motif2Positions.size())) {
+								if (motif2Positions[pos - 1] == motif2Positions[pos]) {
+									motif2Positions[pos].off_ = true;
+								}
+							}
+						}
+						motif2Positions.erase(std::remove_if(motif2Positions.begin(), motif2Positions.end(), [](const GenomicRegion & reg){ return reg.off_; }), motif2Positions.end());
+
 
 						if ((!locs_1_empty && !revLocs_2_empty) ||
 								(!revLocs_1_empty && !locs_2_empty)) {
@@ -536,7 +575,7 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 									const auto & rev_primer = primer_pair.second.revs_[rev_primer_pos];
 
 									auto moftif1_error = fwd_primer.mot_.size() - fwd_primer.mot_.scoreMotif(moftif1_extracted_seq);
-									auto moftif2_error =rev_primer.mot_.size() -rev_primer.mot_.scoreMotif(moftif2_extracted_seq);
+									auto moftif2_error = rev_primer.mot_.size() - rev_primer.mot_.scoreMotif(moftif2_extracted_seq);
 
 									current_out << full_bed.toDelimStr();
 									current_out << "\t" << inner_bed.chromStart_
