@@ -579,8 +579,10 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 			{
 				std::lock_guard lock(out_mut);
 				out << current_out.str();
-				*out_motif1_locs << current_out_motif1.str();
-				*out_motif2_locs << current_out_motif2.str();
+				if (export_individual_motif_locs) {
+					*out_motif1_locs << current_out_motif1.str();
+					*out_motif2_locs << current_out_motif2.str();
+				}
 			}
 		}
 	};
