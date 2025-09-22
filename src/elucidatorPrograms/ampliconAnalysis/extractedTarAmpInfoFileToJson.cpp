@@ -207,7 +207,7 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
       library_sample_info_json["run_accession"] = row[library_sample_info_tab.getColPos("run_accession")];
       if (make_run_accession_library_sample_name) {
         library_sample_info_json["library_sample_name"] = row[library_sample_info_tab.getColPos("run_accession")];
-        library_sample_info_json["alternative_ids"].append( row[library_sample_info_tab.getColPos("library_name")]);
+        library_sample_info_json["alternate_identifiers"].append( row[library_sample_info_tab.getColPos("library_name")]);
       } else {
         library_sample_info_json["library_sample_name"] = row[library_sample_info_tab.getColPos("library_name")];
       }

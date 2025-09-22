@@ -60,6 +60,7 @@
 #include "elucidatorPrograms/popGen.h"
 #include "elucidatorPrograms/primerUtils.h"
 #include "elucidatorPrograms/phipseq_utils.h"
+#include "elucidatorPrograms/pmo.h"
 
 #include <njhcpp/progutils/oneRing.hpp>
 
@@ -109,6 +110,7 @@ elucidatorRunner::elucidatorRunner() :
 					addRing<programWrappersAssembleOnPathWeaverRunner>(),
 					addRing<primerUtilsRunner>(),
 					addRing<PhipSeqUtilsRunner>(),
+					addRing<PMOUtilsRunner>()
 
 
 				},//

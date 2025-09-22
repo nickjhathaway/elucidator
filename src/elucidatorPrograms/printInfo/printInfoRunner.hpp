@@ -35,5 +35,7 @@ class printInfoRunner : public njh::progutils::ProgramRunner {
   static int printAminoAcidInfo(const njh::progutils::CmdArgs & inputCommands);
   static int printFastqAscII(const njh::progutils::CmdArgs & inputCommands);
 
+	static int printCPPNumericalLimits(const njh::progutils::CmdArgs & inputCommands);
+	static int testingBoostFilesystem(const njh::progutils::CmdArgs & inputCommands);
 };
 } // namespace njhseq
