@@ -564,7 +564,7 @@ int seqSearchingRunner::extractBetweenTwoMotifLocations(const njh::progutils::Cm
 									std::string moftif1_extracted_seq = extract.fPrimerReg_.extractSeq(current_seq.seq_);
 									std::string moftif2_extracted_seq = extract.rPrimerReg_.extractSeq(current_seq.seq_);
 									if (add_inner_seq) {
-										inner_seq = extract.gRegion_->extractSeq(current_seq.seq_);
+										inner_seq = extract.gRegionInner_->extractSeq(current_seq.seq_);
 									}
 									if (add_full_seq) {
 										full_seq = extract.gRegion_->extractSeq(current_seq.seq_);
