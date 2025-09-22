@@ -19,10 +19,13 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
   std::string project_name;
   uint32_t panel_id = 0;
   bfs::path sra_meta_fnp;
+  bool make_run_accession_library_sample_name = false;
   ampliconAnalysisSetUp setUp(inputCommands);
   setUp.setOption(sra_meta_fnp, "--sra_meta_fnp", "sra_meta_fnp", true);
   setUp.setOption(project_name, "--project_name", "project_name", true);
   setUp.setOption(panel_id, "--panel_id", "panel_id", true);
+  setUp.setOption(make_run_accession_library_sample_name, "--make_run_accession_library_sample_name", "make run accession library sample name");
+
   setUp.processWritingOptions(outOpts);
   outOpts.outFilename_ = njh::files::prependFileBasename(outOpts.outName(), "project_specimen_library_info_");
 
@@ -149,6 +152,7 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
       if (row[specimen_info_tab.getColPos("country")].find(':') != std::string::npos &&
         row[specimen_info_tab.getColPos("country")].find(':') + 1 != row[specimen_info_tab.getColPos("country")].size()) {
         specimen_info_json["geo_admin1"] = row[specimen_info_tab.getColPos("country")].substr(row[specimen_info_tab.getColPos("country")].find(':') + 1);
+        specimen_info_json["collection_country"] = row[specimen_info_tab.getColPos("country")].substr(0, row[specimen_info_tab.getColPos("country")].find(':'));
       }
       if (column_testing["host_gravidity"]) specimen_info_json["gravidity"] = row[specimen_info_tab.getColPos("host_gravidity")];
       if (column_testing["host_age"]) specimen_info_json["host_age"] = row[specimen_info_tab.getColPos("host_age")];
@@ -198,11 +202,15 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
       library_sample_info_json["sequencing_info_id"] = njh::json::toJson(seq_info_index);
       library_sample_info_json["panel_id"] = njh::json::toJson(panel_id);
 
-      library_sample_info_json["library_sample_name"] = row[library_sample_info_tab.getColPos("library_name")];
       library_sample_info_json["experiment_accession"] = row[library_sample_info_tab.getColPos("experiment_accession")];
       library_sample_info_json["fastqs_loc"] = row[library_sample_info_tab.getColPos("fastq_ftp")];
       library_sample_info_json["run_accession"] = row[library_sample_info_tab.getColPos("run_accession")];
-
+      if (make_run_accession_library_sample_name) {
+        library_sample_info_json["library_sample_name"] = row[library_sample_info_tab.getColPos("run_accession")];
+        library_sample_info_json["alternative_ids"].append( row[library_sample_info_tab.getColPos("library_name")]);
+      } else {
+        library_sample_info_json["library_sample_name"] = row[library_sample_info_tab.getColPos("library_name")];
+      }
       library_sample_info_jsons.append(library_sample_info_json);
     }
     outJson_project_specimen_library["library_sample_info"] = library_sample_info_jsons;
