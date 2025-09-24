@@ -15,11 +15,10 @@ public:
   PMOUtilsRunner();
 
   static int read_pmo(const njh::progutils::CmdArgs & inputCommands);
-
   static int get_overlap_between_panels_in_pmos(const njh::progutils::CmdArgs & inputCommands);
 
-
   static int add_protein_variant_info_to_pmo(const njh::progutils::CmdArgs & inputCommands);
+  static int count_protein_variant_info_to_pmo(const njh::progutils::CmdArgs & inputCommands);
 
 };
 
