@@ -19,11 +19,14 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
   std::string project_name;
   uint32_t panel_id = 0;
   bfs::path sra_meta_fnp;
+  std::string specimen_name_col = "sample_alias";
   bool make_run_accession_library_sample_name = false;
   ampliconAnalysisSetUp setUp(inputCommands);
   setUp.setOption(sra_meta_fnp, "--sra_meta_fnp", "sra_meta_fnp", true);
   setUp.setOption(project_name, "--project_name", "project_name", true);
   setUp.setOption(panel_id, "--panel_id", "panel_id", true);
+  setUp.setOption(specimen_name_col, "--specimen_name_col", "specimen_name_col");
+
   setUp.setOption(make_run_accession_library_sample_name, "--make_run_accession_library_sample_name", "make run accession library sample name");
 
   setUp.processWritingOptions(outOpts);
@@ -43,7 +46,7 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
   sra_meta_table.checkForColumnsThrow(VecStr{
     "library_name","experiment_accession","fastq_ftp","run_accession",
 
-    "sample_alias","tax_id","host_tax_id","collection_date","country","environment_biome",
+    specimen_name_col,"tax_id","host_tax_id","collection_date","country","environment_biome",
     "environment_feature","environmental_medium","host_gravidity","age","host_sex","lat","lon",
     "sample_accession","sample_storage",
 
@@ -108,7 +111,7 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
   {
 
     auto specimen_info_tab = sra_meta_table.getColumns(VecStr{
-      "sample_alias","tax_id","host_tax_id","collection_date","country",
+      specimen_name_col,"tax_id","host_tax_id","collection_date","country",
       "environment_biome", "environment_feature","environmental_medium",
       "host_gravidity","age",
       "host_sex",
@@ -134,7 +137,7 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
     for (const auto & row : specimen_info_tab) {
       Json::Value specimen_info_json;
 
-      specimen_info_json["specimen_name"] = row[specimen_info_tab.getColPos("sample_alias")];
+      specimen_info_json["specimen_name"] = row[specimen_info_tab.getColPos(specimen_name_col)];
       specimen_info_json["specimen_taxon_id"].append(njh::json::toJson(njh::StrToNumConverter::stoToNum<uint32_t>(row[specimen_info_tab.getColPos("tax_id")])));
       if ("NA" == row[specimen_info_tab.getColPos("host_tax_id")]) {
         specimen_info_json["host_taxon_id"] = njh::json::toJson(std::numeric_limits<uint32_t>::max());
@@ -164,7 +167,7 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
                                                         ",",
                                                         row[specimen_info_tab.getColPos("lon")]);
       specimen_info_json["project_id"] = njh::json::toJson(0);
-      specimen_info_name_to_id[row[specimen_info_tab.getColPos("sample_alias")]] = specimen_info_count;
+      specimen_info_name_to_id[row[specimen_info_tab.getColPos(specimen_name_col)]] = specimen_info_count;
       ++specimen_info_count;
       specimen_info_jsons.append(specimen_info_json);
     }
@@ -177,7 +180,7 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
       "library_name",
       "experiment_accession","fastq_ftp","run_accession",
 
-      "sample_alias",
+        specimen_name_col ,
       "instrument_platform","instrument_model","library_layout","library_strategy","library_source",
       "library_selection",
     }).getUniqueRows();
@@ -196,7 +199,7 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
                                         },
                                         "-");
       auto seq_info_index = seq_info_key_to_id[seq_info_key];
-      auto specimen_id = specimen_info_name_to_id[row[library_sample_info_tab.getColPos("sample_alias")]];
+      auto specimen_id = specimen_info_name_to_id[row[library_sample_info_tab.getColPos(specimen_name_col)]];
 
       library_sample_info_json["specimen_id"] = njh::json::toJson(specimen_id);
       library_sample_info_json["sequencing_info_id"] = njh::json::toJson(seq_info_index);
