@@ -242,12 +242,14 @@ int ampliconAnalysisRunner::phasingAlleleTable(
   double second_pass_prune_min_abundance = 0.10;
   double second_pass_freq_cut_off = 0.70;
   bfs::path regions_fnp;
-
+  bool no_second_pass = false;
   ampliconAnalysisSetUp setUp(inputCommands);
   setUp.processVerbose();
   setUp.processDebug();
   setUp.setOption(second_pass_prune_min_abundance, "--second_pass_prune_min_abundance", "second_pass_prune_min_abundance");
   setUp.setOption(second_pass_freq_cut_off, "--second_pass_freq_cut_off", "second_pass_freq_cut_off");
+
+  setUp.setOption(no_second_pass, "--no_second_pass", "no_second_pass");
 
 
   setUp.setOption(freq_cut_off, "--freq_cut_off", "freq_cut_off");
@@ -342,7 +344,7 @@ int ampliconAnalysisRunner::phasingAlleleTable(
   }
 
   // second pass
-  {
+  if (!no_second_pass){
     auto second_past_phaser = phaser;
     for (const auto & hap : iter::enumerate(unique_major_haplotypes)) {
       for (const auto & sample : second_past_phaser.sample_order_) {
@@ -409,8 +411,6 @@ int ampliconAnalysisRunner::phasingAlleleTable(
       ++major_haplotypes_counts[hap_id];
     }
   }
-  
-
 
   phased_haplotypes_out << "hap_id"
       << "\t" << target_id_col

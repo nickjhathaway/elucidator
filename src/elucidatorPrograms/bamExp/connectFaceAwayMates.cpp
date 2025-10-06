@@ -200,9 +200,10 @@ int bamExpRunner::connectFaceAwayMatesRegions(
   uint32_t minInsertSize = 1000;
   uint32_t step = 50;
   uint32_t windowSize = 100;
+  int32_t allowable_dist_between_regions = 0;
   std::string sample = "sample";
   seqSetUp setUp(inputCommands);
-
+  setUp.setOption(allowable_dist_between_regions, "--allowable_dist_between_regions", "allowable dist between regions");
   setUp.setOption(sample, "--sample", "sample name", true);
   setUp.setOption(initialSoftClipCutOff, "--initialSoftClipCutOff", "On initial pass if one side has this amount of soft clip don't count");
   setUp.setOption(finalSoftClipCutOff, "--finalSoftClipCutOff", "On final pass if one side has this amount of soft clip don't count");
@@ -291,8 +292,7 @@ int bamExpRunner::connectFaceAwayMatesRegions(
 
           faceawayRegions.emplace_back(bAlnRegion.genBed3RecordCore());
           faceawayRegions.emplace_back(bAlnMateRegion.genBed3RecordCore());
-
-            }
+        }
       }
     }
 
@@ -325,9 +325,6 @@ int bamExpRunner::connectFaceAwayMatesRegions(
     // for(const auto & reg : mergedRegions){
     for(const auto & reg : merged_combinedMergedRegions){
       auto windows = BedUtility::createWindowsWithinRegion(reg, windowSize, step, true);
-
-
-
       for(const auto & win : windows) {
         bool overlapWithFace = false;
         for(const auto & face : faceawayRegions_merged) {
@@ -437,9 +434,7 @@ int bamExpRunner::connectFaceAwayMatesRegions(
                 }
               }
             }
-
-
-              }
+          }
         }
       }
     }
@@ -457,9 +452,12 @@ int bamExpRunner::connectFaceAwayMatesRegions(
       GenomicRegion backRegion_;
       std::vector<std::shared_ptr<GenomicRegionGraph::edge>> edges_;
 
-      [[nodiscard]] bool bothNodesOverlap(const GenomicRegionGraph::edge & otherEdge, std::vector<GenomicRegionGraph::node> nodes) const {
-        return nodes[otherEdge.nodesInOrder_.first].region_.overlaps(frontRegion_) &&
-          nodes[otherEdge.nodesInOrder_.second].region_.overlaps(backRegion_);
+      [[nodiscard]] bool bothNodesOverlap(const GenomicRegionGraph::edge & otherEdge, std::vector<GenomicRegionGraph::node> nodes,
+        uint32_t within_distance) const {
+        auto dist_between_front = nodes[otherEdge.nodesInOrder_.first].region_.distBetweenRegions(frontRegion_);
+        auto dist_between_backs = nodes[otherEdge.nodesInOrder_.second].region_.distBetweenRegions(backRegion_);
+        return (nodes[otherEdge.nodesInOrder_.first].region_.overlaps(frontRegion_) || dist_between_front <= within_distance) &&
+          (nodes[otherEdge.nodesInOrder_.second].region_.overlaps(backRegion_) || dist_between_backs <= within_distance);
       }
       [[nodiscard]] GenomicRegion genSpanningRegion() const {
         GenomicRegion ret = frontRegion_;
@@ -467,7 +465,6 @@ int bamExpRunner::connectFaceAwayMatesRegions(
         ret.uid_ = ret.createUidFromCoords();
         return ret;
       }
-
     };
     std::vector<GroupedEdges> mergedEdges;
     // std::vector<std::vector<std::shared_ptr<GenomicRegionGraph::edge>>> mergedEdges;
@@ -480,7 +477,7 @@ int bamExpRunner::connectFaceAwayMatesRegions(
       } else {
         bool foundOverlap = false;
         for(auto & otherMergedEdge : mergedEdges) {
-          if(otherMergedEdge.bothNodesOverlap(*edge, graph.nodes_)) {
+          if(otherMergedEdge.bothNodesOverlap(*edge, graph.nodes_, allowable_dist_between_regions)) {
             foundOverlap = true;
             otherMergedEdge.edges_.emplace_back(edge);
             otherMergedEdge.frontRegion_.start_ = std::min(otherMergedEdge.frontRegion_.start_, graph.nodes_[edge->nodesInOrder_.first].region_.start_);
