@@ -65,6 +65,11 @@ int pairProcessingRunner::StitchPairedReads(
 	setUp.pars_.caseInsensitiveScoring_ = true;
 	setUp.pars_.lessNScoring_ = true;
 	setUp.processScoringPars();
+
+	setUp.setOption(params.r1Trim_, "--r1Trim", "r1Trim");
+	setUp.setOption(params.r2Trim_, "--r2Trim", "r2Trim");
+
+
 	setUp.setOption(params.testNumber_, "--testNumber", "Test Number");
 	setUp.setOption(params.hardMismatchCutOff_, "--hardMismatchCutOff", "Hard Mismatch Cut Off, also don't allow this many mismatches");
 	setUp.setOption(params.lqMismatchCutOff,    "--lqMismatchCutOff",   "Low qaulity Mismatch Cut Off, also don't allow this many mismatches");
@@ -72,7 +77,6 @@ int pairProcessingRunner::StitchPairedReads(
 
 	setUp.setOption(params.minOverlap_, "--minOverlap", "Minimum overlap");
 	setUp.setOption(params.writeOverHangs_, "--writeOverHangs", "Write Over Hangs");
-
 	setUp.setOption(params.errorAllowed_, "--errorAllowed", "Percent Error Allowed, between 0 and 1");
 	if(params.errorAllowed_ > 1 || params.errorAllowed_ < 0){
 		setUp.failed_ = true;
