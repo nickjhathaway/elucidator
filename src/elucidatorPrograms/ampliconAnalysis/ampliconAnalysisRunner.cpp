@@ -48,8 +48,9 @@ ampliconAnalysisRunner::ampliconAnalysisRunner()
     	addFunc("phasingAlleleTable", phasingAlleleTable, false),
     	addFunc("sraMetaToJson", sraMetaToJson, false),
     	addFunc("combineSeparatePrimerFastaInfoPrimerFiler", combineSeparatePrimerFastaInfoPrimerFiler, false),
+    	addFunc("detectPhasedPartialAlleles", detectPhasedPartialAlleles, false),
 
-
+//
 										 },//sraMetaToJson
                     "ampliconAnalysis") {}
 

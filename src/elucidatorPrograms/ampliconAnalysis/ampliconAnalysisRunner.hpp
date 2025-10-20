@@ -43,6 +43,7 @@ class ampliconAnalysisRunner : public njh::progutils::ProgramRunner {
 	static int maskRegionBasedOnRefSubRegions(const njh::progutils::CmdArgs & inputCommands);
 
 	static int phasingAlleleTable(const njh::progutils::CmdArgs & inputCommands);
+	static int detectPhasedPartialAlleles(const njh::progutils::CmdArgs & inputCommands);
 
 	static int combineSeparatePrimerFastaInfoPrimerFiler(const njh::progutils::CmdArgs & inputCommands);
 
