@@ -1039,7 +1039,7 @@ int gffExpRunner::gffToBedByDescription(const njh::progutils::CmdArgs & inputCom
 
 	Json::Value outJson;
 	while (nullptr != gRecord) {
-		if( !njh::in(gRecord->type_, excludeFeatures)&&
+		if( !njh::in(gRecord->type_, excludeFeatures) &&
 		(features.empty() || njh::in(gRecord->type_, features))){
 			if(njh::in(gRecord->getAttr("description"), description)){
 				outJson[gRecord->getAttr("ID")] = gRecord->toJson();
@@ -1052,6 +1052,7 @@ int gffExpRunner::gffToBedByDescription(const njh::progutils::CmdArgs & inputCom
 			}
 		}
 		bool end = false;
+
 		while ('#' == reader.inFile_->peek()) {
 			if (njh::files::nextLineBeginsWith(*reader.inFile_, "##FASTA")) {
 				end = true;

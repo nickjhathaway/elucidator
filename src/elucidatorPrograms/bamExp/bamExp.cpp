@@ -1499,6 +1499,7 @@ int bamExpRunner::getBestBedRegionFromBam(const njh::progutils::CmdArgs & inputC
 
 int bamExpRunner::BamExtractReadsFromRegion(
 		const njh::progutils::CmdArgs & inputCommands) {
+	bool combine_output = false;
 	bfs::path bedFile = "";
 	double percInRegion = .50;
 	seqSetUp setUp(inputCommands);
@@ -1507,6 +1508,7 @@ int bamExpRunner::BamExtractReadsFromRegion(
 	setUp.setOption(bedFile, "--bed", "Bed file, first entry is used", true);
 	setUp.processDefaultReader( { "-bam" }, true);
 	setUp.setOption(percInRegion, "--percInRegion", "Percent of bases n Region");
+	setUp.setOption(combine_output, "--combine_output", "combine output into one rather than by region");
 
 	setUp.finishSetUp(std::cout);
 	BamExtractor bExtractor(setUp.pars_.verbose_);
@@ -1521,6 +1523,7 @@ int bamExpRunner::BamExtractReadsFromRegion(
 		ss << __PRETTY_FUNCTION__ << ", error no regions read in from "  << bedFile << std::endl;
 	}else{
 		std::unordered_map<std::string, uint32_t> regionNameCounts;
+		uint32_t region_count = 0;
 		for(const auto & region : regions){
 			if(setUp.pars_.verbose_){
 				std::cout << "Extracting: " << region.uid_ << std::endl;
@@ -1531,9 +1534,16 @@ int bamExpRunner::BamExtractReadsFromRegion(
 			}
 			++regionNameCounts[region.uid_];
 			OutOptions regOutOpts(bfs::path(setUp.pars_.ioOptions_.out_.outFilename_.string() + "_" + name));
+			if (combine_output) {
+				regOutOpts = OutOptions(bfs::path(setUp.pars_.ioOptions_.out_.outFilename_.string()));
+			}
 			regOutOpts.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
+			if (region_count > 1 && combine_output) {
+				regOutOpts.append_ = true;
+			}
 			bExtractor.writeExtractReadsFromBamRegion(setUp.pars_.ioOptions_.firstName_,
 							region, percInRegion, regOutOpts);
+			++region_count;
 		}
 	}
 

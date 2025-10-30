@@ -613,7 +613,7 @@ int seqUtilsSplitRunner::SeqSplitOnNameContainsPattern(const njh::progutils::Cmd
 		} else {
 			condition = "include";
 		}
-
+		/**@todo something appers to hang when output files exist and --overWrite is not on, likely an exception is being thrown without release a lock or something */
 		seqOuts.add(condition, seq);
 	}
   if(setUp.pars_.verbose_){

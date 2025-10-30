@@ -82,6 +82,7 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 
   readDistGraph<double>::HDBScanInputPars hdbScanPars;
 
+	uint64_t length_diff_to_break_edges = std::numeric_limits<uint64_t>::max();
 
 	readDistGraph<double>::dbscanPars dbPars_;
 	dbPars_.minEpNeighbors_ = 2;
@@ -95,6 +96,7 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 
 	setUp.processReadInNames(true);
   setUp.setOption(numThreads, "--numThreads", "numThreads");
+	setUp.setOption(length_diff_to_break_edges, "--length_diff_to_break_edges", "length diff to break edges");
 
   setUp.setOption(useHDBS, "--useHDBS", "useHDBS");
   hdbScanPars.verbose = setUp.pars_.verbose_;
@@ -134,6 +136,9 @@ int seqUtilsExtractRunner::clusterByKmerSim(const njh::progutils::CmdArgs & inpu
 
 	auto dist = getDistance(reads, numThreads, disFun);
 	readDistGraph<double> distGraph(dist, reads);
+	if (std::numeric_limits<uint64_t>::max() != length_diff_to_break_edges) {
+		distGraph.remove_edges_length_diff_between_reads(length_diff_to_break_edges);
+	}
 
 	if(useHDBS){
     auto hdbsDir = njh::files::makeDir(setUp.pars_.directoryName_, njh::files::MkdirPar{"HDBScan"});
