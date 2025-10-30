@@ -1539,6 +1539,7 @@ int bamExpRunner::BamExtractReadsFromRegion(
 			}
 			regOutOpts.transferOverwriteOpts(setUp.pars_.ioOptions_.out_);
 			if (region_count > 1 && combine_output) {
+				regOutOpts.overWriteFile_ = false;
 				regOutOpts.append_ = true;
 			}
 			bExtractor.writeExtractReadsFromBamRegion(setUp.pars_.ioOptions_.firstName_,
