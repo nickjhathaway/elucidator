@@ -517,7 +517,7 @@ int ampliconAnalysisRunner::readsByStageToJson(const njh::progutils::CmdArgs &in
           for (const auto & stage : tar_name.second) {
             Json::Value stageJson;
             stageJson["stage"] = stage.first;
-            stageJson["read_count"] = stage.second;
+            stageJson["reads"] = stage.second;
             stages.append(stageJson);
           }
           read_counts_for_targets.append(tar_json);
