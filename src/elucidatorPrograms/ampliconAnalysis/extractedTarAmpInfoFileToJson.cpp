@@ -133,15 +133,16 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
     }).getUniqueRows();
 
     std::unordered_map<std::string, bool> column_testing;
-    column_testing["environment_biome"] = specimen_info_tab.column_all_na("environment_biome");
-    column_testing["environment_feature"] = specimen_info_tab.column_all_na("environment_feature");
-    column_testing["environmental_medium"] = specimen_info_tab.column_all_na("environmental_medium");
-    column_testing["host_gravidity"] = specimen_info_tab.column_all_na("host_gravidity");
-    column_testing["age"] = specimen_info_tab.column_all_na("age");
-    column_testing["host_sex"] = specimen_info_tab.column_all_na("host_sex");
-    column_testing["lat"] = specimen_info_tab.column_all_na("lat");
-    column_testing["sample_accession"] = specimen_info_tab.column_all_na("sample_accession");
-    column_testing["sample_storage"] = specimen_info_tab.column_all_na("sample_storage");
+    VecStr na_values_to_avoid{"NA", "missing", "na", "n/a", ""};
+    column_testing["environment_biome"] = specimen_info_tab.column_all_na("environment_biome", na_values_to_avoid);
+    column_testing["environment_feature"] = specimen_info_tab.column_all_na("environment_feature", na_values_to_avoid);
+    column_testing["environmental_medium"] = specimen_info_tab.column_all_na("environmental_medium", na_values_to_avoid);
+    column_testing["host_gravidity"] = specimen_info_tab.column_all_na("host_gravidity", na_values_to_avoid);
+    column_testing["age"] = specimen_info_tab.column_all_na("age", na_values_to_avoid);
+    column_testing["host_sex"] = specimen_info_tab.column_all_na("host_sex", na_values_to_avoid);
+    column_testing["lat"] = specimen_info_tab.column_all_na("lat", na_values_to_avoid);
+    column_testing["sample_accession"] = specimen_info_tab.column_all_na("sample_accession", na_values_to_avoid);
+    column_testing["sample_storage"] = specimen_info_tab.column_all_na("sample_storage", na_values_to_avoid);
 
 
     Json::Value specimen_info_jsons;
@@ -180,6 +181,7 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
         specimen_info_json["geo_admin1"] = geo_admin1;
         specimen_info_json["collection_country"] = row[specimen_info_tab.getColPos("country")].substr(0, row[specimen_info_tab.getColPos("country")].find(':'));
       }
+
       if (column_testing["host_gravidity"]) specimen_info_json["gravidity"] = row[specimen_info_tab.getColPos("host_gravidity")];
       if (column_testing["host_age"]) specimen_info_json["host_age"] = row[specimen_info_tab.getColPos("host_age")];
       if (column_testing["host_sex"]) specimen_info_json["host_sex"] = row[specimen_info_tab.getColPos("host_sex")];
@@ -755,7 +757,8 @@ int ampliconAnalysisRunner::specimenLibraryInfoFileToJson(const njh::progutils::
 int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArgs &inputCommands) {
   OutOptions outOpts("", ".json");
   // uint32_t sequencing_id;
-  uint32_t bioinformatics_run_id;
+  uint32_t bioinformatics_run_id = std::numeric_limits<uint32_t>::max();
+  bfs::path sample_to_bio_run_id_fnp;
   bfs::path panel_target_info_fnp;
   bfs::path library_sample_info_fnp;
   bfs::path regions_analyzed_bed_fnp;
@@ -771,7 +774,8 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
   uint32_t regions_analyzed_genome_id = 0;
   ampliconAnalysisSetUp setUp(inputCommands);
   // setUp.setOption(sequencing_id, "--sequencing_id", "sequencing id", true);
-  setUp.setOption(bioinformatics_run_id, "--bioinformatics_run_id", "bioinformatics_run_id", true);
+  setUp.setOption(bioinformatics_run_id, "--bioinformatics_run_id", "bioinformatics_run_id", false);
+  setUp.setOption(sample_to_bio_run_id_fnp, "--sample_to_bio_run_id_fnp", "a table with sample to bio run info id, one column is the same sample column as the input data, other is bioinformatics_run_id", false);
   setUp.setOption(panel_target_info_fnp, "--panel_target_info_fnp", "json file containing the information about the panel and target", true);
   setUp.setOption(library_sample_info_fnp, "--library_sample_info_fnp", "json file containing the information library_samples", true);
 
@@ -846,6 +850,53 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
     }
     library_sample_indexes[library_sample_name] = exp_samp_enum.index;
   }
+
+  std::unordered_map<std::string, uint32_t> sample_to_bio_run_id_map;
+  if (std::numeric_limits<uint32_t>::max() != bioinformatics_run_id) {
+    for (const auto & library_sample_indx : library_sample_indexes) {
+      sample_to_bio_run_id_map[library_sample_indx.first] = bioinformatics_run_id;
+    }
+  } else {
+    table sample_to_bio_run_id_tab(sample_to_bio_run_id_fnp, "\t", true);
+    sample_to_bio_run_id_tab.checkForColumnsThrow(VecStr{sampleIDCol, "bioinformatics_run_id"}, __PRETTY_FUNCTION__);
+    for (const auto & row : sample_to_bio_run_id_tab) {
+      auto samp_name = row[sample_to_bio_run_id_tab.getColPos(sampleIDCol)];
+      if (njh::in(samp_name, sample_to_bio_run_id_map)) {
+        std::stringstream ss;
+        ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << " already have a bio id for " << samp_name << "\n";
+        ss << "have " << sample_to_bio_run_id_map[samp_name] << " and now attempting to add " << row[sample_to_bio_run_id_tab.getColPos("bioinformatics_run_id")] << "\n";
+        throw std::runtime_error{ss.str()};
+      }
+      sample_to_bio_run_id_map[samp_name] = njh::StrToNumConverter::stoToNum<uint32_t>(row[sample_to_bio_run_id_tab.getColPos("bioinformatics_run_id")]);
+    }
+
+    VecStr only_in_library_input;
+    VecStr only_in_samp_to_bio_id_tab;
+    VecStr inboth;
+    auto library_input = getVectorOfMapKeys(library_sample_indexes);
+    auto samp_to_bio_id = getVectorOfMapKeys(sample_to_bio_run_id_map);
+    njh::sort(library_input);
+    njh::sort(samp_to_bio_id);
+
+    njh::decompose_sets(library_input.begin(), library_input.end(),
+      samp_to_bio_id.begin(), samp_to_bio_id.end(),
+      std::back_insert_iterator(only_in_library_input),
+      std::back_insert_iterator(only_in_samp_to_bio_id_tab),
+      std::back_insert_iterator(inboth)
+      );
+    if (!only_in_library_input.empty() ||  !only_in_samp_to_bio_id_tab.empty()) {
+      std::stringstream ss;
+      ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << " " << "\n";
+      if (!only_in_library_input.empty()) {
+        ss << "have " << njh::conToStr(only_in_library_input, ",") << " in " << library_sample_info_fnp << " but missing from "  << sample_to_bio_run_id_fnp << "\n";
+      }
+      if (!only_in_samp_to_bio_id_tab.empty()) {
+        ss << "have " << njh::conToStr(only_in_samp_to_bio_id_tab, ",") << " in " << sample_to_bio_run_id_fnp << " but missing from "  << library_sample_info_fnp << "\n";
+      }
+      throw std::runtime_error{ss.str()};
+    }
+  }
+
   if (!multiple_library_sample_names.empty()) {
     std::stringstream ss;
     ss << __FILE__ << " " << __LINE__ << " " << __PRETTY_FUNCTION__ << ", error " << "found multiple of the same target in " << library_sample_info_fnp << ": " << njh::conToStr(multiple_library_sample_names, ",") << "\n";
@@ -857,10 +908,14 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
   Json::Value & detected_microhaplotypes_full = outJson["detected_microhaplotypes"];
   Json::Value & representative_microhaplotypes = outJson["representative_microhaplotypes"];
 
-  Json::Value detected_microhaplotypes;
-  detected_microhaplotypes["bioinformatics_run_id"] = bioinformatics_run_id;
 
-  Json::Value & samplesJson = detected_microhaplotypes["library_samples"];
+  std::unordered_map<uint32_t, Json::Value> map_detected_microhaplotypes;
+  auto bioinformatics_run_ids = getVectorOfMapValues(sample_to_bio_run_id_map);
+  for (const auto & current_bioinformatics_run_id : bioinformatics_run_ids) {
+    map_detected_microhaplotypes[current_bioinformatics_run_id]["bioinformatics_run_id"] = current_bioinformatics_run_id;
+  }
+
+  // Json::Value & samplesJson = detected_microhaplotypes["library_samples"];
   Json::Value & representative_microhaplotypes_targets = representative_microhaplotypes["targets"];
 
 
@@ -970,11 +1025,12 @@ int ampliconAnalysisRunner::finalClustersFileToJson(const njh::progutils::CmdArg
         tar_info["mhaps"] = tar.second;
         samp_info["target_results"].append(tar_info);
       }
-      samplesJson.append(samp_info);
+      map_detected_microhaplotypes[sample_to_bio_run_id_map[samp.first]]["library_samples"].append(samp_info);
     }
   }
-
-  detected_microhaplotypes_full.append(detected_microhaplotypes);
+  for (const auto & detected_microhaplotypes : map_detected_microhaplotypes) {
+    detected_microhaplotypes_full.append(detected_microhaplotypes.second);
+  }
   Json::StreamWriterBuilder builder;
   builder["indentation"] = "\t";  // or whatever you like
   std::unique_ptr<Json::StreamWriter> writer(
@@ -990,6 +1046,7 @@ int ampliconAnalysisRunner::extractedTarAmpInfoFileToJson(const njh::progutils::
   bfs::path genomeInfoJsonFnp;
   OutOptions outOpts("", ".json");
   std::string panelName;
+  std::string default_reaction;
   bfs::path reactionNameFnp;
   bfs::path extractedInfoFnp;
   bfs::path genomeTwoBit;
@@ -997,7 +1054,9 @@ int ampliconAnalysisRunner::extractedTarAmpInfoFileToJson(const njh::progutils::
   std::string targetColName = "target";
 
   ampliconAnalysisSetUp setUp(inputCommands);
-  setUp.setOption(reactionNameFnp, "--reactionNameFnp", "table with target column and reaction column", true);
+
+  auto reaction_set = setUp.setOption(reactionNameFnp, "--reactionNameFnp", "table with target column and reaction column", false);
+  setUp.setOption(default_reaction, "--default_reaction", "use this as the default reaction for all targets", !reaction_set);
   setUp.setOption(panelName, "--panelName", "Name of the panel", true);
   setUp.setOption(extractedInfoFnp, "--extractedInfoFnp", "Name extracted Info Fnp", true);
   setUp.setOption(genomeInfoJsonFnp, "--genomeInfoJsonFnp", "genome Info Json Fnp", true);
@@ -1037,19 +1096,22 @@ int ampliconAnalysisRunner::extractedTarAmpInfoFileToJson(const njh::progutils::
   }
 
   std::unordered_map<std::string, VecStr> reactionNameMap;
-  table reactionNameTab;
-  reactionNameTab = table(reactionNameFnp, "\t", true);
-  reactionNameTab.checkForColumnsThrow({targetColName, "reaction"}, __PRETTY_FUNCTION__);
-  for (const auto & row : reactionNameTab) {
-    auto target_name = row[reactionNameTab.getColPos(targetColName)];
-    auto reactions = tokenizeString(row[reactionNameTab.getColPos("reaction")], ",");
-    if (njh::in(target_name, reactionNameMap)) {
-      std::stringstream ss;
-      ss << __FILE__ << " " << __LINE__ << " " << __PRETTY_FUNCTION__ << ", error " << "already have target " << target_name << " in " << reactionNameFnp << "\n";
-      throw std::runtime_error{ss.str()};
+  if (reaction_set) {
+    table reactionNameTab;
+    reactionNameTab = table(reactionNameFnp, "\t", true);
+    reactionNameTab.checkForColumnsThrow({targetColName, "reaction"}, __PRETTY_FUNCTION__);
+    for (const auto & row : reactionNameTab) {
+      auto target_name = row[reactionNameTab.getColPos(targetColName)];
+      auto reactions = tokenizeString(row[reactionNameTab.getColPos("reaction")], ",");
+      if (njh::in(target_name, reactionNameMap)) {
+        std::stringstream ss;
+        ss << __FILE__ << " " << __LINE__ << " " << __PRETTY_FUNCTION__ << ", error " << "already have target " << target_name << " in " << reactionNameFnp << "\n";
+        throw std::runtime_error{ss.str()};
+      }
+      reactionNameMap[target_name] = reactions;
     }
-    reactionNameMap[target_name] = reactions;
   }
+
 
   std::unordered_map<std::string, uint32_t> targetIndex;
 
@@ -1077,16 +1139,23 @@ int ampliconAnalysisRunner::extractedTarAmpInfoFileToJson(const njh::progutils::
 
     VecStr missingFromReactionTab;
     VecStr missingFromTargetTab;
-    for(const auto & extractedTargets : extractedRowsPerID) {
-      if (njh::notIn(extractedTargets.first, reactionNameMap)) {
-        missingFromReactionTab.emplace_back(extractedTargets.first);
+    if (reaction_set) {
+      for(const auto & extractedTargets : extractedRowsPerID) {
+        if (njh::notIn(extractedTargets.first, reactionNameMap)) {
+          missingFromReactionTab.emplace_back(extractedTargets.first);
+        }
+      }
+      for(const auto & reactionName : reactionNameMap) {
+        if (njh::notIn(reactionName.first, extractedRowsPerID)) {
+          missingFromTargetTab.emplace_back(reactionName.first);
+        }
+      }
+    } else {
+      for(const auto & extractedTargets : extractedRowsPerID) {
+        reactionNameMap[extractedTargets.first].emplace_back(default_reaction);
       }
     }
-    for(const auto & reactionName : reactionNameMap) {
-      if (njh::notIn(reactionName.first, extractedRowsPerID)) {
-        missingFromTargetTab.emplace_back(reactionName.first);
-      }
-    }
+
     if (!missingFromTargetTab.empty() || !missingFromReactionTab.empty()) {
       VecStr warnings;
       if (!missingFromTargetTab.empty()) {
@@ -1137,7 +1206,7 @@ int ampliconAnalysisRunner::extractedTarAmpInfoFileToJson(const njh::progutils::
             tarInfo["insert_location"] = insert.toJsonLocationOnly();
           }
           tarInfo["insert_location"]["genome_id"] = 0;
-          if (!row[reader.header_.getColPos("insertGeneDescription")].empty()) {
+          if (reader.header_.containsColumn("insertGeneDescription") && !row[reader.header_.getColPos("insertGeneDescription")].empty()) {
             tarInfo["gene_name"] = row[reader.header_.getColPos("insertGeneID")];
           }
           // Json::Value forwardPrimers;
