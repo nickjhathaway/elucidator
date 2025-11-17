@@ -86,6 +86,7 @@ miscRunner::miscRunner()
 										 addFunc("createSharedSubSegmentsFromRefSeqs", createSharedSubSegmentsFromRefSeqs, false),
 
 										 addFunc("countPWExtractedReadsWithPattern", countPWExtractedReadsWithPattern, false),
+    	addFunc("scanningRegionsForReadsWithPattern", scanningRegionsForReadsWithPattern, false),
 										 },//
                     "misc") {}
 

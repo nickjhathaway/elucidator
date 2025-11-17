@@ -83,6 +83,8 @@ class miscRunner : public njh::progutils::ProgramRunner {
 
 	static int countPWExtractedReadsWithPattern(const njh::progutils::CmdArgs & inputCommands);
 
+  static int scanningRegionsForReadsWithPattern(const njh::progutils::CmdArgs & inputCommands);
+
 };
 }  // namespace njhseq
 

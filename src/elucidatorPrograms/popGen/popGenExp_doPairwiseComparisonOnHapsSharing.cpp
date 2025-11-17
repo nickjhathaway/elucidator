@@ -51,7 +51,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	setUp.setOption(dbscanPars.eps_, "--eps", "Epsilon (distance sensitivity of algorithm)");
 	setUp.setOption(dbscanPars.minEpNeighbors_, "--minpts", "The minimum number of epsilon neighbors");
 	setUp.setOption(writeOutDistMatrices, "--writeOutDistMatrices", "write Out Dist Matrices");
-	setUp.setOption(metaFnp, "--metaFnp", "Table of meta data for samples, needs a column named sample and each additonal column will be the meta data associated with that sample");
+	setUp.setOption(metaFnp, "--metaFnp", "Table of meta data for samples, needs a column named sample and each additional column will be the meta data associated with that sample");
 	setUp.setOption(metaFieldsToCalcPopDiffs, "--metaFieldsToCalcPopDiffs", "Meta Fields To Calc Pop Diffs");
 	setUp.setOption(onlyPloidy2, "--onlyPloidy2", "only calculate Ploidy 2 probability");
 	setUp.setOption(writeOutTarsAbsoluteShared, "--writeOutTarsAbsoluteShared", "write Out Tars Absolute Shared");
