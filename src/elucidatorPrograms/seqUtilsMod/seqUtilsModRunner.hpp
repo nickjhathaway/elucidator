@@ -56,6 +56,8 @@ class seqUtilsModRunner : public njh::progutils::ProgramRunner {
 
 	static int compSeq(const njh::progutils::CmdArgs & inputCommands);
 	static int revCompSeq(const njh::progutils::CmdArgs & inputCommands);
+	static int revCompFastqFast(const njh::progutils::CmdArgs & inputCommands);
+
   static int reOrientReads(const njh::progutils::CmdArgs & inputCommands);
   static int collapseToUnique(const njh::progutils::CmdArgs & inputCommands);
   static int collapseToUniqueWithInMetaField(const njh::progutils::CmdArgs & inputCommands);
