@@ -48,13 +48,16 @@ int seqUtilsModRunner::revCompFastqFast(const njh::progutils::CmdArgs & inputCom
 			case 1:
 				//reverse complement seq here
 				revcomp_inplace(line);
-				std::reverse(line.begin(), line.end());
+				out << line << "\n";
+				break;
 			case 3:
 				//just reverse the quality scores
 				std::reverse(line.begin(), line.end());
 				out << line << "\n";
+				break;
 			default:
 				out << line << "\n";
+				break;
 		}
 		++line_count;
 	}
