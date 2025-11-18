@@ -56,6 +56,7 @@ int seqUtilsModRunner::revCompFastqFast(const njh::progutils::CmdArgs & inputCom
 			default:
 				out << line << "\n";
 		}
+		++line_count;
 	}
 	return 0;
 }
