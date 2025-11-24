@@ -20,10 +20,12 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
   bfs::path sra_meta_fnp;
   std::string specimen_name_col = "sample_alias";
   bool make_run_accession_library_sample_name = false;
+  VecStr additional_seq_info_cols;
   ampliconAnalysisSetUp setUp(inputCommands);
   setUp.setOption(sra_meta_fnp, "--sra_meta_fnp", "sra_meta_fnp", true);
   setUp.setOption(panel_id, "--panel_id", "panel_id", true);
   setUp.setOption(specimen_name_col, "--specimen_name_col", "specimen_name_col");
+  setUp.setOption(additional_seq_info_cols, "--additional_seq_info_cols", "additional seq info cols to add");
 
   setUp.setOption(make_run_accession_library_sample_name, "--make_run_accession_library_sample_name", "make run accession library sample name");
 
@@ -52,12 +54,12 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
     "library_selection",
 
     "study_title","study_alias","collected_by"}, __PRETTY_FUNCTION__);
-
+  if (!additional_seq_info_cols.empty()) {
+    sra_meta_table.checkForColumnsThrow(additional_seq_info_cols, __PRETTY_FUNCTION__);
+  }
   // project_info, ProjectInfo
   auto project_info_tab = sra_meta_table.getColumns(VecStr{"study_accession", "study_title","study_alias","collected_by"}).getUniqueRows();
   Json::Value project_info_jsons;
-
-
 
   auto split_project_info_tab = project_info_tab.splitTableOnColumn("study_accession");
   std::unordered_map<std::string, uint32_t> project_indexes;
@@ -81,12 +83,20 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
   outJson_project_specimen_library["project_info"] = project_info_jsons;
   std::unordered_map<std::string, uint32_t> seq_info_key_to_id;
 
+  VecStr seq_info_cols{
+    "instrument_platform","instrument_model",
+    "library_layout","library_strategy","library_source",
+    "library_selection"};
+  if (!additional_seq_info_cols.empty()) {
+    addOtherVec(seq_info_cols, additional_seq_info_cols);
+  }
   {
     //sequencing_info, SequencingInfo
-    auto sequencing_info_tab = sra_meta_table.getColumns(VecStr{
-      "instrument_platform","instrument_model",
-      "library_layout","library_strategy","library_source",
-      "library_selection"}).getUniqueRows();
+
+
+    auto sequencing_info_tab = sra_meta_table.getColumns(seq_info_cols).getUniqueRows();
+
+
     Json::Value sequencing_info_jsons;
     uint32_t seq_info_count = 0;
     for (const auto & row : sequencing_info_tab) {
@@ -95,15 +105,12 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
       if (seq_info_count > 0) {
         sequencing_info_name += std::string("_") + estd::to_string(seq_info_count);
       }
-      auto seq_info_key = njh::conToStr(VecStr{
-        row[sequencing_info_tab.getColPos("instrument_platform")],
-        row[sequencing_info_tab.getColPos("instrument_model")],
-        row[sequencing_info_tab.getColPos("library_layout")],
-        row[sequencing_info_tab.getColPos("library_strategy")],
-        row[sequencing_info_tab.getColPos("library_source")],
-        row[sequencing_info_tab.getColPos("library_selection")]
-      },
-        "-");
+      VecStr current_seq_info_for_key;
+      for (const auto &col: seq_info_cols) {
+        current_seq_info_for_key.emplace_back(row[sequencing_info_tab.getColPos(col)]);
+      }
+      auto seq_info_key = njh::conToStr(current_seq_info_for_key,
+                                        "-");
       sequencing_info_json["sequencing_info_name"] = sequencing_info_name;
       sequencing_info_json["seq_platform"] = row[sequencing_info_tab.getColPos("instrument_platform")];
       sequencing_info_json["seq_instrument_model"] = row[sequencing_info_tab.getColPos("instrument_model")];
@@ -111,6 +118,9 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
       sequencing_info_json["library_strategy"] = row[sequencing_info_tab.getColPos("library_strategy")];
       sequencing_info_json["library_source"] = row[sequencing_info_tab.getColPos("library_source")];
       sequencing_info_json["library_selection"] = row[sequencing_info_tab.getColPos("library_selection")];
+      for (const auto & add : additional_seq_info_cols) {
+        sequencing_info_json[add] = row[sequencing_info_tab.getColPos(add)];
+      }
       seq_info_key_to_id[seq_info_key] = seq_info_count;
       ++seq_info_count;
       sequencing_info_jsons.append(sequencing_info_json);
@@ -128,9 +138,27 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
       "host_gravidity","age",
       "host_sex",
       "lat","lon",
-    "sample_accession","sample_storage",
+      "sample_accession","sample_storage",
       "study_accession"
     }).getUniqueRows();
+    {
+      std::unordered_map<std::string, uint32_t> specimen_name_count;
+      for (const auto & row : specimen_info_tab) {
+        ++specimen_name_count[row[specimen_info_tab.getColPos(specimen_name_col)]];
+      }
+      VecStr warnings;
+      for (const auto & count : specimen_name_count) {
+        if (count.second > 1) {
+          warnings.emplace_back(njh::pasteAsStr("specimen ", count.first, " found ", count.second, " times, specimen names should be unique"));
+        }
+      }
+      if (!warnings.empty()) {
+        std::stringstream ss;
+        ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << " " << "\n";
+        ss << njh::conToStr(warnings, "\n");
+        throw std::runtime_error{ss.str()};
+      }
+    }
 
     std::unordered_map<std::string, bool> column_testing;
     VecStr na_values_to_avoid{"NA", "missing", "na", "n/a", ""};
@@ -200,26 +228,46 @@ int ampliconAnalysisRunner::sraMetaToJson(const njh::progutils::CmdArgs &inputCo
   }
   // LibrarySampleInfo, library_sample_info
   {
-    auto library_sample_info_tab = sra_meta_table.getColumns(VecStr{
+    auto lib_samp_info_cols = VecStr{
       "library_name",
       "experiment_accession","fastq_ftp","run_accession",
 
-        specimen_name_col ,
-      "instrument_platform","instrument_model","library_layout","library_strategy","library_source",
-      "library_selection",
-    }).getUniqueRows();
+        specimen_name_col
+    };
+    addOtherVec(lib_samp_info_cols, seq_info_cols);
+
+    auto library_sample_info_tab = sra_meta_table.getColumns(lib_samp_info_cols).getUniqueRows();
+    {
+      auto lib_samp_name_test = "library_name";
+      if (make_run_accession_library_sample_name) {
+        lib_samp_name_test = "run_accession";
+      }
+      std::unordered_map<std::string, uint32_t> library_sample_name_count;
+      for (const auto & row : library_sample_info_tab) {
+        ++library_sample_name_count[row[library_sample_info_tab.getColPos(lib_samp_name_test)]];
+      }
+      VecStr warnings;
+      for (const auto & count : library_sample_name_count) {
+        if (count.second > 1) {
+          warnings.emplace_back(njh::pasteAsStr("library_sample ", count.first, " found ", count.second, " times, library_sample names should be unique"));
+        }
+      }
+      if (!warnings.empty()) {
+        std::stringstream ss;
+        ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << " " << "\n";
+        ss << njh::conToStr(warnings, "\n");
+        throw std::runtime_error{ss.str()};
+      }
+    }
     Json::Value library_sample_info_jsons;
 
     for (const auto &row: library_sample_info_tab) {
       Json::Value library_sample_info_json;
-      auto seq_info_key = njh::conToStr(VecStr{
-                                          row[library_sample_info_tab.getColPos("instrument_platform")],
-                                          row[library_sample_info_tab.getColPos("instrument_model")],
-                                          row[library_sample_info_tab.getColPos("library_layout")],
-                                          row[library_sample_info_tab.getColPos("library_strategy")],
-                                          row[library_sample_info_tab.getColPos("library_source")],
-                                          row[library_sample_info_tab.getColPos("library_selection")]
-                                        },
+      VecStr current_seq_info_for_key;
+      for (const auto &col: seq_info_cols) {
+        current_seq_info_for_key.emplace_back(row[library_sample_info_tab.getColPos(col)]);
+      }
+      auto seq_info_key = njh::conToStr(current_seq_info_for_key,
                                         "-");
       auto seq_info_index = seq_info_key_to_id[seq_info_key];
       auto specimen_id = specimen_info_name_to_id[row[library_sample_info_tab.getColPos(specimen_name_col)]];
