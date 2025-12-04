@@ -220,8 +220,15 @@ int bamExpRunner::BamFilterByChromsToBam(const njh::progutils::CmdArgs & inputCo
 					filterAlnCache.add(bAln);
 				} else {
 					auto search = filterAlnCache.get(bAln.Name);
-					if(doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality &&
-							doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality){
+					bool baln_pass = true;
+					bool search_pass = true;
+					if (njh::in(refData[bAln.RefID].RefName, chroms)) {
+						baln_pass = !(doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality);
+					}
+					if (njh::in(refData[search->RefID].RefName, chroms)) {
+						search_pass = !(doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality);
+					}
+					if(baln_pass && search_pass){
 						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
 						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
 						if(!doNotWriteFilterOff){
@@ -682,8 +689,15 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 					filterAlnCache.add(bAln);
 				} else {
 					auto search = filterAlnCache.get(bAln.Name);
-					if(doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality &&
-							doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality){
+					bool baln_pass = true;
+					bool search_pass = true;
+					if (njh::in(refData[bAln.RefID].RefName, chroms)) {
+						baln_pass = !(doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality);
+					}
+					if (njh::in(refData[search->RefID].RefName, chroms)) {
+						search_pass = !(doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality);
+					}
+					if(baln_pass && search_pass){
 						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
 						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
 						if(!doNotWriteFilterOff){
