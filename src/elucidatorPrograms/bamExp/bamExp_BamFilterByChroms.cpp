@@ -517,6 +517,7 @@ int bamExpRunner::BamGetImproperPairsOnChroms(const njh::progutils::CmdArgs & in
 	return 0;
 }
 
+
 int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommands){
 	std::string chromFnp;
 	OutOptions outOpts(bfs::path("out"));
@@ -689,15 +690,8 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 					filterAlnCache.add(bAln);
 				} else {
 					auto search = filterAlnCache.get(bAln.Name);
-					bool baln_pass = true;
-					bool search_pass = true;
-					if (njh::in(refData[bAln.RefID].RefName, chroms)) {
-						baln_pass = !(doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality);
-					}
-					if (njh::in(refData[search->RefID].RefName, chroms)) {
-						search_pass = !(doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality);
-					}
-					if(baln_pass && search_pass){
+					if(doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality &&
+							doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality){
 						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
 						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
 						if(!doNotWriteFilterOff){
@@ -907,7 +901,6 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 
 	return 0;
 }
-
 
 } // namespace njhseq
 
