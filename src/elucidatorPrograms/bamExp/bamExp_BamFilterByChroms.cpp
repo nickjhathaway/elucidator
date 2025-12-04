@@ -689,14 +689,10 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 					filterAlnCache.add(bAln);
 				} else {
 					auto search = filterAlnCache.get(bAln.Name);
-					bool baln_pass = true;
-					bool search_pass = true;
-					if (njh::in(refData[bAln.RefID].RefName, chroms)) {
-						baln_pass = !(doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality);
-					}
-					if (njh::in(refData[search->RefID].RefName, chroms)) {
-						search_pass = !(doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality);
-					}
+					//the below checks are in case any_mate is being used then only check for the soft clip filter and min mapp quality on the filter mapping alignments
+					//if any_mate is not being use then both will be checked 
+					bool baln_pass = !njh::in(refData[bAln.RefID].RefName, chroms) || (doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality);
+					bool search_pass = !njh::in(refData[search->RefID].RefName, chroms) || (doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality);
 					if(baln_pass && search_pass){
 						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
 						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
