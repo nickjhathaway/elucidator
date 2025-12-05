@@ -543,7 +543,7 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 
-	auto chroms = getInputValues(chromFnp, ",");
+	auto filter_chroms = getInputValues(chromFnp, ",");
 
 	BamTools::BamReader bReader;
 	bReader.Open(setUp.pars_.ioOptions_.firstName_.string());
@@ -591,13 +591,15 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	BamAlnsCache filterAlnCache;
 
 	auto refData = bReader.GetReferenceData();
+	std::vector<int32_t> filter_chroms_ref_ids;
 	//check to make sure chroms contains chromosome from the input bam file
 	VecStr missing;
-	for(const auto & chrom : chroms){
+	for(const auto & chrom : filter_chroms){
 		bool found = false;
-		for(const auto & ref : refData){
-			if(ref.RefName == chrom){
+		for(const auto & ref : iter::enumerate(refData)){
+			if(ref.element.RefName == chrom){
 				found = true;
+				filter_chroms_ref_ids.emplace_back(ref.index);
 				break;
 			}
 		}
@@ -605,6 +607,9 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 			missing.emplace_back(chrom);
 		}
 	}
+
+	auto onFilterChrom = [&filter_chroms_ref_ids](const int32_t refId){return njh::in(refId, filter_chroms_ref_ids);};
+
 	if(!missing.empty()){
 		std::stringstream ss;
 		ss << __PRETTY_FUNCTION__ << ", error " << "the following chromosomes were not found in the input bam file " << njh::conToStr(missing)<< "\n";
@@ -644,9 +649,19 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 		if (!bAln.IsPrimaryAlignment()) {
 			continue;
 		}
-		if (!bAln.IsPaired()) {
+
+		const bool bAln_isPaired = bAln.IsPaired();
+		const bool bAln_isMapped = bAln.IsMapped();
+		const bool bAln_mateMapped = bAln.IsMateMapped();
+		const bool bAln_isFirst = bAln.IsFirstMate();
+		const bool bAln_isProper = bAln.IsProperPair();
+		const bool bAln_onChrom      = bAln_isMapped && onFilterChrom(bAln.RefID);
+		const bool bAln_mateOnChrom  = bAln_mateMapped && onFilterChrom(bAln.MateRefID);
+
+
+		if (!bAln_isPaired) {
 			++input.singles_;
-			if (!bAln.IsMapped()) {
+			if (!bAln_isMapped) {
 				if (writeOutUnmappedSeparately) {
 					++unmapped.singles_;
 					unmappedSinglesWriter->openWrite(bamAlnToSeqInfo(bAln));
@@ -655,7 +670,7 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 					singlesWriter.openWrite(bamAlnToSeqInfo(bAln));
 				}
 			} else {
-				if (njh::in(refData[bAln.RefID].RefName, chroms)) {
+				if (bAln_onChrom) {
 					if(doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality){
 						if(!doNotWriteFilterOff){
 							filteredSinglesWriter.openWrite(bamAlnToSeqInfo(bAln));
@@ -677,12 +692,12 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 			}
 		} else {
 			++input.pairs_;
-			if (bAln.IsMapped() &&
-					bAln.IsMateMapped() &&
-					((any_mate && (njh::in(refData[bAln.RefID].RefName, chroms) ||
-					njh::in(refData[bAln.MateRefID].RefName, chroms))) || (njh::in(refData[bAln.RefID].RefName, chroms) &&
-					njh::in(refData[bAln.MateRefID].RefName, chroms))) &&
-					(!requireProperPair || bAln.IsProperPair())){
+			if (bAln_isMapped &&
+					bAln_mateMapped &&
+					((any_mate && (bAln_onChrom ||
+					bAln_mateOnChrom)) || (bAln_onChrom &&
+					bAln_mateOnChrom)) &&
+					(!requireProperPair || bAln_isProper)){
 				if (!filterAlnCache.has(bAln.Name)) {
 					//pair hasn't been added to cache yet so add to cache
 					//this only works if mate and first mate have the same name
@@ -691,13 +706,12 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 					auto search = filterAlnCache.get(bAln.Name);
 					//the below checks are in case any_mate is being used then only check for the soft clip filter and min mapp quality on the filter mapping alignments
 					//if any_mate is not being use then both will be checked 
-					bool baln_pass = !njh::in(refData[bAln.RefID].RefName, chroms) || (doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality);
-					bool search_pass = !njh::in(refData[search->RefID].RefName, chroms) || (doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality);
+					bool baln_pass = !bAln_onChrom || (doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality);
+					bool search_pass = !onFilterChrom(search->RefID) || (doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality);
 					if(baln_pass && search_pass){
-						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
-						++filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_;
+						filteredCountsByChrom[njh::pasteAsStr(refData[search->RefID].RefName, "--", refData[bAln.RefID].RefName)].pairs_ += 2;
 						if(!doNotWriteFilterOff){
-							if (bAln.IsFirstMate()) {
+							if (bAln_isFirst) {
 								filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
 							} else {
 								filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
@@ -705,17 +719,15 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 						}
 					} else {
 						if (writeOutUnmappedSeparately) {
-							++unmapped.pairs_;
-							++unmapped.pairs_;
-							if (bAln.IsFirstMate()) {
+							unmapped.pairs_ += 2;
+							if (bAln_isFirst) {
 								unmappedPairedWriter->openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
 							} else {
 								unmappedPairedWriter->openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
 							}
 						} else {
-							++kept.pairs_;
-							++kept.pairs_;
-							if (bAln.IsFirstMate()) {
+							kept.pairs_ += 2;
+							if (bAln_isFirst) {
 								pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
 							} else {
 								pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
@@ -734,22 +746,21 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 					auto search = alnCache.get(bAln.Name);
 					if (filterWithUnmappedMate &&
 					    (
-						    (bAln.IsMapped() && !bAln.IsMateMapped() && njh::in(refData[bAln.RefID].RefName, chroms) &&
+						    (bAln_isMapped && !bAln_mateMapped && bAln_onChrom &&
 						     doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality) ||
-						    (!bAln.IsMapped() && bAln.IsMateMapped() && njh::in(refData[bAln.MateRefID].RefName, chroms) &&
+						    (!bAln_isMapped && bAln_mateMapped && bAln_mateOnChrom &&
 						     doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality)
 					    )
 					) {
 						std::string filterChromName;
-						if (bAln.IsMapped() && !bAln.IsMateMapped()) {
+						if (bAln_isMapped && !bAln_mateMapped) {
 							filterChromName = njh::pasteAsStr("unmapped", "--", refData[bAln.RefID].RefName);
 						} else {
 							filterChromName = njh::pasteAsStr(refData[search->RefID].RefName, "--", "unmapped");
 						}
-						++filteredCountsByChrom[filterChromName].pairs_;
-						++filteredCountsByChrom[filterChromName].pairs_;
+						filteredCountsByChrom[filterChromName].pairs_ += 2;
 						if(!doNotWriteFilterOff){
-							if (bAln.IsFirstMate()) {
+							if (bAln_isFirst) {
 								filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
 							} else {
 								filteredPairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
@@ -758,24 +769,22 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 					} else {
 						if (writeOutUnmappedSeparately &&
 							(
-								(!bAln.IsMapped() && !bAln.IsMateMapped()) ||
+								(!bAln_isMapped && !bAln_mateMapped) ||
 							(
-								( bAln.IsMapped() &&!bAln.IsMateMapped()  && njh::in(refData[bAln.RefID].RefName, chroms)) ||
-							  (!bAln.IsMapped() && bAln.IsMateMapped()  && njh::in(refData[bAln.MateRefID].RefName, chroms))
+								( bAln_isMapped &&!bAln_mateMapped  && bAln_onChrom) ||
+							  (!bAln_isMapped && bAln_mateMapped  && bAln_mateOnChrom)
 							 )
 							 )
 							 ) {
-							++unmapped.pairs_;
-							++unmapped.pairs_;
-							if (bAln.IsFirstMate()) {
+							unmapped.pairs_ += 2;
+							if (bAln_isFirst) {
 								unmappedPairedWriter->openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
 							} else {
 								unmappedPairedWriter->openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
 							}
 						} else {
-							++kept.pairs_;
-							++kept.pairs_;
-							if (bAln.IsFirstMate()) {
+							kept.pairs_ += 2;
+							if (bAln_isFirst) {
 								pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(bAln), bamAlnToSeqInfo(*search),false));
 							} else {
 								pairedWriter.openWrite(PairedRead(bamAlnToSeqInfo(*search), bamAlnToSeqInfo(bAln),false));
@@ -838,55 +847,55 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 	totalsCountsOut << bname
 			<< "\t" << "keptPairs"
 			<< "\t" << kept.pairs_
-			<< "\t" << kept.pairs_/static_cast<long double>(input.pairs_)
+			<< "\t" << (input.pairs_ >0 ? kept.pairs_/static_cast<long double>(input.pairs_) : 0.0)
 			<< "\t" << input.pairs_ << std::endl;
 	totalsCountsOut << bname
 			<< "\t" << "keptSingles"
 			<< "\t" << kept.singles_
-			<< "\t" << kept.singles_/static_cast<long double>(input.singles_)
+			<< "\t" << (input.singles_ > 0 ? kept.singles_/static_cast<long double>(input.singles_): 0.0)
 			<< "\t" << input.singles_ << std::endl;
 
 	totalsCountsOut << bname
 			<< "\t" << "filteredPairs"
 			<< "\t" << filtered.pairs_
-			<< "\t" << filtered.pairs_/static_cast<long double>(input.pairs_)
+			<< "\t" << (input.pairs_ >0 ? filtered.pairs_/static_cast<long double>(input.pairs_): 0.0)
 			<< "\t" << input.pairs_ << std::endl;
 	totalsCountsOut << bname
 			<< "\t" << "filteredSingles"
 			<< "\t" << filtered.singles_
-			<< "\t" << filtered.singles_/static_cast<long double>(input.singles_)
+			<< "\t" << (input.singles_ > 0 ? filtered.singles_/static_cast<long double>(input.singles_) : 0.0)
 			<< "\t" << input.singles_ << std::endl;
 
 	if (writeOutUnmappedSeparately) {
 		totalsCountsOut << bname
 				<< "\t" << "unmappedPairs"
 				<< "\t" << unmapped.pairs_
-				<< "\t" << unmapped.pairs_ / static_cast<long double>(input.pairs_)
+				<< "\t" << (input.pairs_ >0 ? unmapped.pairs_ / static_cast<long double>(input.pairs_) : 0.0)
 				<< "\t" << input.pairs_ << std::endl;
 		totalsCountsOut << bname
 				<< "\t" << "unmappedSingles"
 				<< "\t" << unmapped.singles_
-				<< "\t" << unmapped.singles_ / static_cast<long double>(input.singles_)
+				<< "\t" << (input.singles_ > 0 ? unmapped.singles_ / static_cast<long double>(input.singles_) : 0.0)
 				<< "\t" << input.singles_ << std::endl;
 	}
 
 	totalsCountsOut << bname
 			<< "\t" << "keptOrphans"
 			<< "\t" << keptOrphans_
-			<< "\t"
-			<< "\t" << std::endl;
+			<< "\t" << (input.pairs_ >0 ? keptOrphans_ / static_cast<long double>(input.pairs_) : 0.0)
+			<< "\t" << input.pairs_ << std::endl;
 
 	totalsCountsOut << bname
 			<< "\t" << "filteredOrphans"
 			<< "\t" << filteredOrphans_
-			<< "\t"
-			<< "\t" << std::endl;
+			<< "\t" << (input.pairs_ >0 ? filteredOrphans_ / static_cast<long double>(input.pairs_) : 0.0)
+			<< "\t" << input.pairs_ << std::endl;
 	if (writeOutUnmappedSeparately) {
 		totalsCountsOut << bname
 				<< "\t" << "unmappedOrphans"
 				<< "\t" << unmappedOrphans_
-				<< "\t"
-				<< "\t" << std::endl;
+				<< "\t" << (input.pairs_ >0 ? unmappedOrphans_ / static_cast<long double>(input.pairs_) : 0.0)
+				<< "\t" << input.pairs_ << std::endl;
 	}
 
 	auto names = getVectorOfMapKeys(filteredCountsByChrom);
