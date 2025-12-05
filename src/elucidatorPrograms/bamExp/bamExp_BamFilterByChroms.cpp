@@ -551,8 +551,8 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 
 	BamTools::BamAlignment bAln;
 
-	auto singlesOpts = SeqIOOptions::genFastqOutGz(outOpts.outFilename_.string() + "");
-	auto pairedOpts = SeqIOOptions::genPairedOutGz(outOpts.outFilename_.string() + "");
+	auto singlesOpts = SeqIOOptions::genFastqOutGz(outOpts.outFilename_.string() + "_kept");
+	auto pairedOpts = SeqIOOptions::genPairedOutGz(outOpts.outFilename_.string() + "_kept");
 	auto filteredSinglesOpts = SeqIOOptions::genFastqOutGz(outOpts.outFilename_.string() + "_filteredOff");
 	auto filteredPairedOpts = SeqIOOptions::genPairedOutGz(outOpts.outFilename_.string() + "_filteredOff");
 	auto unmappedSinglesOpts = SeqIOOptions::genFastqOutGz(outOpts.outFilename_.string() + "_unmapped");
