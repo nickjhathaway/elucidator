@@ -551,12 +551,12 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 
 	BamTools::BamAlignment bAln;
 
-	auto singlesOpts = SeqIOOptions::genFastqOutGz(outOpts.outFilename_.string() + "_singles");
-	auto pairedOpts = SeqIOOptions::genPairedOutGz(outOpts.outFilename_.string() + "_pairs");
-	auto filteredSinglesOpts = SeqIOOptions::genFastqOutGz(outOpts.outFilename_.string() + "_filteredOffSingles");
-	auto filteredPairedOpts = SeqIOOptions::genPairedOutGz(outOpts.outFilename_.string() + "_filteredOffPairs");
-	auto unmappedSinglesOpts = SeqIOOptions::genFastqOutGz(outOpts.outFilename_.string() + "_unmappedSingles");
-	auto unmappedPairedOpts = SeqIOOptions::genPairedOutGz(outOpts.outFilename_.string() + "_unmappedPairs");
+	auto singlesOpts = SeqIOOptions::genFastqOutGz(outOpts.outFilename_.string() + "");
+	auto pairedOpts = SeqIOOptions::genPairedOutGz(outOpts.outFilename_.string() + "");
+	auto filteredSinglesOpts = SeqIOOptions::genFastqOutGz(outOpts.outFilename_.string() + "_filteredOff");
+	auto filteredPairedOpts = SeqIOOptions::genPairedOutGz(outOpts.outFilename_.string() + "_filteredOff");
+	auto unmappedSinglesOpts = SeqIOOptions::genFastqOutGz(outOpts.outFilename_.string() + "_unmapped");
+	auto unmappedPairedOpts = SeqIOOptions::genPairedOutGz(outOpts.outFilename_.string() + "_unmapped");
 
 	auto totalsCountsOpts = OutOptions(njh::files::make_path(outOpts.outFilename_.string() + "_totalReadCounts"), ".tab.txt");
 	auto filteredChromCountsOpts = OutOptions(njh::files::make_path(outOpts.outFilename_.string() + "_filteredByChrom"), ".tab.txt");
@@ -705,7 +705,7 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 				} else {
 					auto search = filterAlnCache.get(bAln.Name);
 					//the below checks are in case any_mate is being used then only check for the soft clip filter and min mapp quality on the filter mapping alignments
-					//if any_mate is not being use then both will be checked 
+					//if any_mate is not being use then both will be checked
 					bool baln_pass = !bAln_onChrom || (doesAlnPassSoftClipFilt(bAln) && bAln.MapQuality >= minMappingQuality);
 					bool search_pass = !onFilterChrom(search->RefID) || (doesAlnPassSoftClipFilt(*search) && search->MapQuality >= minMappingQuality);
 					if(baln_pass && search_pass){
