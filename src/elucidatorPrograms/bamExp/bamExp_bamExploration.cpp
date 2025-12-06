@@ -332,8 +332,8 @@ int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & 
 	out << "FileIndexPosition\tName\tPosition\tEndPosition\tQuerySize\tAlnSize\tcigar\tRefId\tRefName\tMateRefID\tMatePosition\tIsMateMapped\tIsMapped\tIsPaired\tIsPrimaryAlignment\tIsSecondary\tIsSupplementary\tIsFirstMate\tDuplicate\tRevComp\tMateRevComp\tProperPair\tMapQ" << "\n";
 	while(bReader.GetNextAlignment(bAln)){
 		if (njh::in(bAln.Name, names)) {
-			bool isSecondary     = (bAln.AlignmentFlag & 0x100) != 0;
-			bool isSupplementary = (bAln.AlignmentFlag & 0x800) != 0;
+			bool isSecondary     = (bAln.AlignmentFlag & 0x0100) != 0;
+			bool isSupplementary = (bAln.AlignmentFlag & 0x0800) != 0;
 			out << count
 					<< "\t" << bAln.Name
 					<< "\t" << bAln.Position
