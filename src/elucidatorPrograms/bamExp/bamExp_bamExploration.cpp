@@ -329,9 +329,11 @@ int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & 
 	uint32_t count = 0;
 
 	OutputStream out(outOpts);
-	out << "FileIndexPosition\tName\tPosition\tEndPosition\tQuerySize\tAlnSize\tcigar\tRefId\tRefName\tMateRefID\tMatePosition\tIsMateMapped\tIsMapped\tIsPaired\tIsPrimaryAlignment\tIsFirstMate\tDuplicate\tRevComp\tMateRevComp\tProperPair\tMapQ" << "\n";
+	out << "FileIndexPosition\tName\tPosition\tEndPosition\tQuerySize\tAlnSize\tcigar\tRefId\tRefName\tMateRefID\tMatePosition\tIsMateMapped\tIsMapped\tIsPaired\tIsPrimaryAlignment\tIsSecondary\tIsSupplementary\tIsFirstMate\tDuplicate\tRevComp\tMateRevComp\tProperPair\tMapQ" << "\n";
 	while(bReader.GetNextAlignment(bAln)){
 		if (njh::in(bAln.Name, names)) {
+			bool isSecondary     = (bAln.AlignmentFlag & 0x100) != 0;
+			bool isSupplementary = (bAln.AlignmentFlag & 0x800) != 0;
 			out << count
 					<< "\t" << bAln.Name
 					<< "\t" << bAln.Position
@@ -347,6 +349,8 @@ int bamExpRunner::BamGetFileIndexPositionOfName(const njh::progutils::CmdArgs & 
 					<< "\t" << njh::boolToStr(bAln.IsMapped())
 					<< "\t" << njh::boolToStr(bAln.IsPaired())
 					<< "\t" << njh::boolToStr(bAln.IsPrimaryAlignment())
+					<< "\t" << njh::boolToStr(isSecondary)
+					<< "\t" << njh::boolToStr(isSupplementary)
 					<< "\t" << njh::boolToStr(bAln.IsFirstMate())
 				  << "\t" << njh::boolToStr(bAln.IsDuplicate())
 					<< "\t" << njh::boolToStr(bAln.IsReverseStrand())
