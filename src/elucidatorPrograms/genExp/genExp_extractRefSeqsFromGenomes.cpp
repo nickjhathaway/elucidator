@@ -109,13 +109,13 @@ int genExpRunner::bioIndexGenome(const njh::progutils::CmdArgs & inputCommands){
 
   if(njh::sys::hasSysCommand("makeblastdb")) {
     programs.emplace_back("makeblastdb");
-  } else {
+  } else	if(setUp.pars_.verbose_){
     std::cerr << "Couldn't find " << "makeblastdb" << " skipping makeblastdb" << std::endl;
   }
 
 	if(njh::sys::hasSysCommand("minimap2")) {
 		programs.emplace_back("minimap2");
-	} else {
+	} else	if(setUp.pars_.verbose_){
 		std::cerr << "Couldn't find " << "minimap2" << " skipping minimap2" << std::endl;
 	}
 	programs.emplace_back("TwoBit");
