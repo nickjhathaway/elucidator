@@ -112,6 +112,12 @@ int genExpRunner::bioIndexGenome(const njh::progutils::CmdArgs & inputCommands){
   } else {
     std::cerr << "Couldn't find " << "makeblastdb" << " skipping makeblastdb" << std::endl;
   }
+
+	if(njh::sys::hasSysCommand("minimap2")) {
+		programs.emplace_back("minimap2");
+	} else {
+		std::cerr << "Couldn't find " << "minimap2" << " skipping minimap2" << std::endl;
+	}
 	programs.emplace_back("TwoBit");
 
 	njh::concurrent::LockableQueue<std::string> programsQueue(programs);
@@ -119,25 +125,28 @@ int genExpRunner::bioIndexGenome(const njh::progutils::CmdArgs & inputCommands){
 	std::function<void()> runIndex = [&programsQueue, &setUp, &genomeFnp](){
 	  BioCmdsUtils bioRunner(setUp.pars_.verbose_);
 	  std::string program;
+		std::vector<njh::sys::RunOutput> run_results;
     while (programsQueue.getVal(program)) {
       if ("bowtie2" == program) {
-        bioRunner.RunBowtie2Index(genomeFnp);
+        run_results.emplace_back(bioRunner.RunBowtie2Index(genomeFnp));
       } else if ("bwa" == program || "bwa-mem2" == program) {
-      	//have to runs things one after the other cause they create same files
+      	//have to runs things one after the other because they create same files
       	if (njh::sys::hasSysCommand("bwa-mem2")) {
-      		bioRunner.RunBwamem2Index(genomeFnp);
+      		run_results.emplace_back(bioRunner.RunBwamem2Index(genomeFnp));
       	}
       	if (njh::sys::hasSysCommand("bwa")) {
-      		bioRunner.RunBwaIndex(genomeFnp);
+      		run_results.emplace_back(bioRunner.RunBwaIndex(genomeFnp));
       	}
       } else if ("samtools" == program) {
-        bioRunner.RunSamtoolsFastaIndex(genomeFnp);
+        run_results.emplace_back(bioRunner.RunSamtoolsFastaIndex(genomeFnp));
       } else if ("picard" == program) {
-        bioRunner.RunPicardFastaSeqDict(genomeFnp);
+        run_results.emplace_back(bioRunner.RunPicardFastaSeqDict(genomeFnp));
       } else if ("TwoBit" == program) {
-        bioRunner.RunFaToTwoBit(genomeFnp);
+        run_results.emplace_back(bioRunner.RunFaToTwoBit(genomeFnp));
       } else if ("makeblastdb" == program) {
-        bioRunner.RunMakeblastdb(genomeFnp);
+        run_results.emplace_back(bioRunner.RunMakeblastdb(genomeFnp));
+      } else if ("minimap2" == program) {
+      	run_results.emplace_back(bioRunner.RunMinimap2Index(genomeFnp));
       }
     }
 	};
