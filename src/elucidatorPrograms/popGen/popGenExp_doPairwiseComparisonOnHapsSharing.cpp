@@ -498,12 +498,12 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 				groups_jaccard_stats[group.first] = getStatsOnVec(jacardWithinGroup);
 			}
 			for (const auto &idx: group.second) {
-				if (group.first == std::numeric_limits<uint32_t>::max()) {
+				if (lociCoveragePerSample[haps.sampNamesVec_[idx]] < minimumLociCoverageToKeepSamples) {
+					outFile << haps.sampNamesVec_[idx] << "\t" << "low_coverage_not_clustered";
+				} else if (group.first == std::numeric_limits<uint32_t>::max()) {
 					outFile << haps.sampNamesVec_[idx] << "\t" << "nogroup";
-
 				} else {
 					outFile << haps.sampNamesVec_[idx] << "\t" << group.first;
-
 				}
 				outFile << std::endl;
 			}
@@ -532,7 +532,26 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		outGroupCountsFile << std::endl;
 		for(const auto & group : groupIndexes) {
 			if(group.first == std::numeric_limits<uint32_t>::max()) {
-				outGroupCountsFile << "nogroup" << "\t" << group.second.size();
+				uint32_t low_coverage_not_clustered_cnt = 0;
+				for(const auto & samp_idx : group.second) {
+					if (lociCoveragePerSample[haps.sampNamesVec_[samp_idx]] < minimumLociCoverageToKeepSamples) {
+						low_coverage_not_clustered_cnt++;
+					}
+				}
+				outGroupCountsFile << "nogroup" << "\t" << group.second.size() - low_coverage_not_clustered_cnt;
+				outGroupCountsFile << "\t" << "NA"
+						<< "\t" << "NA"
+						<< "\t" << "NA"
+						<< "\t" << "NA";
+				if (!doNotBreakWithRmse) {
+					outGroupCountsFile << "\t" << "NA"
+							<< "\t" << "NA"
+							<< "\t" << "NA"
+							<< "\t" << "NA";
+				}
+				outGroupCountsFile << std::endl;
+
+				outGroupCountsFile << "low_coverage_not_clustered" << "\t" << low_coverage_not_clustered_cnt;
 				outGroupCountsFile << "\t" << "NA"
 						<< "\t" << "NA"
 						<< "\t" << "NA"
