@@ -905,9 +905,9 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 		filteredCountsOut << bname
 				<< "\t" << name
 				<< "\t" << filteredCountsByChrom[name].pairs_
-				<< "\t" << filteredCountsByChrom[name].pairs_/static_cast<long double>(filtered.pairs_)
+				<< "\t" << (filtered.pairs_ > 0 ? filteredCountsByChrom[name].pairs_/static_cast<long double>(filtered.pairs_) : 0.0)
 				<< "\t" << filteredCountsByChrom[name].singles_
-				<< "\t" << filteredCountsByChrom[name].singles_/static_cast<long double>(filtered.singles_) << std::endl;
+				<< "\t" << (filtered.singles_ > 0 ? filteredCountsByChrom[name].singles_/static_cast<long double>(filtered.singles_) : 0.0) << std::endl;
 	}
 
 	return 0;
