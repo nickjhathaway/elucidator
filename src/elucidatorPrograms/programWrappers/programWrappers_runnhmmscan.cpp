@@ -211,7 +211,9 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
+
 	setUp.processDefaultReader(VecStr{"fasta", "fastagz", "fastq", "fastqgz"}, true);
+	setUp.pars_.ioOptions_.includeWhiteSpaceInName_ = false;
   setUp.setOption(fullDomainTrimHmmCoverageCutOff, "--fullDomainTrimHmmCoverageCutOff", "full Domain Trim Hmm Coverage Cut Off for when trimming from first to last determined region");
 
 	setUp.setOption(defaultParameters, "--defaultParameters", "The default parameters given to hmmsearch");
@@ -399,13 +401,9 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
     noOverlapMergedFiltAllModelsTrimWriter.openOut();
 
 		while(reader.readNextRead(seq)){
-
 			if(njh::in(seq.name_, postProcessResults.filteredHitsMergedNonOverlapByQuery_)){
         std::vector<Bed6RecordCore> allRegions;
-
 				for(const auto & hitGroup : postProcessResults.filteredHitsMergedNonOverlapByQuery_[seq.name_]){
-
-
           Bed6RecordCore region = hitGroup.region_.genBedRecordCore();
           for(const auto & hit : hitGroup.hits_){
             if(hit.modelCoverage() >= fullDomainTrimHmmCoverageCutOff){
