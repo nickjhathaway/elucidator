@@ -53,6 +53,7 @@ popGenExpRunner::popGenExpRunner()
 					 addFunc("randomSamplingPloidyTest2", randomSamplingPloidyTest2, false),
 					 addFunc("variationWindowShoppingWithLastz", variationWindowShoppingWithLastz, false),
 					 addFunc("collectWindowInfoWithLastz", collectWindowInfoWithLastz, false),
+          	addFunc("calc_lins_concordance_correlation", calc_lins_concordance_correlation, false),
 					 //
            },
           "popGenExp") {}

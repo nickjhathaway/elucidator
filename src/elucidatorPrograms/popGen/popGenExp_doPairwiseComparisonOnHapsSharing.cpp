@@ -151,6 +151,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		auto mat = BasicPointMatrix<double>::readInBasicMatrix(distFnp, dbscanPars);
 		watch.startNewLap("Adding nodes");
 		std::vector<std::vector<double>> pairwiseRMSEs;
+	  std::vector<std::vector<double>> pairwise_cccs;
 		std::vector<std::vector<double>> hapsEncodeBySampRelAbund;
 		if(doNotBreakWithRmse) {
 			// mat.setGraph(pars.numThreads, setUp.pars_.verbose_);
@@ -209,9 +210,11 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 			njh::concurrent::runVoidFunctionThreaded(addToGraph, pars.numThreads);
 		} else {
 			pairwiseRMSEs = std::vector<std::vector<double>>(haps.sampNames_.size(), std::vector<double>(haps.sampNames_.size(),1.0));
-			for(size_t pos = 0; pos < haps.sampNames_.size(); ++pos){
+		  pairwise_cccs = std::vector<std::vector<double>>(haps.sampNames_.size(), std::vector<double>(haps.sampNames_.size(),0.0));
+		  for(size_t pos = 0; pos < haps.sampNames_.size(); ++pos){
 				//set diagonal
 				pairwiseRMSEs[pos][pos] = 0;
+		    pairwise_cccs[pos][pos] = 1.0;
 			}
 			//first fill the relative abundance vector with the input relative abundance
 			hapsEncodeBySampRelAbund = std::vector<std::vector<double>> (haps.sampNames_.size());
@@ -282,7 +285,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 
 			std::function<void()> addToGraph =
 					[&graphMut, &pairFactory,&pairBatchCount,&belowEp,&mat, &haps,&hapsEncodeBySampRelAbund,&rmseCutOffToBreak,
-						&pairwiseRMSEs, &lociCoveragePerSample,
+						&pairwiseRMSEs, &pairwise_cccs, &lociCoveragePerSample,
 						&minimumLociCoverageToKeepSamples]() {
 						PairwisePairFactory::PairwisePairVec pairs;
 						std::vector<PairDist> belowEps;
@@ -295,6 +298,8 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 								//auto dist = mat.points_[pair.row_]->euDist(*mat.points_[pair.col_]);
 								auto dist = mat.points_[pair.row_]->vals_[pair.col_];
 								if (dist < mat.dbscanPars_.eps_) {
+								  std::vector<double> row_values;
+								  std::vector<double> col_values;
 									std::vector<double> rmses;
 									double sum = 0;
 									for(const auto tpos : iter::range(haps.tarNamesVec_.size())) {
@@ -302,15 +307,20 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 											double current_sum = 0;
 											for(const auto hapPos : iter::range(haps.numberOfHapsPerTarget_[tpos])) {
 												current_sum += std::pow(hapsEncodeBySampRelAbund[pair.col_][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[pair.row_][haps.tarStart_[tpos] + hapPos],2);
-												sum += std::pow(hapsEncodeBySampRelAbund[pair.col_][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[pair.row_][haps.tarStart_[tpos] + hapPos],2);
+												sum +=         std::pow(hapsEncodeBySampRelAbund[pair.col_][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[pair.row_][haps.tarStart_[tpos] + hapPos],2);
+											  row_values.emplace_back(hapsEncodeBySampRelAbund[pair.row_][haps.tarStart_[tpos] + hapPos]);
+											  col_values.emplace_back(hapsEncodeBySampRelAbund[pair.col_][haps.tarStart_[tpos] + hapPos]);
 											}
 											rmses.emplace_back(std::sqrt(current_sum));
 										}
 									}
 									//only add if mean RMSE is less than the cut off
 									//if(vectorMean(rmses) < rmseCutOffToBreak) {
+								  auto ccc_calc = ConcordanceCalculator::lins_ccc_with_ci(row_values, col_values);
 									pairwiseRMSEs[pair.col_][pair.row_] = std::sqrt(sum/rmses.size());
 									pairwiseRMSEs[pair.row_][pair.col_] = std::sqrt(sum/rmses.size());
+								  pairwise_cccs[pair.col_][pair.row_] = ccc_calc.ccc;
+								  pairwise_cccs[pair.row_][pair.col_] = ccc_calc.ccc;
 									// std::cout << __FILE__ << " : " << __LINE__ << std::endl;
 									// std::cout << "lociCoveragePerSample[haps.sampNamesVec_[pair.row_]]: " << lociCoveragePerSample[haps.sampNamesVec_[pair.row_]] << std::endl;
 									// std::cout << "lociCoveragePerSample[haps.sampNamesVec_[pair.col_]]: " << lociCoveragePerSample[haps.sampNamesVec_[pair.col_]] << std::endl;
@@ -436,7 +446,10 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 			uint32_t pairBatchCount = 100;
 			PairwisePairFactory allGroupedSamplesFactory(allGroupedIndices.size());
 			std::function<void()> calcRMSEs =
-					[&allGroupedSamplesFactory,&pairwiseRMSEs, &pairBatchCount,
+					[&allGroupedSamplesFactory,
+					  &pairwiseRMSEs,
+					  &pairwise_cccs,
+					  &pairBatchCount,
 						&haps,&hapsEncodeBySampRelAbund,&allGroupedIndices]() {
 						PairwisePairFactory::PairwisePairVec pairs;
 						while(allGroupedSamplesFactory.setNextPairs(pairs, pairBatchCount)) {
@@ -444,21 +457,28 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 								auto colSamplePos = allGroupedIndices[groupedPair.col_];
 								auto rowSamplePos = allGroupedIndices[groupedPair.row_];
 								std::vector<double> rmses;
+							  std::vector<double> row_values;
+							  std::vector<double> col_values;
 								double sum = 0;
 								for(const auto tpos : iter::range(haps.tarNamesVec_.size())) {
 									if(haps.targetsEncodeBySamp_[colSamplePos][tpos]  + haps.targetsEncodeBySamp_[rowSamplePos][tpos] == 2) {
 										double current_sum = 0;
 										for(const auto hapPos : iter::range(haps.numberOfHapsPerTarget_[tpos])) {
 											current_sum += std::pow(hapsEncodeBySampRelAbund[colSamplePos][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[rowSamplePos][haps.tarStart_[tpos] + hapPos],2);
-											sum += std::pow(hapsEncodeBySampRelAbund[colSamplePos][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[rowSamplePos][haps.tarStart_[tpos] + hapPos],2);
+											sum +=         std::pow(hapsEncodeBySampRelAbund[colSamplePos][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[rowSamplePos][haps.tarStart_[tpos] + hapPos],2);
+										  row_values.emplace_back(hapsEncodeBySampRelAbund[rowSamplePos][haps.tarStart_[tpos] + hapPos]);
+										  col_values.emplace_back(hapsEncodeBySampRelAbund[colSamplePos][haps.tarStart_[tpos] + hapPos]);
 										}
 										rmses.emplace_back(std::sqrt(current_sum));
 									}
 								}
 								//only add if mean RMSE is less than the cut off
 								//if(vectorMean(rmses) < rmseCutOffToBreak) {
+							  auto ccc_calc = ConcordanceCalculator::lins_ccc_with_ci(row_values, col_values);
 								pairwiseRMSEs[colSamplePos][rowSamplePos] = std::sqrt(sum/rmses.size());
 								pairwiseRMSEs[rowSamplePos][colSamplePos] = std::sqrt(sum/rmses.size());
+							  pairwise_cccs[colSamplePos][rowSamplePos] = ccc_calc.ccc;
+							  pairwise_cccs[rowSamplePos][colSamplePos] = ccc_calc.ccc;
 							}
 						}
 			};
@@ -468,18 +488,22 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		}
 		std::unordered_map<uint32_t, std::map<std::string, double>> groups_jaccard_stats;
 		std::unordered_map<uint32_t, std::map<std::string, double>> groups_rmse_stats;
+	  std::unordered_map<uint32_t, std::map<std::string, double>> groups_ccc_stats;
 		for(const auto & group : groupIndexes) {
 
 			if (!doNotBreakWithRmse && std::numeric_limits<uint32_t>::max() != group.first) {
 				std::vector<double> rmsesWithinGroup;
+			  std::vector<double> cccsWithinGroup;
 				PairwisePairFactory pfac(group.second.size());
 				PairwisePairFactory::PairwisePair pair;
 				// std::cout << "group: " << group.first << std::endl;
 				while (pfac.setNextPair(pair)) {
 					// std::cout << haps.sampNamesVec_[group.second[pair.col_]] << " vs " << haps.sampNamesVec_[group.second[pair.row_]] << " rmse: " << pairwiseRMSEs[group.second[pair.col_]][group.second[pair.row_]] << std::endl;
 					rmsesWithinGroup.emplace_back(pairwiseRMSEs[group.second[pair.col_]][group.second[pair.row_]]);
+				  cccsWithinGroup.emplace_back(pairwise_cccs[group.second[pair.col_]][group.second[pair.row_]]);
 				}
 				groups_rmse_stats[group.first] = getStatsOnVec(rmsesWithinGroup);
+			  groups_ccc_stats[group.first]  = getStatsOnVec(cccsWithinGroup);
 				// std::cout << njh::conToStr(rmsesWithinGroup, ",") << std::endl;
 				// std::cout << "stats: " << njh::json::toJson(stats) << std::endl;
 				// std::cout << std::endl;
@@ -509,7 +533,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 			}
 		}
 		if (writeOutGroupedRMSEs) {
-			OutputStream outGroupCountsFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "rmses_of_groupped_samples.tsv.gz")));
+			OutputStream outGroupCountsFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "rmses_of_grouped_samples.tsv.gz")));
 			outGroupCountsFile << "sample";
 			for (const auto & sample : allGroupedIndices) {
 				outGroupCountsFile << "\t" << haps.sampNamesVec_[sample];
@@ -523,12 +547,29 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 				outGroupCountsFile << std::endl;
 			}
 		}
+
+	  if (writeOutGroupedRMSEs) {
+	    OutputStream outGroupCountsFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "ccc_of_grouped_samples.tsv.gz")));
+	    outGroupCountsFile << "sample";
+	    for (const auto & sample : allGroupedIndices) {
+	      outGroupCountsFile << "\t" << haps.sampNamesVec_[sample];
+	    }
+	    outGroupCountsFile << std::endl;
+	    for (const auto & sampleCol : allGroupedIndices) {
+	      outGroupCountsFile << haps.sampNamesVec_[sampleCol];
+	      for (const auto & sampleRow : allGroupedIndices) {
+	        outGroupCountsFile << "\t" << pairwise_cccs[sampleRow][sampleCol];
+	      }
+	      outGroupCountsFile << std::endl;
+	    }
+	  }
 		OutputStream outGroupCountsFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_by_jacardTargetsShared_groupCounts.tsv")));
 		outGroupCountsFile << "group\tsampleCount";
 		outGroupCountsFile << "\tmin_jaccard\tmedian_jaccard\tmean_jaccard\tmax_jaccard";
 		if (!doNotBreakWithRmse) {
 			outGroupCountsFile << "\tmin_rmse\tmedian_rmse\tmean_rmse\tmax_rmse";
 		}
+	  outGroupCountsFile << "\tmin_ccc\tmedian_ccc\tmean_ccc\tmax_ccc";
 		outGroupCountsFile << std::endl;
 		for(const auto & group : groupIndexes) {
 			if(group.first == std::numeric_limits<uint32_t>::max()) {
@@ -543,12 +584,16 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 						<< "\t" << "NA"
 						<< "\t" << "NA"
 						<< "\t" << "NA";
-				if (!doNotBreakWithRmse) {
-					outGroupCountsFile << "\t" << "NA"
-							<< "\t" << "NA"
-							<< "\t" << "NA"
-							<< "\t" << "NA";
-				}
+        if (!doNotBreakWithRmse) {
+          outGroupCountsFile << "\t" << "NA"
+              << "\t" << "NA"
+              << "\t" << "NA"
+              << "\t" << "NA";
+        }
+        outGroupCountsFile << "\t" << "NA"
+            << "\t" << "NA"
+            << "\t" << "NA"
+            << "\t" << "NA";
 				outGroupCountsFile << std::endl;
 
 				outGroupCountsFile << "low_coverage_not_clustered" << "\t" << low_coverage_not_clustered_cnt;
@@ -562,6 +607,10 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 							<< "\t" << "NA"
 							<< "\t" << "NA";
 				}
+        outGroupCountsFile << "\t" << "NA"
+            << "\t" << "NA"
+            << "\t" << "NA"
+            << "\t" << "NA";
 				outGroupCountsFile << std::endl;
 			} else {
 				outGroupCountsFile << group.first << "\t" << group.second.size();
@@ -575,6 +624,10 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 							<< "\t" << groups_rmse_stats[group.first]["mean"]
 							<< "\t" << groups_rmse_stats[group.first]["max"];
 				}
+        outGroupCountsFile << "\t" << groups_ccc_stats[group.first]["min"]
+            << "\t" << groups_ccc_stats[group.first]["median"]
+            << "\t" << groups_ccc_stats[group.first]["mean"]
+            << "\t" << groups_ccc_stats[group.first]["max"];
 				outGroupCountsFile << std::endl;
 			}
 		}

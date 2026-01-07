@@ -73,6 +73,7 @@ programWrapperRunner::programWrapperRunner()
 						addFunc("genPossiblePrimersWithPrimer3", genPossiblePrimersWithPrimer3, false),
 						addFunc("genPossiblePrimerPairsWithPrimer3", genPossiblePrimerPairsWithPrimer3, false),
 						addFunc("runnhmmscan", runnhmmscan, false),
+          	addFunc("runNucmerToBed", runNucmerToBed, false),
            },//
           "programWrapper") {}
 

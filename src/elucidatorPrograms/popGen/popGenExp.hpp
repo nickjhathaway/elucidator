@@ -58,6 +58,9 @@ class popGenExpRunner : public njh::progutils::ProgramRunner {
 	static int collectWindowInfoWithLastz(const njh::progutils::CmdArgs & inputCommands);
 
 	//
+	static int calc_lins_concordance_correlation(const njh::progutils::CmdArgs & inputCommands);
+
+
 };
 
 } //  namespace njhseq

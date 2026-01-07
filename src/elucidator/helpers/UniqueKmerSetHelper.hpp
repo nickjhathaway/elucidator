@@ -119,6 +119,8 @@ public:
 	struct ProcessReadForExtractingPars {
 		CompareReadToSetPars compPars;
 
+		bool filter_on_entropy = false;
+
 		bool filterOnNs = false;
 		QualFilteringPars qPars;
 		std::shared_ptr<ReadCheckerQualCheck> qual_checker;
