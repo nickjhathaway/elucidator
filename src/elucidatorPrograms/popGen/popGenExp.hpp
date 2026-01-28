@@ -36,6 +36,8 @@ class popGenExpRunner : public njh::progutils::ProgramRunner {
  public:
 	popGenExpRunner();
 
+  static int cluster_samples_using_ccc_of_microhaps(const njh::progutils::CmdArgs & inputCommands);
+  static int calc_pairwise_ccc_on_haps_sharing(const njh::progutils::CmdArgs & inputCommands);
 	static int doPairwiseComparisonOnHapsSharing(const njh::progutils::CmdArgs & inputCommands);
 	static int tajimatest_testingExample(const njh::progutils::CmdArgs & inputCommands);
 	static int tajimatest(const njh::progutils::CmdArgs & inputCommands);

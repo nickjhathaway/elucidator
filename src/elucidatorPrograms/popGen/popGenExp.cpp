@@ -54,6 +54,8 @@ popGenExpRunner::popGenExpRunner()
 					 addFunc("variationWindowShoppingWithLastz", variationWindowShoppingWithLastz, false),
 					 addFunc("collectWindowInfoWithLastz", collectWindowInfoWithLastz, false),
           	addFunc("calc_lins_concordance_correlation", calc_lins_concordance_correlation, false),
+            addFunc("calc_pairwise_ccc_on_haps_sharing", calc_pairwise_ccc_on_haps_sharing, false),
+            addFunc("cluster_samples_using_ccc_of_microhaps", cluster_samples_using_ccc_of_microhaps, false),
 					 //
            },
           "popGenExp") {}

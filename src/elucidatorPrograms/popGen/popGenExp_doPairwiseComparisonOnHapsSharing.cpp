@@ -21,6 +21,282 @@ namespace njhseq {
 
 
 
+int popGenExpRunner::calc_pairwise_ccc_on_haps_sharing(const njh::progutils::CmdArgs & inputCommands){
+	double minimumLociCoverageToKeepSamples = 0.90;
+	HapsEncodedMatrix::SetWithExternalPars pars;
+  uint32_t pairwise_factor_bin_size = 1000;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+  setUp.setOption(pairwise_factor_bin_size, "--pairwise_factor_bin_size", "pairwise_factor_bin_size");
+	setUp.setOption(minimumLociCoverageToKeepSamples, "--minimumLociCoverageToKeepSamples", "minimum Loci Coverage To Keep Samples in post analysis steps, must have reads for at least this frction of the total loci");
+  pars.setDefaults(setUp);
+
+  setUp.processDirectoryOutputName(bfs::path(bfs::basename(pars.tableFnp)).string() + "_ccc_rmse_TODAY", true);
+	setUp.finishSetUp(std::cout);
+
+	setUp.startARunLog(setUp.pars_.directoryName_);
+
+
+	setUp.timer_.setLapName("initial");
+	setUp.timer_.startNewLap("encode haplotypes");
+  HapsEncodedMatrix haps(pars);
+	setUp.timer_.startNewLap("get hap probabilities");
+	haps.calcHapProbs();
+	setUp.timer_.startNewLap("add relative abundances");
+  haps.add_relative_abundance();
+  setUp.timer_.startNewLap("calc rmse and ccc");
+	auto measures = haps.calc_ccc_rmse_measures(pairwise_factor_bin_size, setUp.pars_.verbose_);
+  setUp.timer_.startNewLap("writing output matrices");
+	OutputStream outSampNamesOut(njh::files::make_path(setUp.pars_.directoryName_, "sampleNames.tab.txt"));
+	outSampNamesOut << njh::conToStr(haps.sampNamesVec_, "\n") << std::endl;
+  {
+	  auto ccc_out_fnp = njh::files::make_path(setUp.pars_.directoryName_, "ccc_on_targets_shared.tab.txt.gz");
+	  OutputStream ccc_out(ccc_out_fnp);
+	  for(const auto & ccc_row : measures.ccc){
+	    ccc_out << njh::conToStr(ccc_row, "\t") << std::endl;
+	  }
+  }
+  {
+	  auto rmse_out_fnp = njh::files::make_path(setUp.pars_.directoryName_, "rmse_on_targets_shared.tab.txt.gz");
+	  OutputStream rmse_out(rmse_out_fnp);
+	  for(const auto & rmse_row : measures.rmse){
+	    rmse_out << njh::conToStr(rmse_row, "\t") << std::endl;
+	  }
+  }
+
+  {
+	  auto targets_shared_out_fnp = njh::files::make_path(setUp.pars_.directoryName_, "targets_shared.tab.txt.gz");
+	  OutputStream targets_shared_out(targets_shared_out_fnp);
+	  for(const auto & targets_shared_row : measures.targets_shared){
+	    targets_shared_out << njh::conToStr(targets_shared_row, "\t") << std::endl;
+	  }
+  }
+  setUp.timer_.startNewLap("getting loci coverage info");
+
+	std::unordered_map<std::string, double> lociCoveragePerSample = haps.getTargetCoveragePerSample();
+	{
+		table numTargetsPerSample = haps.getTableNumberTargetsPerSample(minimumLociCoverageToKeepSamples);
+		OutputStream lociCoverageOut(njh::files::make_path(setUp.pars_.directoryName_, "loci_coverage_per_sample_info.tsv"));
+		numTargetsPerSample.outPutContents(lociCoverageOut, "\t");
+	}
+	setUp.timer_.logLapTimes(setUp.rLog_.runLogFile_, true, 6, true);
+	return 0;
+}
+
+
+int popGenExpRunner::cluster_samples_using_ccc_of_microhaps(const njh::progutils::CmdArgs & inputCommands){
+	double minimumLociCoverageToKeepSamples = 0.90;
+  double concordance_cut_off = 0.95;
+  njhUndirWeightedGraph<double, std::vector<double>>::dbscanPars dbscanPars;
+  // dbscanPars.eps_ = 0.50;
+  dbscanPars.minEpNeighbors_ = 2;
+	HapsEncodedMatrix::SetWithExternalPars pars;
+  uint32_t pairwise_factor_bin_size = 1000;
+	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
+	setUp.processDebug();
+  setUp.setOption(pairwise_factor_bin_size, "--pairwise_factor_bin_size", "pairwise_factor_bin_size");
+	setUp.setOption(minimumLociCoverageToKeepSamples, "--minimumLociCoverageToKeepSamples", "minimum Loci Coverage To Keep Samples in post analysis steps, must have reads for at least this frction of the total loci");
+  setUp.setOption(concordance_cut_off, "--concordance_cut_off", "concordance cut off");
+  dbscanPars.eps_ = 1 - concordance_cut_off;
+  setUp.setOption(dbscanPars.minEpNeighbors_, "--min_group_size", "The minimum number of samples to group together");
+
+  pars.setDefaults(setUp);
+
+  setUp.processDirectoryOutputName(bfs::path(bfs::basename(pars.tableFnp)).string() + "_ccc_rmse_TODAY", true);
+	setUp.finishSetUp(std::cout);
+
+	setUp.startARunLog(setUp.pars_.directoryName_);
+
+
+	setUp.timer_.setLapName("initial");
+	setUp.timer_.startNewLap("encode haplotypes");
+  HapsEncodedMatrix haps(pars);
+	setUp.timer_.startNewLap("get hap probabilities");
+	haps.calcHapProbs();
+	setUp.timer_.startNewLap("add relative abundances");
+  haps.add_relative_abundance();
+  setUp.timer_.startNewLap("calc rmse and ccc");
+	auto measures = haps.calc_ccc_rmse_measures(pairwise_factor_bin_size, setUp.pars_.verbose_);
+  setUp.timer_.startNewLap("writing output matrices");
+	OutputStream outSampNamesOut(njh::files::make_path(setUp.pars_.directoryName_, "sampleNames.tab.txt"));
+	outSampNamesOut << njh::conToStr(haps.sampNamesVec_, "\n") << std::endl;
+  {
+	  auto ccc_out_fnp = njh::files::make_path(setUp.pars_.directoryName_, "ccc_on_targets_shared.tab.txt.gz");
+	  OutputStream ccc_out(ccc_out_fnp);
+	  for(const auto & ccc_row : measures.ccc){
+	    ccc_out << njh::conToStr(ccc_row, "\t") << std::endl;
+	  }
+  }
+  {
+	  auto targets_shared_out_fnp = njh::files::make_path(setUp.pars_.directoryName_, "targets_shared.tab.txt.gz");
+	  OutputStream targets_shared_out(targets_shared_out_fnp);
+	  for(const auto & targets_shared_row : measures.targets_shared){
+	    targets_shared_out << njh::conToStr(targets_shared_row, "\t") << std::endl;
+	  }
+  }
+  setUp.timer_.startNewLap("getting loci coverage info");
+
+	std::unordered_map<std::string, double> lociCoveragePerSample = haps.getTargetCoveragePerSample();
+	{
+		table numTargetsPerSample = haps.getTableNumberTargetsPerSample(minimumLociCoverageToKeepSamples);
+		OutputStream lociCoverageOut(njh::files::make_path(setUp.pars_.directoryName_, "loci_coverage_per_sample_info.tsv"));
+		numTargetsPerSample.outPutContents(lociCoverageOut, "\t");
+	}
+  setUp.timer_.setLapName("transforming matrix");
+	{
+	  //for the distance functions below to work, have to transform CCC so that the lower the better, CCC runs from -1 to 1, so below will transform it so it runs from 0 to 2 with 0 being CCC of 1, 1 being CCC 0, and 2 being CCC -2
+	  PairwisePairFactory pairFactory(measures.ccc.size());
+	  uint32_t pairBatchCount = 100000;
+	  std::function<void()> transform_ccc =
+    [&pairFactory,
+      &pairBatchCount,
+      &measures]() {
+      PairwisePairFactory::PairwisePairVec pairs;
+      while (pairFactory.setNextPairs(pairs, pairBatchCount)) {
+        for (const auto & pair : pairs.pairs_) {
+          measures.ccc[pair.row_][pair.col_] = -1 * (measures.ccc[pair.row_][pair.col_] - 1);
+          measures.ccc[pair.col_][pair.row_] = measures.ccc[pair.row_][pair.col_];
+        }
+      }
+    };
+	  njh::concurrent::runVoidFunctionThreaded(transform_ccc, pars.numThreads);
+    // fill the diagonal
+	  for (uint32_t pos = 0; pos < measures.ccc.size(); ++pos) {
+	    measures.ccc[pos][pos] = 0;
+	  }
+	}
+  setUp.timer_.setLapName("building matrix");
+  auto dist_graph = std::make_unique<njhUndirWeightedGraph<double, std::vector<double> > > ();
+  for (const auto & pos : iter::range(measures.ccc.size())) {
+    dist_graph->addNode(estd::to_string(pos), measures.ccc[pos]);
+  }
+	{
+	  uint32_t belowEp = 0;
+	  PairwisePairFactory pairFactory(measures.ccc.size());
+	  uint32_t pairBatchCount = 100000;
+	  std::mutex graphMut;
+	  struct PairDist {
+	    PairDist(const PairwisePairFactory::PairwisePair & pair, double dist) :
+          pair_(pair), dist_(dist) {
+	    }
+	    PairwisePairFactory::PairwisePair pair_;
+	    double dist_;
+	  };
+
+    std::function<void()> addToGraph =
+        [&graphMut, &pairFactory,&pairBatchCount,&belowEp,
+          &measures, &dbscanPars,
+          &haps, &dist_graph,
+          &lociCoveragePerSample, &minimumLociCoverageToKeepSamples]() {
+      PairwisePairFactory::PairwisePairVec pairs;
+      std::vector<PairDist> belowEps;
+      while (pairFactory.setNextPairs(pairs, pairBatchCount)) {
+        for (const auto &pair: pairs.pairs_) {
+          if (lociCoveragePerSample[haps.sampNamesVec_[pair.row_]] < minimumLociCoverageToKeepSamples ||
+              lociCoveragePerSample[haps.sampNamesVec_[pair.col_]] < minimumLociCoverageToKeepSamples) {
+            continue;
+          }
+          auto dist = measures.ccc[pair.row_][pair.col_];
+          if (dist < dbscanPars.eps_) {
+            belowEps.emplace_back(PairDist{pair, dist});
+          }
+        }
+      }
+      if (!belowEps.empty()) {
+        std::lock_guard<std::mutex> lock(graphMut);
+        belowEp += belowEps.size();
+        for (const auto &bEps: belowEps) {
+          dist_graph->addEdge(estd::to_string(bEps.pair_.row_),
+                              estd::to_string(bEps.pair_.col_),
+                              bEps.dist_);
+        }
+      }
+    };
+	  njh::concurrent::runVoidFunctionThreaded(addToGraph, pars.numThreads);
+	}
+
+  setUp.timer_.startNewLap("dbscan");
+  dist_graph->dbscan(dbscanPars);
+
+  setUp.timer_.startNewLap("output");
+  OutputStream outFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_by_ccc.tsv")));
+  outFile << "sample\tgroup";
+  outFile << std::endl;
+
+  std::map<uint32_t, std::vector<uint32_t>> groupIndexes;
+  std::vector<uint32_t> allGroupedIndices;
+  for(const auto & n : iter::enumerate(dist_graph->nodes_)) {
+    groupIndexes[n.element->group_].emplace_back(n.index);
+    if (std::numeric_limits<uint32_t>::max() != n.element->group_) {
+      allGroupedIndices.emplace_back(n.index);
+    }
+  }
+  std::unordered_map<uint32_t, std::map<std::string, double> > groups_ccc_stats;
+  for (const auto &group: groupIndexes) {
+    std::vector<double> cccsWithinGroup; {
+      PairwisePairFactory pfac(group.second.size());
+      PairwisePairFactory::PairwisePair pair;
+      while (pfac.setNextPair(pair)) {
+        //have to transform back due to the previous transform
+        cccsWithinGroup.emplace_back(measures.ccc[group.second[pair.col_]][group.second[pair.row_]] * -1 + 1);
+      }
+    }
+    groups_ccc_stats[group.first] = getStatsOnVec(cccsWithinGroup);
+    for (const auto &idx: group.second) {
+      if (lociCoveragePerSample[haps.sampNamesVec_[idx]] < minimumLociCoverageToKeepSamples) {
+        outFile << haps.sampNamesVec_[idx] << "\t" << "low_coverage_not_clustered";
+      } else if (group.first == std::numeric_limits<uint32_t>::max()) {
+        outFile << haps.sampNamesVec_[idx] << "\t" << "nogroup";
+      } else {
+        outFile << haps.sampNamesVec_[idx] << "\t" << group.first;
+      }
+      outFile << std::endl;
+    }
+  }
+  OutputStream outGroupCountsFile(
+    OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_by_ccc_groupCounts.tsv")));
+  outGroupCountsFile << "group\tsample_count";
+  outGroupCountsFile << "\tmin_ccc\tmedian_ccc\tmean_ccc\tmax_ccc";
+  outGroupCountsFile << std::endl;
+  for (const auto &group: groupIndexes) {
+    if (group.first == std::numeric_limits<uint32_t>::max()) {
+      uint32_t low_coverage_not_clustered_cnt = 0;
+      for (const auto &samp_idx: group.second) {
+        if (lociCoveragePerSample[haps.sampNamesVec_[samp_idx]] < minimumLociCoverageToKeepSamples) {
+          low_coverage_not_clustered_cnt++;
+        }
+      }
+      outGroupCountsFile << "nogroup" << "\t" << group.second.size() - low_coverage_not_clustered_cnt;
+      outGroupCountsFile << "\t" << "NA"
+          << "\t" << "NA"
+          << "\t" << "NA"
+          << "\t" << "NA";
+      outGroupCountsFile << std::endl;
+
+      outGroupCountsFile << "low_coverage_not_clustered" << "\t" << low_coverage_not_clustered_cnt;
+      outGroupCountsFile << "\t" << "NA"
+          << "\t" << "NA"
+          << "\t" << "NA"
+          << "\t" << "NA";
+      outGroupCountsFile << std::endl;
+    } else {
+      outGroupCountsFile << group.first << "\t" << group.second.size();
+      outGroupCountsFile << "\t" << groups_ccc_stats[group.first]["min"]
+          << "\t" << groups_ccc_stats[group.first]["median"]
+          << "\t" << groups_ccc_stats[group.first]["mean"]
+          << "\t" << groups_ccc_stats[group.first]["max"];
+      outGroupCountsFile << std::endl;
+    }
+  }
+	setUp.timer_.logLapTimes(setUp.rLog_.runLogFile_, true, 6, true);
+	return 0;
+}
+
+
+
+
 int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::CmdArgs & inputCommands){
 	bool writeOutDistMatrices = false;
 	bool clusterOnJacardIndexShared = false;
@@ -152,10 +428,8 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		watch.startNewLap("Adding nodes");
 		std::vector<std::vector<double>> pairwiseRMSEs;
 	  std::vector<std::vector<double>> pairwise_cccs;
-		std::vector<std::vector<double>> hapsEncodeBySampRelAbund;
 		if(doNotBreakWithRmse) {
 			// mat.setGraph(pars.numThreads, setUp.pars_.verbose_);
-
 			mat.graph_ = std::make_unique<
 					njhUndirWeightedGraph<double,
 							std::shared_ptr<BasicPointMatrix<double>::BasicPoint>>>();
@@ -216,45 +490,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 				pairwiseRMSEs[pos][pos] = 0;
 		    pairwise_cccs[pos][pos] = 1.0;
 			}
-			//first fill the relative abundance vector with the input relative abundance
-			hapsEncodeBySampRelAbund = std::vector<std::vector<double>> (haps.sampNames_.size());
-			for(const auto & samp : haps.sampNames_){
-				hapsEncodeBySampRelAbund[haps.sampNamesKey_[samp]] = std::vector<double>(haps.totalHaps_, 0);
-			}
-			TableReader reReadHapTab(TableIOOpts(InOptions(haps.pars_.tableFnp), "\t", true));
-			VecStr row;
-			while(reReadHapTab.getNextRow(row)){
-				const auto& samp = row[reReadHapTab.header_.getColPos(haps.pars_.sampleCol)];
-				const auto& tar = row[reReadHapTab.header_.getColPos(haps.pars_.targetNameCol)];
-				if(!haps.pars_.selectSamples.empty() && !njh::in(samp, haps.pars_.selectSamples)){
-					continue;
-				}
-				if(!haps.pars_.selectTargets.empty() && !njh::in(tar, haps.pars_.selectTargets)){
-					continue;
-				}
-				const auto& hapName = row[reReadHapTab.header_.getColPos(haps.pars_.popIDCol)];
-				auto rBund = njh::StrToNumConverter::stoToNum<double>(row[reReadHapTab.header_.getColPos(haps.pars_.relAbundCol)]);
-				auto tKey = haps.tarNameKey_[tar];
-				auto hKey = haps.hapNamesKey_[tar][hapName];
-				//				if(rBund > 0 && rBund < 1){
-				//					std::cout << rBund << std::endl;
-				//				}
-				hapsEncodeBySampRelAbund[haps.sampNamesKey_[samp]][haps.tarStart_[tKey] + hKey] = rBund;
-			}
-			//now recalculate the relative abundance to be 0-1
-			for(const auto pos : iter::range(haps.sampNames_.size())) {
-				for(const auto tpos : iter::range(haps.tarNamesVec_.size())) {
-					if(haps.targetsEncodeBySamp_[pos][tpos] == 1) {
-						double sum = 0;
-						for(const auto hapPos : iter::range(haps.numberOfHapsPerTarget_[tpos])) {
-							sum += hapsEncodeBySampRelAbund[pos][haps.tarStart_[tpos] + hapPos];
-						}
-						for(const auto hapPos : iter::range(haps.numberOfHapsPerTarget_[tpos])) {
-							hapsEncodeBySampRelAbund[pos][haps.tarStart_[tpos] + hapPos] = hapsEncodeBySampRelAbund[pos][haps.tarStart_[tpos] + hapPos]/sum;
-						}
-					}
-				}
-			}
+      haps.add_relative_abundance();
 
 			if (0 == pars.numThreads) {
 				pars.numThreads = 1;
@@ -284,7 +520,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 			};
 
 			std::function<void()> addToGraph =
-					[&graphMut, &pairFactory,&pairBatchCount,&belowEp,&mat, &haps,&hapsEncodeBySampRelAbund,&rmseCutOffToBreak,
+					[&graphMut, &pairFactory,&pairBatchCount,&belowEp,&mat, &haps,&rmseCutOffToBreak,
 						&pairwiseRMSEs, &pairwise_cccs, &lociCoveragePerSample,
 						&minimumLociCoverageToKeepSamples]() {
 						PairwisePairFactory::PairwisePairVec pairs;
@@ -306,10 +542,10 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 										if(haps.targetsEncodeBySamp_[pair.col_][tpos]  + haps.targetsEncodeBySamp_[pair.row_][tpos] == 2) {
 											double current_sum = 0;
 											for(const auto hapPos : iter::range(haps.numberOfHapsPerTarget_[tpos])) {
-												current_sum += std::pow(hapsEncodeBySampRelAbund[pair.col_][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[pair.row_][haps.tarStart_[tpos] + hapPos],2);
-												sum +=         std::pow(hapsEncodeBySampRelAbund[pair.col_][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[pair.row_][haps.tarStart_[tpos] + hapPos],2);
-											  row_values.emplace_back(hapsEncodeBySampRelAbund[pair.row_][haps.tarStart_[tpos] + hapPos]);
-											  col_values.emplace_back(hapsEncodeBySampRelAbund[pair.col_][haps.tarStart_[tpos] + hapPos]);
+												current_sum += std::pow(haps.hapsEncodeBySampRelAbund_[pair.col_][haps.tarStart_[tpos] + hapPos] - haps.hapsEncodeBySampRelAbund_[pair.row_][haps.tarStart_[tpos] + hapPos],2);
+												sum +=         std::pow(haps.hapsEncodeBySampRelAbund_[pair.col_][haps.tarStart_[tpos] + hapPos] - haps.hapsEncodeBySampRelAbund_[pair.row_][haps.tarStart_[tpos] + hapPos],2);
+											  row_values.emplace_back(haps.hapsEncodeBySampRelAbund_[pair.row_][haps.tarStart_[tpos] + hapPos]);
+											  col_values.emplace_back(haps.hapsEncodeBySampRelAbund_[pair.col_][haps.tarStart_[tpos] + hapPos]);
 											}
 											rmses.emplace_back(std::sqrt(current_sum));
 										}
@@ -430,7 +666,6 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		watch.startNewLap("output");
 		//mat.writeGraph(outFile);
 		outFile << "sample\tgroup";
-
 		outFile << std::endl;
 		std::map<uint32_t, std::vector<uint32_t>> groupIndexes;
 		std::vector<uint32_t> allGroupedIndices;
@@ -450,7 +685,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 					  &pairwiseRMSEs,
 					  &pairwise_cccs,
 					  &pairBatchCount,
-						&haps,&hapsEncodeBySampRelAbund,&allGroupedIndices]() {
+						&haps,&allGroupedIndices]() {
 						PairwisePairFactory::PairwisePairVec pairs;
 						while(allGroupedSamplesFactory.setNextPairs(pairs, pairBatchCount)) {
 							for(const auto & groupedPair : pairs.pairs_) {
@@ -464,10 +699,10 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 									if(haps.targetsEncodeBySamp_[colSamplePos][tpos]  + haps.targetsEncodeBySamp_[rowSamplePos][tpos] == 2) {
 										double current_sum = 0;
 										for(const auto hapPos : iter::range(haps.numberOfHapsPerTarget_[tpos])) {
-											current_sum += std::pow(hapsEncodeBySampRelAbund[colSamplePos][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[rowSamplePos][haps.tarStart_[tpos] + hapPos],2);
-											sum +=         std::pow(hapsEncodeBySampRelAbund[colSamplePos][haps.tarStart_[tpos] + hapPos] - hapsEncodeBySampRelAbund[rowSamplePos][haps.tarStart_[tpos] + hapPos],2);
-										  row_values.emplace_back(hapsEncodeBySampRelAbund[rowSamplePos][haps.tarStart_[tpos] + hapPos]);
-										  col_values.emplace_back(hapsEncodeBySampRelAbund[colSamplePos][haps.tarStart_[tpos] + hapPos]);
+											current_sum += std::pow(haps.hapsEncodeBySampRelAbund_[colSamplePos][haps.tarStart_[tpos] + hapPos] - haps.hapsEncodeBySampRelAbund_[rowSamplePos][haps.tarStart_[tpos] + hapPos],2);
+											sum +=         std::pow(haps.hapsEncodeBySampRelAbund_[colSamplePos][haps.tarStart_[tpos] + hapPos] - haps.hapsEncodeBySampRelAbund_[rowSamplePos][haps.tarStart_[tpos] + hapPos],2);
+										  row_values.emplace_back(haps.hapsEncodeBySampRelAbund_[rowSamplePos][haps.tarStart_[tpos] + hapPos]);
+										  col_values.emplace_back(haps.hapsEncodeBySampRelAbund_[colSamplePos][haps.tarStart_[tpos] + hapPos]);
 										}
 										rmses.emplace_back(std::sqrt(current_sum));
 									}
@@ -563,6 +798,8 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	      outGroupCountsFile << std::endl;
 	    }
 	  }
+
+
 		OutputStream outGroupCountsFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_by_jacardTargetsShared_groupCounts.tsv")));
 		outGroupCountsFile << "group\tsampleCount";
 		outGroupCountsFile << "\tmin_jaccard\tmedian_jaccard\tmean_jaccard\tmax_jaccard";
@@ -933,7 +1170,6 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	setUp.timer_.logLapTimes(setUp.rLog_.runLogFile_, true, 6, true);
 	return 0;
 }
-
 
 
 } //namespace njhseq
