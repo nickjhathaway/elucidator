@@ -61,6 +61,7 @@ seqUtilsModRunner::seqUtilsModRunner()
     	addFunc("breakUpSeqsOnPattern", breakUpSeqsOnPattern, false),
     	addFunc("correctHPRunsBasedOnSurroundingBaseCounts", correctHPRunsBasedOnSurroundingBaseCounts, false),
     	addFunc("revCompFastqFast", revCompFastqFast, false),
+      addFunc("correctHPRunsBasedOnReference", correctHPRunsBasedOnReference, false),
 
 
 

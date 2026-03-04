@@ -1,6 +1,8 @@
 //
 // Created by Nicholas Hathaway on 2/2/25.
 //
+#include <njhseq/alignment/aligner/aligner.hpp>
+
 #include "seqUtilsModRunner.hpp"
 #include <njhseq/objects/counters/DNABaseCounter.hpp>
 #include <njhseq/IO/SeqIO/SeqIO.hpp>
@@ -9,6 +11,150 @@
 
 
 namespace njhseq {
+
+
+int seqUtilsModRunner::correctHPRunsBasedOnReference(const njh::progutils::CmdArgs & inputCommands) {
+
+  uint32_t min_hp_run_size_to_correct = 8;
+  uint32_t min_hp_run_gap_size = 3;
+
+
+  seqInfo ref_seq;
+  seqSetUp setUp(inputCommands);
+  setUp.description_ = "correct possible errors in homopolymer runs by compring to a reference";
+  setUp.processVerbose();
+  setUp.processDebug();
+  setUp.processGap();
+  setUp.processScoringPars();
+  setUp.processAlnInfoInput();
+  setUp.processSeq(ref_seq, "--ref", "Reference sequence to correct with", true, "reference");
+  setUp.setOption(min_hp_run_gap_size, "--min_hp_run_gap_size", "the minimum size of the homopolymer run in which homopolymer gaps are corrected in");
+  setUp.setOption(min_hp_run_size_to_correct, "--min_hp_run_size_to_correct", "the inserted or deleted homopolymer has to be this long to correct");
+  setUp.processDefaultReader(true);
+
+  setUp.finishSetUp(std::cout);
+
+  uint64_t max_size = len(ref_seq);
+  {
+
+    SeqIO reader(setUp.pars_.ioOptions_);
+    reader.openIn();
+    seqInfo seq;
+    while (reader.in_.readNextRead(seq)) {
+      readVec::getMaxLength(seq, max_size);
+    }
+  }
+  if (setUp.pars_.verbose_) {
+    std::cout << "gap scoring:" << std::endl;
+    std::cout << setUp.pars_.gapInfo_.toJson() << std::endl;
+    std::cout << "count_end_gaps: " << setUp.pars_.colOpts_.alignOpts_.countEndGaps_ << std::endl;
+  }
+  aligner alignerObj(max_size, setUp.pars_.gapInfo_, setUp.pars_.scoring_, setUp.pars_.colOpts_.alignOpts_.countEndGaps_);
+  alignerObj.processAlnInfoInput(setUp.pars_.alnInfoDirName_);
+
+  SeqIO reader(setUp.pars_.ioOptions_);
+  reader.openIn();
+  reader.openOut();
+
+  struct HpCorrection {
+    HpCorrection(uint32_t start, uint32_t end, char base, bool delete_hp) : start_(start), end_(end),
+      base_(base), delete_hp_(delete_hp) {
+    }
+    uint32_t start_{std::numeric_limits<uint32_t>::max()};
+    uint32_t end_{std::numeric_limits<uint32_t>::max()};
+    char base_{' '};
+    bool delete_hp_{false}; //! whether or not to delete this postion
+    uint32_t size() const {
+      return end_ - start_;
+    }
+  };
+  seqInfo seq;
+  while (reader.in_.readNextRead(seq)) {
+    // alignerObj.parts_.setMaxSize(ref_seq.seq_.size());
+    alignerObj.alignCacheGlobal(ref_seq, seq);
+    if (setUp.pars_.debug_) {
+      alignerObj.alignObjectA_.seqBase_.outPutSeqAnsi(std::cout);
+      alignerObj.alignObjectB_.seqBase_.outPutSeqAnsi(std::cout);
+    }
+
+    alignerObj.profileAlignment(ref_seq, seq, false, false, false);
+    //first correct for homopolymers insertions
+    std::vector<HpCorrection> corrections;
+    for (const auto &gap: alignerObj.comp_.distances_.alignmentGaps_) {
+      // std::cout << __FILE__ << " " << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
+      // std::cout << "gap.second.gapedSequence_.size() <= 2: " <<  njh::colorBool(gap.second.gapedSequence_.size() <= 2)<< std::endl;
+
+      if (gap.second.gapedSequence_.size() <= 3) {
+        //check if is homopolymer
+        // std::cout << __FILE__ << " " << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
+        // std::cout << "seqUtil::isHomopolyer(gap.second.gapedSequence_): " <<  njh::colorBool(seqUtil::isHomopolyer(gap.second.gapedSequence_))<< std::endl;
+
+        if (seqUtil::isHomopolyer(gap.second.gapedSequence_)) {
+          uint32_t size_of_ref_homopolymer = 0;
+          uint32_t size_of_query_homopolymer = gap.second.gapedSequence_.size();
+          //search backwards
+          if (gap.first != 0) {
+            //for now let's require that both homopolymers be the same location in both ref and query
+            uint32_t cursor = gap.first;
+            while (cursor > 0) {
+              --cursor;
+              if (alignerObj.alignObjectA_.seqBase_.seq_[cursor] == gap.second.gapedSequence_.front() &&
+                  alignerObj.alignObjectB_.seqBase_.seq_[cursor] == gap.second.gapedSequence_.front()) {
+                ++size_of_ref_homopolymer;
+                ++size_of_query_homopolymer;
+              } else {
+                break;
+              }
+            }
+          }
+          if (gap.first + 1 != alignerObj.alignObjectB_.seqBase_.seq_.size()) {
+            //for now let's require that both homopolymers be the same location in both ref and query
+            uint32_t cursor = gap.first;
+            while (cursor + 1 < alignerObj.alignObjectB_.seqBase_.seq_.size()) {
+              ++cursor;
+              if (alignerObj.alignObjectA_.seqBase_.seq_[cursor] == gap.second.gapedSequence_.front() &&
+                  alignerObj.alignObjectB_.seqBase_.seq_[cursor] == gap.second.gapedSequence_.front()) {
+                ++size_of_ref_homopolymer;
+                ++size_of_query_homopolymer;
+              } else {
+                break;
+              }
+            }
+          }
+          if (size_of_query_homopolymer > 7 && size_of_ref_homopolymer > 7) {
+            corrections.emplace_back(gap.second.seqPos_, gap.second.seqPos_ + gap.second.gapedSequence_.size(),
+                                     gap.second.gapedSequence_.front(), gap.second.ref_);
+          }
+        }
+      }
+    }
+    for (const auto &cor: iter::reversed(corrections)) {
+      if (setUp.pars_.verbose_) {
+        std::cout << "cor.start_:" << cor.start_ << std::endl;
+        std::cout << "cor.end_:" << cor.end_ << std::endl;
+        std::cout << "cor.size():" << cor.size() << std::endl;
+        std::cout << "cor.base_:" << cor.base_ << std::endl;
+        std::cout << "cor.delete_hp_:" << njh::colorBool(cor.delete_hp_) << std::endl;
+      }
+      if (cor.delete_hp_) {
+        seq.removeBases(cor.start_, cor.size());
+      } else {
+        // std::cout << "std::string(cor.base_, cor.size()): " << std::string(cor.size(), cor.base_) << std::endl;
+        seq.insert(cor.start_, std::string(cor.size(), cor.base_));
+      }
+      reader.write(seq);
+    }
+    if (setUp.pars_.debug_) {
+      alignerObj.alignCacheGlobal(ref_seq, seq);
+      alignerObj.alignObjectA_.seqBase_.outPutSeqAnsi(std::cout);
+      alignerObj.alignObjectB_.seqBase_.outPutSeqAnsi(std::cout);
+      std::cout << std::endl;
+    }
+  }
+  alignerObj.processAlnInfoOutput(setUp.pars_.outAlnInfoDirName_, setUp.pars_.verbose_);
+
+	return 0;
+}
 
 int seqUtilsModRunner::correctHPRunsBasedOnSurroundingBaseCounts(const njh::progutils::CmdArgs & inputCommands) {
 
@@ -61,7 +207,7 @@ int seqUtilsModRunner::correctHPRunsBasedOnSurroundingBaseCounts(const njh::prog
   std::vector<char> allBases = {'A', 'C', 'G', 'T'};
 
   seqSetUp setUp(inputCommands);
-  setUp.description_ = "count the pattern surrounding homopolymer runs";
+  setUp.description_ = "correct homopolymers based on the pattern surrounding homopolymer runs";
 
   setUp.processVerbose();
   setUp.processDebug();
