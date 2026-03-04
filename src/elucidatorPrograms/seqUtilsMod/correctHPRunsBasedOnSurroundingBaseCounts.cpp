@@ -16,7 +16,7 @@ namespace njhseq {
 int seqUtilsModRunner::correctHPRunsBasedOnReference(const njh::progutils::CmdArgs & inputCommands) {
 
   uint32_t min_hp_run_size_to_correct = 8;
-  uint32_t min_hp_run_gap_size = 3;
+  uint32_t max_hp_run_gap_size = 3;
 
 
   seqInfo ref_seq;
@@ -28,8 +28,8 @@ int seqUtilsModRunner::correctHPRunsBasedOnReference(const njh::progutils::CmdAr
   setUp.processScoringPars();
   setUp.processAlnInfoInput();
   setUp.processSeq(ref_seq, "--ref", "Reference sequence to correct with", true, "reference");
-  setUp.setOption(min_hp_run_gap_size, "--min_hp_run_gap_size", "the minimum size of the homopolymer run in which homopolymer gaps are corrected in");
-  setUp.setOption(min_hp_run_size_to_correct, "--min_hp_run_size_to_correct", "the inserted or deleted homopolymer has to be this long to correct");
+  setUp.setOption(max_hp_run_gap_size, "--max_hp_run_gap_size", "the minimum size (inclusive) of the homopolymer run in which homopolymer gaps are corrected in");
+  setUp.setOption(min_hp_run_size_to_correct, "--min_hp_run_size_to_correct", "the inserted or deleted homopolymer has to be this size(inclusive) or less to correct");
   setUp.processDefaultReader(true);
 
   setUp.finishSetUp(std::cout);
@@ -84,7 +84,7 @@ int seqUtilsModRunner::correctHPRunsBasedOnReference(const njh::progutils::CmdAr
       // std::cout << __FILE__ << " " << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
       // std::cout << "gap.second.gapedSequence_.size() <= 2: " <<  njh::colorBool(gap.second.gapedSequence_.size() <= 2)<< std::endl;
 
-      if (gap.second.gapedSequence_.size() <= 3) {
+      if (gap.second.gapedSequence_.size() <= max_hp_run_gap_size) {
         //check if is homopolymer
         // std::cout << __FILE__ << " " << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
         // std::cout << "seqUtil::isHomopolyer(gap.second.gapedSequence_): " <<  njh::colorBool(seqUtil::isHomopolyer(gap.second.gapedSequence_))<< std::endl;
@@ -121,7 +121,7 @@ int seqUtilsModRunner::correctHPRunsBasedOnReference(const njh::progutils::CmdAr
               }
             }
           }
-          if (size_of_query_homopolymer > 7 && size_of_ref_homopolymer > 7) {
+          if (size_of_query_homopolymer >= max_hp_run_gap_size && size_of_ref_homopolymer >= max_hp_run_gap_size) {
             corrections.emplace_back(gap.second.seqPos_, gap.second.seqPos_ + gap.second.gapedSequence_.size(),
                                      gap.second.gapedSequence_.front(), gap.second.ref_);
           }
@@ -142,8 +142,8 @@ int seqUtilsModRunner::correctHPRunsBasedOnReference(const njh::progutils::CmdAr
         // std::cout << "std::string(cor.base_, cor.size()): " << std::string(cor.size(), cor.base_) << std::endl;
         seq.insert(cor.start_, std::string(cor.size(), cor.base_));
       }
-      reader.write(seq);
     }
+    reader.write(seq);
     if (setUp.pars_.debug_) {
       alignerObj.alignCacheGlobal(ref_seq, seq);
       alignerObj.alignObjectA_.seqBase_.outPutSeqAnsi(std::cout);
