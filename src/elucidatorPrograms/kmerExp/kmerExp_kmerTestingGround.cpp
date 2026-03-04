@@ -837,7 +837,7 @@ int kmerExpRunner::getKmerSharedBlocksBetweenGenomes(const njh::progutils::CmdAr
 					<< "\t" << genome.second.at(name)->kInfo_->kmers_.size() << std::endl;
 		}
 
-		OutputStream outBed(njh::files::make_path(perGenomeUniCountsDir, genome.first + "_uniqueKmerNumbers.bed"));
+		OutputStream outBed(njh::files::make_path(perGenomeUniCountsDir, genome.first + "_uniqueKmerPerGenome.bed"));
 		for(const auto & name : recordNames){
 			std::vector<uint32_t> positions;
 			for(const auto & k : genome.second.at(name)->kInfo_->kmers_){
