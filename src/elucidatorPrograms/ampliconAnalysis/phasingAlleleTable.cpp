@@ -277,8 +277,10 @@ public:
 
 };
 
+
 int ampliconAnalysisRunner::phasingAlleleTable(
         const njh::progutils::CmdArgs & inputCommands) {
+  bool skip_missing_allele_table_regions = false;
   bfs::path allele_table_fnp;
   std::string sample_id_col = "library_sample_name";
   std::string target_id_col = "target_name";
@@ -295,6 +297,7 @@ int ampliconAnalysisRunner::phasingAlleleTable(
   setUp.processDebug();
   setUp.setOption(second_pass_prune_min_abundance, "--second_pass_prune_min_abundance", "second_pass_prune_min_abundance");
   setUp.setOption(second_pass_freq_cut_off, "--second_pass_freq_cut_off", "second_pass_freq_cut_off");
+  setUp.setOption(skip_missing_allele_table_regions, "--skip_missing_allele_table_regions", "skip missing allele table regions");
 
   setUp.setOption(no_second_pass, "--no_second_pass", "no_second_pass");
 
@@ -313,41 +316,60 @@ int ampliconAnalysisRunner::phasingAlleleTable(
   setUp.startARunLog(setUp.pars_.directoryName_ );
 
 
-  auto regions = getBeds(regions_fnp);
-  if (regions.empty()) {
+  auto input_regions = getBeds(regions_fnp);
+  if (input_regions.empty()) {
     std::stringstream ss;
     ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << " no regions read in from: " <<  regions_fnp << "\n";
     throw std::runtime_error{ss.str()};
   }
-  BedUtility::coordSort(regions);
+  BedUtility::coordSort(input_regions);
 
   table allele_table(allele_table_fnp, "\t", true);
   allele_table.checkForColumnsThrow({sample_id_col, target_id_col, relative_abundance_col, identifier_col}, __PRETTY_FUNCTION__);
 
   //check for target and sample names
-  VecStr missing_targets;
-  auto targets_in_allele_table = allele_table.getColumnLevels(target_id_col);
-  for (const auto & tar : regions) {
-    if (njh::notIn(tar->name_, targets_in_allele_table)) {
-      missing_targets.emplace_back(tar->name_);
-    }
-  }
-  VecStr missing_samples;
-  auto samples_in_allele_table = allele_table.getColumnLevels(sample_id_col);
-  for (const auto & sample : sample_order) {
-    if (njh::notIn(sample, samples_in_allele_table)) {
-      missing_samples.emplace_back(sample);
-    }
+  VecStr targets_in_regions{};
+  for (const auto & reg : input_regions) {
+    targets_in_regions.emplace_back(reg->name_);
   }
 
-  if (!missing_samples.empty() || !missing_targets.empty()) {
+  auto targets_in_allele_table = allele_table.getColumnLevels(target_id_col);
+  njh::sort(targets_in_allele_table);
+  njh::sort(targets_in_regions);
+  auto targets_decomp = njh::decompose_sets_container(targets_in_regions, targets_in_allele_table);
+
+  std::vector<std::shared_ptr<Bed6RecordCore>> regions;
+  if (skip_missing_allele_table_regions) {
+    for (const auto & reg : input_regions) {
+      if (njh::in(reg->name_, targets_decomp.shared)) {
+        regions.emplace_back(reg);
+      }
+    }
+    targets_decomp.only_in_first.clear();
+  } else {
+    regions = input_regions;
+  }
+
+  auto samples_in_allele_table = allele_table.getColumnLevels(sample_id_col);
+  njh::sort(sample_order);
+  njh::sort(samples_in_allele_table);
+  auto samples_decomp = njh::decompose_sets_container(sample_order, samples_in_allele_table);
+
+
+  if (!samples_decomp.only_in_first.empty() || !samples_decomp.only_in_second.empty() || !targets_decomp.only_in_first.empty() || !targets_decomp.only_in_second.empty()) {
     std::stringstream ss;
     ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << " " << "\n";
-    if (!missing_samples.empty()) {
-      ss << "missing the following sample from allele_table: " << njh::conToStr(missing_samples, ",") << "\n";
+    if (!samples_decomp.only_in_first.empty()) {
+      ss << "missing the following sample from allele_table: " << njh::conToStr(samples_decomp.only_in_first, ",") << "\n";
     }
-    if (!missing_targets.empty()) {
-      ss << "missing the following targets from allele_table: " << njh::conToStr(missing_targets, ",") << "\n";
+    if (!samples_decomp.only_in_second.empty()) {
+      ss << "missing the following sample from sample_order: " << njh::conToStr(samples_decomp.only_in_second, ",") << "\n";
+    }
+    if (!targets_decomp.only_in_first.empty()) {
+      ss << "missing the following targets from allele_table: " << njh::conToStr(targets_decomp.only_in_first, ",") << "\n";
+    }
+    if (!targets_decomp.only_in_second.empty()) {
+      ss << "missing the following targets from regions_fnp: " << njh::conToStr(targets_decomp.only_in_second, ",") << "\n";
     }
     throw std::runtime_error{ss.str()};
   }
