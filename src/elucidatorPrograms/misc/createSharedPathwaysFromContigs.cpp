@@ -1632,9 +1632,9 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 										 << "\t" << seqs.size()
 										 << "\t" << divMeasures.alleleNumber_
 										 << "\t" << divMeasures.heterozygostiy_
-										 << "\t" << divMeasures.ploidy3_.expectedCOIForPloidy_[3]
-										 << "\t" << divMeasures.ploidy4_.expectedCOIForPloidy_[4]
-										 << "\t" << divMeasures.ploidy5_.expectedCOIForPloidy_[5]
+										 << "\t" << divMeasures.expected_k_heterozygosities[3].k_heterozygosity_
+										 << "\t" << divMeasures.expected_k_heterozygosities[4].k_heterozygosity_
+										 << "\t" << divMeasures.expected_k_heterozygosities[5].k_heterozygosity_
 										 << "\t" << divMeasures.singlets_
 										 << "\t" << divMeasures.doublets_
 										 << "\t" << divMeasures.effectiveNumOfAlleles_
@@ -2336,9 +2336,9 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 															<< "\t" << seqsFromLargestSubRegion.size()
 															<< "\t" << divMeasures.alleleNumber_
 															<< "\t" << divMeasures.heterozygostiy_
-															<< "\t" << divMeasures.ploidy3_.expectedCOIForPloidy_[3]
-															<< "\t" << divMeasures.ploidy4_.expectedCOIForPloidy_[4]
-															<< "\t" << divMeasures.ploidy5_.expectedCOIForPloidy_[5]
+															<< "\t" << divMeasures.expected_k_heterozygosities[3].k_heterozygosity_
+															<< "\t" << divMeasures.expected_k_heterozygosities[4].k_heterozygosity_
+															<< "\t" << divMeasures.expected_k_heterozygosities[5].k_heterozygosity_
 															<< "\t" << divMeasures.singlets_
 															<< "\t" << divMeasures.doublets_
 															<< "\t" << divMeasures.effectiveNumOfAlleles_
@@ -2431,9 +2431,9 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 															<< "\t" << subSeqs.second.size()
 															<< "\t" << divMeasures.alleleNumber_
 															<< "\t" << divMeasures.heterozygostiy_
-															<< "\t" << divMeasures.ploidy3_.expectedCOIForPloidy_[3]
-															<< "\t" << divMeasures.ploidy4_.expectedCOIForPloidy_[4]
-															<< "\t" << divMeasures.ploidy5_.expectedCOIForPloidy_[5]
+															<< "\t" << divMeasures.expected_k_heterozygosities[3].k_heterozygosity_
+															<< "\t" << divMeasures.expected_k_heterozygosities[4].k_heterozygosity_
+															<< "\t" << divMeasures.expected_k_heterozygosities[5].k_heterozygosity_
 															<< "\t" << divMeasures.singlets_
 															<< "\t" << divMeasures.doublets_
 															<< "\t" << divMeasures.effectiveNumOfAlleles_

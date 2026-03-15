@@ -320,7 +320,7 @@ int popGenExpRunner::randomSamplingPloidyTest2(
 		const njh::progutils::CmdArgs & inputCommands) {
 	OutOptions outOpts("", ".tab.txt");
 	bfs::path countsTableFnp;
-	double runs = 100;
+	double runs = 10000;
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(countsTableFnp, "--countsTableFnp", "counts Table Fnp, 2 columns, 1) name, 2) count", true);
 	setUp.setOption(runs, "--runs", "sims to run");
@@ -333,7 +333,7 @@ int popGenExpRunner::randomSamplingPloidyTest2(
 	countsTab.checkForColumnsThrow(VecStr{"name", "count"}, __PRETTY_FUNCTION__);
 
 	OutputStream out(outOpts);
-	out << "ploidyTest\tCOI\tobserved\tfreqObs\tfreqExpected\texpPoly" << std::endl;
+	out << "ploidyTest\tCOI\tobserved\tfreqObs\tfreqExpected\texpPoly\tall_unique" << std::endl;
 
 
 	VecStr namesStr = countsTab.getColumn("name");
@@ -365,15 +365,16 @@ int popGenExpRunner::randomSamplingPloidyTest2(
 			++ploidyCounts[generated.size()];
 		}
 		auto infoForPloidy = PopGenCalculator::ExpectedPloidyInfo::genPloidyInfo(ploidyTest, freqs);
-		for(uint32_t ploidy= 1; ploidy <=ploidyTest; ++ploidy){
+		auto all_unique_for_ploidy_test = PopGenCalculator::ExpectedKHeterozygosityRes(ploidyTest, freqs);
+		for (uint32_t ploidy = 1; ploidy <= ploidyTest; ++ploidy) {
 			out << ploidyTest
 					<< "\t" << ploidy
 					<< "\t" << ploidyCounts[ploidy]
-					<< "\t" << ploidyCounts[ploidy]/static_cast<double>(runs)
+					<< "\t" << ploidyCounts[ploidy] / static_cast<double>(runs)
 					<< "\t" << infoForPloidy.expectedCOIForPloidy_[ploidy]
-				  << "\t" << infoForPloidy.expectedPolyClonal_
-				  << std::endl;
-
+					<< "\t" << infoForPloidy.expectedPolyClonal_
+					<< "\t" << all_unique_for_ploidy_test.k_heterozygosity_
+					<< std::endl;
 		}
 	}
 	return 0;

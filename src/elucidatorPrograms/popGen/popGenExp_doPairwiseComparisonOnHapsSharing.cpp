@@ -308,7 +308,6 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	bfs::path metaFnp;
 	VecStr metaFieldsToCalcPopDiffs{};
 	HapsEncodedMatrix::SetWithExternalPars pars;
-	bool onlyPloidy2 = false;
 	bool writeOutTarsAbsoluteShared = false;
 	bool doNotBreakWithRmse = false;
 	double rmseCutOffToBreak = 0.10;
@@ -329,7 +328,6 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	setUp.setOption(writeOutDistMatrices, "--writeOutDistMatrices", "write Out Dist Matrices");
 	setUp.setOption(metaFnp, "--metaFnp", "Table of meta data for samples, needs a column named sample and each additional column will be the meta data associated with that sample");
 	setUp.setOption(metaFieldsToCalcPopDiffs, "--metaFieldsToCalcPopDiffs", "Meta Fields To Calc Pop Diffs");
-	setUp.setOption(onlyPloidy2, "--onlyPloidy2", "only calculate Ploidy 2 probability");
 	setUp.setOption(writeOutTarsAbsoluteShared, "--writeOutTarsAbsoluteShared", "write Out Tars Absolute Shared");
 
   pars.setDefaults(setUp);
@@ -886,7 +884,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		OutputStream diversityMeasuresOut(njh::files::make_path(setUp.pars_.directoryName_, "diversityMeasuresPerTarget.tab.txt"));
 		diversityMeasuresOut << "loci\tsampCount\ttotalHaps\tuniqueHaps\tSimpsonI\the\tExpP3\tExpP4\tExpP5\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE" << '\n';
 		std::mutex divOutMut;
-		std::function<void()> getTargetInfo = [&tarQueue,&haps,&diversityMeasuresOut,&divOutMut, &onlyPloidy2](){
+		std::function<void()> getTargetInfo = [&tarQueue,&haps,&diversityMeasuresOut,&divOutMut](){
 			uint32_t tarKey = std::numeric_limits<uint32_t>::max();
 			while(tarQueue.getVal(tarKey)){
 
@@ -906,7 +904,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 						}
 					}
 				}
-				auto diversityForTar = PopGenCalculator::getGeneralMeasuresOfDiversity(hapsForTarget, onlyPloidy2);
+				auto diversityForTar = PopGenCalculator::getGeneralMeasuresOfDiversity(hapsForTarget);
 				auto totalHaps = PopGenCalculator::PopHapInfo::getTotalPopCount(hapsForTarget);
 				{
 					std::lock_guard<std::mutex> lock(divOutMut);
@@ -916,9 +914,9 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 															<< "\t" << diversityForTar.alleleNumber_
 															<< "\t" << diversityForTar.simpsonIndex_
 															<< "\t" << diversityForTar.heterozygostiy_
-															<< "\t" << (std::numeric_limits<long double>::max() == diversityForTar.ploidy3_.expectedCOIForPloidy_.at(3) ? "NA": estd::to_string(diversityForTar.ploidy3_.expectedCOIForPloidy_.at(3)))
-															<< "\t" << (std::numeric_limits<long double>::max() == diversityForTar.ploidy4_.expectedCOIForPloidy_.at(4) ? "NA": estd::to_string(diversityForTar.ploidy4_.expectedCOIForPloidy_.at(4)))
-															<< "\t" << (std::numeric_limits<long double>::max() == diversityForTar.ploidy5_.expectedCOIForPloidy_.at(5) ? "NA": estd::to_string(diversityForTar.ploidy5_.expectedCOIForPloidy_.at(5)))
+															<< "\t" << (std::numeric_limits<long double>::max() == diversityForTar.expected_k_heterozygosities.at(3).k_heterozygosity_ ? "NA": estd::to_string(diversityForTar.expected_k_heterozygosities.at(3).k_heterozygosity_))
+															<< "\t" << (std::numeric_limits<long double>::max() == diversityForTar.expected_k_heterozygosities.at(4).k_heterozygosity_ ? "NA": estd::to_string(diversityForTar.expected_k_heterozygosities.at(4).k_heterozygosity_))
+															<< "\t" << (std::numeric_limits<long double>::max() == diversityForTar.expected_k_heterozygosities.at(5).k_heterozygosity_ ? "NA": estd::to_string(diversityForTar.expected_k_heterozygosities.at(5).k_heterozygosity_))
 															<< "\t" << diversityForTar.singlets_
 															<< "\t" << diversityForTar.doublets_
 															<< "\t" << diversityForTar.effectiveNumOfAlleles_
@@ -1013,7 +1011,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 				sampleToMeta.emplace_back(haps.meta_->groupData_[field]->getGroupForSample(haps.sampNamesVec_[sampPos]));
 				subFields.emplace(sampleToMeta.back());
 			}
-			std::function<void()> getPopDiffMeasures = [&tarQueue,&haps, &diversityMeasuresOut,&diffMeasuresOut,&pairwiseDiffMeasuresOut,&divOutMut,&sampleToMeta,&subFields,&field, &onlyPloidy2](){
+			std::function<void()> getPopDiffMeasures = [&tarQueue,&haps, &diversityMeasuresOut,&diffMeasuresOut,&pairwiseDiffMeasuresOut,&divOutMut,&sampleToMeta,&subFields,&field](){
 
 				uint32_t tarKey = std::numeric_limits<uint32_t>::max();
 				while(tarQueue.getVal(tarKey)){
@@ -1055,7 +1053,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 					}
 					std::unordered_map<std::string, PopGenCalculator::DiversityMeasures> divMeausresPerPop;
 					for(const auto & hapsForPop : hapsForTargetPerPopulation){
-						divMeausresPerPop[hapsForPop.first] = PopGenCalculator::getGeneralMeasuresOfDiversity(hapsForPop.second, onlyPloidy2);
+						divMeausresPerPop[hapsForPop.first] = PopGenCalculator::getGeneralMeasuresOfDiversity(hapsForPop.second);
 					}
 					{
 						std::lock_guard<std::mutex> lock(divOutMut);
@@ -1075,9 +1073,9 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 																	<< "\t" << popDiv.second.alleleNumber_
 																	<< "\t" << popDiv.second.simpsonIndex_
 																	<< "\t" << popDiv.second.heterozygostiy_
-																	<< "\t" << (std::numeric_limits<long double>::max() == popDiv.second.ploidy3_.expectedCOIForPloidy_.at(3) ? "NA": estd::to_string(popDiv.second.ploidy3_.expectedCOIForPloidy_.at(3)))
-																	<< "\t" << (std::numeric_limits<long double>::max() == popDiv.second.ploidy4_.expectedCOIForPloidy_.at(4) ? "NA": estd::to_string(popDiv.second.ploidy4_.expectedCOIForPloidy_.at(4)))
-																	<< "\t" << (std::numeric_limits<long double>::max() == popDiv.second.ploidy5_.expectedCOIForPloidy_.at(5) ? "NA": estd::to_string(popDiv.second.ploidy5_.expectedCOIForPloidy_.at(5)))
+							<< "\t" << (std::numeric_limits<long double>::max() == popDiv.second.expected_k_heterozygosities.at(3).k_heterozygosity_ ? "NA": estd::to_string(popDiv.second.expected_k_heterozygosities.at(3).k_heterozygosity_))
+							<< "\t" << (std::numeric_limits<long double>::max() == popDiv.second.expected_k_heterozygosities.at(4).k_heterozygosity_ ? "NA": estd::to_string(popDiv.second.expected_k_heterozygosities.at(4).k_heterozygosity_))
+							<< "\t" << (std::numeric_limits<long double>::max() == popDiv.second.expected_k_heterozygosities.at(5).k_heterozygosity_ ? "NA": estd::to_string(popDiv.second.expected_k_heterozygosities.at(5).k_heterozygosity_))
 																	<< "\t" << popDiv.second.singlets_
 																	<< "\t" << popDiv.second.doublets_
 																	<< "\t" << popDiv.second.effectiveNumOfAlleles_
