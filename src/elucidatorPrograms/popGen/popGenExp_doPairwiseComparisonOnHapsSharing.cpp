@@ -341,6 +341,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	setUp.timer_.setLapName("initial");
 	setUp.timer_.startNewLap("encode haplotypes");
   HapsEncodedMatrix haps(pars);
+
   if (!metaFnp.empty()) {
     haps.addMeta(metaFnp);
     if (!metaFieldsToCalcPopDiffs.empty()) {
@@ -350,7 +351,10 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
     haps.addMetaWithInputTab(njh::vecToSet(metaFieldsToCalcPopDiffs));
   }
 	setUp.timer_.startNewLap("get hap probabilities");
+	/**@todo look into whether or not this is being actually used */
 	haps.calcHapProbs();
+
+	haps.add_relative_abundance();
 	setUp.timer_.startNewLap("writing sample info");
 
 
@@ -488,7 +492,6 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 				pairwiseRMSEs[pos][pos] = 0;
 		    pairwise_cccs[pos][pos] = 1.0;
 			}
-      haps.add_relative_abundance();
 
 			if (0 == pars.numThreads) {
 				pars.numThreads = 1;
@@ -900,7 +903,8 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 					}
 					for(const auto tarpos : iter::range(haps.numberOfHapsPerTarget_[tarKey])){
 						if(haps.hapsEncodeBySamp_[sampPos][haps.tarStart_[tarKey] + tarpos] > 0){
-							hapsForTarget[tarpos].count_ +=1;
+							hapsForTarget[tarpos].unweighted_count_ += 1;
+							hapsForTarget[tarpos].weighted_count_ += haps.hapsEncodeBySampRelAbund_[sampPos][haps.tarStart_[tarKey] + tarpos];
 						}
 					}
 				}
@@ -1029,14 +1033,16 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 						}
 						for(const auto tarpos : iter::range(haps.numberOfHapsPerTarget_[tarKey])){
 							if(haps.hapsEncodeBySamp_[sampPos][haps.tarStart_[tarKey] + tarpos] > 0){
-								hapsForTargetPerPopulationRaw[sampleToMeta[sampPos]][tarpos].count_ +=1;
+								hapsForTargetPerPopulationRaw[sampleToMeta[sampPos]][tarpos].unweighted_count_ +=1;
+								hapsForTargetPerPopulationRaw[sampleToMeta[sampPos]][tarpos].weighted_count_ += haps.hapsEncodeBySampRelAbund_[sampPos][haps.tarStart_[tarKey] + tarpos];
+
 							}
 						}
 					}
 					std::unordered_map<std::string, std::vector<PopGenCalculator::PopHapInfo>> hapsForTargetPerPopulation;
 					for(const auto & pop : hapsForTargetPerPopulationRaw){
 						for(const auto & hap : pop.second){
-							if(hap.count_ > 0){
+							if(hap.unweighted_count_ > 0){
 								hapsForTargetPerPopulation[pop.first].emplace_back(hap);
 							}
 						}
@@ -1044,12 +1050,12 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 
 					PopGenCalculator::PopDifferentiationMeasures generalDiff;
 					if(hapsForTargetPerPopulation.size() > 1){
-						generalDiff = PopGenCalculator::getOverallPopDiff(hapsForTargetPerPopulation);
+						generalDiff = PopGenCalculator::getOverallPopDiffWeighted(hapsForTargetPerPopulation);
 					}
 					std::unordered_map<std::string, std::unordered_map<std::string, PopGenCalculator::PopDifferentiationMeasuresPairWise>> pairwiseDiffs;
 
 					if(hapsForTargetPerPopulation.size() > 1){
-						pairwiseDiffs = PopGenCalculator::getPairwisePopDiff(hapsForTargetPerPopulation);
+						pairwiseDiffs = PopGenCalculator::getPairwisePopDiffWeighted(hapsForTargetPerPopulation);
 					}
 					std::unordered_map<std::string, PopGenCalculator::DiversityMeasures> divMeausresPerPop;
 					for(const auto & hapsForPop : hapsForTargetPerPopulation){
