@@ -175,8 +175,6 @@ int PMOUtilsRunner::add_protein_variant_info_to_pmo(const njh::progutils::CmdArg
 	return 0;
 }
 
-
-
 int PMOUtilsRunner::count_protein_variant_info_to_pmo(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path pmo_fnp;
 
