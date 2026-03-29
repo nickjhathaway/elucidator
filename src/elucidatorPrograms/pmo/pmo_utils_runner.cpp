@@ -98,9 +98,14 @@ int PMOUtilsRunner::add_protein_variant_info_to_pmo(const njh::progutils::CmdArg
 	InputStream in(pmo_fnp);
 	auto pmo_obj= pmo::PortableMicrohaplotypeObject::from_json(nlohmann::json::parse(in));
 	pmo_obj.validate();
-	if (genome_id >= pmo_obj.targeted_genomes_.size()) {
+  if (!pmo_obj.targeted_genomes_) {
+    std::stringstream ss;
+    ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << " targeted_genomes_ are not loaded in " << pmo_fnp << "\n";
+    throw std::runtime_error{ss.str()};
+  }
+	if (genome_id >= pmo_obj.targeted_genomes_->size()) {
 		std::stringstream ss;
-		ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << " genome_id: " << genome_id << " out of range of targeted genomes, size: " <<  pmo_obj.targeted_genomes_.size()<< "\n";
+		ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << " genome_id: " << genome_id << " out of range of targeted genomes, size: " <<  pmo_obj.targeted_genomes_->size()<< "\n";
 		throw std::runtime_error{ss.str()};
 	}
 
@@ -250,19 +255,27 @@ int PMOUtilsRunner::count_protein_variant_info_to_pmo(const njh::progutils::CmdA
 		for (const auto & meta : specimen_meta) {
 			if (meta == "collection_country") {
 				for (const auto & specimen : iter::enumerate(pmo_obj.specimen_info_)) {
-					spec_metas[specimen.index][meta] = specimen.element.collection_country_;
+					spec_metas[specimen.index][meta] = specimen.element.collection_country_ ? *specimen.element.collection_country_ : "NA";
 				}
 			} else if (meta == "collection_year") {
 				for (const auto & specimen : iter::enumerate(pmo_obj.specimen_info_)) {
-					auto pos = specimen.element.collection_date_.find('-');
-					std::string year = pos != std::string::npos ? specimen.element.collection_date_.substr(0, pos) : specimen.element.collection_date_;
-					spec_metas[specimen.index][meta] = year;
+				  if (specimen.element.collection_date_ ) {
+				    auto pos = specimen.element.collection_date_->find('-');
+				    std::string year = pos != std::string::npos ? specimen.element.collection_date_->substr(0, pos) : *specimen.element.collection_date_;
+				    spec_metas[specimen.index][meta] = year;
+				  } else {
+				    spec_metas[specimen.index][meta] = "NA";
+				  }
 				}
 			} else if (meta == "collection_country::collection_year") {
 				for (const auto & specimen : iter::enumerate(pmo_obj.specimen_info_)) {
-					auto pos = specimen.element.collection_date_.find('-');
-					std::string year = pos != std::string::npos ? specimen.element.collection_date_.substr(0, pos) : specimen.element.collection_date_;
-					spec_metas[specimen.index][meta] = njh::pasteAsStr(specimen.element.collection_country_, "-", year);
+				  if (specimen.element.collection_date_ && specimen.element.collection_country_) {
+				    auto pos = specimen.element.collection_date_->find('-');
+				    std::string year = pos != std::string::npos ? specimen.element.collection_date_->substr(0, pos) : *specimen.element.collection_date_;
+				    spec_metas[specimen.index][meta] = njh::pasteAsStr(*specimen.element.collection_country_, "-", year);
+				  } else {
+				    spec_metas[specimen.index][meta] = "NA-NA";
+				  }
 				}
 			}
 		}
