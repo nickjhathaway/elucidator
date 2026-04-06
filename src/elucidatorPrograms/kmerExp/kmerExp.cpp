@@ -106,6 +106,7 @@ kmerExpRunner::kmerExpRunner()
           	addFunc("getKmerCountsPerLocationOnSeqs", getKmerCountsPerLocationOnSeqs, false),
           	addFunc("getKmerCountsPerLocationOnSeq", getKmerCountsPerLocationOnSeq, false),
           	addFunc("filterSeqsBelowMedianKmerCoverage", filterSeqsBelowMedianKmerCoverage, false),
+            addFunc("encodingSeqsByCommonKmers", encodingSeqsByCommonKmers, false),
 
 //,
 									//

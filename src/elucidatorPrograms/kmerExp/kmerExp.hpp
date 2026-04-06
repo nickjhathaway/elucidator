@@ -128,6 +128,8 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int filterSeqsBelowMedianKmerCoverage(const njh::progutils::CmdArgs & inputCommands);
 
 
+  static int encodingSeqsByCommonKmers(const njh::progutils::CmdArgs & inputCommands);
+
 };
 } /* namespace njhseq */
 
