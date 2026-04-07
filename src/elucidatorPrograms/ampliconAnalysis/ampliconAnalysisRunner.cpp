@@ -49,6 +49,7 @@ ampliconAnalysisRunner::ampliconAnalysisRunner()
     	addFunc("sraMetaToJson", sraMetaToJson, false),
     	addFunc("combineSeparatePrimerFastaInfoPrimerFiler", combineSeparatePrimerFastaInfoPrimerFiler, false),
     	addFunc("detectPhasedPartialAlleles", detectPhasedPartialAlleles, false),
+    	addFunc("simulatedPopulationToNewVcfs", simulatedPopulationToNewVcfs, false),
 
 //
 										 },//sraMetaToJson

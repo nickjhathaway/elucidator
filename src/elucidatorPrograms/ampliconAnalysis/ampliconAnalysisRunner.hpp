@@ -47,6 +47,8 @@ class ampliconAnalysisRunner : public njh::progutils::ProgramRunner {
 
 	static int combineSeparatePrimerFastaInfoPrimerFiler(const njh::progutils::CmdArgs & inputCommands);
 
+	static int simulatedPopulationToNewVcfs(const njh::progutils::CmdArgs & inputCommands);
+
 	// PMO
   static int extractedTarAmpInfoFileToJson(const njh::progutils::CmdArgs & inputCommands);
   static int finalClustersFileToJson(const njh::progutils::CmdArgs & inputCommands);
