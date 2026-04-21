@@ -1504,8 +1504,11 @@ int bedExpRunner::getNonOverlappingBedRegions(const njh::progutils::CmdArgs & in
 	bfs::path bedFile;
 	bfs::path intersectWithBed;
 	OutOptions outOpts;
+  bool ignoreSameID = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
+  setUp.setOption(ignoreSameID, "--ignoreSameID", "Don't compare regions with the same id if ids present");
+
 	setUp.setOption(bedFile, "--bed", "Bed file to parse", true);
 	setUp.setOption(intersectWithBed, "--intersectWithBed", "Bed file to intersect with", true);
 	setUp.processWritingOptions(outOpts);
@@ -1525,11 +1528,15 @@ int bedExpRunner::getNonOverlappingBedRegions(const njh::progutils::CmdArgs & in
 	while(reader.readNextRecord(reg)){
 		bool foundIntersection = false;
 		for(const auto & bed : intersectingBed6s){
+		  if(ignoreSameID && !reg.extraFields_.empty() &&  bed->name_ == reg.extraFields_[0]){
+		    continue;
+		  }
 			if(reg.overlaps(*bed, 1)){
 				foundIntersection = true;
 				break;
 			}
 		}
+
 		if(!foundIntersection){
 			reader.write(reg, [](const Bed3RecordCore & bedReg, std::ostream & out){
 				out << bedReg.toDelimStrWithExtra() << std::endl;
