@@ -356,12 +356,15 @@ int programWrapperRunner::runnhmmscan(const njh::progutils::CmdArgs & inputComma
 	auto nhmmscan_raw_outputFnp = njh::files::make_path(setUp.pars_.directoryName_, "nhmmscan_raw_output.txt");
 	auto seqsWithNoDomainHitsFnp = njh::files::make_path(setUp.pars_.directoryName_, "seqsWithNoDomainHits.tab.txt");
 	nhmmscanOutput outputParsed;
+
 	if(regions.empty()){
 		outputParsed = nhmmscanOutput::parseRawOutput(nhmmscan_raw_outputFnp, seqKey);
 	}else{
 		outputParsed = nhmmscanOutput::parseRawOutput(nhmmscan_raw_outputFnp, seqKey, regionsByName, realQueryLens);
 	}
+
 	auto postProcessResults = outputParsed.postProcessHits(postProcessPars);
+
 	//convert hits table into a real table and
 	outputParsed.writeInfoFiles(postProcessResults, setUp.pars_.directoryName_);
 

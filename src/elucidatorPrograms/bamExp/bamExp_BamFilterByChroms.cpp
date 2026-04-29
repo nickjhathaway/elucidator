@@ -592,23 +592,41 @@ int bamExpRunner::BamFilterByChroms(const njh::progutils::CmdArgs & inputCommand
 
 	auto refData = bReader.GetReferenceData();
 	std::vector<int32_t> filter_chroms_ref_ids;
+  VecStr found_bam_chrom_names;
 	//check to make sure chroms contains chromosome from the input bam file
-	VecStr missing;
-	for(const auto & chrom : filter_chroms){
-		bool found = false;
-		for(const auto & ref : iter::enumerate(refData)){
-			if(ref.element.RefName == chrom){
-				found = true;
-				filter_chroms_ref_ids.emplace_back(ref.index);
-				break;
-			}
-		}
-		if(!found){
-			missing.emplace_back(chrom);
-		}
+  njh::sort(filter_chroms);
+  for(const auto & ref : iter::enumerate(refData)){
+    if (njh::in(ref.element.RefName, filter_chroms)) {
+      filter_chroms_ref_ids.emplace_back(ref.index);
+      found_bam_chrom_names.emplace_back(ref.element.RefName);
+    }
+  }
+  njh::sort(found_bam_chrom_names);
+  auto name_decomp = njh::decompose_sets_container(filter_chroms, found_bam_chrom_names);
+	VecStr missing = name_decomp.only_in_first;
+
+  njh::sort(filter_chroms_ref_ids);
+	std::function<bool(const int32_t)> onFilterChrom;
+  //
+	{
+	  //check if filter is a range of values, that start at a specific location and the last value is one from the last value
+	  bool pass = filter_chroms_ref_ids.size() > 1 && filter_chroms_ref_ids.front() > 0 && filter_chroms_ref_ids.back() + 1 == refData.size();
+	  if (pass) {
+	    //check each value along the range is present
+	    for (uint32_t pos = 1; pos < filter_chroms_ref_ids.size(); ++pos) {
+	      if (filter_chroms_ref_ids[pos - 1] + 1 != filter_chroms_ref_ids[pos]) {
+	        pass = false;
+	        break;
+	      }
+	    }
+	  }
+	  if (pass) {
+	    onFilterChrom = [&filter_chroms_ref_ids](const int32_t refId){return refId >= filter_chroms_ref_ids.front();};
+	  } else {
+	    onFilterChrom = [&filter_chroms_ref_ids](const int32_t refId){return njh::in(refId, filter_chroms_ref_ids);};
+	  }
 	}
 
-	auto onFilterChrom = [&filter_chroms_ref_ids](const int32_t refId){return njh::in(refId, filter_chroms_ref_ids);};
 
 	if(!missing.empty()){
 		std::stringstream ss;

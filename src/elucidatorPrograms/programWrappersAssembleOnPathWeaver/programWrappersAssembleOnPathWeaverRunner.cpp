@@ -70,12 +70,40 @@ programWrappersAssembleOnPathWeaverRunner::programWrappersAssembleOnPathWeaverRu
 						addFunc("runIDBAUDOnUniqueKmerExtraction", runIDBAUDOnUniqueKmerExtraction, false),
 						addFunc("runMIRAOnUniqueKmerExtraction", runMIRAOnUniqueKmerExtraction, false),
 						addFunc("runFermiLiteOnUniqueKmerExtraction", runFermiLiteOnUniqueKmerExtraction, false),
+
+
+            addFunc("convertAssemblyNameMeta", convertAssemblyNameMeta, false),
            },//,
           "programWrappersAssembleOnPathWeaverRunner") {
 
 }
 
 
+
+int programWrappersAssembleOnPathWeaverRunner::convertAssemblyNameMeta(const njh::progutils::CmdArgs & inputCommands) {
+  seqSetUp setUp(inputCommands);
+  setUp.processDebug();
+  setUp.processVerbose();
+  setUp.processDefaultReader(seqSetUp::singleInFormatsAvailable_, true);
+
+  setUp.finishSetUp(std::cout);
+  setUp.startARunLog(setUp.pars_.directoryName_);
+
+  SeqIO reader(setUp.pars_.ioOptions_);
+  reader.openIn();
+  reader.openOut();
+
+  seqInfo seq;
+  while (reader.readNextRead(seq)) {
+    auto assembly_info = DefaultAssembleNameInfo(seq.name_);
+    MetaDataInName meta;
+    meta.addMeta("coverage", assembly_info.coverage_);
+    meta.addMeta("length", assembly_info.len_);
+    seq.name_.append(meta.createMetaName());
+    reader.write(seq);
+  }
+  return 0;
+}
 
 int programWrappersAssembleOnPathWeaverRunner::runMIRAOnPathWeaverRegions(const njh::progutils::CmdArgs & inputCommands) {
 	bfs::path bedFile = "";

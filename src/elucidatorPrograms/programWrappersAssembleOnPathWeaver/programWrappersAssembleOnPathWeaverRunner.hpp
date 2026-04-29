@@ -72,6 +72,9 @@ class programWrappersAssembleOnPathWeaverRunner : public njh::progutils::Program
 	static int runFermiLiteOnUniqueKmerExtraction(const njh::progutils::CmdArgs & inputCommands);
 
 
+
+  static int convertAssemblyNameMeta(const njh::progutils::CmdArgs & inputCommands);
+
 };
 
 
