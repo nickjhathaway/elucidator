@@ -21,50 +21,51 @@
 // You should have received a copy of the GNU General Public License
 // along with elucidator.  If not, see <http://www.gnu.org/licenses/>.
 //
-    
+
 #include "seqUtilsSplitRunner.hpp"
 #include <njhseq.h>
-    
+
 namespace njhseq {
 
-
-
-
 seqUtilsSplitRunner::seqUtilsSplitRunner()
-    : njh::progutils::ProgramRunner({
-  		addFunc("SeqSplitOnLenBelow", SeqSplitOnLenBelow, false),
-  		addFunc("SeqSplitOnLenWithin", SeqSplitOnLenWithin, false),
-  		addFunc("SeqSplitOnLenWithinMedianLen", SeqSplitOnLenWithinMedianLen, false),
+    : njh::progutils::ProgramRunner(
+          {
+              addFunc("SeqSplitOnLenBelow", SeqSplitOnLenBelow, false),
+              addFunc("SeqSplitOnLenWithin", SeqSplitOnLenWithin, false),
+              addFunc("SeqSplitOnLenWithinMedianLen",
+                      SeqSplitOnLenWithinMedianLen, false),
 
+              addFunc("SeqSplitOnNameContains", SeqSplitOnNameContains, false),
+              addFunc("SeqSplitOnSeqContains", SeqSplitOnSeqContains, false),
+              addFunc("SeqSplitOnSeqContainsPattern",
+                      SeqSplitOnSeqContainsPattern, false),
+              addFunc("SeqSplitOnSeqAllowableChars",
+                      SeqSplitOnSeqAllowableChars, false),
 
-  		addFunc("SeqSplitOnNameContains", SeqSplitOnNameContains, false),
-  		addFunc("SeqSplitOnSeqContains", SeqSplitOnSeqContains, false),
-    	addFunc("SeqSplitOnSeqContainsPattern", SeqSplitOnSeqContainsPattern, false),
-    	addFunc("SeqSplitOnSeqAllowableChars", SeqSplitOnSeqAllowableChars, false),
+              addFunc("SeqSplitOnLenAbove", SeqSplitOnLenAbove, false),
+              addFunc("SeqSplitOnLenBetween", SeqSplitOnLenBetween, false),
+              addFunc("SeqSplitOnQualityWindow", SeqSplitOnQualityWindow,
+                      false),
+              addFunc("SeqSplitOnQualityCheck", SeqSplitOnQualityCheck, false),
+              addFunc("SeqSplitOnNucelotideComp", SeqSplitOnNucelotideComp,
+                      false),
+              addFunc("getSimilarSequences", getSimilarSequences, false),
+              addFunc("getSimilarSequencesByKDist", getSimilarSequencesByKDist,
+                      false),
+              addFunc("SeqSplitOnCount", SeqSplitOnCount, false),
+              addFunc("SeqSplitOnNameContainsPattern",
+                      SeqSplitOnNameContainsPattern, false),
+              addFunc("SeqSplitOnQualityCheck", SeqSplitOnQualityCheck, false),
+              addFunc("filterSameSizeSeqsHammingDistance",
+                      filterSameSizeSeqsHammingDistance, false),
 
-
-  		addFunc("SeqSplitOnLenAbove", SeqSplitOnLenAbove, false),
-  		addFunc("SeqSplitOnLenBetween", SeqSplitOnLenBetween, false),
-  		addFunc("SeqSplitOnQualityWindow", SeqSplitOnQualityWindow, false),
-  		addFunc("SeqSplitOnQualityCheck", SeqSplitOnQualityCheck, false),
-  		addFunc("SeqSplitOnNucelotideComp", SeqSplitOnNucelotideComp, false),
-			addFunc("getSimilarSequences", getSimilarSequences, false),
-			addFunc("getSimilarSequencesByKDist", getSimilarSequencesByKDist, false),
-			addFunc("SeqSplitOnCount", SeqSplitOnCount, false),
-			addFunc("SeqSplitOnNameContainsPattern", SeqSplitOnNameContainsPattern, false),
-			addFunc("SeqSplitOnQualityCheck", SeqSplitOnQualityCheck, false),
-    	addFunc("filterSameSizeSeqsHammingDistance", filterSameSizeSeqsHammingDistance, false),
-
-
-},
-                    "seqUtilsSplit") {}
+          },
+          "seqUtilsSplit") {}
 
 //
 
-
-
-
-int seqUtilsSplitRunner::getSimilarSequences(const njh::progutils::CmdArgs & inputCommands) {
+int seqUtilsSplitRunner::getSimilarSequences(
+    const njh::progutils::CmdArgs &inputCommands) {
   // remove sequences very dissimilar to input compare sequence
   seqSetUp setUp(inputCommands);
   double idCutOff = 0.97;
@@ -77,12 +78,14 @@ int seqUtilsSplitRunner::getSimilarSequences(const njh::progutils::CmdArgs & inp
   bool trimSimilar = false;
   double percentile = 0.95;
   bool checkComplement = false;
-	setUp.setOption(percentile, "-percentile", "percentile");
-	setUp.setOption(trimSimilar, "-trimSimilar,-trim", "trimSimilar");
-  if(setUp.setOption(useScore, "-useAlnScore,-useScore,-useAlignmentScore", "useAlignmentScore")){
-  	setUp.setOption(scoreCutOff, "-scoreCutOff,-cutOff", "scoreCutOff");
+  setUp.setOption(percentile, "-percentile", "percentile");
+  setUp.setOption(trimSimilar, "-trimSimilar,-trim", "trimSimilar");
+  if (setUp.setOption(useScore, "-useAlnScore,-useScore,-useAlignmentScore",
+                      "useAlignmentScore")) {
+    setUp.setOption(scoreCutOff, "-scoreCutOff,-cutOff", "scoreCutOff");
   }
-  setUp.setOption(checkComplement, "-checkComplement,-complement", "checkComplement");
+  setUp.setOption(checkComplement, "-checkComplement,-complement",
+                  "checkComplement");
   setUp.setOption(useNucComp, "-useNucComp", "useNucComp");
   setUp.setOption(maxNucCompDiff, "-maxNucCompDiff", "maxNucCompDiff");
   setUp.setOption(idCutOff, "-idCutOff,-id", "idCutOff");
@@ -95,8 +98,8 @@ int seqUtilsSplitRunner::getSimilarSequences(const njh::progutils::CmdArgs & inp
   setUp.processVerbose();
   setUp.startARunLog(setUp.pars_.directoryName_);
   SeqInput reader(setUp.pars_.ioOptions_);
-  	reader.openIn();
-	auto inReads = reader.readAllReads<readObject>();
+  reader.openIn();
+  auto inReads = reader.readAllReads<readObject>();
   uint64_t maxReadLength = 0;
   readVec::getMaxLength(inReads, maxReadLength);
   if (setUp.pars_.seqObj_.seqBase_.seq_.size() > maxReadLength) {
@@ -107,14 +110,13 @@ int seqUtilsSplitRunner::getSimilarSequences(const njh::progutils::CmdArgs & inp
   auto scoringMatrixMap = setUp.pars_.scoring_;
   KmerMaps emptyMaps;
   gapScoringParameters gapPars(setUp.pars_.gapInfo_);
-  aligner alignerObj = aligner(maxReadLength, gapPars,
-  		 scoringMatrixMap, false);
+  aligner alignerObj = aligner(maxReadLength, gapPars, scoringMatrixMap, false);
 
   std::vector<readObject> similar;
   std::vector<readObject> dissimilar;
   uint32_t counter = 0;
-  if(setUp.pars_.verbose_){
-  	setUp.pars_.seqObj_.seqBase_.outPutSeq(std::cout);
+  if (setUp.pars_.verbose_) {
+    setUp.pars_.seqObj_.seqBase_.outPutSeq(std::cout);
   }
   readVec::allSetLetterCount(inReads);
   setUp.pars_.seqObj_.setLetterCount();
@@ -124,253 +126,291 @@ int seqUtilsSplitRunner::getSimilarSequences(const njh::progutils::CmdArgs & inp
     if (counter % 50 == 0) {
       std::cout << "On " << counter << " of " << inReads.size() << std::endl;
     }
-    if(useNucComp){
-    	double sum = inReads[readPos].counter_.getFracDifference(setUp.pars_.seqObj_.counter_,
-    			inReads[readPos].counter_.alphabet_);
-    	if(sum > maxNucCompDiff){
-    		dissimilar.emplace_back(inReads[readPos]);
-    		continue;
-    	}
+    if (useNucComp) {
+      double sum = inReads[readPos].counter_.getFracDifference(
+          setUp.pars_.seqObj_.counter_, inReads[readPos].counter_.alphabet_);
+      if (sum > maxNucCompDiff) {
+        dissimilar.emplace_back(inReads[readPos]);
+        continue;
+      }
     }
     alignerObj.alignCache(setUp.pars_.seqObj_, inReads[readPos], false);
     alignerObj.profilePrimerAlignment(setUp.pars_.seqObj_, inReads[readPos]);
-    if(useScore){
-      if(alignerObj.parts_.score_ > scoreCutOff){
-      	similar.emplace_back(inReads[readPos]);
-      }else{
-      	dissimilar.emplace_back(inReads[readPos]);
+    if (useScore) {
+      if (alignerObj.parts_.score_ > scoreCutOff) {
+        similar.emplace_back(inReads[readPos]);
+      } else {
+        dissimilar.emplace_back(inReads[readPos]);
       }
-    }else{
-      if(alignerObj.comp_.distances_.query_.coverage_ > queryCutoff &&
-      		alignerObj.comp_.distances_.percentMatch_ > idCutOff &&
-      		alignerObj.comp_.distances_.percentGaps_ < gapCutoff){
-      	similar.emplace_back(inReads[readPos]);
-      }else{
-      	dissimilar.emplace_back(inReads[readPos]);
+    } else {
+      if (alignerObj.comp_.distances_.query_.coverage_ > queryCutoff &&
+          alignerObj.comp_.distances_.percentMatch_ > idCutOff &&
+          alignerObj.comp_.distances_.percentGaps_ < gapCutoff) {
+        similar.emplace_back(inReads[readPos]);
+      } else {
+        dissimilar.emplace_back(inReads[readPos]);
       }
     }
   }
   counter = 0;
-  if(checkComplement){
+  if (checkComplement) {
     for (const auto readPos : iter::range(len(dissimilar))) {
-    	auto & read = dissimilar[readPos];
-    	read.seqBase_.reverseComplementRead(true);
-    	read.setLetterCount();
+      auto &read = dissimilar[readPos];
+      read.seqBase_.reverseComplementRead(true);
+      read.setLetterCount();
       ++counter;
       if (counter % 50 == 0) {
-        std::cout << "On " << counter << " of " << dissimilar.size() << std::endl;
+        std::cout << "On " << counter << " of " << dissimilar.size()
+                  << std::endl;
       }
-      if(useNucComp){
-      	double sum = read.counter_.getFracDifference(setUp.pars_.seqObj_.counter_,
-      			read.counter_.alphabet_);
-      	if(sum > maxNucCompDiff){
-      		continue;
-      	}
+      if (useNucComp) {
+        double sum = read.counter_.getFracDifference(
+            setUp.pars_.seqObj_.counter_, read.counter_.alphabet_);
+        if (sum > maxNucCompDiff) {
+          continue;
+        }
       }
       alignerObj.alignCache(setUp.pars_.seqObj_, read, false);
       alignerObj.profilePrimerAlignment(setUp.pars_.seqObj_, read);
-      if(useScore){
-        if(alignerObj.parts_.score_ > scoreCutOff){
-        	similar.emplace_back(read);
-        	read.remove = true;
+      if (useScore) {
+        if (alignerObj.parts_.score_ > scoreCutOff) {
+          similar.emplace_back(read);
+          read.remove = true;
         }
-      }else{
-        if(alignerObj.comp_.distances_.query_.coverage_ > queryCutoff &&
-        		alignerObj.comp_.distances_.percentMatch_ > idCutOff &&
-        		alignerObj.comp_.distances_.percentGaps_ < gapCutoff){
-        	similar.emplace_back(read);
-        	read.remove = true;
+      } else {
+        if (alignerObj.comp_.distances_.query_.coverage_ > queryCutoff &&
+            alignerObj.comp_.distances_.percentMatch_ > idCutOff &&
+            alignerObj.comp_.distances_.percentGaps_ < gapCutoff) {
+          similar.emplace_back(read);
+          read.remove = true;
         }
       }
     }
     dissimilar = readVecSplitter::splitVectorOnRemove(dissimilar).first;
   }
 
-  SeqOutput::write(similar, setUp.pars_.directoryName_ + "similar", setUp.pars_.ioOptions_);
-  SeqOutput::write(dissimilar, setUp.pars_.directoryName_ + "dissimilar", setUp.pars_.ioOptions_);
+  SeqOutput::write(similar, setUp.pars_.directoryName_ + "similar",
+                   setUp.pars_.ioOptions_);
+  SeqOutput::write(dissimilar, setUp.pars_.directoryName_ + "dissimilar",
+                   setUp.pars_.ioOptions_);
   std::ofstream outInfo;
-  openTextFile(outInfo, setUp.pars_.directoryName_ + "info", ".tab.txt", false, false);
+  openTextFile(outInfo, setUp.pars_.directoryName_ + "info", ".tab.txt", false,
+               false);
   outInfo << "readsType\treadNum" << std::endl;
-  outInfo << "similar\t" << getPercentageString(readVec::getTotalReadCount(similar),
-  		readVec::getTotalReadCount(inReads)) << std::endl;
-  outInfo << "dissimilar\t" << getPercentageString(readVec::getTotalReadCount(dissimilar),
-  		readVec::getTotalReadCount(inReads)) << std::endl;
-  if(trimSimilar){
-  	std::vector<size_t> startSites;
-  	std::vector<size_t> stopSites;
-  	std::vector<readObject> dis;
-  	for(auto & read : similar){
-  		alignerObj.alignCache(setUp.pars_.seqObj_.seqBase_, read.seqBase_, false);
-  		size_t firstBase = alignerObj.alignObjectB_.seqBase_.seq_.find_first_not_of("-");
-  		startSites.emplace_back(firstBase);
-  		size_t lastBase = alignerObj.alignObjectB_.seqBase_.seq_.find_last_not_of("-");
-  		uint32_t gapCount = std::count(alignerObj.alignObjectA_.seqBase_.seq_.begin(),
-  				alignerObj.alignObjectA_.seqBase_.seq_.begin() + lastBase, '-');
-  		stopSites.emplace_back(lastBase - gapCount);
-  	}
-  	double currentPercentile = 0;
-  	size_t minStart = vectorMinimum(startSites);
-  	while(currentPercentile < percentile){
-  		double currentCount = std::count_if(startSites.begin(), startSites.end(),[&](size_t num){ return num <=minStart;});
-  		currentPercentile = currentCount/startSites.size();
-  		++minStart;
-  	}
-  	currentPercentile = 0;
-  	size_t maxStop = vectorMaximum(stopSites);
-  	while(currentPercentile < percentile){
-  		double currentCount = std::count_if(stopSites.begin(), stopSites.end(),[&](size_t num){ return num >=maxStop;});
-  		currentPercentile = currentCount/stopSites.size();
-  		--maxStop;
-  	}
-  	for(auto & read : similar){
-  		alignerObj.alignCache(setUp.pars_.seqObj_.seqBase_, read.seqBase_, false);
-  		size_t firstBase = alignerObj.alignObjectB_.seqBase_.seq_.find_first_not_of("-");
-  		size_t lastBase = alignerObj.alignObjectB_.seqBase_.seq_.find_last_not_of("-");
-  		uint32_t gapCount = std::count(alignerObj.alignObjectA_.seqBase_.seq_.begin(),
-  				alignerObj.alignObjectA_.seqBase_.seq_.begin() + lastBase, '-');
-  		lastBase = lastBase - gapCount;
-  		if(firstBase > minStart || lastBase < maxStop){
-  			dis.emplace_back(read);
-  			read.remove = true;
-  		}else{
-  			uint32_t startPos = alignerObj.getAlignPosForSeqAPos(minStart);
-  			uint32_t gapCount = std::count(alignerObj.alignObjectB_.seqBase_.seq_.begin(),
-  					alignerObj.alignObjectB_.seqBase_.seq_.begin() + startPos + 1, '-' );
-  			startPos -= gapCount;
-  			uint32_t stopPos = alignerObj.getAlignPosForSeqAPos(maxStop);
-  			uint32_t gapCountStop = std::count(alignerObj.alignObjectB_.seqBase_.seq_.begin(),
-  					alignerObj.alignObjectB_.seqBase_.seq_.begin() + stopPos + 1, '-' );
-  			stopPos -= gapCountStop;
-  			read.trimBack(stopPos + 1);
-  			read.trimFront(startPos);
-  		}
-  	}
-  	std::vector<readObject> trimmed = readVecSplitter::splitVectorOnRemove(similar).first;
-  	SeqOutput::write(trimmed, setUp.pars_.directoryName_ + "trimmed_similar", setUp.pars_.ioOptions_);
-  	SeqOutput::write(dis, setUp.pars_.directoryName_ + "discarded_similar", setUp.pars_.ioOptions_);
-    outInfo << "trimmed\t" << getPercentageString(readVec::getTotalReadCount(trimmed),
-    		readVec::getTotalReadCount(similar, true)) << std::endl;
-    outInfo << "discarded\t" << getPercentageString(readVec::getTotalReadCount(dis),
-    		readVec::getTotalReadCount(similar, true)) << std::endl;
+  outInfo << "similar\t"
+          << getPercentageString(readVec::getTotalReadCount(similar),
+                                 readVec::getTotalReadCount(inReads))
+          << std::endl;
+  outInfo << "dissimilar\t"
+          << getPercentageString(readVec::getTotalReadCount(dissimilar),
+                                 readVec::getTotalReadCount(inReads))
+          << std::endl;
+  if (trimSimilar) {
+    std::vector<size_t> startSites;
+    std::vector<size_t> stopSites;
+    std::vector<readObject> dis;
+    for (auto &read : similar) {
+      alignerObj.alignCache(setUp.pars_.seqObj_.seqBase_, read.seqBase_, false);
+      size_t firstBase =
+          alignerObj.alignObjectB_.seqBase_.seq_.find_first_not_of("-");
+      startSites.emplace_back(firstBase);
+      size_t lastBase =
+          alignerObj.alignObjectB_.seqBase_.seq_.find_last_not_of("-");
+      uint32_t gapCount = std::count(
+          alignerObj.alignObjectA_.seqBase_.seq_.begin(),
+          alignerObj.alignObjectA_.seqBase_.seq_.begin() + lastBase, '-');
+      stopSites.emplace_back(lastBase - gapCount);
+    }
+    double currentPercentile = 0;
+    size_t minStart = vectorMinimum(startSites);
+    while (currentPercentile < percentile) {
+      double currentCount =
+          std::count_if(startSites.begin(), startSites.end(),
+                        [&](size_t num) { return num <= minStart; });
+      currentPercentile = currentCount / startSites.size();
+      ++minStart;
+    }
+    currentPercentile = 0;
+    size_t maxStop = vectorMaximum(stopSites);
+    while (currentPercentile < percentile) {
+      double currentCount =
+          std::count_if(stopSites.begin(), stopSites.end(),
+                        [&](size_t num) { return num >= maxStop; });
+      currentPercentile = currentCount / stopSites.size();
+      --maxStop;
+    }
+    for (auto &read : similar) {
+      alignerObj.alignCache(setUp.pars_.seqObj_.seqBase_, read.seqBase_, false);
+      size_t firstBase =
+          alignerObj.alignObjectB_.seqBase_.seq_.find_first_not_of("-");
+      size_t lastBase =
+          alignerObj.alignObjectB_.seqBase_.seq_.find_last_not_of("-");
+      uint32_t gapCount = std::count(
+          alignerObj.alignObjectA_.seqBase_.seq_.begin(),
+          alignerObj.alignObjectA_.seqBase_.seq_.begin() + lastBase, '-');
+      lastBase = lastBase - gapCount;
+      if (firstBase > minStart || lastBase < maxStop) {
+        dis.emplace_back(read);
+        read.remove = true;
+      } else {
+        uint32_t startPos = alignerObj.getAlignPosForSeqAPos(minStart);
+        uint32_t gapCount = std::count(
+            alignerObj.alignObjectB_.seqBase_.seq_.begin(),
+            alignerObj.alignObjectB_.seqBase_.seq_.begin() + startPos + 1, '-');
+        startPos -= gapCount;
+        uint32_t stopPos = alignerObj.getAlignPosForSeqAPos(maxStop);
+        uint32_t gapCountStop = std::count(
+            alignerObj.alignObjectB_.seqBase_.seq_.begin(),
+            alignerObj.alignObjectB_.seqBase_.seq_.begin() + stopPos + 1, '-');
+        stopPos -= gapCountStop;
+        read.trimBack(stopPos + 1);
+        read.trimFront(startPos);
+      }
+    }
+    std::vector<readObject> trimmed =
+        readVecSplitter::splitVectorOnRemove(similar).first;
+    SeqOutput::write(trimmed, setUp.pars_.directoryName_ + "trimmed_similar",
+                     setUp.pars_.ioOptions_);
+    SeqOutput::write(dis, setUp.pars_.directoryName_ + "discarded_similar",
+                     setUp.pars_.ioOptions_);
+    outInfo << "trimmed\t"
+            << getPercentageString(readVec::getTotalReadCount(trimmed),
+                                   readVec::getTotalReadCount(similar, true))
+            << std::endl;
+    outInfo << "discarded\t"
+            << getPercentageString(readVec::getTotalReadCount(dis),
+                                   readVec::getTotalReadCount(similar, true))
+            << std::endl;
   }
   setUp.logRunTime(std::cout);
   return 0;
 }
 
+int seqUtilsSplitRunner::getSimilarSequencesByKDist(
+    const njh::progutils::CmdArgs &inputCommands) {
+  seqSetUp setUp(inputCommands);
+  bool checkComplement = false;
+  double cutOff = 0.70;
+  uint32_t kmerLen = 7;
+  bool do_not_write_dissimilar = false;
+  setUp.processVerbose();
+  setUp.processDebug();
+  setUp.setOption(cutOff, "--kmerDistCutOff", "Kmer Similarity Score Cut off");
+  setUp.setOption(checkComplement, "--checkComplement", "checkComplement");
+  setUp.setOption(kmerLen, "--kLen", "Kmer Length");
+  setUp.setOption(do_not_write_dissimilar, "--do_not_write_dissimilar",
+                  "do not write dissimilar sequences");
 
-int seqUtilsSplitRunner::getSimilarSequencesByKDist(const njh::progutils::CmdArgs & inputCommands) {
-	seqSetUp setUp(inputCommands);
-	bool checkComplement = false;
-	double cutOff = 0.70;
-	uint32_t kmerLen = 7;
-	bool do_not_write_dissimilar = false;
-	setUp.processVerbose();
-	setUp.processDebug();
-	setUp.setOption(cutOff, "--kmerDistCutOff", "Kmer Similarity Score Cut off");
-	setUp.setOption(checkComplement, "--checkComplement", "checkComplement");
-	setUp.setOption(kmerLen, "--kLen", "Kmer Length");
-	setUp.setOption(do_not_write_dissimilar, "--do_not_write_dissimilar", "do not write dissimilar sequences");
+  // setUp.processKmerLenOptions();
+  setUp.processDefaultReader(true);
+  setUp.processRefFilename(true);
+  setUp.finishSetUp(std::cout);
 
-	// setUp.processKmerLenOptions();
-	setUp.processDefaultReader(true);
-	setUp.processRefFilename(true);
-	setUp.finishSetUp(std::cout);
+  SeqInput reader(setUp.pars_.ioOptions_);
+  reader.openIn();
+  auto similarOutOpts = setUp.pars_.ioOptions_;
+  if ("out" == setUp.pars_.ioOptions_.out_.outFilename_) {
+    similarOutOpts.out_.outFilename_ =
+        njh::files::prependFileBasename(similarOutOpts.firstName_, "similar_");
+  } else {
+    similarOutOpts.out_.outFilename_ = njh::files::prependFileBasename(
+        similarOutOpts.out_.outFilename_, "similar_");
+  }
+  auto disSimilarOutOpts = setUp.pars_.ioOptions_;
+  if ("out" == setUp.pars_.ioOptions_.out_.outFilename_) {
+    disSimilarOutOpts.out_.outFilename_ = njh::files::prependFileBasename(
+        disSimilarOutOpts.firstName_, "dissimilar_");
+  } else {
+    disSimilarOutOpts.out_.outFilename_ = njh::files::prependFileBasename(
+        disSimilarOutOpts.out_.outFilename_, "dissimilar_");
+  }
+  SeqOutput simWriter(similarOutOpts);
+  simWriter.openOut();
+  std::unique_ptr<SeqOutput> disWriter;
+  if (!do_not_write_dissimilar) {
+    disWriter = std::make_unique<SeqOutput>(disSimilarOutOpts);
+    disWriter->openOut();
+  }
 
+  SeqInput refReader(setUp.pars_.refIoOptions_);
+  auto refSeqs = refReader.readAllReads<seqInfo>();
+  std::vector<std::unique_ptr<seqWithKmerInfo>> refKmerReads;
+  for (const auto &seq : refSeqs) {
+    refKmerReads.emplace_back(
+        std::make_unique<seqWithKmerInfo>(seq, kmerLen, false));
+  }
 
-	SeqInput reader(setUp.pars_.ioOptions_);
-	reader.openIn();
-	auto similarOutOpts = setUp.pars_.ioOptions_;
-	if("out" == setUp.pars_.ioOptions_.out_.outFilename_ ){
-		similarOutOpts.out_.outFilename_ = njh::files::prependFileBasename(similarOutOpts.firstName_, "similar_");
-	}else{
-		similarOutOpts.out_.outFilename_ = njh::files::prependFileBasename(similarOutOpts.out_.outFilename_, "similar_");
-	}
-	auto disSimilarOutOpts = setUp.pars_.ioOptions_;
-	if("out" == setUp.pars_.ioOptions_.out_.outFilename_ ){
-		disSimilarOutOpts.out_.outFilename_ = njh::files::prependFileBasename(disSimilarOutOpts.firstName_, "dissimilar_");
-	}else{
-		disSimilarOutOpts.out_.outFilename_ = njh::files::prependFileBasename(disSimilarOutOpts.out_.outFilename_, "dissimilar_");
-	}
-	SeqOutput simWriter(similarOutOpts);
-	simWriter.openOut();
-	std::unique_ptr<SeqOutput> disWriter;
-	if (!do_not_write_dissimilar){
-		disWriter = std::make_unique<SeqOutput>(disSimilarOutOpts);
-		disWriter->openOut();
-	}
-
-
-	SeqInput refReader(setUp.pars_.refIoOptions_);
-	auto refSeqs = refReader.readAllReads<seqInfo>();
-	std::vector<std::unique_ptr<seqWithKmerInfo>> refKmerReads;
-	for (const auto & seq : refSeqs) {
-		refKmerReads.emplace_back(std::make_unique<seqWithKmerInfo>(seq, kmerLen, false));
-	}
-
-	seqInfo seq;
-	if(checkComplement){
-		while (reader.readNextRead(seq)) {
-			readVec::handelLowerCaseBases(seq, setUp.pars_.ioOptions_.lowerCaseBases_);
-			auto seqKmer = std::make_unique<seqWithKmerInfo>(seq, kmerLen, checkComplement);
-			uint32_t forwardWinners = 0;
-			uint32_t revWinners = 0;
-			for (const auto & refSeq : refKmerReads) {
-				auto forDist = refSeq->compareKmers(*seqKmer);
-				auto revDist = refSeq->compareKmersRevComp(*seqKmer);
-				if(forDist.second > cutOff && revDist.second > cutOff){
-					if (forDist.first < revDist.first) {
-						++revWinners;
-					} else {
-						++forwardWinners;
-					}
-				}else if(forDist.second > cutOff){
-					++forwardWinners;
-				}else if(revDist.second > cutOff){
-					++revWinners;
-				}
-			}
-			if(revWinners + forwardWinners > 0){
-				if (revWinners > forwardWinners) {
-					seq.reverseComplementRead(true, true);
-				}
-				simWriter.write(seq);
-			}else if (!do_not_write_dissimilar){
-				disWriter->write(seq);
-			}
-		}
-	}else{
-		while (reader.readNextRead(seq)) {
-			readVec::handelLowerCaseBases(seq, setUp.pars_.ioOptions_.lowerCaseBases_);
-			auto seqKmer = std::make_unique<seqWithKmerInfo>(seq, kmerLen, checkComplement);
-			uint32_t forwardWinners = 0;
-			for (const auto & refSeq : refKmerReads) {
-				auto forDist = refSeq->compareKmers(*seqKmer);
-				if(forDist.second >= cutOff){
-					++forwardWinners;
-					break;
-				}
-			}
-			if (forwardWinners >= 1) {
-				simWriter.write(seq);
-			}else if (!do_not_write_dissimilar){
-				disWriter->write(seq);
-			}
-		}
-	}
-	return 0;
+  seqInfo seq;
+  if (checkComplement) {
+    while (reader.readNextRead(seq)) {
+      readVec::handelLowerCaseBases(seq,
+                                    setUp.pars_.ioOptions_.lowerCaseBases_);
+      auto seqKmer =
+          std::make_unique<seqWithKmerInfo>(seq, kmerLen, checkComplement);
+      uint32_t forwardWinners = 0;
+      uint32_t revWinners = 0;
+      for (const auto &refSeq : refKmerReads) {
+        auto forDist = refSeq->compareKmers(*seqKmer);
+        auto revDist = refSeq->compareKmersRevComp(*seqKmer);
+        if (forDist.second > cutOff && revDist.second > cutOff) {
+          if (forDist.first < revDist.first) {
+            ++revWinners;
+          } else {
+            ++forwardWinners;
+          }
+        } else if (forDist.second > cutOff) {
+          ++forwardWinners;
+        } else if (revDist.second > cutOff) {
+          ++revWinners;
+        }
+      }
+      if (revWinners + forwardWinners > 0) {
+        if (revWinners > forwardWinners) {
+          seq.reverseComplementRead(true, true);
+        }
+        simWriter.write(seq);
+      } else if (!do_not_write_dissimilar) {
+        disWriter->write(seq);
+      }
+    }
+  } else {
+    while (reader.readNextRead(seq)) {
+      readVec::handelLowerCaseBases(seq,
+                                    setUp.pars_.ioOptions_.lowerCaseBases_);
+      auto seqKmer =
+          std::make_unique<seqWithKmerInfo>(seq, kmerLen, checkComplement);
+      uint32_t forwardWinners = 0;
+      for (const auto &refSeq : refKmerReads) {
+        auto forDist = refSeq->compareKmers(*seqKmer);
+        if (forDist.second >= cutOff) {
+          ++forwardWinners;
+          break;
+        }
+      }
+      if (forwardWinners >= 1) {
+        simWriter.write(seq);
+      } else if (!do_not_write_dissimilar) {
+        disWriter->write(seq);
+      }
+    }
+  }
+  return 0;
 }
 
-
-struct defaultSplitPars{
+struct defaultSplitPars {
   bool mark_ = false;
-	bool include_ = false;
+  bool include_ = false;
   SeqIOOptions incOpts_;
   SeqIOOptions excOpts_;
-
+  bool do_not_write_excluded_ = false;
 };
-void defaultSplitSetUpOptions(seqSetUp & setUp, defaultSplitPars & pars){
-	setUp.setOption(pars.include_, "--include", "Switch the exclusion and inclusion, by default most splitters exclude the search criteria");
-	setUp.setOption(pars.mark_, "--mark", "Mark the sequence names");
+void defaultSplitSetUpOptions(seqSetUp &setUp, defaultSplitPars &pars) {
+  setUp.setOption(pars.include_, "--include",
+                  "Switch the exclusion and inclusion, by default most "
+                  "splitters exclude the search criteria");
+  setUp.setOption(pars.mark_, "--mark", "Mark the sequence names");
+  setUp.setOption(pars.do_not_write_excluded_, "--do_not_write_excluded",
+                  "do not write excluded");
   setUp.processVerbose();
   // input file info
   setUp.processDefaultReader(true);
@@ -378,601 +418,682 @@ void defaultSplitSetUpOptions(seqSetUp & setUp, defaultSplitPars & pars){
   pars.excOpts_ = setUp.pars_.ioOptions_;
   pars.incOpts_ = setUp.pars_.ioOptions_;
   bfs::path bName = pars.incOpts_.out_.outFilename_;
-  if(pars.incOpts_.out_.outFilename_ == "out"){
-  	bName = njh::files::bfs::path(setUp.pars_.ioOptions_.firstName_);
+  if (pars.incOpts_.out_.outFilename_ == "out") {
+    bName = njh::files::bfs::path(setUp.pars_.ioOptions_.firstName_);
   }
   // bName.replace_extension("");
   bName = njh::files::removeExtension(bName);
   pars.incOpts_.out_.outFilename_ = bName.string() + "_included";
-	pars.excOpts_.out_.outFilename_ = bName.string() + "_excluded";
-
-
+  pars.excOpts_.out_.outFilename_ = bName.string() + "_excluded";
 }
 
-
-
-
-
-
-int seqUtilsSplitRunner::SeqSplitOnLenBelow(const njh::progutils::CmdArgs & inputCommands) {
-	defaultSplitPars dSplitPars;
-	uint32_t minLen = 0;
+int seqUtilsSplitRunner::SeqSplitOnLenBelow(
+    const njh::progutils::CmdArgs &inputCommands) {
+  defaultSplitPars dSplitPars;
+  uint32_t minLen = 0;
   seqSetUp setUp(inputCommands);
   defaultSplitSetUpOptions(setUp, dSplitPars);
 
-	setUp.setOption(minLen, "--minLen", "Exclude sequence below this Minimum Length", true);
-
+  setUp.setOption(minLen, "--minLen",
+                  "Exclude sequence below this Minimum Length", true);
 
   setUp.finishSetUp(std::cout);
 
   MultiSeqOutCache<seqInfo> seqOuts;
   seqOuts.addReader("include", dSplitPars.incOpts_);
-  seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  if (!dSplitPars.do_not_write_excluded_) {
+    seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  }
 
-  auto checker = std::make_unique<const ReadCheckerLenAbove>( minLen, dSplitPars.mark_);
+  auto checker =
+      std::make_unique<const ReadCheckerLenAbove>(minLen, dSplitPars.mark_);
 
   SeqIO reader(setUp.pars_.ioOptions_);
   reader.openIn();
   seqInfo seq;
-  while(reader.readNextRead(seq)){
-  	checker->checkRead(seq);
-  	if(dSplitPars.include_) {
-  		seq.on_ = !seq.on_;
-  	}
+  while (reader.readNextRead(seq)) {
+    checker->checkRead(seq);
+    if (dSplitPars.include_) {
+      seq.on_ = !seq.on_;
+    }
     std::string condition;
-    if(seq.on_){
-    	condition = "include";
-    }else{
-    	condition = "exclude";
+
+    if (seq.on_) {
+      condition = "include";
+    } else {
+      condition = "exclude";
     }
-    seqOuts.add(condition, seq);
+    if ("include" == condition || !dSplitPars.do_not_write_excluded_) {
+      seqOuts.add(condition, seq);
+    }
   }
 
-  if(setUp.pars_.verbose_){
-  	setUp.logRunTime(std::cout);
+  if (setUp.pars_.verbose_) {
+    setUp.logRunTime(std::cout);
   }
   return 0;
 }
 
-int seqUtilsSplitRunner::SeqSplitOnCount(const njh::progutils::CmdArgs & inputCommands) {
-	defaultSplitPars dSplitPars;
-	uint32_t count = 0;
+int seqUtilsSplitRunner::SeqSplitOnCount(
+    const njh::progutils::CmdArgs &inputCommands) {
+  defaultSplitPars dSplitPars;
+  uint32_t count = 0;
   seqSetUp setUp(inputCommands);
   defaultSplitSetUpOptions(setUp, dSplitPars);
 
-	setUp.setOption(count, "--count", "Exclude seqs with counts equal to and below this number", true);
-
+  setUp.setOption(count, "--count",
+                  "Exclude seqs with counts equal to and below this number",
+                  true);
 
   setUp.finishSetUp(std::cout);
 
   MultiSeqOutCache<seqInfo> seqOuts;
   seqOuts.addReader("include", dSplitPars.incOpts_);
-  seqOuts.addReader("exclude", dSplitPars.excOpts_);
-
+  if (!dSplitPars.do_not_write_excluded_) {
+    seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  }
 
   SeqIO reader(setUp.pars_.ioOptions_);
   reader.openIn();
   seqInfo seq;
-  while(reader.readNextRead(seq)){
-  	if(seq.cnt_ <= count){
-  		seq.on_ = false;
-  	}
-    std::string condition = "";
-    if(seq.on_){
-    	condition = "include";
-    }else{
-    	condition = "exclude";
+  while (reader.readNextRead(seq)) {
+    if (seq.cnt_ <= count) {
+      seq.on_ = false;
     }
-    seqOuts.add(condition, seq);
-  }
-
-  if(setUp.pars_.verbose_){
-  	setUp.logRunTime(std::cout);
-  }
-  return 0;
-}
-
-
-int seqUtilsSplitRunner::SeqSplitOnLenWithinMedianLen(const njh::progutils::CmdArgs & inputCommands) {
-	defaultSplitPars dSplitPars;
-	uint32_t within = 0;
-	double withinMultiplier = 0.15;
-  seqSetUp setUp(inputCommands);
-  defaultSplitSetUpOptions(setUp, dSplitPars);
-
-	setUp.setOption(within, "--within", "Within");
-	setUp.setOption(withinMultiplier, "--withinMultiplier", "withinMultiplier");
-
-  setUp.finishSetUp(std::cout);
-
-  MultiSeqOutCache<seqInfo> seqOuts;
-  seqOuts.addReader("include", dSplitPars.incOpts_);
-  seqOuts.addReader("exclude", dSplitPars.excOpts_);
-	uint32_t length = 0;
-	{
-		std::vector<uint32_t> readLengths;
-	  SeqIO reader(setUp.pars_.ioOptions_);
-	  reader.openIn();
-	  seqInfo seq;
-	  while(reader.readNextRead(seq)){
-	  	readLengths.emplace_back(len(seq));
-	  }
-	  length = std::round(vectorMedianRef(readLengths));
-	}
-
-	if(0 == within){
-		within = withinMultiplier * length;
-	}
-
-	auto checker = std::make_unique<const ReadCheckerLenWithin>(within, length, dSplitPars.mark_);
-
-
-  SeqIO reader(setUp.pars_.ioOptions_);
-  reader.openIn();
-  seqInfo seq;
-  while(reader.readNextRead(seq)){
-  	checker->checkRead(seq);
-  	if(dSplitPars.include_) {
-  		seq.on_ = !seq.on_;
-  	}
     std::string condition;
-    if(seq.on_){
-    	condition = "include";
-    }else{
-    	condition = "exclude";
+    if (seq.on_) {
+      condition = "include";
+    } else {
+      condition = "exclude";
     }
-    seqOuts.add(condition, seq);
+    if ("include" == condition || !dSplitPars.do_not_write_excluded_) {
+      seqOuts.add(condition, seq);
+    }
   }
 
-  if(setUp.pars_.verbose_){
-  	setUp.logRunTime(std::cout);
+  if (setUp.pars_.verbose_) {
+    setUp.logRunTime(std::cout);
   }
   return 0;
 }
-int seqUtilsSplitRunner::SeqSplitOnLenWithin(const njh::progutils::CmdArgs & inputCommands) {
-	defaultSplitPars dSplitPars;
-	uint32_t length = 0;
-	uint32_t within = 0;
 
+int seqUtilsSplitRunner::SeqSplitOnLenWithinMedianLen(
+    const njh::progutils::CmdArgs &inputCommands) {
+  defaultSplitPars dSplitPars;
+  uint32_t within = 0;
+  double withinMultiplier = 0.15;
   seqSetUp setUp(inputCommands);
   defaultSplitSetUpOptions(setUp, dSplitPars);
 
-	setUp.setOption(within, "--within", "Within");
-	setUp.setOption(length, "--length", "Target Length", true);
+  setUp.setOption(within, "--within", "Within");
+  setUp.setOption(withinMultiplier, "--withinMultiplier", "withinMultiplier");
 
   setUp.finishSetUp(std::cout);
 
   MultiSeqOutCache<seqInfo> seqOuts;
   seqOuts.addReader("include", dSplitPars.incOpts_);
-  seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  if (!dSplitPars.do_not_write_excluded_) {
+    seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  }
+  uint32_t length = 0;
+  {
+    std::vector<uint32_t> readLengths;
+    SeqIO reader(setUp.pars_.ioOptions_);
+    reader.openIn();
+    seqInfo seq;
+    while (reader.readNextRead(seq)) {
+      readLengths.emplace_back(len(seq));
+    }
+    length = std::round(vectorMedianRef(readLengths));
+  }
 
-	auto checker = std::make_unique<const ReadCheckerLenWithin>(within, length, dSplitPars.mark_);
+  if (0 == within) {
+    within = withinMultiplier * length;
+  }
 
+  auto checker = std::make_unique<const ReadCheckerLenWithin>(within, length,
+                                                              dSplitPars.mark_);
 
   SeqIO reader(setUp.pars_.ioOptions_);
   reader.openIn();
   seqInfo seq;
-  while(reader.readNextRead(seq)){
-  	checker->checkRead(seq);
-  	if(dSplitPars.include_) {
-  		seq.on_ = !seq.on_;
-  	}
-    std::string condition;
-    if(seq.on_){
-    	condition = "include";
-    }else{
-    	condition = "exclude";
+  while (reader.readNextRead(seq)) {
+    checker->checkRead(seq);
+    if (dSplitPars.include_) {
+      seq.on_ = !seq.on_;
     }
-    seqOuts.add(condition, seq);
+    std::string condition;
+    if (seq.on_) {
+      condition = "include";
+    } else {
+      condition = "exclude";
+    }
+    if ("include" == condition || !dSplitPars.do_not_write_excluded_) {
+      seqOuts.add(condition, seq);
+    }
   }
 
-  if(setUp.pars_.verbose_){
-  	setUp.logRunTime(std::cout);
+  if (setUp.pars_.verbose_) {
+    setUp.logRunTime(std::cout);
+  }
+  return 0;
+}
+int seqUtilsSplitRunner::SeqSplitOnLenWithin(
+    const njh::progutils::CmdArgs &inputCommands) {
+  defaultSplitPars dSplitPars;
+  uint32_t length = 0;
+  uint32_t within = 0;
+
+  seqSetUp setUp(inputCommands);
+  defaultSplitSetUpOptions(setUp, dSplitPars);
+
+  setUp.setOption(within, "--within", "Within");
+  setUp.setOption(length, "--length", "Target Length", true);
+
+  setUp.finishSetUp(std::cout);
+
+  MultiSeqOutCache<seqInfo> seqOuts;
+  seqOuts.addReader("include", dSplitPars.incOpts_);
+  if (!dSplitPars.do_not_write_excluded_) {
+    seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  }
+  auto checker = std::make_unique<const ReadCheckerLenWithin>(within, length,
+                                                              dSplitPars.mark_);
+
+  SeqIO reader(setUp.pars_.ioOptions_);
+  reader.openIn();
+  seqInfo seq;
+  while (reader.readNextRead(seq)) {
+    checker->checkRead(seq);
+    if (dSplitPars.include_) {
+      seq.on_ = !seq.on_;
+    }
+    std::string condition;
+    if (seq.on_) {
+      condition = "include";
+    } else {
+      condition = "exclude";
+    }
+    if ("include" == condition || !dSplitPars.do_not_write_excluded_) {
+      seqOuts.add(condition, seq);
+    }
+  }
+
+  if (setUp.pars_.verbose_) {
+    setUp.logRunTime(std::cout);
   }
   return 0;
 }
 
-
-
-
-int seqUtilsSplitRunner::SeqSplitOnNameContainsPattern(const njh::progutils::CmdArgs & inputCommands) {
-	defaultSplitPars dSplitPars;
-	std::string nameContainsPattern;
+int seqUtilsSplitRunner::SeqSplitOnNameContainsPattern(
+    const njh::progutils::CmdArgs &inputCommands) {
+  defaultSplitPars dSplitPars;
+  std::string nameContainsPattern;
   seqSetUp setUp(inputCommands);
   setUp.processVerbose();
   // input file info
   setUp.processDefaultReader(true);
-	setUp.setOption(dSplitPars.include_, "--include", "Switch the exclusion and inclusion, by default most splitters exclude the search criteria");
+  setUp.setOption(dSplitPars.include_, "--include",
+                  "Switch the exclusion and inclusion, by default most "
+                  "splitters exclude the search criteria");
 
   dSplitPars.excOpts_ = setUp.pars_.ioOptions_;
   dSplitPars.incOpts_ = setUp.pars_.ioOptions_;
   bfs::path bName = dSplitPars.incOpts_.out_.outFilename_;
-  if(dSplitPars.incOpts_.out_.outFilename_ == "out"){
-  	bName = njh::files::bfs::path(setUp.pars_.ioOptions_.firstName_);
+  if (dSplitPars.incOpts_.out_.outFilename_ == "out") {
+    bName = njh::files::bfs::path(setUp.pars_.ioOptions_.firstName_);
   }
   bName.replace_extension("");
   dSplitPars.incOpts_.out_.outFilename_ = bName.string() + "_included";
   dSplitPars.excOpts_.out_.outFilename_ = bName.string() + "_excluded";
-
-	setUp.setOption(nameContainsPattern, "--nameContains", "Exclude if Name Contains this regex pattern", true);
+  setUp.setOption(dSplitPars.do_not_write_excluded_, "--do_not_write_excluded",
+                  "do not write excluded");
+  setUp.setOption(nameContainsPattern, "--nameContains",
+                  "Exclude if Name Contains this regex pattern", true);
 
   setUp.finishSetUp(std::cout);
 
   MultiSeqOutCache<seqInfo> seqOuts;
   seqOuts.addReader("include", dSplitPars.incOpts_);
-  seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  if (!dSplitPars.do_not_write_excluded_) {
+    seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  }
 
   std::regex pat{nameContainsPattern};
 
   SeqIO reader(setUp.pars_.ioOptions_);
   reader.openIn();
-	seqInfo seq;
-	while (reader.readNextRead(seq)) {
-		auto searchResults = std::regex_match(seq.name_, pat);
-		std::string condition;
-		if(dSplitPars.include_) {
-			searchResults = !searchResults;
-		}
-		if (searchResults) {
-			condition = "exclude";
-		} else {
-			condition = "include";
-		}
-		/**@todo something appers to hang when output files exist and --overWrite is not on, likely an exception is being thrown without release a lock or something */
-		seqOuts.add(condition, seq);
-	}
-  if(setUp.pars_.verbose_){
-  	setUp.logRunTime(std::cout);
+  seqInfo seq;
+  while (reader.readNextRead(seq)) {
+    auto searchResults = std::regex_match(seq.name_, pat);
+    std::string condition;
+    if (dSplitPars.include_) {
+      searchResults = !searchResults;
+    }
+    if (searchResults) {
+      condition = "exclude";
+    } else {
+      condition = "include";
+    }
+    /**@todo something appers to hang when output files exist and --overWrite is
+     * not on, likely an exception is being thrown without release a lock or
+     * something */
+    if ("include" == condition || !dSplitPars.do_not_write_excluded_) {
+      seqOuts.add(condition, seq);
+    }
+  }
+  if (setUp.pars_.verbose_) {
+    setUp.logRunTime(std::cout);
   }
   return 0;
 }
 
-
-int seqUtilsSplitRunner::SeqSplitOnNameContains(const njh::progutils::CmdArgs & inputCommands) {
-	defaultSplitPars dSplitPars;
-	std::string nameContains;
+int seqUtilsSplitRunner::SeqSplitOnNameContains(
+    const njh::progutils::CmdArgs &inputCommands) {
+  defaultSplitPars dSplitPars;
+  std::string nameContains;
   seqSetUp setUp(inputCommands);
   defaultSplitSetUpOptions(setUp, dSplitPars);
-	setUp.setOption(nameContains, "--nameContains", "Exclude if Name Contains", true);
+  setUp.setOption(nameContains, "--nameContains", "Exclude if Name Contains",
+                  true);
 
   setUp.finishSetUp(std::cout);
 
   MultiSeqOutCache<seqInfo> seqOuts;
   seqOuts.addReader("include", dSplitPars.incOpts_);
-  seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  if (!dSplitPars.do_not_write_excluded_) {
+    seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  }
 
-  auto checker = std::make_unique<const ReadCheckerOnNameContaining>( nameContains, dSplitPars.mark_);
+  auto checker = std::make_unique<const ReadCheckerOnNameContaining>(
+      nameContains, dSplitPars.mark_);
 
   SeqIO reader(setUp.pars_.ioOptions_);
   reader.openIn();
   seqInfo seq;
-  while(reader.readNextRead(seq)){
-  	checker->checkRead(seq);
-  	if(dSplitPars.include_) {
-  		seq.on_ = !seq.on_;
-  	}
-    std::string condition;
-    if(seq.on_){
-    	condition = "include";
-    }else{
-    	condition = "exclude";
+  while (reader.readNextRead(seq)) {
+    checker->checkRead(seq);
+    if (dSplitPars.include_) {
+      seq.on_ = !seq.on_;
     }
-    seqOuts.add(condition, seq);
+    std::string condition;
+    if (seq.on_) {
+      condition = "include";
+    } else {
+      condition = "exclude";
+    }
+    if ("include" == condition || !dSplitPars.do_not_write_excluded_) {
+      seqOuts.add(condition, seq);
+    }
   }
 
-  if(setUp.pars_.verbose_){
-  	setUp.logRunTime(std::cout);
+  if (setUp.pars_.verbose_) {
+    setUp.logRunTime(std::cout);
   }
   return 0;
 }
-int seqUtilsSplitRunner::SeqSplitOnSeqContains(const njh::progutils::CmdArgs & inputCommands) {
-	defaultSplitPars dSplitPars;
-	std::string seqContains;
-	uint32_t occurrences = 1;
-
-	seqSetUp setUp(inputCommands);
-	defaultSplitSetUpOptions(setUp, dSplitPars);
-	setUp.setOption(occurrences, "--occurrences", "Minimum number of times a sequence must occur");
-	setUp.setOption(seqContains, "--seqContains", "Exclude if Seq Contains this", true);
-
-	setUp.finishSetUp(std::cout);
-
-	MultiSeqOutCache<seqInfo> seqOuts;
-	seqOuts.addReader("include", dSplitPars.incOpts_);
-	seqOuts.addReader("exclude", dSplitPars.excOpts_);
-	auto checker = std::make_unique<const ReadCheckerOnSeqContaining>( seqContains, occurrences, dSplitPars.mark_);
-
-	SeqIO reader(setUp.pars_.ioOptions_);
-	reader.openIn();
-	seqInfo seq;
-	while(reader.readNextRead(seq)){
-		checker->checkRead(seq);
-		if(dSplitPars.include_) {
-			seq.on_ = !seq.on_;
-		}
-		std::string condition;
-		if(seq.on_){
-			condition = "include";
-		}else{
-			condition = "exclude";
-		}
-		seqOuts.add(condition, seq);
-	}
-
-	if(setUp.pars_.verbose_){
-		setUp.logRunTime(std::cout);
-	}
-	return 0;
-}
-
-
-
-
-int seqUtilsSplitRunner::SeqSplitOnSeqAllowableChars(const njh::progutils::CmdArgs & inputCommands) {
-	defaultSplitPars dSplitPars;
-	std::vector<char> allowableChars{'A', 'C', 'G', 'T'};
-	uint32_t occurrences = 1;
-
-	seqSetUp setUp(inputCommands);
-	defaultSplitSetUpOptions(setUp, dSplitPars);
-	setUp.setOption(occurrences, "--occurrences", "Minimum number of times a sequence must occur");
-	setUp.setOption(allowableChars, "--allowableChars", "Exclude if seq contains any of characters that aren't these characters");
-	setUp.finishSetUp(std::cout);
-
-	MultiSeqOutCache<seqInfo> seqOuts;
-	seqOuts.addReader("include", dSplitPars.incOpts_);
-	seqOuts.addReader("exclude", dSplitPars.excOpts_);
-
-	SeqIO reader(setUp.pars_.ioOptions_);
-	reader.openIn();
-	seqInfo seq;
-	while (reader.readNextRead(seq)) {
-		uint32_t count = std::count_if(seq.seq_.begin(), seq.seq_.end(), [&allowableChars](char c) {
-			return njh::notIn(c, allowableChars);
-		});
-		if (setUp.pars_.verbose_) {
-			std::cout << seq.name_ << std::endl;
-			std::cout << "\tcount: " << count << std::endl;
-		}
-		if (count >= occurrences) {
-			seq.on_ = !seq.on_;
-		}
-		// checker->checkRead(seq);
-		if (dSplitPars.include_) {
-			seq.on_ = !seq.on_;
-		}
-		std::string condition;
-		if (seq.on_) {
-			condition = "include";
-		} else {
-			condition = "exclude";
-		}
-		seqOuts.add(condition, seq);
-	}
-
-	if(setUp.pars_.verbose_){
-		setUp.logRunTime(std::cout);
-	}
-	return 0;
-}
-
-int seqUtilsSplitRunner::SeqSplitOnSeqContainsPattern(const njh::progutils::CmdArgs & inputCommands) {
-	defaultSplitPars dSplitPars;
-	std::string seqContains;
+int seqUtilsSplitRunner::SeqSplitOnSeqContains(
+    const njh::progutils::CmdArgs &inputCommands) {
+  defaultSplitPars dSplitPars;
+  std::string seqContains;
   uint32_t occurrences = 1;
 
   seqSetUp setUp(inputCommands);
   defaultSplitSetUpOptions(setUp, dSplitPars);
-	setUp.setOption(occurrences, "--occurrences", "Minimum number of times a sequence must occur");
-	setUp.setOption(seqContains, "--pattern", "Exclude if Seq Contains this", true);
+  setUp.setOption(occurrences, "--occurrences",
+                  "Minimum number of times a sequence must occur");
+  setUp.setOption(seqContains, "--seqContains", "Exclude if Seq Contains this",
+                  true);
+
   setUp.finishSetUp(std::cout);
 
   MultiSeqOutCache<seqInfo> seqOuts;
   seqOuts.addReader("include", dSplitPars.incOpts_);
-  seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  if (!dSplitPars.do_not_write_excluded_) {
+    seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  }
+  auto checker = std::make_unique<const ReadCheckerOnSeqContaining>(
+      seqContains, occurrences, dSplitPars.mark_);
 
   SeqIO reader(setUp.pars_.ioOptions_);
   reader.openIn();
   seqInfo seq;
-	std::regex seqContainsReg{seqContains};
-	while (reader.readNextRead(seq)) {
-		uint32_t count = countRegexOccurrences(seq.seq_, seqContainsReg);
-		if (setUp.pars_.verbose_) {
-			std::cout << seq.name_ << std::endl;
-			std::cout << "\tcount: " << count << std::endl;
-		}
-		if (count >= occurrences) {
-			seq.on_ = !seq.on_;
-		}
-		// checker->checkRead(seq);
-		if (dSplitPars.include_) {
-			seq.on_ = !seq.on_;
-		}
-		std::string condition;
-		if (seq.on_) {
-			condition = "include";
-		} else {
-			condition = "exclude";
-		}
-		seqOuts.add(condition, seq);
-	}
+  while (reader.readNextRead(seq)) {
+    checker->checkRead(seq);
+    if (dSplitPars.include_) {
+      seq.on_ = !seq.on_;
+    }
+    std::string condition;
+    if (seq.on_) {
+      condition = "include";
+    } else {
+      condition = "exclude";
+    }
+    if ("include" == condition || !dSplitPars.do_not_write_excluded_) {
+      seqOuts.add(condition, seq);
+    }
+  }
 
-  if(setUp.pars_.verbose_){
-  	setUp.logRunTime(std::cout);
+  if (setUp.pars_.verbose_) {
+    setUp.logRunTime(std::cout);
   }
   return 0;
 }
 
-int seqUtilsSplitRunner::SeqSplitOnLenAbove(const njh::progutils::CmdArgs & inputCommands) {
-	defaultSplitPars dSplitPars;
-	uint32_t maxLength = 0;
+int seqUtilsSplitRunner::SeqSplitOnSeqAllowableChars(
+    const njh::progutils::CmdArgs &inputCommands) {
+  defaultSplitPars dSplitPars;
+  std::vector<char> allowableChars{'A', 'C', 'G', 'T'};
+  uint32_t occurrences = 1;
+
   seqSetUp setUp(inputCommands);
-	setUp.setOption(maxLength, "--maxLen", "Exclude sequence with lengths above this maximum Length", true);
+  defaultSplitSetUpOptions(setUp, dSplitPars);
+  setUp.setOption(occurrences, "--occurrences",
+                  "Minimum number of times a sequence must occur");
+  setUp.setOption(
+      allowableChars, "--allowableChars",
+      "Exclude if seq contains any of characters that aren't these characters");
+  setUp.finishSetUp(std::cout);
+
+  MultiSeqOutCache<seqInfo> seqOuts;
+  seqOuts.addReader("include", dSplitPars.incOpts_);
+  if (!dSplitPars.do_not_write_excluded_) {
+    seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  }
+
+  SeqIO reader(setUp.pars_.ioOptions_);
+  reader.openIn();
+  seqInfo seq;
+  while (reader.readNextRead(seq)) {
+    uint32_t count = std::count_if(
+        seq.seq_.begin(), seq.seq_.end(),
+        [&allowableChars](char c) { return njh::notIn(c, allowableChars); });
+    if (setUp.pars_.verbose_) {
+      std::cout << seq.name_ << std::endl;
+      std::cout << "\tcount: " << count << std::endl;
+    }
+    if (count >= occurrences) {
+      seq.on_ = !seq.on_;
+    }
+    // checker->checkRead(seq);
+    if (dSplitPars.include_) {
+      seq.on_ = !seq.on_;
+    }
+    std::string condition;
+    if (seq.on_) {
+      condition = "include";
+    } else {
+      condition = "exclude";
+    }
+    if ("include" == condition || !dSplitPars.do_not_write_excluded_) {
+      seqOuts.add(condition, seq);
+    }
+  }
+
+  if (setUp.pars_.verbose_) {
+    setUp.logRunTime(std::cout);
+  }
+  return 0;
+}
+
+int seqUtilsSplitRunner::SeqSplitOnSeqContainsPattern(
+    const njh::progutils::CmdArgs &inputCommands) {
+  defaultSplitPars dSplitPars;
+  std::string seqContains;
+  uint32_t occurrences = 1;
+
+  seqSetUp setUp(inputCommands);
+  defaultSplitSetUpOptions(setUp, dSplitPars);
+  setUp.setOption(occurrences, "--occurrences",
+                  "Minimum number of times a sequence must occur");
+  setUp.setOption(seqContains, "--pattern", "Exclude if Seq Contains this",
+                  true);
+  setUp.finishSetUp(std::cout);
+
+  MultiSeqOutCache<seqInfo> seqOuts;
+  seqOuts.addReader("include", dSplitPars.incOpts_);
+  if (!dSplitPars.do_not_write_excluded_) {
+    seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  }
+
+  SeqIO reader(setUp.pars_.ioOptions_);
+  reader.openIn();
+  seqInfo seq;
+  std::regex seqContainsReg{seqContains};
+  while (reader.readNextRead(seq)) {
+    uint32_t count = countRegexOccurrences(seq.seq_, seqContainsReg);
+    if (setUp.pars_.verbose_) {
+      std::cout << seq.name_ << std::endl;
+      std::cout << "\tcount: " << count << std::endl;
+    }
+    if (count >= occurrences) {
+      seq.on_ = !seq.on_;
+    }
+    // checker->checkRead(seq);
+    if (dSplitPars.include_) {
+      seq.on_ = !seq.on_;
+    }
+    std::string condition;
+    if (seq.on_) {
+      condition = "include";
+    } else {
+      condition = "exclude";
+    }
+    if ("include" == condition || !dSplitPars.do_not_write_excluded_) {
+      seqOuts.add(condition, seq);
+    }
+  }
+
+  if (setUp.pars_.verbose_) {
+    setUp.logRunTime(std::cout);
+  }
+  return 0;
+}
+
+int seqUtilsSplitRunner::SeqSplitOnLenAbove(
+    const njh::progutils::CmdArgs &inputCommands) {
+  defaultSplitPars dSplitPars;
+  uint32_t maxLength = 0;
+  seqSetUp setUp(inputCommands);
+  setUp.setOption(maxLength, "--maxLen",
+                  "Exclude sequence with lengths above this maximum Length",
+                  true);
 
   defaultSplitSetUpOptions(setUp, dSplitPars);
   setUp.finishSetUp(std::cout);
 
   MultiSeqOutCache<seqInfo> seqOuts;
   seqOuts.addReader("include", dSplitPars.incOpts_);
-  seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  if (!dSplitPars.do_not_write_excluded_) {
+    seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  }
 
-  auto   	checker = std::make_unique<const ReadCheckerLenBelow>( maxLength, dSplitPars.mark_);
+  auto checker =
+      std::make_unique<const ReadCheckerLenBelow>(maxLength, dSplitPars.mark_);
 
   SeqIO reader(setUp.pars_.ioOptions_);
   reader.openIn();
   seqInfo seq;
-  while(reader.readNextRead(seq)){
-  	checker->checkRead(seq);
-  	if(dSplitPars.include_) {
-  		seq.on_ = !seq.on_;
-  	}
-    std::string condition;
-    if(seq.on_){
-    	condition = "include";
-    }else{
-    	condition = "exclude";
+  while (reader.readNextRead(seq)) {
+    checker->checkRead(seq);
+    if (dSplitPars.include_) {
+      seq.on_ = !seq.on_;
     }
-    seqOuts.add(condition, seq);
+    std::string condition;
+    if (seq.on_) {
+      condition = "include";
+    } else {
+      condition = "exclude";
+    }
+    if ("include" == condition || !dSplitPars.do_not_write_excluded_) {
+      seqOuts.add(condition, seq);
+    }
   }
 
-  if(setUp.pars_.verbose_){
-  	setUp.logRunTime(std::cout);
+  if (setUp.pars_.verbose_) {
+    setUp.logRunTime(std::cout);
   }
   return 0;
 }
 
-int seqUtilsSplitRunner::SeqSplitOnLenBetween(const njh::progutils::CmdArgs & inputCommands) {
-	defaultSplitPars dSplitPars;
-	uint32_t minLen = 0;
-	uint32_t maxLength = 0;
+int seqUtilsSplitRunner::SeqSplitOnLenBetween(
+    const njh::progutils::CmdArgs &inputCommands) {
+  defaultSplitPars dSplitPars;
+  uint32_t minLen = 0;
+  uint32_t maxLength = 0;
   seqSetUp setUp(inputCommands);
   defaultSplitSetUpOptions(setUp, dSplitPars);
-	setUp.setOption(maxLength, "--maxLen", "Exclude sequence with lengths above this maximum Length", true);
-	setUp.setOption(minLen, "--minLen", "Exclude sequence below this Minimum Length", true);
-	if(minLen >maxLength){
-		setUp.failed_ = true;
-		setUp.addWarning(njh::pasteAsStr("Minimum length must be less than or equal to max length"));
-	}
+  setUp.setOption(maxLength, "--maxLen",
+                  "Exclude sequence with lengths above this maximum Length",
+                  true);
+  setUp.setOption(minLen, "--minLen",
+                  "Exclude sequence below this Minimum Length", true);
+  if (minLen > maxLength) {
+    setUp.failed_ = true;
+    setUp.addWarning(njh::pasteAsStr(
+        "Minimum length must be less than or equal to max length"));
+  }
   setUp.finishSetUp(std::cout);
 
   MultiSeqOutCache<seqInfo> seqOuts;
   seqOuts.addReader("include", dSplitPars.incOpts_);
-  seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  if (!dSplitPars.do_not_write_excluded_) {
+    seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  }
 
-  auto checker = std::make_unique<const ReadCheckerLenBetween>( maxLength, minLen, dSplitPars.mark_);
+  auto checker = std::make_unique<const ReadCheckerLenBetween>(
+      maxLength, minLen, dSplitPars.mark_);
 
   SeqIO reader(setUp.pars_.ioOptions_);
   reader.openIn();
   seqInfo seq;
-  while(reader.readNextRead(seq)){
-  	checker->checkRead(seq);
-  	if(dSplitPars.include_) {
-  		seq.on_ = !seq.on_;
-  	}
-    std::string condition;
-    if(seq.on_){
-    	condition = "include";
-    }else{
-    	condition = "exclude";
+  while (reader.readNextRead(seq)) {
+    checker->checkRead(seq);
+    if (dSplitPars.include_) {
+      seq.on_ = !seq.on_;
     }
-    seqOuts.add(condition, seq);
+    std::string condition;
+    if (seq.on_) {
+      condition = "include";
+    } else {
+      condition = "exclude";
+    }
+    if ("include" == condition || !dSplitPars.do_not_write_excluded_) {
+      seqOuts.add(condition, seq);
+    }
   }
 
-  if(setUp.pars_.verbose_){
-  	setUp.logRunTime(std::cout);
+  if (setUp.pars_.verbose_) {
+    setUp.logRunTime(std::cout);
   }
   return 0;
 }
 
-int seqUtilsSplitRunner::SeqSplitOnQualityWindow(const njh::progutils::CmdArgs & inputCommands) {
-	defaultSplitPars dSplitPars;
+int seqUtilsSplitRunner::SeqSplitOnQualityWindow(
+    const njh::progutils::CmdArgs &inputCommands) {
+  defaultSplitPars dSplitPars;
   std::string qualWindowString = "50,5,25";
 
   seqSetUp setUp(inputCommands);
   defaultSplitSetUpOptions(setUp, dSplitPars);
-  setUp.setOption(qualWindowString, "-qualWindow", "Sliding Quality Window, goes WindowSize,WindowStep,Thresdhold", true);
+  setUp.setOption(
+      qualWindowString, "-qualWindow",
+      "Sliding Quality Window, goes WindowSize,WindowStep,Thresdhold", true);
 
-	uint32_t qualWindowLength = 50;
-	uint32_t qualWindowStep = 5;
-	uint8_t qualWindowThres = 25;
+  uint32_t qualWindowLength = 50;
+  uint32_t qualWindowStep = 5;
+  uint8_t qualWindowThres = 25;
   seqUtil::processQualityWindowString(qualWindowString, qualWindowLength,
-  		qualWindowStep, qualWindowThres);
+                                      qualWindowStep, qualWindowThres);
 
   setUp.finishSetUp(std::cout);
 
   MultiSeqOutCache<seqInfo> seqOuts;
   seqOuts.addReader("include", dSplitPars.incOpts_);
-  seqOuts.addReader("exclude", dSplitPars.excOpts_);
-  auto checker = std::make_unique<const ReadCheckerOnQualityWindow>( qualWindowLength, qualWindowStep, qualWindowThres, dSplitPars.mark_);
+  if (!dSplitPars.do_not_write_excluded_) {
+    seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  }
+  auto checker = std::make_unique<const ReadCheckerOnQualityWindow>(
+      qualWindowLength, qualWindowStep, qualWindowThres, dSplitPars.mark_);
 
   SeqIO reader(setUp.pars_.ioOptions_);
   reader.openIn();
   seqInfo seq;
-  while(reader.readNextRead(seq)){
-  	checker->checkRead(seq);
-  	if(dSplitPars.include_) {
-  		seq.on_ = !seq.on_;
-  	}
-    std::string condition;
-    if(seq.on_){
-    	condition = "include";
-    }else{
-    	condition = "exclude";
+  while (reader.readNextRead(seq)) {
+    checker->checkRead(seq);
+    if (dSplitPars.include_) {
+      seq.on_ = !seq.on_;
     }
-    seqOuts.add(condition, seq);
+    std::string condition;
+    if (seq.on_) {
+      condition = "include";
+    } else {
+      condition = "exclude";
+    }
+    if ("include" == condition || !dSplitPars.do_not_write_excluded_) {
+      seqOuts.add(condition, seq);
+    }
   }
 
-  if(setUp.pars_.verbose_){
-  	setUp.logRunTime(std::cout);
+  if (setUp.pars_.verbose_) {
+    setUp.logRunTime(std::cout);
   }
   return 0;
 }
 
-
-
-int seqUtilsSplitRunner::SeqSplitOnQualityCheck(const njh::progutils::CmdArgs & inputCommands) {
-	defaultSplitPars dSplitPars;
+int seqUtilsSplitRunner::SeqSplitOnQualityCheck(
+    const njh::progutils::CmdArgs &inputCommands) {
+  defaultSplitPars dSplitPars;
 
   seqSetUp setUp(inputCommands);
   defaultSplitSetUpOptions(setUp, dSplitPars);
   double qualCheckCutOff = .90;
   uint32_t qualCheck = 30;
-  setUp.setOption(qualCheckCutOff, "--qualCheckCutOff", "the fraction of the bases that have to be above the --qualCheck flag, ranges 0-1", true );
-  setUp.setOption(qualCheck, "--qualCheck", "Quality score Check to count", true);
+  setUp.setOption(qualCheckCutOff, "--qualCheckCutOff",
+                  "the fraction of the bases that have to be above the "
+                  "--qualCheck flag, ranges 0-1",
+                  true);
+  setUp.setOption(qualCheck, "--qualCheck", "Quality score Check to count",
+                  true);
 
   setUp.finishSetUp(std::cout);
 
   MultiSeqOutCache<seqInfo> seqOuts;
   seqOuts.addReader("include", dSplitPars.incOpts_);
-  seqOuts.addReader("exclude", dSplitPars.excOpts_);
-  auto checker = std::make_unique<const ReadCheckerQualCheck>( qualCheck,qualCheckCutOff , dSplitPars.mark_);
+  if (!dSplitPars.do_not_write_excluded_) {
+    seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  }
+  auto checker = std::make_unique<const ReadCheckerQualCheck>(
+      qualCheck, qualCheckCutOff, dSplitPars.mark_);
 
   SeqIO reader(setUp.pars_.ioOptions_);
   reader.openIn();
   seqInfo seq;
-  while(reader.readNextRead(seq)){
-  	checker->checkRead(seq);
-  	if(dSplitPars.include_) {
-  		seq.on_ = !seq.on_;
-  	}
-    std::string condition;
-    if(seq.on_){
-    	condition = "include";
-    }else{
-    	condition = "exclude";
+  while (reader.readNextRead(seq)) {
+    checker->checkRead(seq);
+    if (dSplitPars.include_) {
+      seq.on_ = !seq.on_;
     }
-    seqOuts.add(condition, seq);
+    std::string condition;
+    if (seq.on_) {
+      condition = "include";
+    } else {
+      condition = "exclude";
+    }
+    if ("include" == condition || !dSplitPars.do_not_write_excluded_) {
+      seqOuts.add(condition, seq);
+    }
   }
 
-  if(setUp.pars_.verbose_){
-  	setUp.logRunTime(std::cout);
+  if (setUp.pars_.verbose_) {
+    setUp.logRunTime(std::cout);
   }
   return 0;
 }
 
-
-int seqUtilsSplitRunner::SeqSplitOnNucelotideComp(const njh::progutils::CmdArgs & inputCommands) {
-	defaultSplitPars dSplitPars;
+int seqUtilsSplitRunner::SeqSplitOnNucelotideComp(
+    const njh::progutils::CmdArgs &inputCommands) {
+  defaultSplitPars dSplitPars;
 
   seqSetUp setUp(inputCommands);
   defaultSplitSetUpOptions(setUp, dSplitPars);
@@ -980,148 +1101,157 @@ int seqUtilsSplitRunner::SeqSplitOnNucelotideComp(const njh::progutils::CmdArgs 
 
   MultiSeqOutCache<seqInfo> seqOuts;
   seqOuts.addReader("include", dSplitPars.incOpts_);
-  seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  if (!dSplitPars.do_not_write_excluded_) {
+    seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  }
 
+  SeqIO nucReader(setUp.pars_.ioOptions_);
+  nucReader.openIn();
+  seqInfo nucSeq;
+  charCounter counter;
+  while (nucReader.readNextRead(nucSeq)) {
+    counter.increaseCountByString(nucSeq.seq_, nucSeq.cnt_);
+  }
+  counter.resetAlphabet(true);
+  counter.setFractions();
+  nucReader.closeIn();
+  nucReader.openIn();
+  std::vector<double> differences;
+  while (nucReader.readNextRead(nucSeq)) {
+    charCounter currentCounter(counter.alphabet_);
+    currentCounter.increaseCountByString(nucSeq.seq_, nucSeq.cnt_);
+    currentCounter.setFractions(counter.alphabet_);
+    differences.push_back(
+        counter.getFracDifference(currentCounter, counter.alphabet_));
+  }
+  double stdCalc = vectorStandardDeviationSamp(differences);
+  double meanCalc = vectorMean(differences);
 
-	SeqIO nucReader(setUp.pars_.ioOptions_);
-	nucReader.openIn();
-	seqInfo nucSeq;
-	charCounter counter;
-	while(nucReader.readNextRead(nucSeq)){
-		counter.increaseCountByString(nucSeq.seq_, nucSeq.cnt_);
-	}
-	counter.resetAlphabet(true);
-	counter.setFractions();
-	nucReader.closeIn();
-	nucReader.openIn();
-	std::vector<double> differences;
-	while(nucReader.readNextRead(nucSeq)){
-		charCounter currentCounter(counter.alphabet_);
-		currentCounter.increaseCountByString(nucSeq.seq_, nucSeq.cnt_);
-		currentCounter.setFractions(counter.alphabet_);
-		differences.push_back(counter.getFracDifference(currentCounter, counter.alphabet_));
-	}
-	double stdCalc = vectorStandardDeviationSamp(differences);
-	double meanCalc = vectorMean(differences);
-
-
-	auto checker = std::make_unique<const ReadCheckerOnNucComp>( counter, meanCalc + 2 * stdCalc , dSplitPars.mark_);
+  auto checker = std::make_unique<const ReadCheckerOnNucComp>(
+      counter, meanCalc + 2 * stdCalc, dSplitPars.mark_);
 
   SeqIO reader(setUp.pars_.ioOptions_);
   reader.openIn();
   seqInfo seq;
-  while(reader.readNextRead(seq)){
-  	checker->checkRead(seq);
-  	if(dSplitPars.include_) {
-  		seq.on_ = !seq.on_;
-  	}
-    std::string condition;
-    if(seq.on_){
-    	condition = "include";
-    }else{
-    	condition = "exclude";
+  while (reader.readNextRead(seq)) {
+    checker->checkRead(seq);
+    if (dSplitPars.include_) {
+      seq.on_ = !seq.on_;
     }
-    seqOuts.add(condition, seq);
+    std::string condition;
+    if (seq.on_) {
+      condition = "include";
+    } else {
+      condition = "exclude";
+    }
+    if ("include" == condition || !dSplitPars.do_not_write_excluded_) {
+      seqOuts.add(condition, seq);
+    }
   }
 
-  if(setUp.pars_.verbose_){
-  	setUp.logRunTime(std::cout);
+  if (setUp.pars_.verbose_) {
+    setUp.logRunTime(std::cout);
   }
   return 0;
 }
 
+int seqUtilsSplitRunner::filterSameSizeSeqsHammingDistance(
+    const njh::progutils::CmdArgs &inputCommands) {
+  SeqIOOptions comp_seqs_opts;
+  uint32_t edit_distance_cut_off = 0;
+  defaultSplitPars dSplitPars;
+  seqSetUp setUp(inputCommands);
+  defaultSplitSetUpOptions(setUp, dSplitPars);
+  setUp.setOption(edit_distance_cut_off, "--edit_distance_cut_off",
+                  "edit_distance_cut_off", true);
+  setUp.processSeqIoFilename(comp_seqs_opts, "compSeqs", true);
+  setUp.finishSetUp(std::cout);
 
-int seqUtilsSplitRunner::filterSameSizeSeqsHammingDistance(const njh::progutils::CmdArgs & inputCommands) {
-	SeqIOOptions comp_seqs_opts;
-	uint32_t edit_distance_cut_off = 0;
-	defaultSplitPars dSplitPars;
-	seqSetUp setUp(inputCommands);
-	defaultSplitSetUpOptions(setUp, dSplitPars);
-  setUp.setOption(edit_distance_cut_off, "--edit_distance_cut_off", "edit_distance_cut_off", true);
-	setUp.processSeqIoFilename(comp_seqs_opts, "compSeqs", true);
-	setUp.finishSetUp(std::cout);
+  MultiSeqOutCache<seqInfo> seqOuts;
+  seqOuts.addReader("include", dSplitPars.incOpts_);
+  if (!dSplitPars.do_not_write_excluded_) {
+    seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  }
 
-	MultiSeqOutCache<seqInfo> seqOuts;
-	seqOuts.addReader("include", dSplitPars.incOpts_);
-	seqOuts.addReader("exclude", dSplitPars.excOpts_);
+  SeqInput comp_seqs_reader(comp_seqs_opts);
+  comp_seqs_reader.openIn();
+  auto comp_seqs = comp_seqs_reader.readAllReads<seqInfo>();
+  bool check_pass = true;
+  for (const auto &seq : comp_seqs) {
+    if (seq.seq_.size() != comp_seqs.front().seq_.size()) {
+      check_pass = false;
+      break;
+    }
+  }
+  if (!check_pass) {
+    std::stringstream ss;
+    ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__
+       << ", error " << " input comp seqs need to be same length " << "\n";
+    for (const auto &seq : comp_seqs) {
+      ss << seq.name_ << " length: " << seq.seq_.size() << "\n";
+    }
+    throw std::runtime_error{ss.str()};
+  }
+  SeqIO reader(setUp.pars_.ioOptions_);
+  reader.openIn();
 
-	SeqInput comp_seqs_reader(comp_seqs_opts);
-	comp_seqs_reader.openIn();
-	auto comp_seqs = comp_seqs_reader.readAllReads<seqInfo>();
-	bool check_pass = true;
-	for (const auto & seq : comp_seqs) {
-		if (seq.seq_.size() != comp_seqs.front().seq_.size()) {
-			check_pass = false;
-			break;
-		}
-	}
-	if (!check_pass) {
-		std::stringstream ss;
-		ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << " input comp seqs need to be same length " << "\n";
-		for (const auto & seq : comp_seqs) {
-			ss << seq.name_ << " length: " << seq.seq_.size() << "\n";
-		}
-		throw std::runtime_error{ss.str()};
-	}
-	SeqIO reader(setUp.pars_.ioOptions_);
-	reader.openIn();
+  seqInfo seq;
+  aligner alignObj(
+      comp_seqs.front().seq_.size() * 2, gapScoringParameters(5, 1),
+      substituteMatrix::createScoreMatrix(1, -1, false, false, true));
+  while (reader.readNextRead(seq)) {
+    if (seq.seq_.size() != comp_seqs.front().seq_.size()) {
+      std::stringstream ss;
+      ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__
+         << ", error " << seq.name_ << " is length: " << seq.seq_.size()
+         << ", does not match expected length of "
+         << comp_seqs.front().seq_.size() << "\n";
+      throw std::runtime_error{ss.str()};
+    }
+    for (const auto &comp_seq : comp_seqs) {
+      alignObj.alignObjectA_ = comp_seq;
+      alignObj.alignObjectB_ = seq;
+      alignObj.profilePrimerAlignment(comp_seq, seq);
+      // if (alignObj.comp_.hqMismatches_ == 0) {
+      // 	alignObj.alignObjectA_.seqBase_.outPutSeqAnsi(std::cout);
+      // 	alignObj.alignObjectB_.seqBase_.outPutSeqAnsi(std::cout);
+      // 	std::cout << alignObj.comp_.toJson() << std::endl;
+      // 	exit(1);
+      // }
+      if (alignObj.comp_.hqMismatches_ <= edit_distance_cut_off) {
+        seq.on_ = false;
+        if (dSplitPars.mark_) {
+          MetaDataInName meta;
+          if (MetaDataInName::nameHasMetaData(seq.name_)) {
+            meta = MetaDataInName(seq.name_);
+          }
+          meta.addMeta("com_seq_name", comp_seq.name_, true);
+          meta.addMeta("com_seq_seq", comp_seq.seq_, true);
+          meta.addMeta("edit_distance", alignObj.comp_.hqMismatches_, true);
+          meta.resetMetaInName(seq.name_);
+        }
+        break;
+      }
+    }
 
-	seqInfo seq;
-	aligner alignObj(comp_seqs.front().seq_.size() * 2, gapScoringParameters(5,1),
-		substituteMatrix::createScoreMatrix(1, -1, false, false, true));
-	while(reader.readNextRead(seq)){
-		if (seq.seq_.size() != comp_seqs.front().seq_.size()) {
-			std::stringstream ss;
-			ss << __PRETTY_FUNCTION__ << " " << __FILE__ << " " << __LINE__ << ", error " << seq.name_ << " is length: " <<
-					seq.seq_.size() << ", does not match expected length of " << comp_seqs.front().seq_.size() << "\n";
-			throw std::runtime_error{ss.str()};
-		}
-		for (const auto & comp_seq : comp_seqs) {
-			alignObj.alignObjectA_ = comp_seq;
-			alignObj.alignObjectB_ = seq;
-			alignObj.profilePrimerAlignment(comp_seq, seq);
-			// if (alignObj.comp_.hqMismatches_ == 0) {
-			// 	alignObj.alignObjectA_.seqBase_.outPutSeqAnsi(std::cout);
-			// 	alignObj.alignObjectB_.seqBase_.outPutSeqAnsi(std::cout);
-			// 	std::cout << alignObj.comp_.toJson() << std::endl;
-			// 	exit(1);
-			// }
-			if (alignObj.comp_.hqMismatches_ <= edit_distance_cut_off) {
-				seq.on_ = false;
-				if (dSplitPars.mark_) {
-					MetaDataInName meta;
-					if (MetaDataInName::nameHasMetaData(seq.name_)) {
-						meta = MetaDataInName(seq.name_);
-					}
-					meta.addMeta("com_seq_name", comp_seq.name_, true);
-					meta.addMeta("com_seq_seq", comp_seq.seq_, true);
-					meta.addMeta("edit_distance", alignObj.comp_.hqMismatches_, true);
-					meta.resetMetaInName(seq.name_);
-				}
-				break;
-			}
-		}
+    if (dSplitPars.include_) {
+      seq.on_ = !seq.on_;
+    }
+    std::string condition;
+    if (seq.on_) {
+      condition = "include";
+    } else {
+      condition = "exclude";
+    }
+    if ("include" == condition || !dSplitPars.do_not_write_excluded_) {
+      seqOuts.add(condition, seq);
+    }
+  }
 
-		if(dSplitPars.include_) {
-			seq.on_ = !seq.on_;
-		}
-		std::string condition;
-		if(seq.on_){
-			condition = "include";
-		}else{
-			condition = "exclude";
-		}
-		seqOuts.add(condition, seq);
-	}
-
-	if(setUp.pars_.verbose_){
-		setUp.logRunTime(std::cout);
-	}
-	return 0;
+  if (setUp.pars_.verbose_) {
+    setUp.logRunTime(std::cout);
+  }
+  return 0;
 }
-
-
-
-
 
 } // namespace njhseq
