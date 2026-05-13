@@ -166,7 +166,7 @@ int programWrappersAssembleOnPathWeaverRunner::runMIRAOnUniqueKmerExtraction(con
 			miramanifestOutput << "job = genome,denovo,accurate"<< std::endl;
 
 
-			miramanifestOutput << "parameters = -CO:force_nonIUPACconsensus_perseqtype=yes -GENERAL:number_of_threads=" << utility.inputPars_.numThreads_ << " COMMON_SETTINGS -NW:cmrnl=no -NW:cac=warn -NW:csrn=no -NW:cdrn=no"<< std::endl;
+			miramanifestOutput << "parameters = -CO:force_nonIUPACconsensus_perseqtype=yes -GENERAL:number_of_threads=" << utility.inputPars_.numThreads_ << " COMMON_SETTINGS -NW:cmrnl=no -NW:cac=warn -NW:csrn=no -NW:cdrn=no " << utility.inputPars_.extraProgramOptions_<< std::endl;
 			//-EDIT:edit_homopolymer_overcalls=yes
 			if(exists(utility.pairedR1Fnp_)){
 				if(!exists(utility.pairedR2Fnp_)){

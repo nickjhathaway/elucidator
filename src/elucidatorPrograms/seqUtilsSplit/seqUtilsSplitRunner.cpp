@@ -263,12 +263,14 @@ int seqUtilsSplitRunner::getSimilarSequencesByKDist(const njh::progutils::CmdArg
 	bool checkComplement = false;
 	double cutOff = 0.70;
 	uint32_t kmerLen = 7;
-
+	bool do_not_write_dissimilar = false;
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.setOption(cutOff, "--kmerDistCutOff", "Kmer Similarity Score Cut off");
 	setUp.setOption(checkComplement, "--checkComplement", "checkComplement");
 	setUp.setOption(kmerLen, "--kLen", "Kmer Length");
+	setUp.setOption(do_not_write_dissimilar, "--do_not_write_dissimilar", "do not write dissimilar sequences");
+
 	// setUp.processKmerLenOptions();
 	setUp.processDefaultReader(true);
 	setUp.processRefFilename(true);
@@ -290,10 +292,13 @@ int seqUtilsSplitRunner::getSimilarSequencesByKDist(const njh::progutils::CmdArg
 		disSimilarOutOpts.out_.outFilename_ = njh::files::prependFileBasename(disSimilarOutOpts.out_.outFilename_, "dissimilar_");
 	}
 	SeqOutput simWriter(similarOutOpts);
-	SeqOutput disWriter(disSimilarOutOpts);
-
 	simWriter.openOut();
-	disWriter.openOut();
+	std::unique_ptr<SeqOutput> disWriter;
+	if (!do_not_write_dissimilar){
+		disWriter = std::make_unique<SeqOutput>(disSimilarOutOpts);
+		disWriter->openOut();
+	}
+
 
 	SeqInput refReader(setUp.pars_.refIoOptions_);
 	auto refSeqs = refReader.readAllReads<seqInfo>();
@@ -329,8 +334,8 @@ int seqUtilsSplitRunner::getSimilarSequencesByKDist(const njh::progutils::CmdArg
 					seq.reverseComplementRead(true, true);
 				}
 				simWriter.write(seq);
-			}else{
-				disWriter.write(seq);
+			}else if (!do_not_write_dissimilar){
+				disWriter->write(seq);
 			}
 		}
 	}else{
@@ -347,8 +352,8 @@ int seqUtilsSplitRunner::getSimilarSequencesByKDist(const njh::progutils::CmdArg
 			}
 			if (forwardWinners >= 1) {
 				simWriter.write(seq);
-			}else{
-				disWriter.write(seq);
+			}else if (!do_not_write_dissimilar){
+				disWriter->write(seq);
 			}
 		}
 	}

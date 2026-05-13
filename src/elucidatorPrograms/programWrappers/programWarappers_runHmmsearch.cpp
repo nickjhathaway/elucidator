@@ -44,7 +44,7 @@ int programWrapperRunner::runHmmsearch(const njh::progutils::CmdArgs & inputComm
 	bfs::path hmmModel;
 	uint32_t hmmStartFilter = 25;
 	uint32_t targetStartFilter = std::numeric_limits<uint32_t>::max();
-
+	double hard_evalue_cut_off = std::numeric_limits<double>::max();
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -53,6 +53,7 @@ int programWrapperRunner::runHmmsearch(const njh::progutils::CmdArgs & inputComm
 	setUp.setOption(hmmModel, "--hmmModel", "hmm model database, created by hmmbuild", true);
 	setUp.setOption(hmmStartFilter, "--hmmStartFilter", "Filter partial hmms domain hits if they start or end this far into the model");
 	setUp.setOption(targetStartFilter, "--targetStartFilter", "Filter partial hmms domain hits if they start or end this far into the target");
+	setUp.setOption(hard_evalue_cut_off, "--hard_evalue_cut_off", "hard evalue cut off");
 
 	setUp.processDirectoryOutputName(true);
 	setUp.finishSetUp(std::cout);
@@ -136,23 +137,25 @@ int programWrapperRunner::runHmmsearch(const njh::progutils::CmdArgs & inputComm
 
 		while(reader.readNextRecord(domain)){
 			out << domain.toDelimStr() << std::endl;
+
 			bool passHmmStart = domain.zeroBasedHmmFrom() <= hmmStartFilter;
 			bool passHmmEnd = (domain.queryLen_ - domain.hmmTo_) <= hmmStartFilter;
 			bool passTargetStart = domain.env0BasedPlusStrandStart() <= targetStartFilter;
 			bool passTargetEnd = domain.targetLen_ - domain.envTo_ <= targetStartFilter;
-			if(passHmmStart && passHmmEnd && passTargetStart && passTargetEnd) {
+			bool passEvalue = domain.seqEvalue_ < hard_evalue_cut_off;
+			if(passHmmStart && passHmmEnd && passTargetStart && passTargetEnd && passEvalue) {
 				outFilt << domain.toDelimStr() << std::endl;
 			}
 			// ++count;
 		}
 	}
 	//get best non-overlapping positions
-	std::vector<Bed6RecordCore> filteredRegions;
 
 	std::unordered_map<std::string, std::vector<HmmerDomainHitTab>> domainsPerSeq;
 	std::map<uint32_t, std::unordered_map<std::string, uint32_t>> domainCountsPerSeq;
 
 	{
+		std::vector<Bed6RecordCore> filteredRegions;
 		std::vector<HmmerDomainHitTab> domains;
 		std::vector<Bed6RecordCore> locations;
 
