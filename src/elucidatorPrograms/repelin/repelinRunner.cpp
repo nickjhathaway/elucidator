@@ -795,8 +795,13 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
 				auto outRegion = relativeToTemplateLoc;
 				outRegion.chrom_ = currentgRegion.chrom_;
 				outRegion.strand_ = (currentgRegion.reverseSrand_ ? '-' : '+');
-        outRegion.chromStart_ = currentgRegion.getRelativePositionFromStartStrandAware(relativeToTemplateLoc.chromStart_);
-				outRegion.chromEnd_ = currentgRegion.getRelativePositionFromStartStrandAware(relativeToTemplateLoc.chromEnd_);
+			  if (currentgRegion.reverseSrand_) {
+			    outRegion.chromStart_ = currentgRegion.getRelativePositionFromStartStrandAware(relativeToTemplateLoc.chromEnd_) + 1;
+			    outRegion.chromEnd_ = currentgRegion.getRelativePositionFromStartStrandAware(relativeToTemplateLoc.chromStart_) + 1;
+			  } else {
+			    outRegion.chromStart_ = currentgRegion.getRelativePositionFromStartStrandAware(relativeToTemplateLoc.chromStart_);
+			    outRegion.chromEnd_ = currentgRegion.getRelativePositionFromStartStrandAware(relativeToTemplateLoc.chromEnd_);
+			  }
 				*outGenomicLocationOut << outRegion.toDelimStrWithExtra() << std::endl;
 			}
 		}
@@ -868,13 +873,13 @@ int repelinRunner::runTRF(const njh::progutils::CmdArgs & inputCommands){
 				auto outRegion = reg;
 				outRegion.chrom_ = currentgRegion.chrom_;
 				outRegion.strand_ = (currentgRegion.reverseSrand_ ? '-' : '+');
-				if(currentgRegion.reverseSrand_){
-					outRegion.chromStart_ = currentgRegion.getRelativePositionFromStartStrandAware(reg.chromEnd_) + 1;
-					outRegion.chromEnd_ = currentgRegion.getRelativePositionFromStartStrandAware(reg.chromStart_) + 1;
-				}else{
-					outRegion.chromStart_ = currentgRegion.getRelativePositionFromStartStrandAware(reg.chromStart_);
-					outRegion.chromEnd_ = currentgRegion.getRelativePositionFromStartStrandAware(reg.chromEnd_);
-				}
+        if (currentgRegion.reverseSrand_) {
+          outRegion.chromStart_ = currentgRegion.getRelativePositionFromStartStrandAware(reg.chromEnd_) + 1;
+          outRegion.chromEnd_ = currentgRegion.getRelativePositionFromStartStrandAware(reg.chromStart_) + 1;
+        } else {
+          outRegion.chromStart_ = currentgRegion.getRelativePositionFromStartStrandAware(reg.chromStart_);
+          outRegion.chromEnd_ = currentgRegion.getRelativePositionFromStartStrandAware(reg.chromEnd_);
+        }
 				*combinedGenomicOut << outRegion.toDelimStrWithExtra() << std::endl;
 			}
 		}
