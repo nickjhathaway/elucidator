@@ -599,6 +599,7 @@ int seqUtilsTrimRunner::trimBeforeSeq(const njh::progutils::CmdArgs & inputComma
 
 int seqUtilsTrimRunner::trimFromSeq(const njh::progutils::CmdArgs & inputCommands){
 	FullTrimReadsPars pars;
+
 	seqUtilsTrimSetUp setUp(inputCommands);
 	/**@todo add trimmer specific trimmer */
 	setUp.setUpTrimFromSeq(pars);

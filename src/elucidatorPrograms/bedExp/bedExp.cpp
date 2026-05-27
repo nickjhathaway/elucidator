@@ -120,7 +120,7 @@ bedExpRunner::bedExpRunner()
            addFunc("createBedRegionFromName", createBedRegionFromName, false),
           	addFunc("vcfToBed", vcfToBed, false),
           	addFunc("printVcfSamples", printVcfSamples, false),
-          	addFunc("combineVcfs", combineVcfs, false),
+          	addFunc("combineCustomVcfs", combineCustomVcfs, false),
           	addFunc("simpleVCFDetermineMonoclonals", simpleVCFDetermineMonoclonals, false),
 
 

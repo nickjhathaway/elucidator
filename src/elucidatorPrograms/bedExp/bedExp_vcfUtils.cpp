@@ -155,7 +155,7 @@ int bedExpRunner::vcfRenameChroms(const njh::progutils::CmdArgs & inputCommands)
 
 
 
-int bedExpRunner::combineVcfs(const njh::progutils::CmdArgs & inputCommands) {
+int bedExpRunner::combineCustomVcfs(const njh::progutils::CmdArgs & inputCommands) {
 	std::vector<bfs::path> vcfFnps;
 	bfs::path intersectWithBed;
 	OutOptions outOpts;
@@ -167,7 +167,7 @@ int bedExpRunner::combineVcfs(const njh::progutils::CmdArgs & inputCommands) {
 	setUp.setOption(combiningVcfPars.ploidy, "--ploidy", "Ploidy to force for the sample for the vcf files");
 	setUp.setOption(combiningVcfPars.doNotRescueVariantCallsAcrossTargets, "--doNotRescueVariantCallsAcrossTargets", "do Not Rescue Variant Calls Across Targets");
 	setUp.setOption(combiningVcfPars.combinedOverlappingCallsAcrossTargets, "--combineOverlappingCallsAcrossTargets", "Rather than taking the best variant call for overlapping targets, sum them instead");
-	setUp.processWritingOptions(outOpts);
+  setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 
 	OutputStream out(outOpts);

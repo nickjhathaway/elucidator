@@ -149,7 +149,7 @@ class bedExpRunner : public njh::progutils::ProgramRunner {
 	//vcf
 	static int vcfRenameChroms(const njh::progutils::CmdArgs & inputCommands);
 	static int vcfToBed(const njh::progutils::CmdArgs & inputCommands);
-	static int combineVcfs(const njh::progutils::CmdArgs & inputCommands);
+	static int combineCustomVcfs(const njh::progutils::CmdArgs & inputCommands);
 	static int printVcfSamples(const njh::progutils::CmdArgs & inputCommands);
 	static int simpleVCFDetermineMonoclonals(const njh::progutils::CmdArgs & inputCommands);
 
