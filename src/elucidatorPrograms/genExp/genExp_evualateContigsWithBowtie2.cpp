@@ -1693,12 +1693,13 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 
 	std::set<std::string> matchingContigs;
 	std::set<std::string> notMatchingContigs(unmappedToAllGenomes.begin(), unmappedToAllGenomes.end());
-
+  uint32_t unmapped_contigs_count = 0;
 	if(!unmappedToAllGenomes.empty()){
 		OutOptions unmmapedOpts(njh::files::make_path(setUp.pars_.directoryName_, "unmappedReads.txt"));
 		OutputStream unmappedOut(unmmapedOpts);
 		for(const auto & unmappedAln : unmappedToAllGenomes){
 			unmappedOut << unmappedAln << std::endl;
+		  ++unmapped_contigs_count;
 		}
 	}
 	bfs::remove(tempSeqBowtie2Opts.out_.outName());
@@ -1731,6 +1732,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 					<< "\t" << "ContigsMatchingExpectedFrac"
 					<< "\t" << "ContigsMatchingNotExpectedCnt"
 					<< "\t" << "ContigsMatchingNotExpectedFrac"
+		      << "\t" << "ContigsUnmapped"
 					<< "\t" << "TotalContigs"
 					<< "\t" << "TotalBases"
 					<< "\t" << "TotalRequiredContigs"
@@ -1747,6 +1749,7 @@ int genExpRunner::evaluateContigsAgainstExpected(const njh::progutils::CmdArgs &
 					<< "\t" << matchingContigs.size()/static_cast<double>(readNumber)
 					<< "\t" << notMatchingContigs.size()
 					<< "\t" << notMatchingContigs.size()/static_cast<double>(readNumber)
+		      << "\t" << unmapped_contigs_count
 					<< "\t" << readNumber
 					<< "\t" << vectorSum(allContigsReadLengths)
 					<< "\t" << requiredRegions.size()
