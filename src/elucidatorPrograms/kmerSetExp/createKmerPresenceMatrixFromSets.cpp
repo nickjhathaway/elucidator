@@ -224,6 +224,62 @@ int kmerSetExpRunner::estimateKmerSubSamples(const njh::progutils::CmdArgs & inp
   return 0;
 }
 
+int kmerSetExpRunner::rarifySequencesSubSamples(const njh::progutils::CmdArgs & inputCommands) {
+  OutOptions outOpts("", ".tsv.gz");
+  uint32_t subsampleStart = 10;
+  uint32_t subsampleEnd = 100;
+  uint32_t subsampleStep = 10;
+  bool byReadLength = false;
+  std::string id = "id";
+  seqSetUp setUp(inputCommands);
+  setUp.description_ = "Get info on how many kmers can be found and at what counts";
+  setUp.processVerbose();
+  setUp.processDebug();
+
+  setUp.setOption(id, "--id", "id for file", true);
+  setUp.setOption(subsampleStart, "--subsampleStart", "subsample Start", true);
+  setUp.setOption(subsampleEnd, "--subsampleEnd", "subsample End", true);
+  setUp.setOption(subsampleStep, "--subsampleStep", "subsample Step", true);
+
+
+  setUp.processReadInNames(true);
+  setUp.processWritingOptions(outOpts);
+  setUp.finishSetUp(std::cout);
+
+  auto input = SeqInput::getSeqVec<seqInfo>(setUp.pars_.ioOptions_);
+
+  std::unordered_map<std::string, uint64_t> allSeqsCounts;
+  uint64_t totalSeqs = 0;
+  for (const auto & seq : input) {
+    allSeqsCounts[seq.seq_] += seq.cnt_;
+    totalSeqs += seq.cnt_;
+  }
+
+
+  if (setUp.pars_.verbose_) {
+    std::cout << "input.size(): " << input.size() << std::endl;
+    std::cout << "totalSeqs: " << totalSeqs << std::endl;
+    std::cout << "allSeqsCounts.size(): " << allSeqsCounts.size() << std::endl;
+  }
+
+  OutputStream out(outOpts);
+  out << "id\tsubSampleAmount\trarefiedUniqueSeqCount\ttotalSeqs\ttotalUniqueSeqs" << std::endl;
+  for(uint64_t sub = subsampleStart; sub < subsampleEnd && sub <= totalSeqs; sub += subsampleStep) {
+    long double bottom = lchoose_aprox(totalSeqs, sub);
+    long double sum = 0;
+    for (const auto & seq : allSeqsCounts) {
+      uint64_t bigN_minus_species_n = totalSeqs - seq.second;
+      long double top = lchoose_aprox(bigN_minus_species_n, sub);
+      sum += 1 - exp(top - bottom);
+    }
+    out << id
+    << "\t" << sub
+    << "\t" << sum
+    << "\t" << totalSeqs
+    << "\t" << allSeqsCounts.size() << std::endl;
+  }
+  return 0;
+}
 
 
 

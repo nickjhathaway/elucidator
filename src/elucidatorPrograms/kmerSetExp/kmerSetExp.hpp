@@ -46,6 +46,7 @@ public:
 	static int getUniqueKmersFromRandomSubsamples(const njh::progutils::CmdArgs & inputCommands);
 
 	static int estimateKmerSubSamples(const njh::progutils::CmdArgs & inputCommands);
+  static int rarifySequencesSubSamples(const njh::progutils::CmdArgs & inputCommands);
 
 
 };
