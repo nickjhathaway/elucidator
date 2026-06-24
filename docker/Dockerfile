@@ -97,7 +97,13 @@ WORKDIR /opt
 RUN wget -q https://github.com/quarto-dev/quarto-cli/releases/download/v1.9.38/quarto-1.9.38-linux-amd64.tar.gz && \
     tar -xzf quarto-1.9.38-linux-amd64.tar.gz && \
     rm quarto-1.9.38-linux-amd64.tar.gz && \
-    rm -f /opt/quarto-1.9.38/bin/tools/*/esbuild
+    # quarto's bundled esbuild is built with an old Go toolchain (Scout stdlib CVEs). esbuild is
+    # still required (dashboard/embed-resources rendering spawns it to bundle JS), so swap in the
+    # latest upstream esbuild binary, which is built with a current, CVE-free Go stdlib.
+    wget -q https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.28.1.tgz -O /tmp/esbuild.tgz && \
+    tar -xzOf /tmp/esbuild.tgz package/bin/esbuild > /opt/quarto-1.9.38/bin/tools/x86_64/esbuild && \
+    chmod +x /opt/quarto-1.9.38/bin/tools/x86_64/esbuild && \
+    rm /tmp/esbuild.tgz
 
 # elucidator — shallow clone, clean build artifacts
 RUN mkdir ~/.ssh/ && ssh-keyscan github.com >> ~/.ssh/known_hosts
