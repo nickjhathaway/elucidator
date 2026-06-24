@@ -14,12 +14,10 @@ RUN ulimit -n 10000
 RUN apt-get update && apt-get -yq dist-upgrade && \
     apt-get install -yq --no-install-recommends \
       autotools-dev autoconf libtool automake build-essential curl wget file tree \
-      git git-lfs locales libssl-dev libcurl4-gnutls-dev ca-certificates \
+      git locales libssl-dev libcurl4-gnutls-dev ca-certificates \
       xz-utils zlib1g-dev libbz2-dev liblzma5 liblzma-dev openssh-client \
       gcc-10 g++-10 ccache libxml2-dev libfontconfig1-dev libcairo2-dev \
       python3-dev python3-pip python3-yaml \
-      python3-nbclient python3-nbconvert python3-ipykernel \
-      python3-jupyter-client python3-jupyter-core \
       libharfbuzz-dev libfribidi-dev libicu-dev libhdf5-dev \
       pigz lastz cmake tzdata libuv1-dev\
       # R and CRAN repo
@@ -28,6 +26,7 @@ RUN apt-get update && apt-get -yq dist-upgrade && \
  && wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc \
       | tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc \
  && apt-get update && apt-get install -yq r-base r-base-dev \
+ && pip3 install --break-system-packages --no-cache-dir --upgrade setuptools wheel \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
@@ -94,9 +93,10 @@ RUN mkdir -p /usr/local/lib/R/etc/ /usr/lib/R/etc/ && \
 
 # Quarto
 WORKDIR /opt
-RUN wget -q https://github.com/quarto-dev/quarto-cli/releases/download/v1.8.25/quarto-1.8.25-linux-amd64.tar.gz && \
-    tar -xzf quarto-1.8.25-linux-amd64.tar.gz && \
-    rm quarto-1.8.25-linux-amd64.tar.gz
+RUN wget -q https://github.com/quarto-dev/quarto-cli/releases/download/v1.9.38/quarto-1.9.38-linux-amd64.tar.gz && \
+    tar -xzf quarto-1.9.38-linux-amd64.tar.gz && \
+    rm quarto-1.9.38-linux-amd64.tar.gz && \
+    rm -f /opt/quarto-1.9.38/bin/tools/*/esbuild
 
 # elucidator — shallow clone, clean build artifacts
 RUN mkdir ~/.ssh/ && ssh-keyscan github.com >> ~/.ssh/known_hosts
@@ -122,6 +122,6 @@ RUN ./setup.py --libs adapterremoval:v2.3.2 --numCores ${CPU_COUNT} --overWrite 
 
 
 EXPOSE 8000-9999
-ENV PATH="/opt/quarto-1.8.25/bin:/opt/elucidator/bin:$PATH"
+ENV PATH="/opt/quarto-1.9.38/bin:/opt/elucidator/bin:$PATH"
 ENV XDG_CACHE_HOME="/tmp/quarto_cache"
 WORKDIR /
