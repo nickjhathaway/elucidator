@@ -1,0 +1,86 @@
+name: build-and-publish-container
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'docker/Dockerfile'
+      - 'docker/install_packages.R'
+    tags:
+      - 'v*'                             # version tags (v1.2.3) build a versioned image (paths filter is ignored for tags)
+  workflow_dispatch:                     # allows to trigger it manually
+
+permissions:
+  contents: write      # upload the .sif as a release asset
+  packages: write      # push to ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: vars
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "version=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false"               >> "$GITHUB_OUTPUT"
+          else
+            echo "version=develop"                >> "$GITHUB_OUTPUT"
+            echo "prerelease=true"                >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Detect CPU count
+        id: cpu
+        run: echo "count=$(nproc)" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push OCI image to both registries
+        uses: docker/build-push-action@v6
+        with:
+          context: docker               # build context = docker/, so COPY install_packages.R works
+          platforms: linux/amd64         # what most HPC nodes need
+          push: true
+          provenance: mode=max           # SLSA build provenance attestation (avoids Scout "missing attestation")
+          sbom: true                     # SBOM attestation so Scout can analyze contents accurately
+          build-args: |
+            CPU_COUNT=${{ steps.cpu.outputs.count }}
+            ELUCIDATOR_VERSION=${{ steps.vars.outputs.version }}
+          tags: |
+            docker.io/${{ vars.DOCKERHUB_USERNAME }}/elucidator:${{ steps.vars.outputs.version }}
+            docker.io/${{ vars.DOCKERHUB_USERNAME }}/elucidator:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/elucidator:${{ steps.vars.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/elucidator:${{ github.sha }}
+
+      - name: Set up Apptainer
+        uses: eWaterCycle/setup-apptainer@v2
+
+      - name: Build SIF from the image we just pushed
+        run: |
+          apptainer registry login -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }} docker://ghcr.io
+          apptainer build elucidator.sif docker://ghcr.io/${{ github.repository_owner }}/elucidator:${{ github.sha }}
+
+      - name: Publish SIF via ORAS (for Apptainer users)
+        run: |
+          apptainer registry login -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }} oras://ghcr.io
+          apptainer push elucidator.sif oras://ghcr.io/${{ github.repository_owner }}/elucidator-sif:${{ steps.vars.outputs.version }}
+
+      - name: Publish SIF as a release asset (for Singularity 3.6.4 / everyone)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.version }}
+          prerelease: ${{ steps.vars.outputs.prerelease }}
+          files: elucidator.sif
