@@ -26,7 +26,8 @@ RUN apt-get update && apt-get -yq dist-upgrade && \
  && wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc \
       | tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc \
  && apt-get update && apt-get install -yq r-base r-base-dev \
- && pip3 install --break-system-packages --no-cache-dir --upgrade setuptools wheel \
+ && pip3 install --break-system-packages --no-cache-dir --ignore-installed setuptools wheel \
+ && rm -rf /usr/lib/python3/dist-packages/setuptools* /usr/lib/python3/dist-packages/wheel* \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
