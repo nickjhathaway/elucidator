@@ -133,9 +133,9 @@ ENV PATH="/opt/quarto-1.9.38/bin:/opt/elucidator/bin:$PATH"
 ENV XDG_CACHE_HOME="/tmp/quarto_cache"
 WORKDIR /
 
-# Default to a non-root user (Docker Scout policy). This is only a default for a bare `docker run`:
-# Nextflow's `-u $(id -u):$(id -g)` overrides it at runtime (so file ownership is unchanged), and
-# Apptainer/Singularity ignore USER entirely and run as the calling user. Tools live in world-readable
-# /opt and the Quarto cache is under world-writable /tmp, so any uid can run the image.
-RUN useradd --create-home --uid 1000 --shell /bin/bash elucidator
-USER elucidator
+# Default to a non-root user (Docker Scout policy). Reuse ubuntu:24.04's built-in `ubuntu` user
+# (uid 1000). This is only a default for a bare `docker run`: Nextflow's `-u $(id -u):$(id -g)`
+# overrides it at runtime (so file ownership is unchanged), and Apptainer/Singularity ignore USER
+# entirely and run as the calling user. Tools live in world-readable /opt and the Quarto cache is
+# under world-writable /tmp, so any uid can run the image.
+USER ubuntu
