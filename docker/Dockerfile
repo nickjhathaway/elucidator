@@ -83,7 +83,7 @@ RUN mkdir -p /usr/local/lib/R/etc/ /usr/lib/R/etc/ && \
     Rscript -e " \
       source('/opt/install_packages.R'); \
       setRepositories(ind = 1:3);\
-      install_github(c('nickjhathaway/HaplotypeRainbows@develop', 'hoesler/rwantshue'))" && \
+      install_github(c('nickjhathaway/HaplotypeRainbows@v2.0.0', 'hoesler/rwantshue'))" && \
     # Clean R build artifacts — often 200-400MB
     find /usr/local/lib/R -name "*.o" -delete && \
     find /usr/local/lib/R -name "*.a" -delete && \
