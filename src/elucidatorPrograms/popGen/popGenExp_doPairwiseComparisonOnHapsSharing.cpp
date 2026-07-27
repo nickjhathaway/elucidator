@@ -85,12 +85,591 @@ int popGenExpRunner::calc_pairwise_ccc_on_haps_sharing(const njh::progutils::Cmd
 }
 
 
-int popGenExpRunner::cluster_samples_using_ccc_of_microhaps(const njh::progutils::CmdArgs & inputCommands){
+static const std::string static_qmd_on_clustering = R"QMD(---
+title: Processing groups
+---
+
+
+```{r setup}
+library(HaplotypeRainbows)
+library(tidyverse)
+library(DT)
+
+create_dt <- function(x) {
+  DT::datatable(
+    x,
+    extensions = 'Buttons',
+    options = list(
+      dom = 'Blfrtip',
+      buttons = c('copy', 'csv', 'excel', 'pdf', 'print'),
+      lengthMenu = list(c(10, 25, 50,-1),
+                        c(10, 25, 50, "All"))
+    ),
+    filter = "top"
+  )
+}
+```
+
+## Creating a haplotype rainbow
+
+Create a haplotype rainbow and sort and cluster by the groups determined
+
+```{r}
+
+
+clusters = readr::read_tsv("clusters.tsv")
+haps = readr::read_tsv("haps.tsv.gz")
+
+haps_hr = haplotype_rainbow(haps,
+                                               sample_col = "library_sample_name",
+                                               target_col = "target_name",
+                                               popuid_col = "seq",
+                                               rel_abund_col = "within_sample_freq")$prep()
+
+haps_hr$set_sample_meta(clusters, "sample")
+haps_hr$sort_samples_by_clustering(abundance_weighted = T)$sort_samples_by_meta("group")$add_sample_cluster_gaps()
+
+haps_hr$save_pdf(
+  haps_hr$add_sample_annotation_to_plot(haps_hr$plot()), "haps_hr.pdf")
+
+```
+
+
+## Looking up two samples for their concordance, jaccard index and root mean square error
+
+```{r, eval = F}
+# read in the data and convert into matrixes for easy look up
+sampleNames = readr::read_tsv("measures/sampleNames.tab.txt", col_names = "sample")
+
+ccc = bind_cols(
+  sampleNames,
+  readr::read_tsv("measures/ccc_on_targets_shared.tab.txt.gz", col_names = sampleNames$sample)
+)
+ccc_mat <- ccc |>
+  tibble::column_to_rownames("sample") |>
+  as.matrix()
+
+jaccard = bind_cols(
+  sampleNames,
+  readr::read_tsv("measures/jaccard_on_targets_shared.tab.txt.gz", col_names = sampleNames$sample)
+)
+jaccard_mat <- jaccard |>
+  tibble::column_to_rownames("sample") |>
+  as.matrix()
+
+rmse = bind_cols(
+  sampleNames,
+  readr::read_tsv("measures/rmse_on_targets_shared.tab.txt.gz", col_names = sampleNames$sample)
+)
+rmse_mat <- rmse |>
+  tibble::column_to_rownames("sample") |>
+  as.matrix()
+
+
+
+lookup_sample1_name = "samp1"
+lookup_sample2_name = "samp2"
+
+
+create_dt(tibble(
+  sample1 = lookup_sample1_name,
+  sample2 = lookup_sample2_name,
+  ccc = ccc_mat[lookup_sample1_name, lookup_sample2_name]
+  jaccard = jaccard_mat[lookup_sample1_name, lookup_sample2_name]
+  rmse = rmse_mat[lookup_sample1_name, lookup_sample2_name]
+))
+
+
+```
+
+## Looking up the connections for a group
+
+```{r, eval = F}
+adjacency_list = readr::read_tsv("adjacency_list.tsv.gz")
+
+lookup_group = 0
+
+adjacency_list_group0 = adjacency_list %>%
+  filter(group == lookup_group)
+
+create_dt(adjacency_list_group0)
+```
+)QMD";
+
+static const std::string static_run_app_on_clustering = R"RUNAPP(#!/usr/bin/env Rscript
+
+# =============================================================================
+# Haplotype clustering explorer - launcher
+# =============================================================================
+#
+# This is a small Shiny app that mirrors the `static_qmd_on_clustering` report
+# (haplotype rainbow + pairwise sample look-ups + per-group connections) but
+# adds interactive controls: uploading extra sample meta, sorting by it,
+# choosing which samples / group to look up, and setting the PDF output path.
+#
+# ---- One-time package installation ------------------------------------------
+#   install.packages(c("optparse", "shiny", "DT", "readr", "dplyr", "tibble"))
+#   # HaplotypeRainbows (GitHub):
+#   # remotes::install_github("nickjhathaway/HaplotypeRainbows")
+#
+# ---- Running the app --------------------------------------------------------
+#   # from this directory, pointing at an output dir produced by
+#   # `elucidator cluster_samples_using_ccc_of_microhaps`:
+#   ./run_app.R --data-dir /path/to/<input>_cluster_TODAY
+#
+#   # serve on all interfaces (e.g. on a remote server) on port 8080:
+#   ./run_app.R --data-dir /path/to/results --host 0.0.0.0 --port 8080
+#
+#   # then browse to http://<server-ip>:8080
+#
+# If `--data-dir` is omitted it defaults to the current directory and can also
+# be changed from inside the app.
+# =============================================================================
+
+suppressPackageStartupMessages({
+  library(optparse)
+  library(shiny)
+})
+
+option_list <- list(
+  make_option(
+    c("-d", "--data-dir"),
+    type = "character",
+    default = ".",
+    help = "Directory containing clusters.tsv, haps.tsv.gz, adjacency_list.tsv.gz and measures/ [default: %default]"
+  ),
+  make_option(
+    c("-p", "--port"),
+    type = "integer",
+    default = 3838,
+    help = "Port to run the Shiny app on [default: %default]"
+  ),
+  make_option(
+    c("-H", "--host"),
+    type = "character",
+    default = "127.0.0.1",
+    help = "Host address to serve on (use 0.0.0.0 to expose to the network) [default: %default]"
+  ),
+  make_option(
+    c("-b", "--browser"),
+    action = "store_true",
+    default = FALSE,
+    help = "Automatically open a browser"
+  )
+)
+
+opt <- parse_args(OptionParser(option_list = option_list))
+
+# app.R reads this to pre-populate the data directory input
+Sys.setenv(HR_CLUSTERING_DATA_DIR = normalizePath(opt$`data-dir`, mustWork = FALSE))
+
+app_dir <- dirname(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)))
+if (length(app_dir) == 0 || app_dir == "") app_dir <- "."
+
+shiny::runApp(
+  appDir = file.path(app_dir, "app.R"),
+  host = opt$host,
+  port = opt$port,
+  launch.browser = opt$browser
+)
+)RUNAPP";
+
+static const std::string static_app_on_clustering = R"APPR(################################################################################
+# Haplotype clustering explorer - minimal Shiny app
+#
+# Mirrors `static_qmd_on_clustering`:
+#   1. Creating a haplotype rainbow (sorted/clustered by group), with optional
+#      extra sample meta (uploaded tsv/csv -> update_sample_meta) and sorting
+#      by that meta, plus PDF export to a user-set path.
+#   2. Looking up two samples for CCC / Jaccard / RMSE.
+#   3. Looking up the connections for a group in the adjacency list.
+#
+# Packages: shiny, HaplotypeRainbows, readr, dplyr, tibble, DT
+################################################################################
+
+suppressPackageStartupMessages({
+  library(shiny)
+  library(HaplotypeRainbows)
+  library(readr)
+  library(dplyr)
+  library(tibble)
+  library(DT)
+})
+
+# -- helpers -------------------------------------------------------------------
+
+create_dt <- function(x) {
+  DT::datatable(
+    x,
+    extensions = "Buttons",
+    options = list(
+      dom = "Blfrtip",
+      buttons = c("copy", "csv", "excel", "pdf", "print"),
+      lengthMenu = list(c(10, 25, 50, -1), c(10, 25, 50, "All")),
+      scrollX = TRUE
+    ),
+    filter = "top",
+    rownames = FALSE
+  )
+}
+
+quick_summary <- function(x, probs = c(0.25, 0.5, 0.75)) {
+  q <- quantile(x, probs = probs, na.rm = TRUE)
+  tibble(
+    n = length(x[!is.na(x)]),
+    sd = sd(x, na.rm = TRUE),
+    mean = mean(x, na.rm = TRUE),
+    min  = min(x, na.rm = TRUE),
+    max  = max(x, na.rm = TRUE),
+    !!!setNames(as.list(q), paste0("q", probs*100))
+  )
+}
+
+# original_name drives extension detection; path is what actually gets read
+read_delim_auto <- function(path, original_name = path) {
+  base_ext  <- tolower(tools::file_ext(original_name))
+  inner_ext <- if (base_ext == "gz") {
+    tolower(tools::file_ext(tools::file_path_sans_ext(original_name)))
+  } else {
+    base_ext
+  }
+  if (inner_ext %in% c("tsv", "tab", "txt")) {
+    read_tsv(path, show_col_types = FALSE)
+  } else {
+    read_csv(path, show_col_types = FALSE)
+  }
+}
+
+# read a square measure matrix written alongside measures/sampleNames.tab.txt
+read_measure_matrix <- function(measures_dir, fnp) {
+  sample_names <- read_tsv(
+    file.path(measures_dir, "sampleNames.tab.txt"),
+    col_names = "sample", show_col_types = FALSE
+  )
+  mat <- read_tsv(
+    file.path(measures_dir, fnp),
+    col_names = sample_names$sample, show_col_types = FALSE
+  )
+  bind_cols(sample_names, mat) %>%
+    column_to_rownames("sample") %>%
+    as.matrix()
+}
+
+default_data_dir <- {
+  d <- Sys.getenv("HR_CLUSTERING_DATA_DIR", unset = ".")
+  if (nzchar(d)) d else "."
+}
+
+# -- UI ------------------------------------------------------------------------
+
+ui <- fluidPage(
+  titlePanel("Haplotype clustering explorer"),
+  sidebarLayout(
+    sidebarPanel(
+      width = 3,
+      textInput("data_dir", "Data directory", value = default_data_dir),
+      helpText("Directory with clusters.tsv, haps.tsv.gz,",
+               "adjacency_list.tsv.gz and measures/."),
+      actionButton("load", "Load data", class = "btn-primary"),
+      tags$hr(),
+      uiOutput("load_status")
+    ),
+    mainPanel(
+      width = 9,
+      tabsetPanel(
+        id = "tabs",
+
+        # ---- Tab 1: haplotype rainbow ------------------------------------------
+        tabPanel(
+          "Haplotype rainbow",
+          br(),
+          fluidRow(
+            column(
+              4,
+              h4("Column mapping"),
+              selectInput("sample_col", "Sample column", choices = NULL),
+              selectInput("target_col", "Target column", choices = NULL),
+              selectInput("popuid_col", "Pop UID (seq) column", choices = NULL),
+              selectInput("rel_abund_col", "Relative abundance column", choices = NULL)
+            ),
+            column(
+              4,
+              h4("Extra sample meta (optional)"),
+              fileInput("meta_file", "Upload tsv / csv", accept = c(".tsv", ".txt", ".tab", ".csv")),
+              selectInput("meta_match_col", "Meta match column (sample id)", choices = NULL),
+              helpText("Added via update_sample_meta().")
+            ),
+            column(
+              4,
+              h4("Sorting & clustering"),
+              checkboxInput("abund_weighted", "Cluster abundance weighted", value = TRUE),
+              selectizeInput(
+                "sort_meta_cols", "Sort samples by meta (in order)",
+                choices = "group", selected = "group", multiple = TRUE
+              ),
+              checkboxInput("sort_desc", "Sort descending", value = FALSE),
+              checkboxInput("cluster_gaps", "Add sample cluster gaps", value = TRUE)
+            )
+          ),
+          fluidRow(
+            column(
+              6,
+              selectizeInput(
+                "annot_cols", "Annotation columns (blank = all meta)",
+                choices = NULL, selected = NULL, multiple = TRUE
+              )
+            ),
+            column(
+              6,
+              textInput("pdf_path", "Output PDF path", value = "haps_hr.pdf"),
+              numericInput("pdf_width", "PDF width (in, blank = auto)", value = NA),
+              numericInput("pdf_height", "PDF height (in, blank = auto)", value = NA)
+            )
+          ),
+          fluidRow(
+            column(
+              12,
+              actionButton("render", "Render preview", class = "btn-primary"),
+              actionButton("export_pdf", "Export PDF"),
+              uiOutput("pdf_status")
+            )
+          ),
+          br(),
+          plotOutput("rainbow_plot", height = "700px")
+        ),
+
+        # ---- Tab 2: pairwise sample look-up ------------------------------------
+        tabPanel(
+          "Pairwise look-up",
+          br(),
+          fluidRow(
+            column(6, selectInput("lookup_s1", "Sample 1", choices = NULL)),
+            column(6, selectInput("lookup_s2", "Sample 2", choices = NULL))
+          ),
+          helpText("Concordance (CCC), Jaccard index and RMSE for the two samples."),
+          DTOutput("pairwise_tbl")
+        ),
+
+        # ---- Tab 3: group connections ------------------------------------------
+        tabPanel(
+          "Group connections",
+          br(),
+          selectInput("lookup_group", "Group", choices = NULL),
+          DTOutput("group_tbl"),
+          br(),
+          h4("Group summary"),
+          selectInput("summary_measure", "Summarize measure",
+                      choices = c("ccc", "jaccard", "rmse"), selected = "ccc"),
+          DTOutput("group_summary_tbl")
+        )
+      )
+    )
+  )
+)
+
+# -- server --------------------------------------------------------------------
+
+server <- function(input, output, session) {
+
+  data_store <- reactiveValues(
+    clusters = NULL, haps = NULL, adjacency = NULL,
+    ccc = NULL, jaccard = NULL, rmse = NULL,
+    sample_names = NULL, error = NULL
+  )
+
+  meta_store <- reactiveVal(NULL)
+
+  observeEvent(input$load, {
+    dir <- input$data_dir
+    data_store$error <- NULL
+    tryCatch({
+      req_file <- function(f) {
+        p <- file.path(dir, f)
+        if (!file.exists(p)) stop(sprintf("Missing file: %s", p))
+        p
+      }
+      clusters  <- read_tsv(req_file("clusters.tsv"), show_col_types = FALSE)
+      haps      <- read_tsv(req_file("haps.tsv.gz"), show_col_types = FALSE)
+      adjacency <- read_tsv(req_file("adjacency_list.tsv.gz"), show_col_types = FALSE)
+
+      measures_dir <- file.path(dir, "measures")
+      ccc     <- read_measure_matrix(measures_dir, "ccc_on_targets_shared.tab.txt.gz")
+      jaccard <- read_measure_matrix(measures_dir, "jaccard_on_targets_shared.tab.txt.gz")
+      rmse    <- read_measure_matrix(measures_dir, "rmse_on_targets_shared.tab.txt.gz")
+
+      data_store$clusters     <- clusters
+      data_store$haps         <- haps
+      data_store$adjacency    <- adjacency
+      data_store$ccc          <- ccc
+      data_store$jaccard      <- jaccard
+      data_store$rmse         <- rmse
+      data_store$sample_names <- rownames(ccc)
+
+      # column mapping defaults, matching the qmd where present
+      hap_cols <- names(haps)
+      pick <- function(preferred) if (preferred %in% hap_cols) preferred else hap_cols[1]
+      updateSelectInput(session, "sample_col", choices = hap_cols, selected = pick("library_sample_name"))
+      updateSelectInput(session, "target_col", choices = hap_cols, selected = pick("target_name"))
+      updateSelectInput(session, "popuid_col", choices = hap_cols, selected = pick("seq"))
+      updateSelectInput(session, "rel_abund_col", choices = hap_cols, selected = pick("within_sample_freq"))
+
+      # meta sort / annotation start with the clustering group column
+      cluster_cols <- setdiff(names(clusters), "sample")
+      updateSelectizeInput(session, "sort_meta_cols", choices = cluster_cols,
+                           selected = intersect("group", cluster_cols))
+      updateSelectizeInput(session, "annot_cols", choices = cluster_cols, selected = character(0))
+
+      updateSelectInput(session, "lookup_s1", choices = data_store$sample_names)
+      updateSelectInput(session, "lookup_s2", choices = data_store$sample_names,
+                        selected = if (length(data_store$sample_names) > 1) data_store$sample_names[2] else NULL)
+
+      groups <- sort(unique(adjacency$group))
+      updateSelectInput(session, "lookup_group", choices = groups)
+
+      measure_cols <- intersect(c("ccc", "jaccard", "jaccard", "rmse", "targets_shared"),
+                                names(adjacency))
+      updateSelectInput(session, "summary_measure", choices = measure_cols,
+                        selected = if ("ccc" %in% measure_cols) "ccc" else measure_cols[1])
+    }, error = function(e) {
+      data_store$error <- conditionMessage(e)
+    })
+  })
+
+  output$load_status <- renderUI({
+    if (!is.null(data_store$error)) {
+      div(style = "color:#b00;", strong("Error: "), data_store$error)
+    } else if (!is.null(data_store$clusters)) {
+      div(style = "color:#080;",
+          sprintf("Loaded %d samples, %d adjacency rows.",
+                  length(data_store$sample_names), nrow(data_store$adjacency)))
+    } else {
+      helpText("No data loaded yet.")
+    }
+  })
+
+  # uploaded extra meta -> refresh match column + sort/annotation choices
+  observeEvent(input$meta_file, {
+    meta <- read_delim_auto(input$meta_file$datapath, input$meta_file$name)
+    meta_store(meta)
+    meta_cols <- names(meta)
+    guess_match <- if ("sample" %in% meta_cols) "sample" else meta_cols[1]
+    updateSelectInput(session, "meta_match_col", choices = meta_cols, selected = guess_match)
+
+    value_cols <- setdiff(meta_cols, guess_match)
+    cluster_cols <- if (!is.null(data_store$clusters)) setdiff(names(data_store$clusters), "sample") else character(0)
+    all_meta <- union(cluster_cols, value_cols)
+    updateSelectizeInput(session, "sort_meta_cols", choices = all_meta,
+                         selected = isolate(input$sort_meta_cols))
+    updateSelectizeInput(session, "annot_cols", choices = all_meta,
+                         selected = isolate(input$annot_cols))
+  })
+
+  # build the prepped/sorted haplotype rainbow object
+  build_rainbow <- reactive({
+    req(data_store$haps, data_store$clusters)
+
+    hr <- haplotype_rainbow(
+      data_store$haps,
+      sample_col    = input$sample_col,
+      target_col    = input$target_col,
+      popuid_col    = input$popuid_col,
+      rel_abund_col = input$rel_abund_col
+    )$prep()
+
+    hr$set_sample_meta(data_store$clusters, "sample")
+
+    meta <- meta_store()
+    if (!is.null(meta) && !is.null(input$meta_match_col) && nzchar(input$meta_match_col)) {
+      hr$update_sample_meta(meta, input$meta_match_col)
+    }
+
+    hr$sort_samples_by_clustering(abundance_weighted = isTRUE(input$abund_weighted))
+
+    sort_cols <- input$sort_meta_cols
+    if (length(sort_cols) > 0) {
+      hr$sort_samples_by_meta(sort_cols, desc = isTRUE(input$sort_desc))
+    }
+
+    if (isTRUE(input$cluster_gaps)) {
+      hr$add_sample_cluster_gaps()
+    }
+    hr
+  })
+
+  annotated_plot <- reactive({
+    hr <- build_rainbow()
+    annot_cols <- input$annot_cols
+    if (length(annot_cols) == 0) annot_cols <- NULL
+    hr$add_sample_annotation_to_plot(hr$plot(), cols = annot_cols)
+  })
+
+  rainbow_plot_rv <- eventReactive(input$render, {
+    annotated_plot()
+  })
+
+  output$rainbow_plot <- renderPlot({
+    rainbow_plot_rv()
+  })
+
+  observeEvent(input$export_pdf, {
+    output$pdf_status <- renderUI(helpText("Rendering PDF..."))
+    tryCatch({
+      hr <- build_rainbow()
+      w <- if (is.na(input$pdf_width)) NULL else input$pdf_width
+      h <- if (is.na(input$pdf_height)) NULL else input$pdf_height
+      hr$save_pdf(annotated_plot(), input$pdf_path, width = w, height = h)
+      output$pdf_status <- renderUI(
+        div(style = "color:#080;", sprintf("Saved: %s", normalizePath(input$pdf_path, mustWork = FALSE)))
+      )
+    }, error = function(e) {
+      output$pdf_status <- renderUI(div(style = "color:#b00;", conditionMessage(e)))
+    })
+  })
+
+  # ---- pairwise look-up --------------------------------------------------------
+  output$pairwise_tbl <- renderDT({
+    req(data_store$ccc, input$lookup_s1, input$lookup_s2)
+    s1 <- input$lookup_s1
+    s2 <- input$lookup_s2
+    create_dt(tibble(
+      sample1 = s1,
+      sample2 = s2,
+      ccc     = data_store$ccc[s1, s2],
+      jaccard = data_store$jaccard[s1, s2],
+      rmse    = data_store$rmse[s1, s2]
+    ))
+  })
+
+  # ---- group connections -------------------------------------------------------
+  group_rows <- reactive({
+    req(data_store$adjacency, input$lookup_group)
+    grp <- input$lookup_group
+    # match the group column's type when filtering
+    if (is.numeric(data_store$adjacency$group)) grp <- as.numeric(grp)
+    dplyr::filter(data_store$adjacency, group == grp)
+  })
+
+  output$group_tbl <- renderDT({
+    create_dt(group_rows())
+  })
+
+  output$group_summary_tbl <- renderDT({
+    req(input$summary_measure)
+    create_dt(dplyr::summarise(group_rows(), quick_summary(.data[[input$summary_measure]])))
+  })
+}
+
+shinyApp(ui, server)
+)APPR";
+
+int popGenExpRunner::cluster_samples_dist_of_microhaps_sharing(const njh::progutils::CmdArgs & inputCommands){
 	double minimumLociCoverageToKeepSamples = 0.90;
   double concordance_cut_off = 0.95;
+  double rmse_cut_off = 0.15;
+  bool cluster_on_rmse = false;
   njhUndirWeightedGraph<double, std::vector<double>>::dbscanPars dbscanPars;
   // dbscanPars.eps_ = 0.50;
-  dbscanPars.minEpNeighbors_ = 2;
+  dbscanPars.minEpNeighbors_ = 5;
 	HapsEncodedMatrix::SetWithExternalPars pars;
   uint32_t pairwise_factor_bin_size = 1000;
 	seqSetUp setUp(inputCommands);
@@ -100,39 +679,63 @@ int popGenExpRunner::cluster_samples_using_ccc_of_microhaps(const njh::progutils
 	setUp.setOption(minimumLociCoverageToKeepSamples, "--minimumLociCoverageToKeepSamples", "minimum Loci Coverage To Keep Samples in post analysis steps, must have reads for at least this frction of the total loci");
   setUp.setOption(concordance_cut_off, "--concordance_cut_off", "concordance cut off");
   dbscanPars.eps_ = 1 - concordance_cut_off;
-  setUp.setOption(dbscanPars.minEpNeighbors_, "--min_group_size", "The minimum number of samples to group together");
+  setUp.setOption(dbscanPars.minEpNeighbors_, "--min_neighbors", "The minimum neighbors for the DB scan clustering");
+  setUp.setOption(rmse_cut_off, "--rmse_cut_off", "RMSE cut off");
+  setUp.setOption(cluster_on_rmse, "--cluster_on_rmse", "cluster on RMSE");
+  if (cluster_on_rmse) {
+    dbscanPars.eps_ = rmse_cut_off;
+  }
 
   pars.setDefaults(setUp);
 
-  setUp.processDirectoryOutputName(bfs::path(bfs::basename(pars.tableFnp)).string() + "_ccc_rmse_TODAY", true);
+  setUp.processDirectoryOutputName(bfs::path(bfs::basename(pars.tableFnp)).string() + "_cluster_TODAY", true);
 	setUp.finishSetUp(std::cout);
 
 	setUp.startARunLog(setUp.pars_.directoryName_);
 
-
 	setUp.timer_.setLapName("initial");
 	setUp.timer_.startNewLap("encode haplotypes");
+
   HapsEncodedMatrix haps(pars);
 	setUp.timer_.startNewLap("get hap probabilities");
 	haps.calcHapProbs();
 	setUp.timer_.startNewLap("add relative abundances");
   haps.add_relative_abundance();
+  setUp.timer_.startNewLap("get index measures");
+  auto indexRes = haps.genIndexMeasures(setUp.pars_.verbose_);
   setUp.timer_.startNewLap("calc rmse and ccc");
-	auto measures = haps.calc_ccc_rmse_measures(pairwise_factor_bin_size, setUp.pars_.verbose_);
+	auto original_measures = haps.calc_ccc_rmse_measures(pairwise_factor_bin_size, setUp.pars_.verbose_);
   setUp.timer_.startNewLap("writing output matrices");
-	OutputStream outSampNamesOut(njh::files::make_path(setUp.pars_.directoryName_, "sampleNames.tab.txt"));
+  auto measures_dir = njh::files::make_path(setUp.pars_.directoryName_, "measures/");
+  njh::files::makeDir(measures_dir);
+  //write out measures
+	OutputStream outSampNamesOut(njh::files::make_path(measures_dir, "sampleNames.tab.txt"));
 	outSampNamesOut << njh::conToStr(haps.sampNamesVec_, "\n") << std::endl;
   {
-	  auto ccc_out_fnp = njh::files::make_path(setUp.pars_.directoryName_, "ccc_on_targets_shared.tab.txt.gz");
+	  auto ccc_out_fnp = njh::files::make_path(measures_dir, "ccc_on_targets_shared.tab.txt.gz");
 	  OutputStream ccc_out(ccc_out_fnp);
-	  for(const auto & ccc_row : measures.ccc){
+	  for(const auto & ccc_row : original_measures.ccc){
 	    ccc_out << njh::conToStr(ccc_row, "\t") << std::endl;
 	  }
   }
   {
-	  auto targets_shared_out_fnp = njh::files::make_path(setUp.pars_.directoryName_, "targets_shared.tab.txt.gz");
+	  auto rmse_out_fnp = njh::files::make_path(measures_dir, "rmse_on_targets_shared.tab.txt.gz");
+	  OutputStream rmse_out(rmse_out_fnp);
+	  for(const auto & rmse_row : original_measures.rmse){
+	    rmse_out << njh::conToStr(rmse_row, "\t") << std::endl;
+	  }
+  }
+  {
+	  auto jaccard_out_fnp = njh::files::make_path(measures_dir, "jaccard_on_targets_shared.tab.txt.gz");
+	  OutputStream jaccard_out(jaccard_out_fnp);
+	  for(const auto & jaccard_row : indexRes.byHapsTarShared){
+	    jaccard_out << njh::conToStr(jaccard_row, "\t") << std::endl;
+	  }
+  }
+  {
+	  auto targets_shared_out_fnp = njh::files::make_path(measures_dir, "targets_shared.tab.txt.gz");
 	  OutputStream targets_shared_out(targets_shared_out_fnp);
-	  for(const auto & targets_shared_row : measures.targets_shared){
+	  for(const auto & targets_shared_row : original_measures.targets_shared){
 	    targets_shared_out << njh::conToStr(targets_shared_row, "\t") << std::endl;
 	  }
   }
@@ -144,37 +747,42 @@ int popGenExpRunner::cluster_samples_using_ccc_of_microhaps(const njh::progutils
 		OutputStream lociCoverageOut(njh::files::make_path(setUp.pars_.directoryName_, "loci_coverage_per_sample_info.tsv"));
 		numTargetsPerSample.outPutContents(lociCoverageOut, "\t");
 	}
+
   setUp.timer_.setLapName("transforming matrix");
+  auto inverse_ccc = original_measures.ccc;
 	{
 	  //for the distance functions below to work, have to transform CCC so that the lower the better, CCC runs from -1 to 1, so below will transform it so it runs from 0 to 2 with 0 being CCC of 1, 1 being CCC 0, and 2 being CCC -2
-	  PairwisePairFactory pairFactory(measures.ccc.size());
+	  PairwisePairFactory pairFactory(inverse_ccc.size());
 	  uint32_t pairBatchCount = 100000;
 	  std::function<void()> transform_ccc =
     [&pairFactory,
       &pairBatchCount,
-      &measures]() {
+      &inverse_ccc]() {
       PairwisePairFactory::PairwisePairVec pairs;
       while (pairFactory.setNextPairs(pairs, pairBatchCount)) {
         for (const auto & pair : pairs.pairs_) {
-          measures.ccc[pair.row_][pair.col_] = -1 * (measures.ccc[pair.row_][pair.col_] - 1);
-          measures.ccc[pair.col_][pair.row_] = measures.ccc[pair.row_][pair.col_];
+          inverse_ccc[pair.row_][pair.col_] = -1 * (inverse_ccc[pair.row_][pair.col_] - 1);
+          inverse_ccc[pair.col_][pair.row_] = inverse_ccc[pair.row_][pair.col_];
         }
       }
     };
 	  njh::concurrent::runVoidFunctionThreaded(transform_ccc, pars.numThreads);
     // fill the diagonal
-	  for (uint32_t pos = 0; pos < measures.ccc.size(); ++pos) {
-	    measures.ccc[pos][pos] = 0;
+	  for (uint32_t pos = 0; pos < inverse_ccc.size(); ++pos) {
+	    inverse_ccc[pos][pos] = 0;
 	  }
 	}
+
+  const std::vector<std::vector<double> > &distance_matrix = cluster_on_rmse ? original_measures.rmse : inverse_ccc;
+
   setUp.timer_.setLapName("building matrix");
   auto dist_graph = std::make_unique<njhUndirWeightedGraph<double, std::vector<double> > > ();
-  for (const auto & pos : iter::range(measures.ccc.size())) {
-    dist_graph->addNode(estd::to_string(pos), measures.ccc[pos]);
+  for (const auto & pos : iter::range(distance_matrix.size())) {
+    dist_graph->addNode(estd::to_string(pos), distance_matrix[pos]);
   }
 	{
 	  uint32_t belowEp = 0;
-	  PairwisePairFactory pairFactory(measures.ccc.size());
+	  PairwisePairFactory pairFactory(distance_matrix.size());
 	  uint32_t pairBatchCount = 100000;
 	  std::mutex graphMut;
 	  struct PairDist {
@@ -187,7 +795,7 @@ int popGenExpRunner::cluster_samples_using_ccc_of_microhaps(const njh::progutils
 
     std::function<void()> addToGraph =
         [&graphMut, &pairFactory,&pairBatchCount,&belowEp,
-          &measures, &dbscanPars,
+          &distance_matrix, &dbscanPars,
           &haps, &dist_graph,
           &lociCoveragePerSample, &minimumLociCoverageToKeepSamples]() {
       PairwisePairFactory::PairwisePairVec pairs;
@@ -198,8 +806,8 @@ int popGenExpRunner::cluster_samples_using_ccc_of_microhaps(const njh::progutils
               lociCoveragePerSample[haps.sampNamesVec_[pair.col_]] < minimumLociCoverageToKeepSamples) {
             continue;
           }
-          auto dist = measures.ccc[pair.row_][pair.col_];
-          if (dist < dbscanPars.eps_) {
+          auto dist = distance_matrix[pair.row_][pair.col_];
+          if (dist <= dbscanPars.eps_) {
             belowEps.emplace_back(PairDist{pair, dist});
           }
         }
@@ -219,9 +827,16 @@ int popGenExpRunner::cluster_samples_using_ccc_of_microhaps(const njh::progutils
 
   setUp.timer_.startNewLap("dbscan");
   dist_graph->dbscan(dbscanPars);
+  if (dbscanPars.minEpNeighbors_ > 2) {
+    dist_graph->add_small_groups_in_off_nodes(dbscanPars);
+  }
+  if (setUp.pars_.verbose_) {
+    std::cout << "Determined " << dist_graph->numberOfGroups_ << " groups" << std::endl;
+  }
+
 
   setUp.timer_.startNewLap("output");
-  OutputStream outFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_by_ccc.tsv")));
+  OutputStream outFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters.tsv")));
   outFile << "sample\tgroup";
   outFile << std::endl;
 
@@ -234,16 +849,27 @@ int popGenExpRunner::cluster_samples_using_ccc_of_microhaps(const njh::progutils
     }
   }
   std::unordered_map<uint32_t, std::map<std::string, double> > groups_ccc_stats;
+  std::unordered_map<uint32_t, std::map<std::string, double> > groups_rmse_stats;
+  std::unordered_map<uint32_t, std::map<std::string, double> > groups_jaccard_stats;
   for (const auto &group: groupIndexes) {
-    std::vector<double> cccsWithinGroup; {
+    std::vector<double> cccsWithinGroup;
+    std::vector<double> rmsesWithinGroup;
+    std::vector<double> jaccardsWithinGroup;
+    {
       PairwisePairFactory pfac(group.second.size());
       PairwisePairFactory::PairwisePair pair;
       while (pfac.setNextPair(pair)) {
         //have to transform back due to the previous transform
-        cccsWithinGroup.emplace_back(measures.ccc[group.second[pair.col_]][group.second[pair.row_]] * -1 + 1);
+        //cccsWithinGroup.emplace_back(measures.ccc[group.second[pair.col_]][group.second[pair.row_]] * -1 + 1);
+        cccsWithinGroup.emplace_back(original_measures.ccc[group.second[pair.col_]][group.second[pair.row_]]);
+        rmsesWithinGroup.emplace_back(original_measures.rmse[group.second[pair.col_]][group.second[pair.row_]]);
+        jaccardsWithinGroup.emplace_back(indexRes.byHapsTarShared[group.second[pair.col_]][group.second[pair.row_]]);
       }
     }
     groups_ccc_stats[group.first] = getStatsOnVec(cccsWithinGroup);
+    groups_rmse_stats[group.first] = getStatsOnVec(rmsesWithinGroup);
+    groups_jaccard_stats[group.first] = getStatsOnVec(jaccardsWithinGroup);
+
     for (const auto &idx: group.second) {
       if (lociCoveragePerSample[haps.sampNamesVec_[idx]] < minimumLociCoverageToKeepSamples) {
         outFile << haps.sampNamesVec_[idx] << "\t" << "low_coverage_not_clustered";
@@ -255,10 +881,13 @@ int popGenExpRunner::cluster_samples_using_ccc_of_microhaps(const njh::progutils
       outFile << std::endl;
     }
   }
+
   OutputStream outGroupCountsFile(
-    OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_by_ccc_groupCounts.tsv")));
+    OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_groupCounts.tsv")));
   outGroupCountsFile << "group\tsample_count";
   outGroupCountsFile << "\tmin_ccc\tmedian_ccc\tmean_ccc\tmax_ccc";
+  outGroupCountsFile << "\tmin_rmse\tmedian_rmse\tmean_rmse\tmax_rmse";
+  outGroupCountsFile << "\tmin_jaccard\tmedian_jaccard\tmean_jaccard\tmax_jaccard";
   outGroupCountsFile << std::endl;
   for (const auto &group: groupIndexes) {
     if (group.first == std::numeric_limits<uint32_t>::max()) {
@@ -273,9 +902,25 @@ int popGenExpRunner::cluster_samples_using_ccc_of_microhaps(const njh::progutils
           << "\t" << "NA"
           << "\t" << "NA"
           << "\t" << "NA";
+      outGroupCountsFile << "\t" << "NA"
+          << "\t" << "NA"
+          << "\t" << "NA"
+          << "\t" << "NA";
+      outGroupCountsFile << "\t" << "NA"
+          << "\t" << "NA"
+          << "\t" << "NA"
+          << "\t" << "NA";
       outGroupCountsFile << std::endl;
 
       outGroupCountsFile << "low_coverage_not_clustered" << "\t" << low_coverage_not_clustered_cnt;
+      outGroupCountsFile << "\t" << "NA"
+          << "\t" << "NA"
+          << "\t" << "NA"
+          << "\t" << "NA";
+      outGroupCountsFile << "\t" << "NA"
+          << "\t" << "NA"
+          << "\t" << "NA"
+          << "\t" << "NA";
       outGroupCountsFile << "\t" << "NA"
           << "\t" << "NA"
           << "\t" << "NA"
@@ -287,11 +932,55 @@ int popGenExpRunner::cluster_samples_using_ccc_of_microhaps(const njh::progutils
           << "\t" << groups_ccc_stats[group.first]["median"]
           << "\t" << groups_ccc_stats[group.first]["mean"]
           << "\t" << groups_ccc_stats[group.first]["max"];
+      outGroupCountsFile << "\t" << groups_rmse_stats[group.first]["min"]
+          << "\t" << groups_rmse_stats[group.first]["median"]
+          << "\t" << groups_rmse_stats[group.first]["mean"]
+          << "\t" << groups_rmse_stats[group.first]["max"];
+      outGroupCountsFile << "\t" << groups_jaccard_stats[group.first]["min"]
+          << "\t" << groups_jaccard_stats[group.first]["median"]
+          << "\t" << groups_jaccard_stats[group.first]["mean"]
+          << "\t" << groups_jaccard_stats[group.first]["max"];
       outGroupCountsFile << std::endl;
     }
   }
+
+  OutputStream adjacency_list_out(njh::files::make_path(setUp.pars_.directoryName_, "adjacency_list.tsv.gz"));
+  adjacency_list_out << "node1\tnode2\tgroup\ttargets_shared\tccc\trmse\tjaccard" << std::endl;
+  for (const auto & e : dist_graph->edges_) {
+    if (e->on_) {
+      auto node1 = e->nodeToNode_.begin()->second.lock();
+      auto node2 = e->nodeToNode_.rbegin()->second.lock();
+      auto node1_idx = njh::StrToNumConverter::stoToNum<uint32_t>(node1->name_);
+      auto node2_idx = njh::StrToNumConverter::stoToNum<uint32_t>(node2->name_);
+      adjacency_list_out << haps.sampNamesVec_[node1_idx]
+        << "\t" << haps.sampNamesVec_[node2_idx]
+        << "\t" << node1->group_
+        << "\t" << original_measures.targets_shared[node1_idx][node2_idx]
+        << "\t" << original_measures.ccc[node1_idx][node2_idx]
+        << "\t" << original_measures.rmse[node1_idx][node2_idx]
+        << "\t" << indexRes.byHapsTarShared[node1_idx][node2_idx]
+        << std::endl;
+    }
+  }
+
+	haps.exportEncodedTable().outPutContents(TableIOOpts::genTabFileOut(njh::files::make_path(setUp.pars_.directoryName_, "haps.tsv.gz")));
+	OutputStream static_qmd_out(njh::files::make_path(setUp.pars_.directoryName_, "process.qmd"));
+	static_qmd_out << static_qmd_on_clustering << std::endl;
+	//write out a minimal shiny app (run_app.R + app.R) alongside the outputs so it can be run in place
+	{
+		auto run_app_fnp = njh::files::make_path(setUp.pars_.directoryName_, "run_app.R");
+		OutputStream run_app_out(run_app_fnp);
+		run_app_out << static_run_app_on_clustering << std::endl;
+		::chmod(run_app_fnp.c_str(),
+		S_IWUSR | S_IRUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH);
+	}
+	{
+		OutputStream app_out(njh::files::make_path(setUp.pars_.directoryName_, "app.R"));
+		app_out << static_app_on_clustering << std::endl;
+	}
 	setUp.timer_.logLapTimes(setUp.rLog_.runLogFile_, true, 6, true);
 	return 0;
+
 }
 
 
@@ -299,7 +988,7 @@ int popGenExpRunner::cluster_samples_using_ccc_of_microhaps(const njh::progutils
 
 int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::CmdArgs & inputCommands){
 	bool writeOutDistMatrices = false;
-	bool clusterOnJacardIndexShared = false;
+	bool clusterOnJaccardIndexShared = false;
 	njhUndirWeightedGraph<double, std::shared_ptr<BasicPointMatrix<double>::BasicPoint>>::dbscanPars dbscanPars;
 	// dbscanPars.eps_ = 0.50;
 	dbscanPars.eps_ = 0.10;
@@ -317,7 +1006,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	setUp.processDebug();
 	setUp.setOption(minimumLociCoverageToKeepSamples, "--minimumLociCoverageToKeepSamples", "minimum Loci Coverage To Keep Samples in post analysis steps, must have reads for at least this frction of the total loci");
 
-	setUp.setOption(clusterOnJacardIndexShared, "--clusterOnJacardIndexShared", "cluster On Jacard Index Shared");
+	setUp.setOption(clusterOnJaccardIndexShared, "--clusterOnJaccardIndexShared", "cluster On Jaccard Index Shared");
 	setUp.setOption(doNotBreakWithRmse, "--doNotBreakWithRmse", "do Not Break With Rmse");
 	setUp.setOption(rmseCutOffToBreak, "--rmseCutOffToBreak", "rmse Cut Off To Break");
 	setUp.setOption(doNotWriteOutGroupedRMSEs, "--doNotWriteOutGroupedRMSEs", "wriet Out Grouped RMSEs");
@@ -365,12 +1054,12 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 
 	if(writeOutDistMatrices){
 		OutputStream byTargetOut(njh::files::make_path(setUp.pars_.directoryName_, "percOfTarSharingAtLeastOneHap.tab.txt.gz"));
-		OutputStream byHapOut(njh::files::make_path(setUp.pars_.directoryName_, "jacardByAllHap.tab.txt.gz"));
-		OutputStream byHapTarSharedOut(njh::files::make_path(setUp.pars_.directoryName_, "jacardByHapsTarShared.tab.txt.gz"));
-		OutputStream avgHapOut(njh::files::make_path(setUp.pars_.directoryName_, "avgJacardPerTarget.tab.txt.gz"));
+		OutputStream byHapOut(njh::files::make_path(setUp.pars_.directoryName_, "jaccardByAllHap.tab.txt.gz"));
+		OutputStream byHapTarSharedOut(njh::files::make_path(setUp.pars_.directoryName_, "jaccardByHapsTarShared.tab.txt.gz"));
+		OutputStream avgHapOut(njh::files::make_path(setUp.pars_.directoryName_, "avgJaccardPerTarget.tab.txt.gz"));
 
-		OutputStream byHapTarSharedWeightedOut(njh::files::make_path(setUp.pars_.directoryName_, "jacardByHapsTarSharedWeighted.tab.txt.gz"));
-		OutputStream avgHapWeightedOut(njh::files::make_path(setUp.pars_.directoryName_, "avgJacardPerTargetWeighted.tab.txt.gz"));
+		OutputStream byHapTarSharedWeightedOut(njh::files::make_path(setUp.pars_.directoryName_, "jaccardByHapsTarSharedWeighted.tab.txt.gz"));
+		OutputStream avgHapWeightedOut(njh::files::make_path(setUp.pars_.directoryName_, "avgJaccardPerTargetWeighted.tab.txt.gz"));
 		OutputStream targetsSharedBetweenSampsOut(njh::files::make_path(setUp.pars_.directoryName_, "targetsSharedBetweenSamps.tab.txt.gz"));
 
 
@@ -407,8 +1096,8 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 		numTargetsPerSample.outPutContents(lociCoverageOut, "\t");
 	}
 
-	if(clusterOnJacardIndexShared) {
-		auto distFnp = njh::files::make_path(setUp.pars_.directoryName_, "1MinusjacardByHapsTarShared.tab.txt.gz");
+	if(clusterOnJaccardIndexShared) {
+		auto distFnp = njh::files::make_path(setUp.pars_.directoryName_, "1MinusjaccardByHapsTarShared.tab.txt.gz");
 		{
 			OutputStream byHapTarSharedOut(distFnp);
 			for(const auto & ih : indexRes.byHapsTarShared){
@@ -423,7 +1112,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 
 
 
-		OutputStream outFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_by_jacardTargetsShared.tsv")));
+		OutputStream outFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_by_jaccardTargetsShared.tsv")));
 		njh::stopWatch watch;
 		watch.setLapName("Reading in");
 		auto mat = BasicPointMatrix<double>::readInBasicMatrix(distFnp, dbscanPars);
@@ -747,15 +1436,15 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 
 
 			if (std::numeric_limits<uint32_t>::max() != group.first) {
-				std::vector<double> jacardWithinGroup;
+				std::vector<double> jaccardWithinGroup;
 				PairwisePairFactory pfac(group.second.size());
 				PairwisePairFactory::PairwisePair pair;
 				// std::cout << "group: " << group.first << std::endl;
 				while (pfac.setNextPair(pair)) {
 					// std::cout << haps.sampNamesVec_[group.second[pair.col_]] << " vs " << haps.sampNamesVec_[group.second[pair.row_]] << " rmse: " << pairwiseRMSEs[group.second[pair.col_]][group.second[pair.row_]] << std::endl;
-					jacardWithinGroup.emplace_back(1 - mat.points_[group.second[pair.col_]]->vals_[group.second[pair.row_]]);
+					jaccardWithinGroup.emplace_back(1 - mat.points_[group.second[pair.col_]]->vals_[group.second[pair.row_]]);
 				}
-				groups_jaccard_stats[group.first] = getStatsOnVec(jacardWithinGroup);
+				groups_jaccard_stats[group.first] = getStatsOnVec(jaccardWithinGroup);
 			}
 			for (const auto &idx: group.second) {
 				if (lociCoveragePerSample[haps.sampNamesVec_[idx]] < minimumLociCoverageToKeepSamples) {
@@ -801,7 +1490,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 	  }
 
 
-		OutputStream outGroupCountsFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_by_jacardTargetsShared_groupCounts.tsv")));
+		OutputStream outGroupCountsFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_by_jaccardTargetsShared_groupCounts.tsv")));
 		outGroupCountsFile << "group\tsampleCount";
 		outGroupCountsFile << "\tmin_jaccard\tmedian_jaccard\tmean_jaccard\tmax_jaccard";
 		if (!doNotBreakWithRmse) {
