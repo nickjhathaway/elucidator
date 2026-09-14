@@ -48,19 +48,80 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
 	if (reset_gt_fields) {
 		input_vcf.allAddGTFields(reset_gt_fields_ploidy);
 	}
+	// only GT and AD are read from the input per-sample data; drop everything else (DP, GQ, PL, ...)
+	// since the per-sample meta is what dominates memory for a large VCF
+	for (auto & rec : input_vcf.records_) {
+		for (auto & samp : rec.sampleFormatInfos_) {
+			VecStr sample_meta_to_remove;
+			for (const auto & meta : samp.second.meta_) {
+				if (!njh::in(meta.first, {"GT", "AD"})) {
+					sample_meta_to_remove.emplace_back(meta.first);
+				}
+			}
+			for (const auto & meta : sample_meta_to_remove) {
+				samp.second.meta_.erase(meta);
+			}
+		}
+	}
+	{
+		// keep the FORMAT header consistent with the stripped per-sample data
+		VecStr input_format_to_remove;
+		for (const auto & format : input_vcf.formatEntries_) {
+			if (!njh::in(format.first, {"GT", "AD"})) {
+				input_format_to_remove.emplace_back(format.first);
+			}
+		}
+		for (const auto & format : input_format_to_remove) {
+			input_vcf.formatEntries_.erase(format);
+		}
+	}
+
+	// build the cleaned output template once; each population copies this (no sample data) rather
+	// than the full input, which previously meant one full copy of the input VCF per thread
+	VCFOutput output_template = input_vcf;
+	{
+		//clear samples
+		output_template.samples_.clear();
+		for (auto & rec : output_template.records_) {
+			rec.sampleFormatInfos_.clear();
+		}
+		//INFO/AC,INFO/AF,INFO/AN,^FORMAT/GT,FORMAT/AD
+		output_template.otherHeaderMetaFields_.clear();
+		//format entries to remove
+		VecStr format_to_remove;
+		for (const auto & format : output_template.formatEntries_) {
+			if (!njh::in(format.first, {"GT", "AD"})) {
+				format_to_remove.emplace_back(format.first);
+			}
+		}
+		for (const auto & format : format_to_remove) {
+			output_template.formatEntries_.erase(format);
+		}
+		//info entries to remove
+		VecStr info_to_remove;
+		for (const auto & info : output_template.infoEntries_) {
+			if (!njh::in(info.first, {"AC", "AF", "AN"})) {
+				info_to_remove.emplace_back(info.first);
+			}
+		}
+		for (const auto & info : info_to_remove) {
+			output_template.infoEntries_.erase(info);
+		}
+	}
 	auto simulated_populations = njh::json::parseFile(simulated_population_fnp.string());
   VecStr population_names = simulated_populations.getMemberNames();
   njh::concurrent::LockableQueue<std::string> pop_queue(population_names);
   // const references so worker threads can only read the shared inputs; the non-const
   // operator[] on std::map and Json::Value inserts on a missing key, which would be a data race
   const VCFOutput & input_vcf_c = input_vcf;
+  const VCFOutput & output_template_c = output_template;
   const Json::Value & simulated_populations_c = simulated_populations;
 
   // capture exceptions thrown inside worker threads instead of letting them std::terminate
   std::mutex error_mut;
   VecStr thread_errors;
 
-  std::function<void()> process_population = [&pop_queue,&input_vcf_c,
+  std::function<void()> process_population = [&pop_queue,&input_vcf_c,&output_template_c,
     index_start, fake_total_sample_depth, reset_gt_fields_ploidy,
     &setUp,
     &simulated_populations_c,
@@ -69,41 +130,12 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
     while (pop_queue.getVal(pop_name)) {
      try {
       const auto & pop = simulated_populations_c[pop_name];
+      std::unordered_map<uint32_t, std::string> ancestral_population_index;
+      for (const auto & ancestral_pop_index : pop["ancestral_indexes"]) {
+        ancestral_population_index[ancestral_pop_index["index"].asUInt() ] = ancestral_pop_index["ancestral_genotype"].asString();
+      }
 		  {
-		    VCFOutput strains_separately = input_vcf_c;
-		    //clean up vcf for output
-		    //clear samples
-		    strains_separately.samples_.clear();
-		    for (auto & rec : strains_separately.records_) {
-			    rec.sampleFormatInfos_.clear();
-		    }
-		    //INFO/AC,INFO/AF,INFO/AN,^FORMAT/GT,FORMAT/AD
-		    strains_separately.otherHeaderMetaFields_.clear();
-		    //format entries to remove
-		    VecStr format_to_remove;
-		    for (const auto & format : strains_separately.formatEntries_) {
-			    if (!njh::in(format.first, {"GT", "AD"})) {
-				    format_to_remove.emplace_back(format.first);
-			    }
-		    }
-		    for (const auto & format : format_to_remove) {
-			    strains_separately.formatEntries_.erase(format);
-		    }
-		    //info entries to remove
-		    VecStr info_to_remove;
-		    for (const auto & info : strains_separately.infoEntries_) {
-			    if (!njh::in(info.first, {"AC", "AF", "AN"})) {
-				    info_to_remove.emplace_back(info.first);
-			    }
-		    }
-		    for (const auto & info : info_to_remove) {
-			    strains_separately.infoEntries_.erase(info);
-		    }
-
-		    std::unordered_map<uint32_t, std::string> ancestral_population_index;
-		    for (const auto & ancestral_pop_index : pop["ancestral_indexes"]) {
-			    ancestral_population_index[ancestral_pop_index["index"].asUInt() ] = ancestral_pop_index["ancestral_genotype"].asString();
-		    }
+		    VCFOutput strains_separately = output_template_c;
 		    uint32_t sample_index = index_start;
 		    for (const auto & sim_sample : pop["simulated_samples"]) {
 			    auto sample_name = njh::leftPadNumStr(sample_index, pop["simulated_samples"].size());
@@ -143,40 +175,7 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
 		    strains_separately.writeOutFixedAndSampleMeta(pop_out_vcf);
 		  }
 		  {
-		    VCFOutput by_sample = input_vcf_c;
-		    //clean up vcf for output
-		    //clear samples
-		    by_sample.samples_.clear();
-		    for (auto & rec : by_sample.records_) {
-			    rec.sampleFormatInfos_.clear();
-		    }
-		    //INFO/AC,INFO/AF,INFO/AN,^FORMAT/GT,FORMAT/AD
-		    by_sample.otherHeaderMetaFields_.clear();
-		    //format entries to remove
-		    VecStr format_to_remove;
-		    for (const auto & format : by_sample.formatEntries_) {
-			    if (!njh::in(format.first, {"GT", "AD"})) {
-				    format_to_remove.emplace_back(format.first);
-			    }
-		    }
-		    for (const auto & format : format_to_remove) {
-			    by_sample.formatEntries_.erase(format);
-		    }
-		    //info entries to remove
-		    VecStr info_to_remove;
-		    for (const auto & info : by_sample.infoEntries_) {
-			    if (!njh::in(info.first, {"AC", "AF", "AN"})) {
-				    info_to_remove.emplace_back(info.first);
-			    }
-		    }
-		    for (const auto & info : info_to_remove) {
-			    by_sample.infoEntries_.erase(info);
-		    }
-
-		    std::unordered_map<uint32_t, std::string> ancestral_population_index;
-		    for (const auto & ancestral_pop_index : pop["ancestral_indexes"]) {
-			    ancestral_population_index[ancestral_pop_index["index"].asUInt() ] = ancestral_pop_index["ancestral_genotype"].asString();
-		    }
+		    VCFOutput by_sample = output_template_c;
 		    uint32_t sample_index = index_start;
 		    for (const auto & sim_sample : pop["simulated_samples"]) {
 			    auto sample_name = njh::leftPadNumStr(sample_index, pop["simulated_samples"].size());
