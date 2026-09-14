@@ -3,6 +3,8 @@
 //
 
 
+#include <mutex>
+
 #include <njhseq/IO/OutputStream.hpp>
 #include <njhseq/objects/dataContainers/tables/TableReader.hpp>
 #include <njhseq/objects/BioDataObject/GenomicRegion.hpp>
@@ -49,16 +51,26 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
 	auto simulated_populations = njh::json::parseFile(simulated_population_fnp.string());
   VecStr population_names = simulated_populations.getMemberNames();
   njh::concurrent::LockableQueue<std::string> pop_queue(population_names);
+  // const references so worker threads can only read the shared inputs; the non-const
+  // operator[] on std::map and Json::Value inserts on a missing key, which would be a data race
+  const VCFOutput & input_vcf_c = input_vcf;
+  const Json::Value & simulated_populations_c = simulated_populations;
 
-  std::function<void()> process_population = [&pop_queue,&input_vcf,
+  // capture exceptions thrown inside worker threads instead of letting them std::terminate
+  std::mutex error_mut;
+  VecStr thread_errors;
+
+  std::function<void()> process_population = [&pop_queue,&input_vcf_c,
     index_start, fake_total_sample_depth, reset_gt_fields_ploidy,
     &setUp,
-    &simulated_populations]() {
+    &simulated_populations_c,
+    &error_mut, &thread_errors]() {
     std::string pop_name;
     while (pop_queue.getVal(pop_name)) {
-      const auto & pop = simulated_populations[pop_name];
+     try {
+      const auto & pop = simulated_populations_c[pop_name];
 		  {
-		    VCFOutput strains_separately = input_vcf;
+		    VCFOutput strains_separately = input_vcf_c;
 		    //clean up vcf for output
 		    //clear samples
 		    strains_separately.samples_.clear();
@@ -104,7 +116,7 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
 				    strains_separately.samples_.emplace_back(output_sample_name);
 				    for (const auto & segments : genotype["segments"]) {
 					    Bed3RecordCore current_segment(segments["chrom"].asString(), segments["start"].asUInt(), segments["end"].asUInt());
-					    auto ancestral_genotype = ancestral_population_index[segments["index"].asUInt()];
+					    const auto & ancestral_genotype = ancestral_population_index.at(segments["index"].asUInt());
 					    //assumes input is sorted
 					    for (const auto & recPos : iter::enumerate(strains_separately.records_)) {
 						    auto zero_based_pos = recPos.element.pos_ - 1;
@@ -115,9 +127,8 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
 							    MetaDataInName output_sample_info;
 							    // std::cout << __FILE__ << " " << __LINE__ << std::endl;
 							    // std::cout << "ancestral_genotype: " << ancestral_genotype << std::endl;
-							    // std::cout << "input_vcf.records_[recPos.index].sampleFormatInfos_[ancestral_genotype]" << njh::json::toJson(input_vcf.records_[recPos.index].sampleFormatInfos_[ancestral_genotype].meta_) << std::endl;
-							    output_sample_info.addMeta("GT", input_vcf.records_[recPos.index].sampleFormatInfos_[ancestral_genotype].getMeta("GT"));
-							    output_sample_info.addMeta("AD", input_vcf.records_[recPos.index].sampleFormatInfos_[ancestral_genotype].getMeta("AD"));
+							    output_sample_info.addMeta("GT", input_vcf_c.records_[recPos.index].sampleFormatInfos_.at(ancestral_genotype).getMeta("GT"));
+							    output_sample_info.addMeta("AD", input_vcf_c.records_[recPos.index].sampleFormatInfos_.at(ancestral_genotype).getMeta("AD"));
 							    // std::cout << __FILE__ << " " << __LINE__ << std::endl;
 							    strains_separately.records_[recPos.index].sampleFormatInfos_.emplace(output_sample_name, output_sample_info);
 						    }
@@ -132,7 +143,7 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
 		    strains_separately.writeOutFixedAndSampleMeta(pop_out_vcf);
 		  }
 		  {
-		    VCFOutput by_sample = input_vcf;
+		    VCFOutput by_sample = input_vcf_c;
 		    //clean up vcf for output
 		    //clear samples
 		    by_sample.samples_.clear();
@@ -185,7 +196,7 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
 
 				    for (const auto & segments : genotype["segments"]) {
 					    Bed3RecordCore current_segment(segments["chrom"].asString(), segments["start"].asUInt(), segments["end"].asUInt());
-					    auto ancestral_genotype = ancestral_population_index[segments["index"].asUInt()];
+					    const auto & ancestral_genotype = ancestral_population_index.at(segments["index"].asUInt());
 					    //assumes input is sorted
 					    for (const auto & recPos : iter::enumerate(by_sample.records_)) {
 						    auto zero_based_pos = recPos.element.pos_ - 1;
@@ -194,14 +205,14 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
 						    }
 						    if (recPos.element.chrom_ == current_segment.chrom_ && zero_based_pos >= current_segment.chromStart_ && zero_based_pos < current_segment.chromEnd_) {
 
-						      auto input_AD_toks = vecStrToVecNum<uint32_t>(tokenizeString(input_vcf.records_[recPos.index].sampleFormatInfos_[ancestral_genotype].getMeta("AD"), ","));
+						      auto input_AD_toks = vecStrToVecNum<uint32_t>(tokenizeString(input_vcf_c.records_[recPos.index].sampleFormatInfos_.at(ancestral_genotype).getMeta("AD"), ","));
 						      auto AD_sum = vectorSum(input_AD_toks);
 						      std::vector<uint32_t> output_AD_toks;
 						      if (0 == AD_sum) {
 						        output_AD_toks = input_AD_toks;
 						      } else {
 						        for (const auto  AD : input_AD_toks) {
-						          output_AD_toks.emplace_back(std::round(AD/AD_sum * depth_per_genotypes[genotype_index]));
+						          output_AD_toks.emplace_back(std::round(static_cast<double>(AD) / AD_sum * depth_per_genotypes[genotype_index]));
 						        }
 						      }
                   if (0 == genotype_index) {
@@ -235,10 +246,20 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
 		    by_sample.allAutoAdd_AN_AC_AF_InfoFields();
 		    by_sample.writeOutFixedAndSampleMeta(pop_out_vcf);
 		  }
+     } catch (const std::exception & e) {
+       std::lock_guard<std::mutex> lock(error_mut);
+       thread_errors.emplace_back(njh::pasteAsStr("error processing population ", pop_name, ": ", e.what()));
+     }
     }
   };
 
   njh::concurrent::runVoidFunctionThreaded(process_population, num_threads);
+  if (!thread_errors.empty()) {
+    std::stringstream ss;
+    ss << __PRETTY_FUNCTION__ << ", " << thread_errors.size() << " population(s) failed:\n";
+    ss << njh::conToStr(thread_errors, "\n") << "\n";
+    throw std::runtime_error{ss.str()};
+  }
 
 	if (setUp.pars_.debug_){
 		OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "out.vcf.gz"));
