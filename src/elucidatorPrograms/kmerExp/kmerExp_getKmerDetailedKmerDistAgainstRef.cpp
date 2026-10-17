@@ -205,13 +205,14 @@ int kmerExpRunner::getKmerDetailedKmerDistAgainstRef(const njh::progutils::CmdAr
 
 	bool getRevComp = false;
 
-
+  bool do_not_skip_same_name = false;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
 	setUp.processReadInNames(true);
 	setUp.processRefFilename(true);
 	setUp.processWritingOptions(outOpts);
+  setUp.setOption(do_not_skip_same_name, "--do_not_skip_same_name", "do not skip comparisons when records have the same name");
 
 	setUp.setOption(numThreads, "--numThreads", "number of threads to use");
 	setUp.setOption(kmerLength, "--kmerLength", "kmer Length");
@@ -231,53 +232,55 @@ int kmerExpRunner::getKmerDetailedKmerDistAgainstRef(const njh::progutils::CmdAr
 	std::mutex outMut;
 	std::function<void()> getBestDist = [&reader,&out,&outMut,
 																			 &getRevComp,&kmerLength,
-																			 &refSeqs](){
+																			 &refSeqs, &do_not_skip_same_name](){
 		seqInfo seq;
 		while(reader.readNextReadLock(seq)){
 
 			kmerInfo kInfo(seq.seq_, kmerLength, false);
 			for(const auto pos : iter::range(refSeqs.size())){
 				const auto & refSeq = refSeqs[pos];
-				auto dist = kInfo.compareKmersDetailed(refSeq->kInfo_);
-				{
-					std::lock_guard<std::mutex> lock(outMut);
-					out << seq.name_
-							<< "\t" << refSeq->seqBase_.name_
-							<< "\t" << njh::boolToStr(false)
-							<< "\t" << dist.totalShared_
-							<< "\t" << dist.getDistTotalShared()
-							<< "\t" << dist.getDistTotalSharedLenAdjusted()
-							<< "\t" << dist.totalKmersIn1_
-							<< "\t" << dist.totalKmersIn2_
-							<< "\t" << dist.totalUniqShared_
-							<< "\t" << dist.getDistUniqueShared()
-							<< "\t" << dist.getDistUniqueSharedLenAdjusted()
-							<< "\t" << dist.totalUniqKmersIn1_
-							<< "\t" << dist.totalUniqKmersIn2_
-							<< "\t" << dist.totalUniqBetween_
-							<< std::endl;;
-				}
-				if(getRevComp){
-					auto revDist = kInfo.compareKmersRevCompDetailed(refSeq->kInfo_);
-					{
-						std::lock_guard<std::mutex> lock(outMut);
-						out << seq.name_
-								<< "\t" << refSeq->seqBase_.name_
-								<< "\t" << njh::boolToStr(true)
-								<< "\t" << revDist.totalShared_
-								<< "\t" << revDist.getDistTotalShared()
-								<< "\t" << revDist.getDistTotalSharedLenAdjusted()
-								<< "\t" << revDist.totalKmersIn1_
-								<< "\t" << revDist.totalKmersIn2_
-								<< "\t" << revDist.totalUniqShared_
-								<< "\t" << revDist.getDistUniqueShared()
-								<< "\t" << revDist.getDistUniqueSharedLenAdjusted()
-								<< "\t" << revDist.totalUniqKmersIn1_
-								<< "\t" << revDist.totalUniqKmersIn2_
-								<< "\t" << revDist.totalUniqBetween_
-								<< "\n";
-					}
-				}
+			  if (do_not_skip_same_name || refSeq->seqBase_.name_ != seq.name_) {
+			    auto dist = kInfo.compareKmersDetailed(refSeq->kInfo_);
+			    {
+			      std::lock_guard<std::mutex> lock(outMut);
+			      out << seq.name_
+                << "\t" << refSeq->seqBase_.name_
+                << "\t" << njh::boolToStr(false)
+                << "\t" << dist.totalShared_
+                << "\t" << dist.getDistTotalShared()
+                << "\t" << dist.getDistTotalSharedLenAdjusted()
+                << "\t" << dist.totalKmersIn1_
+                << "\t" << dist.totalKmersIn2_
+                << "\t" << dist.totalUniqShared_
+                << "\t" << dist.getDistUniqueShared()
+                << "\t" << dist.getDistUniqueSharedLenAdjusted()
+                << "\t" << dist.totalUniqKmersIn1_
+                << "\t" << dist.totalUniqKmersIn2_
+                << "\t" << dist.totalUniqBetween_
+                << std::endl;;
+			    }
+			    if(getRevComp){
+			      auto revDist = kInfo.compareKmersRevCompDetailed(refSeq->kInfo_);
+			      {
+			        std::lock_guard<std::mutex> lock(outMut);
+			        out << seq.name_
+                  << "\t" << refSeq->seqBase_.name_
+                  << "\t" << njh::boolToStr(true)
+                  << "\t" << revDist.totalShared_
+                  << "\t" << revDist.getDistTotalShared()
+                  << "\t" << revDist.getDistTotalSharedLenAdjusted()
+                  << "\t" << revDist.totalKmersIn1_
+                  << "\t" << revDist.totalKmersIn2_
+                  << "\t" << revDist.totalUniqShared_
+                  << "\t" << revDist.getDistUniqueShared()
+                  << "\t" << revDist.getDistUniqueSharedLenAdjusted()
+                  << "\t" << revDist.totalUniqKmersIn1_
+                  << "\t" << revDist.totalUniqKmersIn2_
+                  << "\t" << revDist.totalUniqBetween_
+                  << "\n";
+			      }
+			    }
+			  }
 			}
 		}
 	};
