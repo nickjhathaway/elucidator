@@ -7,6 +7,7 @@
 #include <njhseq/IO/SeqIO.h>
 #include <njhseq/objects/kmer/SimpleKmerHash.hpp>
 #include <SeekDeep/parameters/setUpPars.hpp>
+#include "elucidator/helpers/UniqueKmerSetHelper.hpp"
 
 
 namespace njhseq {
@@ -49,6 +50,10 @@ int kmerSetExpRunner::extractByKmerUniqueSets(const njh::progutils::CmdArgs &inp
 
   //running
   setUp.setOption(numThreads, "--numThreads", "number of threads");
+  bool noInvertedKmerIndex = false;
+  setUp.setOption(noInvertedKmerIndex, "--noInvertedKmerIndex",
+      "Probe every k-mer set for every read k-mer instead of using one k-mer -> set(s) index. The index gives identical counts and handles k-mers shared between targets; this exists to fall back if that is ever in doubt");
+  const bool useInvertedKmerIndex = !noInvertedKmerIndex;
 
 
 
@@ -74,6 +79,18 @@ int kmerSetExpRunner::extractByKmerUniqueSets(const njh::progutils::CmdArgs &inp
   //read in extra info
   ids.addLenCutOffs(lenCutOffsFnp);
   uint32_t extractionKmer = ids.addUniqKmerCounts(uniqueKmersPerTargetFnp, ignoreMissingKmerSets);
+  {
+    //the table is loaded as given, with no cross-target uniqueness check, so whether the targets are
+    //actually exclusive is reported rather than assumed. A k-mer shared between targets counts toward
+    //every target that holds it, so the counts are the same as probing each target in turn.
+    auto exclusivityIndex = UniqueKmerSetHelper::getInvertedIndex(ids.uniqueKmersPerTarget_);
+    if(nullptr != exclusivityIndex){
+      std::cout << "kmerSetExclusivity\tsets\t" << exclusivityIndex->nSets_
+          << "\ttotalKmers\t" << exclusivityIndex->totalKmers_
+          << "\tsharedKmers\t" << exclusivityIndex->nSharedKmers_
+          << "\texclusive\t" << njh::boolToStr(0 == exclusivityIndex->nSharedKmers_) << std::endl;
+    }
+  }
 
 
   // set up input
@@ -124,8 +141,20 @@ int kmerSetExpRunner::extractByKmerUniqueSets(const njh::progutils::CmdArgs &inp
   std::function<void()> readInComp = [&reader, &ids, &readsPerSet,&readsPerSetRevComp,&mut,
                                       &extractionKmer,&seqOut,&sampleName,&rename,
                                       &corePars,
-                                      &masterCounts]() {
+                                      &masterCounts,&useInvertedKmerIndex]() {
     SimpleKmerHash hasher;
+    //one k-mer -> set(s) lookup in place of probing every target for every read k-mer; a k-mer shared
+    //between targets increments each of them, so the counts are unchanged
+    std::shared_ptr<const UniqueKmerSetHelper::InvertedKmerIndex> invIndex;
+    if(useInvertedKmerIndex){
+      invIndex = UniqueKmerSetHelper::getInvertedIndex(ids.uniqueKmersPerTarget_);
+      if(nullptr != invIndex && !invIndex->usable(ids.uniqueKmersPerTarget_)){
+        invIndex = nullptr;
+      }
+    }
+    auto tally = [&invIndex](const uint64_t hash, std::unordered_map<std::string, uint32_t> & into){
+      invIndex->tallyAll(hash, into);
+    };
     seqInfo seq;
     std::unordered_map<std::string, uint32_t> readsPerSetCurrent;
     std::unordered_map<std::string, uint32_t> readsPerSetRevCompCurrent;
@@ -160,17 +189,22 @@ int kmerSetExpRunner::extractByKmerUniqueSets(const njh::progutils::CmdArgs &inp
         foundPerSet[setName] = 0;
         foundPerSetRevComp[setName] = 0;
       }
-      for(const auto & hashedKmer : hashedInputKmers){
-        for(const auto & uniqueKmers : ids.uniqueKmersPerTarget_){
-          if(njh::in(hashedKmer.first, uniqueKmers.second)){
-            ++foundPerSet[uniqueKmers.first];
+      if(nullptr != invIndex){
+        for(const auto & hashedKmer : hashedInputKmers){ tally(hashedKmer.first, foundPerSet); }
+        for(const auto & hashedKmer : hashedInputKmersRevComp){ tally(hashedKmer.first, foundPerSetRevComp); }
+      } else {
+        for(const auto & hashedKmer : hashedInputKmers){
+          for(const auto & uniqueKmers : ids.uniqueKmersPerTarget_){
+            if(njh::in(hashedKmer.first, uniqueKmers.second)){
+              ++foundPerSet[uniqueKmers.first];
+            }
           }
         }
-      }
-      for(const auto & hashedKmer : hashedInputKmersRevComp){
-        for(const auto & uniqueKmers : ids.uniqueKmersPerTarget_){
-          if(njh::in(hashedKmer.first, uniqueKmers.second)){
-            ++foundPerSetRevComp[uniqueKmers.first];
+        for(const auto & hashedKmer : hashedInputKmersRevComp){
+          for(const auto & uniqueKmers : ids.uniqueKmersPerTarget_){
+            if(njh::in(hashedKmer.first, uniqueKmers.second)){
+              ++foundPerSetRevComp[uniqueKmers.first];
+            }
           }
         }
       }

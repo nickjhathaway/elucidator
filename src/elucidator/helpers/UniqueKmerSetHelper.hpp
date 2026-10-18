@@ -7,6 +7,7 @@
 
 
 #include <njhcpp/common.h>
+#include <njhseq/BamToolsUtils/StrandBiasKmerCorrector.hpp>
 #include <njhseq/objects/kmer.h>
 #include <njhseq/objects/dataContainers/tables/TableReader.hpp>
 #include <njhseq/IO/SeqIO/MultiSeqIO.hpp>
@@ -59,6 +60,11 @@ public:
 
 		std::set<std::string> excludeSetNames{"genomeRest"};
 
+		//!@brief Use one k-mer -> set(s) index instead of probing every set for every read k-mer.
+		//! Counts are identical either way and k-mers shared between sets are handled, so this is on
+		//! by default and exists only to fall back from.
+		bool useInvertedKmerIndex_{true};
+
 		uint32_t initialExcludeHardCountOff = 0;
 		double initialExcludeFracCutOff = 0;
 
@@ -79,7 +85,8 @@ public:
 		void increaseHashedInputKmerCountsRevComp(const seqInfo & seq, const CompareReadToSetPars &compPars, const SimpleKmerHash &hasher);
 		void increaseHashedInputKmerCountsBoth(const seqInfo & seq, const CompareReadToSetPars &compPars, const SimpleKmerHash &hasher);
 
-		void checkForPresenceOfHashedInputKmers(const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet);
+		void checkForPresenceOfHashedInputKmers(const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+				bool useInvertedIndex = true);
 		void preprocessedFoundKmers(const CompareReadToSetPars &compPars, uint32_t kmersPossible);
 		void determineWinner(const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet);
 
@@ -136,6 +143,20 @@ public:
 		bool writeOutFinalKmerSets = false;
 
 		bool filterMultiHitReads = false;
+
+		//!@brief Optional per-set strand-bias k-mer correctors. When present, a read is corrected
+		//! right after its winning set and orientation are determined (so it is already in set
+		//! orientation) and before it is written. Built by a prior collection pass over the same
+		//! reads, which is where the sequencing strand is known; applying needs no strand.
+		std::shared_ptr<const std::unordered_map<std::string, std::shared_ptr<StrandBiasKmerCorrector>>> strandBiasCorrectors;
+
+		/**@brief apply the corrector for a set, if one exists, to a set-oriented sequence*/
+		uint32_t correctForSet(const std::string & setName, seqInfo & seq) const {
+			if (nullptr == strandBiasCorrectors) { return 0; }
+			auto search = strandBiasCorrectors->find(setName);
+			if (search == strandBiasCorrectors->end() || nullptr == search->second) { return 0; }
+			return search->second->applyToSeq(seq.seq_);
+		}
 	};
 
 	struct ProcessReadForExtractingCounts{
@@ -236,6 +257,17 @@ public:
 																			 const ProcessReadForExtractingPars &extractingPars, const SimpleKmerHash &hasher,
 																			 MultiSeqIO &seqOut, ProcessReadForExtractingCounts &counts);
 
+
+	/**@brief One k-mer -> the set or sets holding it, in place of probing every set per read k-mer.
+	 *
+	 * The implementation lives in njhseq so that SeekDeep, which sits below elucidator, uses the same
+	 * one. It is built once per change to the sets and re-validated on use, so a stale index cannot
+	 * produce a wrong answer.
+	 */
+	using InvertedKmerIndex = njhseq::KmerSetInvertedIndex;
+
+	static std::shared_ptr<const InvertedKmerIndex> getInvertedIndex(
+			const std::unordered_map<std::string, std::unordered_set<uint64_t>> & sets);
 
 	static std::unordered_map<std::string, std::unordered_map<uint64_t, uint32_t>>
 	readInNewKmersFromExtractedReads(const bfs::path &directoryIn,

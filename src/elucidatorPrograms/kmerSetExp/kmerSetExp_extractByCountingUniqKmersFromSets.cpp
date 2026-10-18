@@ -44,6 +44,10 @@ int kmerSetExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::Cmd
 	setUp.setOption(compPars.pairsSeparate, "--pairsSeparate", "count the pairs separately");
 	setUp.setOption(compPars.kmerLengthForEntropyCalc_, "--kmerLengthForEntropyCalc", "kmer Length For Entropy Calc");
 	setUp.setOption(compPars.entropyFilter_, "--entropyFilter", "entropy Filter");
+	bool noInvertedKmerIndexCounting = false;
+	setUp.setOption(noInvertedKmerIndexCounting, "--noInvertedKmerIndex",
+			"Probe every k-mer set for every read k-mer instead of using one k-mer -> set(s) index. Counts are identical either way; the index is faster, increasingly so with more sets");
+	compPars.useInvertedKmerIndex_ = !noInvertedKmerIndexCounting;
 	//run options
 	setUp.setOption(numThreads, "--numThreads", "numThreads");
 	//write options
@@ -55,6 +59,17 @@ int kmerSetExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::Cmd
 	watch.startNewLap("reading in unique kmer table");
 	compPars.klen = UniqueKmerSetHelper::getKmerLenFromUniqueKmerTable(countTable);
 	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet = UniqueKmerSetHelper::readInUniqueKmerTablePerSet(countTable);
+	{
+		//the index handles shared k-mers, but whether the sets are actually exclusive changes how the
+		//winner-takes-most classification behaves, so report it rather than assume it
+		auto exclusivityIndex = UniqueKmerSetHelper::getInvertedIndex(uniqueKmersPerSet);
+		if (nullptr != exclusivityIndex) {
+			std::cout << "kmerSetExclusivity\tsets\t" << exclusivityIndex->nSets_
+					<< "\ttotalKmers\t" << exclusivityIndex->totalKmers_
+					<< "\tsharedKmers\t" << exclusivityIndex->nSharedKmers_
+					<< "\texclusive\t" << njh::boolToStr(0 == exclusivityIndex->nSharedKmers_) << std::endl;
+		}
+	}
 	std::string nonUniqueRegionName = "NON_UNIQUE";
 	std::unordered_set<uint64_t> nonUniqueKmersPerSet;
 	if (!nonUniqueKmerTable.empty()) {
@@ -130,6 +145,99 @@ int kmerSetExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::Cmd
 							meta.resetMetaInName(seq.name_);
 						}
  **/
+
+namespace {
+
+/**@brief Build one strand-bias k-mer corrector per set from the reads the final extraction will write.
+ *
+ * Read-only pass over the same inputs the final extraction uses, after the k-mer sets are frozen.
+ * The winning orientation from compareReadToSets IS the sequencing strand relative to the set,
+ * which is the axis the correction needs and which is lost once the read is written. Note the mate
+ * convention: the inputs are read with revComplMate_ on, so both mates sit in one frame and share a
+ * winnerRevComp; physically they were sequenced in opposite directions, so the second mate's strand
+ * is the complement of the first's.
+ *
+ * In a multigene family strand restriction alone also admits genuine rare paralogs whose coverage
+ * happens to be one sided, so the corrector is built with requireQualityDrop_ set: every correction
+ * must also show the reference base degraded on the strand carrying the candidate.
+ */
+std::shared_ptr<const std::unordered_map<std::string, std::shared_ptr<njhseq::StrandBiasKmerCorrector>>>
+buildStrandBiasCorrectorsPerSet(const SeqIOOptions & pairedOpts, const SeqIOOptions & singlesOpts,
+		const std::unordered_map<std::string, std::unordered_set<uint64_t>> & uniqueKmersPerSet,
+		UniqueKmerSetHelper::ProcessReadForExtractingPars extractingPars,
+		const SimpleKmerHash & hasher,
+		const njhseq::StrandBiasKmerCorrectionPars & sbPars,
+		uint32_t maxReadsPerSet,
+		std::ostream & logOut) {
+	auto ret = std::make_shared<std::unordered_map<std::string, std::shared_ptr<njhseq::StrandBiasKmerCorrector>>>();
+	if (!sbPars.on_) { return ret; }
+	extractingPars.strandBiasCorrectors = nullptr; //never correct while collecting
+	std::unordered_map<std::string, std::vector<njhseq::StrandBiasKmerCorrector::BufferedRead>> perSet;
+	std::unordered_set<std::string> skip { "undetermined", "multihit" };
+	for (const auto & n : extractingPars.compPars.excludeSetNames) { skip.emplace(n); }
+
+	auto keep = [&perSet, &skip, &maxReadsPerSet](const std::string & setName, const seqInfo & seq, bool reverseStrand) {
+		if (njh::in(setName, skip)) { return; }
+		auto & v = perSet[setName];
+		if (v.size() >= maxReadsPerSet) { return; }
+		njhseq::StrandBiasKmerCorrector::BufferedRead rd;
+		rd.seq_ = seq.seq_;
+		rd.reverseStrand_ = reverseStrand;
+		rd.quals_.reserve(seq.qual_.size());
+		for (const auto q : seq.qual_) { rd.quals_.emplace_back(static_cast<uint8_t>(q)); }
+		v.emplace_back(std::move(rd));
+	};
+	if (!pairedOpts.firstName_.empty()) {
+		SeqInput reader(pairedOpts);
+		reader.openIn();
+		PairedRead pseq;
+		while (reader.readNextRead(pseq)) {
+			auto first = UniqueKmerSetHelper::compareReadToSets(pseq.seqBase_, uniqueKmersPerSet, extractingPars.compPars, hasher);
+			auto second = UniqueKmerSetHelper::compareReadToSets(pseq.mateSeqBase_, uniqueKmersPerSet, extractingPars.compPars, hasher);
+			//compareReadToSets has already flipped each mate into its winning set's orientation
+			keep(first.winnerSet, pseq.seqBase_, first.winnerRevComp);
+			keep(second.winnerSet, pseq.mateSeqBase_, !second.winnerRevComp);
+		}
+	}
+	if (!singlesOpts.firstName_.empty()) {
+		SeqInput reader(singlesOpts);
+		reader.openIn();
+		seqInfo seq;
+		while (reader.readNextRead(seq)) {
+			auto res = UniqueKmerSetHelper::compareReadToSets(seq, uniqueKmersPerSet, extractingPars.compPars, hasher);
+			const bool secondMate = njh::endsWith(seq.name_, "_secondMate");
+			keep(res.winnerSet, seq, secondMate ? !res.winnerRevComp : res.winnerRevComp);
+		}
+	}
+	for (auto & setReads : perSet) {
+		if (setReads.second.size() < 50) { continue; }
+		auto corrector = std::make_shared<njhseq::StrandBiasKmerCorrector>(sbPars);
+		for (uint32_t pass = 0; pass < sbPars.maxPasses_; ++pass) {
+			njhseq::StrandBiasKmerCorrector::KmerTable table;
+			for (const auto & rd : setReads.second) { corrector->tallySeq(table, rd.seq_, rd.reverseStrand_); }
+			auto candidates = corrector->findCandidates(table);
+			if (candidates.empty()) { break; }
+			auto quals = corrector->collectOffsetQuality(setReads.second, candidates);
+			uint32_t rescued = 0;
+			auto found = corrector->buildPass(candidates, table, quals, rescued);
+			if (found.corrections_.empty()) { break; }
+			corrector->addPass(std::move(found));
+			for (auto & rd : setReads.second) { corrector->applyToSeq(rd.seq_); }
+		}
+		if (corrector->hasCorrections()) {
+			uint32_t nk = 0;
+			for (const auto & pass : corrector->passes_) { nk += pass.corrections_.size(); }
+			logOut << "strandBiasKmerCorrection\t" << setReads.first << "\t" << setReads.second.size()
+					<< "\t" << corrector->numPasses() << "\t" << nk << std::endl;
+			(*ret)[setReads.first] = corrector;
+		}
+		setReads.second.clear();
+		setReads.second.shrink_to_fit();
+	}
+	return ret;
+}
+
+}  // namespace
 
 int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::CmdArgs & inputCommands){
 
@@ -211,11 +319,62 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 
 	bool finalExtractionPairsTogether = false;
 	setUp.setOption(finalExtractionPairsTogether, "--finalExtractionPairsTogether", "final extraction the pairs together");
+	//strand-bias k-mer correction, applied to the reads written by the final extraction
+	njhseq::StrandBiasKmerCorrectionPars sbPars;
+	sbPars.kLen_ = 25;              //independent of the set table's k, which is for classification
+	sbPars.requireQualityDrop_ = true;  //a multigene family needs quality to corroborate every correction
+	bool noStrandBiasKmerCorrection = false;
+	setUp.setOption(noStrandBiasKmerCorrection, "--noStrandBiasKmerCorrection",
+			"Turn off correcting strand-restricted artifact k-mers in the reads written by the final extraction");
+	sbPars.on_ = !noStrandBiasKmerCorrection;
+	setUp.setOption(sbPars.kLen_, "--strandBiasKmerCorrectionKLen",
+			"K-mer length for the strand-bias correction (max 32). Longer values make a window paralog specific and relieve the shared-paralogy veto, but lower the depth per k-mer; 25 suits most sets, raise it for deep, highly paralogous sets");
+	setUp.setOption(sbPars.qualDropMin_, "--strandBiasKmerCorrectionQualityDropMin",
+			"Required Phred drop of the reference base at the candidate's position, other strand minus artifact strand");
+	setUp.setOption(sbPars.minPartnerMissingStrandDepth_, "--strandBiasKmerCorrectionMinPartnerDepth",
+			"Balanced partner k-mer must have at least this many reads on the strand the candidate is missing from");
+	setUp.setOption(sbPars.fisherPhred_, "--strandBiasKmerCorrectionFisherPhred",
+			"Two-sided Fisher exact (Phred scaled) of partner vs candidate strand counts must exceed this");
+	setUp.setOption(sbPars.maxPasses_, "--strandBiasKmerCorrectionMaxPasses", "Maximum tally-and-correct passes");
+	//alternative criterion for data where the strand axis is unusable (stranded RNA-seq): correct a
+	//rare k-mer to a dominant one-off neighbour on a depth ratio alone. Not selective -- it also
+	//removes real alleles below roughly 1/(multiplier+1) of their locus -- so it is strictly opt-in.
+	bool noStrandBiasKmerDoubletCorrection = !sbPars.doublet_;
+	setUp.setOption(noStrandBiasKmerDoubletCorrection, "--noStrandBiasKmerDoubletCorrection",
+			"Turn off correction of adjacent two-base artifacts. The single-base criterion cannot reach these, since a k-mer covering the pair differs at two positions and so has no one-off partner. A doublet is held to stricter evidence than a single: no quality relaxation, and a quality collapse required at both positions");
+	sbPars.doublet_ = !noStrandBiasKmerDoubletCorrection;
+	bool strandBiasKmerDoubletAnySubstitution = !sbPars.doubletRequireSameSubstitution_;
+	setUp.setOption(strandBiasKmerDoubletAnySubstitution, "--strandBiasKmerDoubletAnySubstitution",
+			"Allow an adjacent doublet whose two bases change differently; by default both must change the same way");
+	sbPars.doubletRequireSameSubstitution_ = !strandBiasKmerDoubletAnySubstitution;
+	bool kmerFrequencyCorrection = false;
+	setUp.setOption(kmerFrequencyCorrection, "--kmerFrequencyCorrection",
+			"Use a k-mer frequency criterion instead of the strand/quality one: correct a rare k-mer to a dominant one-off neighbour. For stranded RNA-seq, where strand is confounded with mate and template errors carry normal quality. WARNING: also erases real alleles below about 1/(multiplier+1) of their locus, so minor strains and rare paralogs below that fraction are lost");
+	setUp.setOption(sbPars.minDepthRatio_, "--kmerFrequencyCorrectionMultiplier",
+			"In frequency mode, the dominant neighbour must be at least this many fold the k-mer being corrected; 10 corrects below about 9% of a locus, 5 below about 17%");
+	setUp.setOption(sbPars.freqMinPartnerDepth_, "--kmerFrequencyCorrectionMinPartnerDepth",
+			"In frequency mode, the dominant neighbour needs at least this much support before the ratio is trusted");
+	setUp.setOption(sbPars.freqMinCandidateTotal_, "--kmerFrequencyCorrectionMinCandidateDepth",
+			"In frequency mode, the smallest k-mer depth eligible for correction (1 corrects single-read errors)");
+	setUp.setOption(sbPars.freqMaxCandidateTotal_, "--kmerFrequencyCorrectionMaxCandidateDepth",
+			"In frequency mode, the largest k-mer depth eligible for correction, regardless of the ratio; 0 removes the cap. Keeps the correction on the singletons and doubletons that carry the error mass, and so leaves alone tandem-repeat genes, where a genuine repeat-copy variant sits at a fraction of the gene's coverage and satisfies the ratio just as an error does");
+	if (kmerFrequencyCorrection) {
+		sbPars.frequencyOnly_ = true;
+		sbPars.requireQualityDrop_ = false;
+		sbPars.on_ = !noStrandBiasKmerCorrection;
+	}
+	uint32_t strandBiasMaxReadsPerSet = 1000000;
+	setUp.setOption(strandBiasMaxReadsPerSet, "--strandBiasKmerCorrectionMaxReadsPerSet",
+			"Cap on reads buffered per set while building the corrections, which bounds memory");
 	finalExtractionPairsSeparate = !finalExtractionPairsTogether;
 	//setUp.setOption(finalExtractionPairsSeparate, "--finalExtractionPairsSeparate", "extract the pairs separately for final extraction step");
 
 
 	setUp.setOption(extractingPars.compPars.allowableCharacters_, "--allowableCharacters", "allowable characters");
+	bool noInvertedKmerIndex = false;
+	setUp.setOption(noInvertedKmerIndex, "--noInvertedKmerIndex",
+			"Probe every k-mer set for every read k-mer instead of using one k-mer -> set(s) index. The index gives identical counts and handles k-mers shared between sets; this exists to fall back from if that is ever in doubt");
+	extractingPars.compPars.useInvertedKmerIndex_ = !noInvertedKmerIndex;
 
 	setUp.setOption(extractingPars.compPars.entropyFilter_, "--entropyFilter", "entropy Filter cut off");
 	setUp.setOption(extractingPars.compPars.kmerLengthForEntropyCalc_, "--kmerLengthForEntropyCalc", "kmerLength For Entropy Calculation");
@@ -353,6 +512,17 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 
 	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet = UniqueKmerSetHelper::readInUniqueKmerTablePerSet(
 					countTable);
+	{
+		//the index handles shared k-mers, but whether the sets are actually exclusive changes how the
+		//winner-takes-most classification behaves, so report it rather than assume it
+		auto exclusivityIndex = UniqueKmerSetHelper::getInvertedIndex(uniqueKmersPerSet);
+		if (nullptr != exclusivityIndex) {
+			std::cout << "kmerSetExclusivity\tsets\t" << exclusivityIndex->nSets_
+					<< "\ttotalKmers\t" << exclusivityIndex->totalKmers_
+					<< "\tsharedKmers\t" << exclusivityIndex->nSharedKmers_
+					<< "\texclusive\t" << njh::boolToStr(0 == exclusivityIndex->nSharedKmers_) << std::endl;
+		}
+	}
 	std::string nonUniqueRegionName = "NON_UNIQUE";
 	std::unordered_set<uint64_t> nonUniqueKmersPerSet;
 	if (!nonUniqueKmerTable.empty()) {
@@ -998,8 +1168,22 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 		//setting final extraction cut offs
 		extractingPars.compPars.initialExcludeHardCountOff = extractingPars.compPars.finalHardCountOff;
 		extractingPars.compPars.initialExcludeFracCutOff = extractingPars.compPars.finalFracCutOff;
+
 		extractingPars.compPars.hardCountOff = extractingPars.compPars.finalHardCountOff;
 		extractingPars.compPars.fracCutOff = extractingPars.compPars.finalFracCutOff;
+
+		//Build the strand-bias corrections before writing anything, using the same final cut offs the
+		//write pass will use so the two passes classify identically. This re-reads the inputs, which is
+		//affordable because it happens once, after the k-mer sets are frozen, and it is the only point
+		//where each read's sequencing strand relative to its set is still knowable.
+		if (sbPars.on_) {
+			watch.startNewLap("build strand bias corrections");
+			SimpleKmerHash sbHasher;
+			extractingPars.strandBiasCorrectors = buildStrandBiasCorrectorsPerSet(
+					setUp.pars_.ioOptions_, singlesOption, uniqueKmersPerSet, extractingPars, sbHasher,
+					sbPars, strandBiasMaxReadsPerSet, std::cout);
+			watch.startNewLap("final extraction");
+		}
 
 		if (finalWriteOutMultiHitSeparate) {
 			extractingPars.writeMultiHitSeparate = true;

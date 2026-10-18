@@ -23,7 +23,7 @@ UniqueKmerSetHelper::CompareReadToSetRes UniqueKmerSetHelper::compareReadToSets(
 	}
 
 	// check for presence of kmers in sets
-	ret.checkForPresenceOfHashedInputKmers(uniqueKmersPerSet);
+	ret.checkForPresenceOfHashedInputKmers(uniqueKmersPerSet, compPars.useInvertedKmerIndex_);
 
 	// uint32_t kmersPossible = (pseq.seqBase_.seq_.size() - compPars.klen + 1) + (pseq.mateSeqBase_.seq_.size() - compPars.klen + 1);
 
@@ -66,7 +66,7 @@ UniqueKmerSetHelper::CompareReadToSetRes UniqueKmerSetHelper::compareReadToSets(
 	}
 
   // check for presence of kmers in sets
-	ret.checkForPresenceOfHashedInputKmers(uniqueKmersPerSet);
+	ret.checkForPresenceOfHashedInputKmers(uniqueKmersPerSet, compPars.useInvertedKmerIndex_);
 	// if (seq.name_.find("PfSN01_13_2727936_2728809_PfSN01_130074700_id48_pos433_size440") != std::string::npos) {
 	// 	std::cout << njh::bashCT::blue << std::endl;
 	// 	std::cout << __FILE__ << " : " << __LINE__ << std::endl;
@@ -181,6 +181,7 @@ void UniqueKmerSetHelper::processReadForExtracting(seqInfo &seq,
 
 
 	auto compRes = UniqueKmerSetHelper::compareReadToSets(seq, uniqueKmersPerSet, extractingPars.compPars, hasher);
+	extractingPars.correctForSet(compRes.winnerSet, seq);
 	// if (seq.name_.find("PfSN01_13_2727936_2728809_PfSN01_130074700_id48_pos433_size440_firstMate") != std::string::npos) {
 	// 	std::cout << __FILE__ << " : " << __LINE__ << std::endl;
 	// 	std::cout << "extractingPars.compPars.hardCountOff: " << extractingPars.compPars.hardCountOff << std::endl;
@@ -289,6 +290,11 @@ void UniqueKmerSetHelper::processReadForExtractingPairsTogether(PairedRead &pseq
 	auto compResSecondMate = UniqueKmerSetHelper::compareReadToSets(pseq.mateSeqBase_, uniqueKmersPerSet,
 																																	extractingPars.compPars, hasher);
 
+	//both mates are now in their winning set's orientation, so strand-bias corrections (built by the
+	//collection pass) can be applied before any write path sees them
+	extractingPars.correctForSet(compResFirstMate.winnerSet, pseq.seqBase_);
+	extractingPars.correctForSet(compResSecondMate.winnerSet, pseq.mateSeqBase_);
+
 	if (compResFirstMate.winnerSet == compResSecondMate.winnerSet &&
 						 compResFirstMate.winnerRevComp != compResSecondMate.winnerRevComp &&
 						 !njh::in(compResFirstMate.winnerSet, extractingPars.compPars.excludeSetNames)) {
@@ -362,6 +368,11 @@ void UniqueKmerSetHelper::processReadForExtractingPairsSeparate(PairedRead &pseq
 
 	auto compResSecondMate = UniqueKmerSetHelper::compareReadToSets(pseq.mateSeqBase_, uniqueKmersPerSet,
 																																	extractingPars.compPars, hasher);
+
+	//both mates are now in their winning set's orientation, so strand-bias corrections (built by the
+	//collection pass) can be applied before any write path sees them
+	extractingPars.correctForSet(compResFirstMate.winnerSet, pseq.seqBase_);
+	extractingPars.correctForSet(compResSecondMate.winnerSet, pseq.mateSeqBase_);
 	// if (pseq.seqBase_.name_.find("PfSN01_080036600.1-exon2_id49_pos520_size170") != std::string::npos) {
 	// 	std::cout << "compResFirstMate: " << std::endl;
 	// 	std::cout << njh::json::JsonConversion::toJson(compResFirstMate) << std::endl;

@@ -3,6 +3,8 @@
 //
 
 #include <njhseq/readVectorManipulation/readVectorHelpers/readVecChecker.hpp>
+#include <cstdlib>
+#include <mutex>
 #include "UniqueKmerSetHelper.hpp"
 
 
@@ -62,8 +64,37 @@ void UniqueKmerSetHelper::CompareReadToSetRes::determineWinner(
 }
 
 
-void UniqueKmerSetHelper::CompareReadToSetRes::checkForPresenceOfHashedInputKmers(const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet){
-	// check for presence of kmers in sets
+std::shared_ptr<const UniqueKmerSetHelper::InvertedKmerIndex> UniqueKmerSetHelper::getInvertedIndex(
+		const std::unordered_map<std::string, std::unordered_set<uint64_t>> & sets) {
+	//the index itself lives in njhseq, so SeekDeep and elucidator share one implementation and one cache
+	return njhseq::KmerSetInvertedIndex::get(sets);
+}
+
+void UniqueKmerSetHelper::CompareReadToSetRes::checkForPresenceOfHashedInputKmers(
+		const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
+		bool useInvertedIndex){
+	//One k-mer -> set(s) lookup replaces probing every set for every read k-mer. A k-mer belonging to
+	//several sets increments each of them, so the counts are identical to the per-set loop below.
+	if (useInvertedIndex) {
+		auto index = UniqueKmerSetHelper::getInvertedIndex(uniqueKmersPerSet);
+		if (nullptr != index && index->usable(uniqueKmersPerSet)) {
+			auto tally = [&index](const uint64_t h, std::unordered_map<std::string, uint32_t> & into) {
+				auto search = index->kmerToSet_.find(h);
+				if (search == index->kmerToSet_.end()) { return; }
+				if (search->second & InvertedKmerIndex::SHARED_FLAG) {
+					for (const auto idx : index->sharedSets_[search->second & ~InvertedKmerIndex::SHARED_FLAG]) {
+						++into[index->setNames_[idx]];
+					}
+				} else {
+					++into[index->setNames_[search->second]];
+				}
+			};
+			for (const auto &hashedKmer: hashedInputKmers) { tally(hashedKmer.first, foundPerSet); }
+			for (const auto &hashedKmer: hashedInputKmersRevComp) { tally(hashedKmer.first, foundPerSetRevComp); }
+			return;
+		}
+	}
+	// per-set loop: one lookup per set per read k-mer
 	for (const auto &hashedKmer: hashedInputKmers) {
 		for (const auto &uniqueKmers: uniqueKmersPerSet) {
 			if (njh::in(hashedKmer.first, uniqueKmers.second)) {

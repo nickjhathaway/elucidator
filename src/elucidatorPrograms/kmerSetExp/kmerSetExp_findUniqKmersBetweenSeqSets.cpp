@@ -41,6 +41,56 @@
 
 namespace njhseq {
 
+namespace {
+/**@brief Tally a read's hashed k-mers against the unique k-mer sets using one k-mer -> set(s) index.
+ *
+ * One lookup per read k-mer in place of one hash-set lookup per set per k-mer. The sets handed here
+ * are unique between sets by construction, so a k-mer belongs to at most one of them; a k-mer that
+ * is shared anyway counts toward the first set holding it, giving each read k-mer a single owner.
+ * Falls back to the per-set loop when no index is available.
+ */
+inline void tallyHashedKmersToSets(
+		const std::unordered_map<std::string, std::unordered_set<uint64_t>> & uniqueKmersPerSet,
+		const std::shared_ptr<const UniqueKmerSetHelper::InvertedKmerIndex> & invIndex,
+		const std::unordered_map<uint64_t, uint64_t> & hashedInputKmers,
+		std::unordered_map<std::string, std::unordered_map<uint64_t, uint64_t>> & uniqueKmersFoundPerSetCurrent,
+		std::unordered_map<std::string, uint32_t> & foundPerSet) {
+	if (nullptr != invIndex) {
+		for (const auto & hashedKmer : hashedInputKmers) {
+			const auto idx = invIndex->firstSet(hashedKmer.first);
+			if (UniqueKmerSetHelper::InvertedKmerIndex::NO_SET == idx) {
+				continue;
+			}
+			const auto & setName = invIndex->setNames_[idx];
+			uniqueKmersFoundPerSetCurrent[setName][hashedKmer.first] += hashedKmer.second;
+			++foundPerSet[setName];
+		}
+		return;
+	}
+	for (const auto & hashedKmer : hashedInputKmers) {
+		for (const auto & uniqueKmers : uniqueKmersPerSet) {
+			if (njh::in(hashedKmer.first, uniqueKmers.second)) {
+				uniqueKmersFoundPerSetCurrent[uniqueKmers.first][hashedKmer.first] += hashedKmer.second;
+				++foundPerSet[uniqueKmers.first];
+				break;
+			}
+		}
+	}
+}
+
+inline std::shared_ptr<const UniqueKmerSetHelper::InvertedKmerIndex> getUsableInvertedIndex(
+		const std::unordered_map<std::string, std::unordered_set<uint64_t>> & uniqueKmersPerSet, bool use) {
+	if (!use) {
+		return nullptr;
+	}
+	auto index = UniqueKmerSetHelper::getInvertedIndex(uniqueKmersPerSet);
+	if (nullptr != index && index->usable(uniqueKmersPerSet)) {
+		return index;
+	}
+	return nullptr;
+}
+}  // namespace
+
 
 
 
@@ -101,6 +151,10 @@ int kmerSetExpRunner::countingUniqKmersFromSetsInUnmappedAlns(const njh::proguti
 	setUp.setOption(sampleName, "--sampleName", "Name to add to output file", true);
 
 	setUp.setOption(numThreads, "--numThreads", "numThreads");
+	bool noInvertedKmerIndex = false;
+	setUp.setOption(noInvertedKmerIndex, "--noInvertedKmerIndex",
+			"Probe every k-mer set for every read k-mer instead of using one k-mer -> set(s) index. Identical results either way; this exists to fall back if that is ever in doubt");
+	const bool useInvertedKmerIndex = !noInvertedKmerIndex;
 	setUp.setOption(includeRevComp, "--includeRevComp", "include Rev Comp of the input seqs");
 
 
@@ -173,7 +227,8 @@ int kmerSetExpRunner::countingUniqKmersFromSetsInUnmappedAlns(const njh::proguti
 
 	LockedBamReader bamReader(setUp.pars_.ioOptions_.firstName_);
 
-	std::function<void()> readInComp = [&bamReader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp]() {
+	const auto invIndex = getUsableInvertedIndex(uniqueKmersPerSet, useInvertedKmerIndex);
+	std::function<void()> readInComp = [&bamReader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp,&invIndex]() {
 		SimpleKmerHash hasher;
 		std::unordered_map<std::string, std::unordered_map<uint64_t, uint64_t>> uniqueKmersFoundPerSetCurrent;
 		std::unordered_map<std::string, std::vector<uint64_t>> kmersFoundPerSeqCurrent;
@@ -201,15 +256,8 @@ int kmerSetExpRunner::countingUniqKmersFromSetsInUnmappedAlns(const njh::proguti
 						}
 					}
 					std::unordered_map<std::string, uint32_t> foundPerSet;
-					for(const auto & hashedKmer : hashedInputKmers){
-						for(const auto & uniqueKmers : uniqueKmersPerSet){
-							if(njh::in(hashedKmer.first, uniqueKmers.second)){
-								uniqueKmersFoundPerSetCurrent[uniqueKmers.first][hashedKmer.first]+= hashedKmer.second;
-								++foundPerSet[uniqueKmers.first];
-								break;
-							}
-						}
-					}
+					tallyHashedKmersToSets(uniqueKmersPerSet, invIndex, hashedInputKmers,
+							uniqueKmersFoundPerSetCurrent, foundPerSet);
 					for(const auto & found : foundPerSet){
 						kmersFoundPerSeqCurrent[found.first].emplace_back(found.second);
 		//					seqOut.openWrite(found.first, pseq);
@@ -293,6 +341,10 @@ int kmerSetExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & 
 	setUp.setOption(sampleName, "--sampleName", "Name to add to output file", true);
 
 	setUp.setOption(numThreads, "--numThreads", "numThreads");
+	bool noInvertedKmerIndex = false;
+	setUp.setOption(noInvertedKmerIndex, "--noInvertedKmerIndex",
+			"Probe every k-mer set for every read k-mer instead of using one k-mer -> set(s) index. Identical results either way; this exists to fall back if that is ever in doubt");
+	const bool useInvertedKmerIndex = !noInvertedKmerIndex;
 	setUp.setOption(includeRevComp, "--includeRevComp", "include Rev Comp of the input seqs");
 
 
@@ -319,6 +371,7 @@ int kmerSetExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & 
 	reader.openIn();
 
 	OutputStream out(outOpts);
+	const auto invIndex = getUsableInvertedIndex(uniqueKmersPerSet, useInvertedKmerIndex);
 	std::function<void()> readInComp;
 	VecStr names = getVectorOfMapKeys(uniqueKmersPerSet);
 //	MultiSeqIO seqOut;
@@ -331,7 +384,7 @@ int kmerSetExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & 
 //			seqOut.addReader(name, seqOutOpts);
 //		}
 //		readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp,&seqOut]() {
-		readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp]() {
+		readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp,&invIndex]() {
 
 			SimpleKmerHash hasher;
 			PairedRead pseq;
@@ -377,15 +430,8 @@ int kmerSetExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & 
 					}
 				}
 				std::unordered_map<std::string, uint32_t> foundPerSet;
-				for(const auto & hashedKmer : hashedInputKmers){
-					for(const auto & uniqueKmers : uniqueKmersPerSet){
-						if(njh::in(hashedKmer.first, uniqueKmers.second)){
-							uniqueKmersFoundPerSetCurrent[uniqueKmers.first][hashedKmer.first]+= hashedKmer.second;
-							++foundPerSet[uniqueKmers.first];
-							break;
-						}
-					}
-				}
+				tallyHashedKmersToSets(uniqueKmersPerSet, invIndex, hashedInputKmers,
+						uniqueKmersFoundPerSetCurrent, foundPerSet);
 				for(const auto & found : foundPerSet){
 					kmersFoundPerSeqCurrent[found.first].emplace_back(found.second);
 //					seqOut.openWrite(found.first, pseq);
@@ -404,7 +450,7 @@ int kmerSetExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & 
 			}
 		};
 	} else {
-		readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp]() {
+		readInComp = [&reader, &uniqueKmersPerSet, &uniqueKmersFoundPerSet,&kmersFoundPerSeq,&mut,&klen,&includeRevComp,&invIndex]() {
 			SimpleKmerHash hasher;
 			seqInfo seq;
 			std::unordered_map<std::string, std::unordered_map<uint64_t, uint64_t>> uniqueKmersFoundPerSetCurrent;
@@ -428,15 +474,8 @@ int kmerSetExpRunner::countingUniqKmersFromSets(const njh::progutils::CmdArgs & 
 					}
 				}
 				std::unordered_map<std::string, uint32_t> foundPerSet;
-				for(const auto & hashedKmer : hashedInputKmers){
-					for(const auto & uniqueKmers : uniqueKmersPerSet){
-						if(njh::in(hashedKmer.first, uniqueKmers.second)){
-							uniqueKmersFoundPerSetCurrent[uniqueKmers.first][hashedKmer.first]+= hashedKmer.second;
-							++foundPerSet[uniqueKmers.first];
-							break;
-						}
-					}
-				}
+				tallyHashedKmersToSets(uniqueKmersPerSet, invIndex, hashedInputKmers,
+						uniqueKmersFoundPerSetCurrent, foundPerSet);
 				for(const auto & found : foundPerSet){
 					kmersFoundPerSeqCurrent[found.first].emplace_back(found.second);
 //					seqOut.openWrite(found.first, pseq);
