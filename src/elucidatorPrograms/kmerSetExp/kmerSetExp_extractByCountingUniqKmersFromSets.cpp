@@ -345,10 +345,8 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 	setUp.setOption(noStrandBiasKmerDoubletCorrection, "--noStrandBiasKmerDoubletCorrection",
 			"Turn off correction of adjacent two-base artifacts. The single-base criterion cannot reach these, since a k-mer covering the pair differs at two positions and so has no one-off partner. A doublet is held to stricter evidence than a single: no quality relaxation, and a quality collapse required at both positions");
 	sbPars.doublet_ = !noStrandBiasKmerDoubletCorrection;
-	bool strandBiasKmerDoubletAnySubstitution = !sbPars.doubletRequireSameSubstitution_;
-	setUp.setOption(strandBiasKmerDoubletAnySubstitution, "--strandBiasKmerDoubletAnySubstitution",
-			"Allow an adjacent doublet whose two bases change differently; by default both must change the same way");
-	sbPars.doubletRequireSameSubstitution_ = !strandBiasKmerDoubletAnySubstitution;
+	setUp.setOption(sbPars.doubletRequireSameSubstitution_, "--strandBiasKmerDoubletRequireSameSubstitution",
+			"Correct an adjacent doublet only when both bases change the same way; off by default, since requiring it blocks a real artifact class");
 	bool kmerFrequencyCorrection = false;
 	setUp.setOption(kmerFrequencyCorrection, "--kmerFrequencyCorrection",
 			"Use a k-mer frequency criterion instead of the strand/quality one: correct a rare k-mer to a dominant one-off neighbour. For stranded RNA-seq, where strand is confounded with mate and template errors carry normal quality. WARNING: also erases real alleles below about 1/(multiplier+1) of their locus, so minor strains and rare paralogs below that fraction are lost");
