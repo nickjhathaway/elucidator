@@ -19,8 +19,8 @@ RUN apt-get update && apt-get -yq dist-upgrade && \
       gcc-10 g++-10 ccache libxml2-dev libfontconfig1-dev libcairo2-dev \
       python3-dev python3-pip python3-yaml \
       libharfbuzz-dev libfribidi-dev libicu-dev libhdf5-dev \
-      pigz lastz cmake tzdata libuv1-dev\
-      # R and CRAN repo
+      pigz lastz cmake tzdata libuv1-dev jq \
+      # R and CRAN repo \
       r-base r-base-dev \
  && echo "deb https://cloud.r-project.org/bin/linux/ubuntu noble-cran40/" > /etc/apt/sources.list.d/cran.list \
  && wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc \
