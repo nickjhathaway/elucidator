@@ -339,6 +339,8 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 	//alternative criterion for data where the strand axis is unusable (stranded RNA-seq): correct a
 	//rare k-mer to a dominant one-off neighbour on a depth ratio alone. Not selective -- it also
 	//removes real alleles below roughly 1/(multiplier+1) of their locus -- so it is strictly opt-in.
+	setUp.setOption(sbPars.maxMinorStrandFrac_, "--strandBiasKmerCorrectionMaxMinorStrandFrac",
+			"Scale the minor-strand veto with each k-mer's depth rather than holding it absolute; 0 keeps the absolute threshold");
 	bool noStrandBiasKmerDoubletCorrection = !sbPars.doublet_;
 	setUp.setOption(noStrandBiasKmerDoubletCorrection, "--noStrandBiasKmerDoubletCorrection",
 			"Turn off correction of adjacent two-base artifacts. The single-base criterion cannot reach these, since a k-mer covering the pair differs at two positions and so has no one-off partner. A doublet is held to stricter evidence than a single: no quality relaxation, and a quality collapse required at both positions");
