@@ -176,13 +176,16 @@ buildStrandBiasCorrectorsPerSet(const SeqIOOptions & pairedOpts, const SeqIOOpti
 	std::unordered_set<std::string> skip { "undetermined", "multihit" };
 	for (const auto & n : extractingPars.compPars.excludeSetNames) { skip.emplace(n); }
 
-	auto keep = [&perSet, &skip, &maxReadsPerSet](const std::string & setName, const seqInfo & seq, bool reverseStrand) {
+	//fragment: shared id for the two mates of a pair (duplicate detection in frequency mode)
+	auto keep = [&perSet, &skip, &maxReadsPerSet](const std::string & setName, const seqInfo & seq, bool reverseStrand,
+			uint64_t fragment) {
 		if (njh::in(setName, skip)) { return; }
 		auto & v = perSet[setName];
 		if (v.size() >= maxReadsPerSet) { return; }
 		njhseq::StrandBiasKmerCorrector::BufferedRead rd;
 		rd.seq_ = seq.seq_;
 		rd.reverseStrand_ = reverseStrand;
+		rd.fragment_ = fragment;
 		rd.quals_.reserve(seq.qual_.size());
 		for (const auto q : seq.qual_) { rd.quals_.emplace_back(static_cast<uint8_t>(q)); }
 		v.emplace_back(std::move(rd));
@@ -191,12 +194,14 @@ buildStrandBiasCorrectorsPerSet(const SeqIOOptions & pairedOpts, const SeqIOOpti
 		SeqInput reader(pairedOpts);
 		reader.openIn();
 		PairedRead pseq;
+		uint64_t fragment = 0;
 		while (reader.readNextRead(pseq)) {
 			auto first = UniqueKmerSetHelper::compareReadToSets(pseq.seqBase_, uniqueKmersPerSet, extractingPars.compPars, hasher);
 			auto second = UniqueKmerSetHelper::compareReadToSets(pseq.mateSeqBase_, uniqueKmersPerSet, extractingPars.compPars, hasher);
 			//compareReadToSets has already flipped each mate into its winning set's orientation
-			keep(first.winnerSet, pseq.seqBase_, first.winnerRevComp);
-			keep(second.winnerSet, pseq.mateSeqBase_, !second.winnerRevComp);
+			keep(first.winnerSet, pseq.seqBase_, first.winnerRevComp, fragment);
+			keep(second.winnerSet, pseq.mateSeqBase_, !second.winnerRevComp, fragment);
+			++fragment;
 		}
 	}
 	if (!singlesOpts.firstName_.empty()) {
@@ -206,21 +211,24 @@ buildStrandBiasCorrectorsPerSet(const SeqIOOptions & pairedOpts, const SeqIOOpti
 		while (reader.readNextRead(seq)) {
 			auto res = UniqueKmerSetHelper::compareReadToSets(seq, uniqueKmersPerSet, extractingPars.compPars, hasher);
 			const bool secondMate = njh::endsWith(seq.name_, "_secondMate");
-			keep(res.winnerSet, seq, secondMate ? !res.winnerRevComp : res.winnerRevComp);
+			keep(res.winnerSet, seq, secondMate ? !res.winnerRevComp : res.winnerRevComp, std::numeric_limits<uint64_t>::max());
 		}
 	}
 	for (auto & setReads : perSet) {
 		if (setReads.second.size() < 50) { continue; }
 		auto corrector = std::make_shared<njhseq::StrandBiasKmerCorrector>(sbPars);
+		uint32_t vetoed = 0;
 		for (uint32_t pass = 0; pass < sbPars.maxPasses_; ++pass) {
 			njhseq::StrandBiasKmerCorrector::KmerTable table;
-			for (const auto & rd : setReads.second) { corrector->tallySeq(table, rd.seq_, rd.reverseStrand_); }
+			corrector->tallyReads(table, setReads.second);
 			auto candidates = corrector->findCandidates(table);
 			if (candidates.empty()) { break; }
 			auto quals = corrector->collectOffsetQuality(setReads.second, candidates);
 			uint32_t rescued = 0;
 			auto found = corrector->buildPass(candidates, table, quals, rescued);
+			vetoed += corrector->vetoSupportedAlleles(found, candidates, table, quals, setReads.second);
 			if (found.corrections_.empty()) { break; }
+			corrector->addQualityRescued(rescued);
 			corrector->addPass(std::move(found));
 			for (auto & rd : setReads.second) { corrector->applyToSeq(rd.seq_); }
 		}
@@ -228,7 +236,7 @@ buildStrandBiasCorrectorsPerSet(const SeqIOOptions & pairedOpts, const SeqIOOpti
 			uint32_t nk = 0;
 			for (const auto & pass : corrector->passes_) { nk += pass.corrections_.size(); }
 			logOut << "strandBiasKmerCorrection\t" << setReads.first << "\t" << setReads.second.size()
-					<< "\t" << corrector->numPasses() << "\t" << nk << std::endl;
+					<< "\t" << corrector->numPasses() << "\t" << nk << "\t" << corrector->numQualityRescued() << "\t" << vetoed << std::endl;
 			(*ret)[setReads.first] = corrector;
 		}
 		setReads.second.clear();
@@ -330,7 +338,7 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 	setUp.setOption(sbPars.kLen_, "--strandBiasKmerCorrectionKLen",
 			"K-mer length for the strand-bias correction (max 32). Longer values make a window paralog specific and relieve the shared-paralogy veto, but lower the depth per k-mer; 25 suits most sets, raise it for deep, highly paralogous sets");
 	setUp.setOption(sbPars.qualDropMin_, "--strandBiasKmerCorrectionQualityDropMin",
-			"Required Phred drop of the reference base at the candidate's position, other strand minus artifact strand");
+			"Required Phred drop of the reference base at the candidate's position, other strand minus artifact strand; in frequency mode, the partner's base minus the candidate's");
 	setUp.setOption(sbPars.minPartnerMissingStrandDepth_, "--strandBiasKmerCorrectionMinPartnerDepth",
 			"Balanced partner k-mer must have at least this many reads on the strand the candidate is missing from");
 	setUp.setOption(sbPars.fisherPhred_, "--strandBiasKmerCorrectionFisherPhred",
@@ -358,6 +366,20 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 			"In frequency mode, the smallest k-mer depth eligible for correction (1 corrects single-read errors)");
 	setUp.setOption(sbPars.freqMaxCandidateTotal_, "--kmerFrequencyCorrectionMaxCandidateDepth",
 			"In frequency mode, the largest k-mer depth eligible for correction, regardless of the ratio; 0 removes the cap. Keeps the correction on the singletons and doubletons that carry the error mass, and so leaves alone tandem-repeat genes, where a genuine repeat-copy variant sits at a fraction of the gene's coverage and satisfies the ratio just as an error does");
+	bool kmerFrequencyCorrectionKeepDuplicates = !sbPars.freqCollapseDuplicates_;
+	setUp.setOption(kmerFrequencyCorrectionKeepDuplicates, "--kmerFrequencyCorrectionKeepDuplicates",
+			"In frequency mode, count duplicate fragments in k-mer depth; by default a fragment whose mates are identical to an earlier fragment's counts once");
+	sbPars.freqCollapseDuplicates_ = !kmerFrequencyCorrectionKeepDuplicates;
+	bool kmerFrequencyCorrectionNoQualityOverride = !sbPars.freqQualityOverride_;
+	setUp.setOption(kmerFrequencyCorrectionNoQualityOverride, "--kmerFrequencyCorrectionNoQualityOverride",
+			"In frequency mode, turn off the quality override, which corrects candidates over the depth cap or short of the multiplier when their differing base is low quality (mean --strandBiasKmerCorrectionQualityDropMin below the partner's, with few Q30+ calls), including adjacent two-base candidates");
+	sbPars.freqQualityOverride_ = !kmerFrequencyCorrectionNoQualityOverride;
+	setUp.setOption(sbPars.freqQualityMinDepthRatio_, "--kmerFrequencyCorrectionQualityMultiplier",
+			"In frequency mode, the dominant neighbour fold required instead of --kmerFrequencyCorrectionMultiplier when the quality drop is seen");
+	setUp.setOption(sbPars.freqQualityMaxHighQualShare_, "--kmerFrequencyCorrectionQualityMaxHighQualShare",
+			"In frequency mode, the quality override requires the candidate's share of Q30+ calls at its differing base to be at most this fraction of the partner's share");
+	setUp.setOption(sbPars.freqQualityMaxConfidentCalls_, "--kmerFrequencyCorrectionQualityMaxConfidentCalls",
+			"In frequency mode, the quality override requires the candidate to have at most this many Q30+ calls at its differing base");
 	if (kmerFrequencyCorrection) {
 		sbPars.frequencyOnly_ = true;
 		sbPars.requireQualityDrop_ = false;
