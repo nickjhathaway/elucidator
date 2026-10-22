@@ -111,8 +111,6 @@ public:
 			TwoBit::TwoBitFile tReader(njh::mapAt(gMapper.genomes_, gMapper.pars_.primaryGenome_)->fnpTwoBit_);
 			primaryExtract_ = std::make_shared<readObject>(region_.extractSeq(tReader));
 			primaryExtract_->createCondensedSeq();
-			primaryExtract_->setLetterCount();
-			primaryExtract_->counter_.resetAlphabet(false);
 		}
 
 		void resetCounts(){
@@ -138,8 +136,6 @@ public:
 					meta.addMeta("extractionCount", extractionCount);
 					std::shared_ptr<readObject> currentExtract = std::make_shared<readObject>(region.extractSeq(tReader));
 					currentExtract->createCondensedSeq();
-					currentExtract->setLetterCount();
-					currentExtract->counter_.resetAlphabet(false);
 					currentExtract->seqBase_.name_ = meta.createMetaName();
 					allSeqs_[gRegions.first].emplace_back(currentExtract);
 					++extractionCount;
@@ -162,8 +158,7 @@ public:
 				for(auto & seq : ref.second){
 					++totalSeqCount;
 					readLengths.emplace_back(len(*seq));
-					seq->counter_.calcGcContent();
-					gcContents.emplace_back(seq->counter_.gcContent_);
+					gcContents.emplace_back(seq->getGCContent());
 					bool found = false;
 					for (auto & otherRef : uniqueSeqs) {
 						if (otherRef.seq_ == seq->seqBase_.seq_) {
@@ -418,7 +413,10 @@ int popGenExpRunner::variationWindowShoppingWithLastz(const njh::progutils::CmdA
 			firstCheckFail = true;
 		}
 		if(!firstCheckFail){
-			for(const auto & base : seq->counter_.alphabet_){
+			auto seqCounts = seq->getLetterCounts();
+			//only the letters actually present
+			seqCounts.resetAlphabet(false);
+			for(const auto & base : seqCounts.alphabet_){
 				if(!njh::in(base, allowableLetters)){
 					firstCheckFail = true;
 					break;

@@ -339,9 +339,8 @@ int PhipSeqUtilsRunner::generateNucleotidePossibleFromProteins(const njh::progut
 		&gc_content_window_size, &gc_content_window_step](const seqInfo & seq){
 
 		readObject seq_info(seq);
-		seq_info.setLetterCount();
-		seq_info.counter_.calcGcContent();
-		bool pass = seq_info.counter_.gcContent_ < max_gc_content_window && seq_info.counter_.gcContent_ > min_gc_content_window;
+		double gcContent = seq_info.getGCContent();
+		bool pass = gcContent < max_gc_content_window && gcContent > min_gc_content_window;
 		if (pass) {
 			seq_info.createCondensedSeq();
 			for (const auto & count : seq_info.condensedSeqCount) {

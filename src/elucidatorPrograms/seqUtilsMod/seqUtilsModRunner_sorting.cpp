@@ -244,21 +244,23 @@ int seqUtilsModRunner::sortReads(
 	reader.openIn();
 	auto inReads = reader.in_.readAllReads<readObject>();
 	if (stringToLowerReturn(sortBy) == "gc") {
-		auto gcCompare = [](const readObject & read1, const readObject & read2) {
-			if(read1.counter_.gcContent_ < read2.counter_.gcContent_) {
-				return true;
-			} else if (read1.counter_.gcContent_ == read2.counter_.gcContent_) {
-				return read1.seqBase_.seq_ < read2.seqBase_.seq_;
-			} else {
-				return true;
-			}
-		};
-
-		njh::for_each(inReads, [](readObject & read) {
-			read.setLetterCount();
-			read.counter_.calcGcContent();
-		});
-		njh::sort(inReads, gcCompare);
+		//compute each read's gc content once rather than on every comparison
+		std::vector<std::pair<double, readObject>> readsWithGc;
+		readsWithGc.reserve(inReads.size());
+		for (auto & read : inReads) {
+			double gc = read.getGCContent();
+			readsWithGc.emplace_back(gc, std::move(read));
+		}
+		std::sort(readsWithGc.begin(), readsWithGc.end(),
+				[](const std::pair<double, readObject> & first, const std::pair<double, readObject> & second) {
+					if (first.first != second.first) {
+						return first.first < second.first;
+					}
+					return first.second.seqBase_.seq_ < second.second.seqBase_.seq_;
+				});
+		for (const auto pos : iter::range(readsWithGc.size())) {
+			inReads[pos] = std::move(readsWithGc[pos].second);
+		}
 	} else {
 		readVecSorter::sortReadVector(inReads, sortBy, decending);
 	}

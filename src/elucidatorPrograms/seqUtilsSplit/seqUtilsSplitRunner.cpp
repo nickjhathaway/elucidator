@@ -118,8 +118,7 @@ int seqUtilsSplitRunner::getSimilarSequences(
   if (setUp.pars_.verbose_) {
     setUp.pars_.seqObj_.seqBase_.outPutSeq(std::cout);
   }
-  readVec::allSetLetterCount(inReads);
-  setUp.pars_.seqObj_.setLetterCount();
+  const auto seqObjCounts = setUp.pars_.seqObj_.getLetterCounts();
 
   for (const auto readPos : iter::range(len(inReads))) {
     ++counter;
@@ -127,8 +126,8 @@ int seqUtilsSplitRunner::getSimilarSequences(
       std::cout << "On " << counter << " of " << inReads.size() << std::endl;
     }
     if (useNucComp) {
-      double sum = inReads[readPos].counter_.getFracDifference(
-          setUp.pars_.seqObj_.counter_, inReads[readPos].counter_.alphabet_);
+      const auto readCounts = inReads[readPos].getLetterCounts();
+      double sum = readCounts.getFracDifference(seqObjCounts, readCounts.alphabet_);
       if (sum > maxNucCompDiff) {
         dissimilar.emplace_back(inReads[readPos]);
         continue;
@@ -157,15 +156,14 @@ int seqUtilsSplitRunner::getSimilarSequences(
     for (const auto readPos : iter::range(len(dissimilar))) {
       auto &read = dissimilar[readPos];
       read.seqBase_.reverseComplementRead(true);
-      read.setLetterCount();
       ++counter;
       if (counter % 50 == 0) {
         std::cout << "On " << counter << " of " << dissimilar.size()
                   << std::endl;
       }
       if (useNucComp) {
-        double sum = read.counter_.getFracDifference(
-            setUp.pars_.seqObj_.counter_, read.counter_.alphabet_);
+        const auto readCounts = read.getLetterCounts();
+        double sum = readCounts.getFracDifference(seqObjCounts, readCounts.alphabet_);
         if (sum > maxNucCompDiff) {
           continue;
         }

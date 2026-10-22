@@ -804,17 +804,27 @@ int genExpRunner::sortOnNucComp(const njh::progutils::CmdArgs & inputCommands) {
 	reader.openIn();
 	auto inReads = reader.readAllReads<readObject>();
 
-	readVec::allSetLetterCount(inReads);
 	uint64_t maxSize = 0;
 	readVec::getMaxLength(inReads, maxSize);
 	njh::randomGenerator gen;
 	readObject rSeq = readObject(
 			seqInfo("rSeq",
 					simulation::evenRandStr(maxSize, { 'A', 'C', 'G', 'T' }, gen)));
-	rSeq.counter_.setFractions();
-	auto nucComp =
-			[&rSeq](const readObject & rSeq1, const readObject & rSeq2) {return rSeq1.counter_.getFracDifference(rSeq.counter_, rSeq.counter_.alphabet_) < rSeq2.counter_.getFracDifference(rSeq.counter_, rSeq.counter_.alphabet_);};
-	njh::sort(inReads, nucComp);
+	const auto rSeqCounts = rSeq.getLetterCounts();
+	//compute each read's difference once rather than on every comparison
+	std::vector<std::pair<double, readObject>> readsWithDiff;
+	readsWithDiff.reserve(inReads.size());
+	for (auto & read : inReads) {
+		double diff = read.getLetterCounts().getFracDifference(rSeqCounts, rSeqCounts.alphabet_);
+		readsWithDiff.emplace_back(diff, std::move(read));
+	}
+	std::stable_sort(readsWithDiff.begin(), readsWithDiff.end(),
+			[](const std::pair<double, readObject> & first, const std::pair<double, readObject> & second) {
+				return first.first < second.first;
+			});
+	for (const auto pos : iter::range(readsWithDiff.size())) {
+		inReads[pos] = std::move(readsWithDiff[pos].second);
+	}
 	SeqOutput::write(inReads, setUp.pars_.ioOptions_);
 	return 0;
 }
