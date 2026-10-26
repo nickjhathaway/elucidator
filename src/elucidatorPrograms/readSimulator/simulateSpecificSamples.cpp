@@ -62,9 +62,11 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 	bfs::path population_haps_fnp;
 	VecStr population_haps_required_cols{"target","seq","hap_id"};
 	bfs::path sample_set_up_fnp;
-	VecStr sample_set_up_required_cols{"sample_name","starting_template","sample_total_depth","target","hap_id","within_sample_fullhap_id","relative_abundance", "pcr_rounds"};
+	VecStr sample_set_up_required_cols{"sample_name","starting_template","sample_total_depth","target","hap_id","within_sample_fullhap_id","relative_abundance"};
 	// optional, only used when idFile has MIDs, if absent MIDs are assigned automatically and samples are pooled into Subset-N indexes
 	VecStr sample_set_up_mid_cols{"index", "mid"};
+	// optional, if absent --pcrRounds is used for every sample
+	std::string sample_set_up_pcr_rounds_col = "pcr_rounds";
 	bfs::path target_read_count_factor_fnp;
 	VecStr target_read_count_factor_required_cols{"target", "factor", "factor_stddev"};
 	bfs::path idFile;
@@ -82,24 +84,24 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 	setUp.setOption(illuminaProfileDir, "--illuminaProfileDir", "Illumina Profile Dir");
 	setUp.setOption(idFile, "--idFile", "Primer MID Fnp, if it contains MIDs, samples are MID-tagged and pooled into index fastqs", true);
 	setUp.setOption(population_haps_fnp, "--population_haps_fnp", njh::pasteAsStr("population haplotype sequences file, required columns: ", njh::conToStr(population_haps_required_cols, ",")), true);
-	setUp.setOption(sample_set_up_fnp, "--sample_set_up_fnp", njh::pasteAsStr("sample setup file, required columns: ", njh::conToStr(sample_set_up_required_cols, ","), "; optional columns (when idFile has MIDs): ", njh::conToStr(sample_set_up_mid_cols, ",")), true);
+	setUp.setOption(sample_set_up_fnp, "--sample_set_up_fnp", njh::pasteAsStr("sample setup file, required columns: ", njh::conToStr(sample_set_up_required_cols, ","), "; optional columns: ", sample_set_up_pcr_rounds_col, " (defaults to --pcrRounds), ", njh::conToStr(sample_set_up_mid_cols, ","), " (when idFile has MIDs)"), true);
 	setUp.setOption(target_read_count_factor_fnp, "--target_read_count_factor_fnp", njh::pasteAsStr("target read count factor, used to adjust read depths based on known biases, required columns: ", njh::conToStr(target_read_count_factor_required_cols, ",")), true);
 
 
-	setUp.setOption(sim_lib_pars.pairedEndLength_, "--pairedEndLength", "Paired End Length", !singleEnd);
-	setUp.setOption(finalReadAmountSDFrac, "--finalReadAmountSDFrac", "final Read Amount SD Frac", njh::progutils::ProgramSetUp::CheckCase::GREATERZERO);
+	setUp.setOption(finalReadAmountSDFrac, "--finalReadAmountSDFrac", "final Read Amount SD Frac, the standard deviation of a sample's total read depth as a fraction of sample_total_depth", njh::progutils::ProgramSetUp::CheckCase::GREATERZERO);
 	setUp.setOption(noChimeras, "--noChimeras", "Don't simulate chimeras");
 	setUp.setOption(templateCap, "--templateCap", "Template Cap");
 	setUp.setOption(chimeraBasesIn, "--chimeraBasesIn", "The number of bases needed for a template to lay down");
 	setUp.setOption(keepPCRSeqs, "--keepPCRSeqs", "Keep PCR Seqs");
 	setUp.setOption(errorRate, "--errorRate", "Polymerase Error Rate");
 	setUp.setOption(pcrEfficiency, "--pcrEfficiency", "PCR Efficiency, between 0-1, chance a product gets amplified");
-	setUp.setOption(defaultPcrRounds, "--pcrRounds", "Number of PCR rounds");
+	setUp.setOption(defaultPcrRounds, "--pcrRounds", "Number of PCR rounds, used when the sample setup file has no pcr_rounds column");
 	setUp.setOption(initialPcrRounds, "--initialPcrRounds", "Number of Initial rounds of PCR before sampling");
 	setUp.setOption(initialPcrRoundsMapFnp, "--initialPcrRoundsTable", "Number of Initial rounds of PCR before sampling per starting template amount, columns 1)template, 2) rounds");
 	setUp.setOption(numThreads, "--numThreads", "Number of Threads to Use");
 	setUp.setOption(pcrNumThreads, "--pcrNumThreads", "Number of Threads to Use for PCR sim");
 	setUp.setOption(singleEnd, "--singleEnd", "Single End");
+	setUp.setOption(sim_lib_pars.pairedEndLength_, "--pairedEndLength", "Paired End Length", !singleEnd);
 	setUp.processDirectoryOutputName("simulateSpecificSamples_TODAY", true);
 	setUp.finishSetUp(std::cout);
 
@@ -136,6 +138,12 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 		for (const auto & row : target_read_count_factor) {
 			auto factor = njh::StrToNumConverter::stoToNum<double>(row[target_read_count_factor.getColPos("factor")]);
 			auto factor_stddev = njh::StrToNumConverter::stoToNum<double>(row[target_read_count_factor.getColPos("factor_stddev")]);
+			if (factor <= 0 || factor_stddev < 0) {
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "for target " << row[target_read_count_factor.getColPos("target")]
+				<< " factor must be greater than 0 and factor_stddev can't be negative, found factor: " << factor << ", factor_stddev: " << factor_stddev << "\n";
+				throw std::runtime_error{ss.str()};
+			}
 			read_depth_biases[row[target_read_count_factor.getColPos("target")]] = std::normal_distribution<double>(factor, factor_stddev);;
 		}
 		auto target_names_in_biases = njh::getSetOfMapKeys(read_depth_biases);
@@ -192,7 +200,21 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 			std::unordered_map<std::string, std::vector<uint32_t>> hap_ids_;
 		};
 		std::map<uint32_t, FullHap> full_haps_;
-		std::map<std::string, uint64_t> gen_read_depths_per_target(std::unordered_map<std::string, std::normal_distribution<double>> & read_depth_biases, njh::randomGenerator& rGen) const {
+		// draw from a normal distribution, re-drawing until positive so the tail below zero can't produce negative/zero factors or depths
+		static double draw_positive(std::normal_distribution<double> & dist, njh::randomGenerator& rGen) {
+			if (dist.mean() <= 0) {
+				return 0;
+			}
+			if (dist.stddev() <= 0) {
+				return dist.mean();
+			}
+			double ret = 0;
+			while (ret <= 0) {
+				ret = dist(rGen.mtGen_);
+			}
+			return ret;
+		}
+		std::map<std::string, uint64_t> gen_read_depths_per_target(std::unordered_map<std::string, std::normal_distribution<double>> & read_depth_biases, njh::randomGenerator& rGen, double total_depth_sd_frac) const {
 			std::map<std::string, uint64_t> ret;
 			std::map<std::string, double> relative_depths;
 			std::map<std::string, uint32_t> hap_counts_per_targets;
@@ -205,7 +227,7 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 			for (const auto & hap_counts_per_target : hap_counts_per_targets) {
 				double bias_factor = 0;
 				for (uint32_t hap = 0; hap < hap_counts_per_target.second; ++hap) {
-					bias_factor += read_depth_biases[hap_counts_per_target.first](rGen.mtGen_);
+					bias_factor += draw_positive(read_depth_biases.at(hap_counts_per_target.first), rGen);
 				}
 				relative_depths[hap_counts_per_target.first] = bias_factor;
 				total_bias_factor += bias_factor;
@@ -214,9 +236,9 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 			for (auto & relative_depth : relative_depths) {
 				relative_depth.second /= total_bias_factor;
 			}
-			std::normal_distribution<double> total_depth_dist(sample_total_depth_, sample_total_depth_ * 0.10);
+			std::normal_distribution<double> total_depth_dist(sample_total_depth_, sample_total_depth_ * total_depth_sd_frac);
 			for (const auto & target_bias : relative_depths) {
-				auto raw_read_depth = std::round(target_bias.second * total_depth_dist(rGen.mtGen_));
+				auto raw_read_depth = std::round(target_bias.second * draw_positive(total_depth_dist, rGen));
 				uint64_t read_depth = 0;
 				if (raw_read_depth >= 1) {
 					read_depth = static_cast<uint64_t>(raw_read_depth);
@@ -299,7 +321,11 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 		ss << __PRETTY_FUNCTION__ << ", error " << sample_set_up_fnp << " if supplying MIDs need both columns: " << njh::conToStr(sample_set_up_mid_cols, ",") << "\n";
 		throw std::runtime_error{ss.str()};
 	}
-	VecStr sample_only_cols{"sample_name","starting_template","sample_total_depth", "pcr_rounds"};
+	VecStr sample_only_cols{"sample_name","starting_template","sample_total_depth"};
+	const bool hasPcrRoundsCol = sample_setup.containsColumn(sample_set_up_pcr_rounds_col);
+	if (hasPcrRoundsCol) {
+		sample_only_cols.emplace_back(sample_set_up_pcr_rounds_col);
+	}
 	if (useMids && hasMidCols) {
 		addOtherVec(sample_only_cols, sample_set_up_mid_cols);
 	}
@@ -319,7 +345,7 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 
 		sim_sample.starting_template_ = njh::StrToNumConverter::stoToNum<uint32_t>(row[sample_only_info.getColPos("starting_template")]);
 		sim_sample.sample_total_depth_ = njh::StrToNumConverter::stoToNum<uint32_t>(row[sample_only_info.getColPos("sample_total_depth")]);
-		sim_sample.pcr_rounds_ = njh::StrToNumConverter::stoToNum<uint32_t>(row[sample_only_info.getColPos("pcr_rounds")]);
+		sim_sample.pcr_rounds_ = hasPcrRoundsCol ? njh::StrToNumConverter::stoToNum<uint32_t>(row[sample_only_info.getColPos(sample_set_up_pcr_rounds_col)]) : defaultPcrRounds;
 		sim_sample.index_name_ = sample_name;
 		if (useMids && hasMidCols) {
 			sim_sample.index_name_ = row[sample_only_info.getColPos("index")];
@@ -394,7 +420,7 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 		auto target_name = row[sample_setup.getColPos("target")];
 		auto hap_id = njh::StrToNumConverter::stoToNum<uint32_t>(row[sample_setup.getColPos("hap_id")]);
 		auto within_sample_fullhap_id = njh::StrToNumConverter::stoToNum<uint32_t>(row[sample_setup.getColPos("within_sample_fullhap_id")]);
-		if (njh::notIn(hap_id, population_haps_by_target[target_name])) {
+		if (njh::notIn(hap_id, population_haps_by_target.at(target_name))) {
 			missing_hap_warnings.emplace_back(njh::pasteAsStr("missing hap_id: ", hap_id, " for target: ", target_name));
 		}
 		sim_samples.at(sample_name).full_haps_[within_sample_fullhap_id].hap_ids_[target_name].emplace_back(hap_id);
@@ -458,7 +484,7 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 		&primers, &setUp,
 		&pcrNumThreads,
 		&intErrorRate, &pcrEfficiency, &templateCap,&noChimeras, &chimeraBasesIn,
-		&initialPcrRounds, &initialPcrRoundsMap,
+		&initialPcrRounds, &initialPcrRoundsMap, &finalReadAmountSDFrac,
 		&population_haps_by_target,
 		&output_numbers, &output_numbers_mut]() {
 		std::string indexKey;
@@ -507,7 +533,7 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 
 			for (const auto & sampleKey : samples_by_index.at(indexKey)) {
 				const auto & sim_sample = sim_samples.at(sampleKey);
-				auto read_depths_per_target = sim_sample.gen_read_depths_per_target(thread_read_depth_biases, rGen);
+				auto read_depths_per_target = sim_sample.gen_read_depths_per_target(thread_read_depth_biases, rGen, finalReadAmountSDFrac);
 				auto expected_relative_depths_per_hap_id = sim_sample.gen_relative_depths_per_hap_id();
 				auto starting_templates_per_hap_id = sim_sample.gen_starting_templates_per_hap_id(rGen);
 				// auto copy_number_per_hap_id = sim_sample.gen_number_per_hap_id();
@@ -516,10 +542,12 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 
 				for (const auto & target : starting_templates_per_hap_id) {
 					std::vector<PCRSimulator::SeqGenomeCnt> seqGCounts;
+					// every expected hap including ones that ended up with 0 starting templates, used for reporting only
+					std::vector<PCRSimulator::SeqGenomeCnt> allSeqGCounts;
 					uint32_t totalGenomes = 0;
 					for (const auto & hap_id : target.second) {
 						std::string seqName = njh::pasteAsStr(hap_id.first);
-						std::string seq = population_haps_by_target[target.first][hap_id.first].seq_;
+						std::string seq = population_haps_by_target.at(target.first).at(hap_id.first).seq_;
 						if (!sim_lib_pars.noAddPrimers_) {
 							seq.append(seqUtil::reverseComplement(primers.targets_.at(target.first).info_.reversePrimerRaw_, "DNA"));
 							seq.insert(0, primers.targets_.at(target.first).info_.forwardPrimerRaw_);
@@ -540,11 +568,15 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 						}
 						seqInfo currentSeq(seqName, seq);
 
-						currentSeq.frac_ = expected_relative_depths_per_hap_id[target.first][hap_id.first];
-						currentSeq.cnt_ = expected_relative_depths_per_hap_id[target.first][hap_id.first];
+						currentSeq.frac_ = expected_relative_depths_per_hap_id.at(target.first).at(hap_id.first);
+						currentSeq.cnt_ = expected_relative_depths_per_hap_id.at(target.first).at(hap_id.first);
 
-						seqGCounts.emplace_back(currentSeq, hap_id.second);
-						totalGenomes += hap_id.second;
+						allSeqGCounts.emplace_back(currentSeq, hap_id.second);
+						// haps with no starting templates can't be amplified, so leave them out of the PCR like simMultipleMixtureSimPCR does
+						if (hap_id.second > 0) {
+							seqGCounts.emplace_back(currentSeq, hap_id.second);
+							totalGenomes += hap_id.second;
+						}
 					}
 
 					PCRSimulator pcrSim(intErrorRate);
@@ -566,8 +598,8 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 						}
 					}
 					std::unordered_map<std::string, uint32_t> pcred_read_counts;
-					if (read_depths_per_target[target.first] > 0) {
-						auto pcrSimAmounts = pcrSim.simLibFast(seqGCounts, pcrReadsOpts, read_depths_per_target[target.first], sim_sample.pcr_rounds_, currentInitial, pcrNumThreads);
+					if (read_depths_per_target.at(target.first) > 0 && totalGenomes > 0) {
+						auto pcrSimAmounts = pcrSim.simLibFast(seqGCounts, pcrReadsOpts, read_depths_per_target.at(target.first), sim_sample.pcr_rounds_, currentInitial, pcrNumThreads);
 						auto pcrSeqsInOpts = SeqIOOptions::genFastaIn(pcrReadsFnp);
 						SeqInput pcrReader(pcrSeqsInOpts);
 						pcrReader.openIn();
@@ -576,6 +608,13 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 						while(pcrReader.readNextRead(targetSeq)){
 							MetaDataInName targetSeqMeta(targetSeq.name_);
 							++pcred_read_counts[targetSeqMeta.getMeta("hap")];
+							// hap ids and idNums repeat across targets and samples, so add where the read came from to keep names unique within the output fastq
+							targetSeqMeta.addMeta("sample", sampleKey);
+							targetSeqMeta.addMeta("target", target.first);
+							if (useMids) {
+								targetSeqMeta.addMeta("mid", sim_sample.mid_name_);
+							}
+							targetSeqMeta.resetMetaInName(targetSeq.name_);
 							//blunt ending
 							if(sim_lib_pars.addBluntEndingArtifact_){
 								if('A' == targetSeq.seq_[0] && rGen() < sim_lib_pars.bluntEndingArtifactChance_){
@@ -626,7 +665,7 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 					}
 					{
 						std::lock_guard<std::mutex> lock(output_numbers_mut);
-						for (const auto &seqGCount : seqGCounts) {
+						for (const auto &seqGCount : allSeqGCounts) {
 							output_numbers.addRow(
 								indexKey,
 								sim_sample.mid_name_,
@@ -634,8 +673,8 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 								sim_sample.full_haps_.size(),
 								sim_sample.sample_total_depth_,
 								target.first,
-								seqGCounts.size(),
-								read_depths_per_target[target.first],
+								allSeqGCounts.size(),
+								read_depths_per_target.at(target.first),
 								seqGCount.seqBase_.name_,
 								sim_sample.starting_template_,
 								totalGenomes,
