@@ -63,6 +63,8 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 	VecStr population_haps_required_cols{"target","seq","hap_id"};
 	bfs::path sample_set_up_fnp;
 	VecStr sample_set_up_required_cols{"sample_name","starting_template","sample_total_depth","target","hap_id","within_sample_fullhap_id","relative_abundance", "pcr_rounds"};
+	// optional, only used when idFile has MIDs, if absent MIDs are assigned automatically and samples are pooled into Subset-N indexes
+	VecStr sample_set_up_mid_cols{"index", "mid"};
 	bfs::path target_read_count_factor_fnp;
 	VecStr target_read_count_factor_required_cols{"target", "factor", "factor_stddev"};
 	bfs::path idFile;
@@ -73,11 +75,14 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 	setUp.setOption(sim_lib_pars.noAddPrimers_, "--noAddPrimers", "don't add primers");
 	setUp.setOption(sim_lib_pars.addBluntEndingArtifact_, "--addBluntEndingArtifact", "add Blunt Ending Artifact");
 	setUp.setOption(sim_lib_pars.addReverseComplement_, "--addReverseComplement", "add Reverse Complement");
+	setUp.setOption(sim_lib_pars.bluntEndingArtifactChance_, "--bluntEndingArtifactChance", "Blunt Ending Artifact Chance");
+	setUp.setOption(sim_lib_pars.barcodeRandomPrecedingBases_, "--barcodeRandomPrecedingBases", "Barcode Random Preceding Bases, up to this many random bases are added before the MIDs");
+	setUp.setOption(sim_lib_pars.primerRandomPrecedingBases_, "--primerRandomPrecedingBases", "Primer Random Preceding Bases, up to this many random bases are added before the primers");
 
 	setUp.setOption(illuminaProfileDir, "--illuminaProfileDir", "Illumina Profile Dir");
-	setUp.setOption(idFile, "--idFile", "Primer MID Fnp", true);
-	setUp.setOption(population_haps_fnp, "--population_haps_fnp", njh::pasteAsStr("population haplotype sequences file, required columns: ", njh::conToStr(sample_set_up_required_cols, ",")), true);
-	setUp.setOption(sample_set_up_fnp, "--sample_set_up_fnp", njh::pasteAsStr("sample setup file, required columns: ", njh::conToStr(sample_set_up_required_cols, ",")), true);
+	setUp.setOption(idFile, "--idFile", "Primer MID Fnp, if it contains MIDs, samples are MID-tagged and pooled into index fastqs", true);
+	setUp.setOption(population_haps_fnp, "--population_haps_fnp", njh::pasteAsStr("population haplotype sequences file, required columns: ", njh::conToStr(population_haps_required_cols, ",")), true);
+	setUp.setOption(sample_set_up_fnp, "--sample_set_up_fnp", njh::pasteAsStr("sample setup file, required columns: ", njh::conToStr(sample_set_up_required_cols, ","), "; optional columns (when idFile has MIDs): ", njh::conToStr(sample_set_up_mid_cols, ",")), true);
 	setUp.setOption(target_read_count_factor_fnp, "--target_read_count_factor_fnp", njh::pasteAsStr("target read count factor, used to adjust read depths based on known biases, required columns: ", njh::conToStr(target_read_count_factor_required_cols, ",")), true);
 
 
@@ -173,6 +178,8 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 		uint32_t starting_template_ = std::numeric_limits<uint32_t>::max();
 		uint32_t sample_total_depth_ = std::numeric_limits<uint32_t>::max();
 		uint32_t pcr_rounds_ = std::numeric_limits<uint32_t>::max();
+		std::string index_name_; // the fastq file this sample is written to, the sample name itself when no MIDs
+		std::string mid_name_;   // empty when no MIDs
 
 		struct FullHap {
 			FullHap(uint32_t within_sample_fullhap_id, double relative_abundance): within_sample_fullhap_id_(
@@ -280,7 +287,23 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 	//std::cout << __FILE__ << " " << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
 	// populate samples
 	std::map<std::string, SimSampleInfo> sim_samples;
-	auto sample_only_info = sample_setup.getColumns(VecStr{"sample_name","starting_template","sample_total_depth", "pcr_rounds"}).getUniqueRows();
+	const bool useMids = primers.containsMids();
+	const bool hasMidCols = sample_setup.containsColumns(sample_set_up_mid_cols);
+	if (!useMids && (sample_setup.containsColumn("mid") || sample_setup.containsColumn("index"))) {
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << sample_set_up_fnp << " has mid/index columns but " << idFile << " doesn't contain any MIDs" << "\n";
+		throw std::runtime_error{ss.str()};
+	}
+	if (useMids && !hasMidCols && (sample_setup.containsColumn("mid") || sample_setup.containsColumn("index"))) {
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << sample_set_up_fnp << " if supplying MIDs need both columns: " << njh::conToStr(sample_set_up_mid_cols, ",") << "\n";
+		throw std::runtime_error{ss.str()};
+	}
+	VecStr sample_only_cols{"sample_name","starting_template","sample_total_depth", "pcr_rounds"};
+	if (useMids && hasMidCols) {
+		addOtherVec(sample_only_cols, sample_set_up_mid_cols);
+	}
+	auto sample_only_info = sample_setup.getColumns(sample_only_cols).getUniqueRows();
 	for (const auto & row : sample_only_info) {
 		auto sample_name = row[sample_only_info.getColPos("sample_name")];
 		if (njh::in(sample_name, sim_samples)) {
@@ -297,7 +320,44 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 		sim_sample.starting_template_ = njh::StrToNumConverter::stoToNum<uint32_t>(row[sample_only_info.getColPos("starting_template")]);
 		sim_sample.sample_total_depth_ = njh::StrToNumConverter::stoToNum<uint32_t>(row[sample_only_info.getColPos("sample_total_depth")]);
 		sim_sample.pcr_rounds_ = njh::StrToNumConverter::stoToNum<uint32_t>(row[sample_only_info.getColPos("pcr_rounds")]);
+		sim_sample.index_name_ = sample_name;
+		if (useMids && hasMidCols) {
+			sim_sample.index_name_ = row[sample_only_info.getColPos("index")];
+			sim_sample.mid_name_ = row[sample_only_info.getColPos("mid")];
+		}
 		sim_samples.emplace(sample_name, sim_sample);
+	}
+	// set up MIDs, either checking the given ones or assigning them in sorted order, starting a new index when MIDs run out
+	if (useMids) {
+		auto midNames = njh::getVecOfMapKeys(primers.mids_);
+		njh::sort(midNames);
+		if (hasMidCols) {
+			VecStr mid_warnings;
+			std::map<std::string, std::map<std::string, std::string>> samples_by_index_by_mid;
+			for (const auto & sim_sample : sim_samples) {
+				if (njh::notIn(sim_sample.second.mid_name_, primers.mids_)) {
+					mid_warnings.emplace_back(njh::pasteAsStr("sample: ", sim_sample.first, " has mid: ", sim_sample.second.mid_name_, " which isn't in ", idFile));
+				}
+				auto & samples_by_mid = samples_by_index_by_mid[sim_sample.second.index_name_];
+				if (njh::in(sim_sample.second.mid_name_, samples_by_mid)) {
+					mid_warnings.emplace_back(njh::pasteAsStr("samples: ", samples_by_mid[sim_sample.second.mid_name_], " and ", sim_sample.first, " share mid: ", sim_sample.second.mid_name_, " in index: ", sim_sample.second.index_name_));
+				}
+				samples_by_mid[sim_sample.second.mid_name_] = sim_sample.first;
+			}
+			if (!mid_warnings.empty()) {
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << njh::conToStr(mid_warnings, "\n") << "\n";
+				throw std::runtime_error{ss.str()};
+			}
+		} else {
+			uint32_t indexTotal = (sim_samples.size() + midNames.size() - 1) / midNames.size();
+			uint32_t sampleCount = 0;
+			for (auto & sim_sample : sim_samples) {
+				sim_sample.second.index_name_ = njh::pasteAsStr("Subset-", njh::leftPadNumStr<uint32_t>(sampleCount / midNames.size(), indexTotal));
+				sim_sample.second.mid_name_ = midNames[sampleCount % midNames.size()];
+				++sampleCount;
+			}
+		}
 	}
 	//std::cout << __FILE__ << " " << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
 	// populate haplotypes
@@ -350,9 +410,29 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 	if(!noChimeras){
 		njh::files::makeDir(njh::files::MkdirPar{chimeraDirectory});
 	}
-	std::atomic_uint sampleCountAtom{0};
+	// group samples by the fastq (index) they are written to, without MIDs every sample is its own index
+	std::map<std::string, VecStr> samples_by_index;
+	for (const auto & sim_sample : sim_samples) {
+		samples_by_index[sim_sample.second.index_name_].emplace_back(sim_sample.first);
+	}
+	auto index_names = njh::getVecOfMapKeys(samples_by_index);
+	std::unordered_map<std::string, uint32_t> index_sample_numbers;
+	for (const auto & index_name : index_names) {
+		index_sample_numbers[index_name] = index_sample_numbers.size() + 1;
+	}
+	if (useMids) {
+		table sample_names_table(VecStr{"#file", "sample", "run1"});
+		for (const auto & sim_sample : sim_samples) {
+			sample_names_table.addRow(sim_sample.second.index_name_, sim_sample.first, sim_sample.second.mid_name_);
+		}
+		sample_names_table.sortTable("#file", "run1", false);
+		OutputStream sample_names_out(njh::files::make_path(setUp.pars_.directoryName_, "sampleNames.tab.txt"));
+		sample_names_table.outPutContents(sample_names_out, "\t");
+	}
 	std::string extension = ".fastq.gz";
 	table output_numbers(VecStr{
+		"index",
+		"mid",
 		"sample_name",
 		"COI",
 		"expected_total_sample_reads",
@@ -367,10 +447,11 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 		"non_chimera_total_pcr_count"
 	});
 	std::mutex output_numbers_mut;
-	njh::concurrent::LockableQueue<std::string> sample_queue(njh::getVecOfMapKeys(sim_samples));
+	njh::concurrent::LockableQueue<std::string> index_queue(index_names);
 
-	std::function<void()> sim_sample_func = [&sample_queue, &sim_samples,
-		&illuminaProfileDir, &sampleCountAtom, &sim_lib_pars,
+	std::function<void()> sim_sample_func = [&index_queue, &sim_samples,
+		&samples_by_index, &index_sample_numbers, &useMids,
+		&illuminaProfileDir, &sim_lib_pars,
 		&keepPCRSeqs, &singleEnd,
 		&fastqDirectory, &extension,
 		&read_depth_biases,
@@ -380,18 +461,26 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 		&initialPcrRounds, &initialPcrRoundsMap,
 		&population_haps_by_target,
 		&output_numbers, &output_numbers_mut]() {
-		std::string sampleKey;
+		std::string indexKey;
 		//std::cout << __FILE__ << " " << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
 		njh::randObjectGen<char,uint32_t> baseRGen({'A', 'C', 'G', 'T'}, {1,1,1,1});
 		RoughIlluminaSimulator simulator(illuminaProfileDir);
 		njh::randomGenerator rGen;
-		while (sample_queue.getVal(sampleKey)) {
-			const auto & sim_sample = sim_samples.at(sampleKey);
-
-			uint32_t sampleCount = sampleCountAtom++;
-			OutOptions targetOutOpts(njh::files::make_path(fastqDirectory, njh::pasteAsStr(sampleKey, "_S", sampleCount + 1, extension)));
-			OutOptions r1OutOpts(njh::files::make_path(fastqDirectory, njh::pasteAsStr(sampleKey, "_S", sampleCount + 1, "_R1_001" + extension)));
-			OutOptions r2OutOpts(njh::files::make_path(fastqDirectory, njh::pasteAsStr(sampleKey, "_S", sampleCount + 1, "_R2_001" + extension)));
+		// per thread copy, drawing from a std::normal_distribution modifies it so it can't be shared between threads
+		auto thread_read_depth_biases = read_depth_biases;
+		auto add_random_bases = [&rGen, &baseRGen](uint32_t maxBases, bool randomOneLength) -> std::string {
+			if (0 == maxBases) {
+				return "";
+			}
+			uint32_t minBases = randomOneLength ? maxBases : 0;
+			uint32_t numBases = rGen.unifRand<uint32_t>(minBases, maxBases + 1);
+			return njh::pasteAsStr(baseRGen.genObjs(numBases));
+		};
+		while (index_queue.getVal(indexKey)) {
+			uint32_t sampleNumber = index_sample_numbers.at(indexKey);
+			OutOptions targetOutOpts(njh::files::make_path(fastqDirectory, njh::pasteAsStr(indexKey, "_S", sampleNumber, extension)));
+			OutOptions r1OutOpts(njh::files::make_path(fastqDirectory, njh::pasteAsStr(indexKey, "_S", sampleNumber, "_R1_001" + extension)));
+			OutOptions r2OutOpts(njh::files::make_path(fastqDirectory, njh::pasteAsStr(indexKey, "_S", sampleNumber, "_R2_001" + extension)));
 			std::shared_ptr<OutputStream> targetOut;
 			std::shared_ptr<OutputStream> r1Out;
 			std::shared_ptr<OutputStream> r2Out;
@@ -416,131 +505,147 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 	//			}
 	//		}
 
-			auto read_depths_per_target = sim_sample.gen_read_depths_per_target(read_depth_biases, rGen);
-			auto expected_relative_depths_per_hap_id = sim_sample.gen_relative_depths_per_hap_id();
-			auto starting_templates_per_hap_id = sim_sample.gen_starting_templates_per_hap_id(rGen);
-			// auto copy_number_per_hap_id = sim_sample.gen_number_per_hap_id();
+			for (const auto & sampleKey : samples_by_index.at(indexKey)) {
+				const auto & sim_sample = sim_samples.at(sampleKey);
+				auto read_depths_per_target = sim_sample.gen_read_depths_per_target(thread_read_depth_biases, rGen);
+				auto expected_relative_depths_per_hap_id = sim_sample.gen_relative_depths_per_hap_id();
+				auto starting_templates_per_hap_id = sim_sample.gen_starting_templates_per_hap_id(rGen);
+				// auto copy_number_per_hap_id = sim_sample.gen_number_per_hap_id();
 
 
 
-			for (const auto & target : starting_templates_per_hap_id) {
-				std::vector<PCRSimulator::SeqGenomeCnt> seqGCounts;
-				uint32_t totalGenomes = 0;
-				for (const auto & hap_id : target.second) {
-					std::string seqName = njh::pasteAsStr(hap_id.first);
-					std::string seq = population_haps_by_target[target.first][hap_id.first].seq_;
-					if (!sim_lib_pars.noAddPrimers_) {
-						seq.append(seqUtil::reverseComplement(primers.targets_.at(target.first).info_.reversePrimerRaw_, "DNA"));
-						seq.insert(0, primers.targets_.at(target.first).info_.forwardPrimerRaw_);
-					}
-					/*
-					 * @todo add back in doing MIDs and doing random bases etc
-					 */
-					seqInfo currentSeq(seqName, seq);
-
-					currentSeq.frac_ = expected_relative_depths_per_hap_id[target.first][hap_id.first];
-					currentSeq.cnt_ = expected_relative_depths_per_hap_id[target.first][hap_id.first];
-
-					seqGCounts.emplace_back(currentSeq, hap_id.second);
-					totalGenomes += hap_id.second;
-				}
-
-				PCRSimulator pcrSim(intErrorRate);
-				pcrSim.verbose_ = setUp.pars_.verbose_;
-				pcrSim.pcrEfficiency_ = pcrEfficiency;
-				pcrSim.templateCap_ = templateCap;
-				pcrSim.noChimeras_ = noChimeras;
-				pcrSim.chimeraPad_ = chimeraBasesIn;
-
-
-				auto pcrReadsFnp = njh::files::make_path(fastqDirectory, sampleKey  + "_" + target.first + "_pcr_reads.fasta");
-				OutOptions pcrReadsOpts(pcrReadsFnp);
-
-				uint32_t currentInitial = initialPcrRounds;
-				for(const auto & initialRound : initialPcrRoundsMap){
-					if(initialRound.first >= totalGenomes){
-						currentInitial = initialRound.second;
-						break;
-					}
-				}
-				std::unordered_map<std::string, uint32_t> pcred_read_counts;
-				if (read_depths_per_target[target.first] > 0) {
-					auto pcrSimAmounts = pcrSim.simLibFast(seqGCounts, pcrReadsOpts, read_depths_per_target[target.first], sim_sample.pcr_rounds_, currentInitial, pcrNumThreads);
-					auto pcrSeqsInOpts = SeqIOOptions::genFastaIn(pcrReadsFnp);
-					SeqInput pcrReader(pcrSeqsInOpts);
-					pcrReader.openIn();
-					seqInfo targetSeq;
-
-					while(pcrReader.readNextRead(targetSeq)){
-						MetaDataInName targetSeqMeta(targetSeq.name_);
-						++pcred_read_counts[targetSeqMeta.getMeta("hap")];
-						//blunt ending
-						if(sim_lib_pars.addBluntEndingArtifact_){
-							if('A' == targetSeq.seq_[0] && rGen() < sim_lib_pars.bluntEndingArtifactChance_){
-								readVecTrimmer::trimOffForwardBases(targetSeq, 1);
-							}
-							if ('T' == targetSeq.seq_.back()
-									&& rGen() < sim_lib_pars.bluntEndingArtifactChance_) {
-								readVecTrimmer::trimOffEndBases(targetSeq, 1);
-									}
+				for (const auto & target : starting_templates_per_hap_id) {
+					std::vector<PCRSimulator::SeqGenomeCnt> seqGCounts;
+					uint32_t totalGenomes = 0;
+					for (const auto & hap_id : target.second) {
+						std::string seqName = njh::pasteAsStr(hap_id.first);
+						std::string seq = population_haps_by_target[target.first][hap_id.first].seq_;
+						if (!sim_lib_pars.noAddPrimers_) {
+							seq.append(seqUtil::reverseComplement(primers.targets_.at(target.first).info_.reversePrimerRaw_, "DNA"));
+							seq.insert(0, primers.targets_.at(target.first).info_.forwardPrimerRaw_);
 						}
-						//complement
-						if(sim_lib_pars.addReverseComplement_){
-							bool complement = rGen.unifRand(0,2) == 0;
-							if(complement){
-								targetSeq.reverseComplementRead(false, true);
+						/**@todo add back in randomizing this per seq, currently random bases are set once per haplotype template like simMultipleMixtureSimPCR*/
+						seq.insert(0, add_random_bases(sim_lib_pars.primerRandomPrecedingBases_, false));
+						seq.append(add_random_bases(sim_lib_pars.primerRandomPrecedingBases_, false));
+						if (useMids) {
+							const auto & mid = primers.mids_.at(sim_sample.mid_name_);
+							if (nullptr != mid.forwardBar_) {
+								seq.insert(0, mid.forwardBar_->bar_->motifOriginal_);
+								seq.insert(0, add_random_bases(sim_lib_pars.barcodeRandomPrecedingBases_, false));
+							}
+							if (nullptr != mid.reverseBar_) {
+								seq.append(seqUtil::reverseComplement(mid.reverseBar_->bar_->motifOriginal_, "DNA"));
+								seq.append(add_random_bases(sim_lib_pars.barcodeRandomPrecedingBases_, false));
 							}
 						}
-						//length
-						if(singleEnd){
-							//target
-							targetSeq.outPutSeq(*targetOut);
-						}else{
-							{
-								//r1
-								auto subSeq = len(targetSeq) > sim_lib_pars.pairedEndLength_? targetSeq.getSubRead(0, sim_lib_pars.pairedEndLength_) : targetSeq;
-								simulator.simR1(subSeq, sim_lib_pars.pairedEndLength_).outPutFastq(*r1Out);
-							}
-							{
-								//r2
-								targetSeq.reverseComplementRead(false, true);
-								auto subSeq = len(targetSeq) > sim_lib_pars.pairedEndLength_? targetSeq.getSubRead(0, sim_lib_pars.pairedEndLength_) : targetSeq;
-								simulator.simR2(subSeq, sim_lib_pars.pairedEndLength_).outPutFastq(*r2Out);
-							}
+						seqInfo currentSeq(seqName, seq);
+
+						currentSeq.frac_ = expected_relative_depths_per_hap_id[target.first][hap_id.first];
+						currentSeq.cnt_ = expected_relative_depths_per_hap_id[target.first][hap_id.first];
+
+						seqGCounts.emplace_back(currentSeq, hap_id.second);
+						totalGenomes += hap_id.second;
+					}
+
+					PCRSimulator pcrSim(intErrorRate);
+					pcrSim.verbose_ = setUp.pars_.verbose_;
+					pcrSim.pcrEfficiency_ = pcrEfficiency;
+					pcrSim.templateCap_ = templateCap;
+					pcrSim.noChimeras_ = noChimeras;
+					pcrSim.chimeraPad_ = chimeraBasesIn;
+
+
+					auto pcrReadsFnp = njh::files::make_path(fastqDirectory, sampleKey  + "_" + target.first + "_pcr_reads.fasta");
+					OutOptions pcrReadsOpts(pcrReadsFnp);
+
+					uint32_t currentInitial = initialPcrRounds;
+					for(const auto & initialRound : initialPcrRoundsMap){
+						if(initialRound.first >= totalGenomes){
+							currentInitial = initialRound.second;
+							break;
 						}
 					}
-					pcrReader.closeIn();
-					if(!keepPCRSeqs) {
-						bfs::remove(pcrReadsFnp);
+					std::unordered_map<std::string, uint32_t> pcred_read_counts;
+					if (read_depths_per_target[target.first] > 0) {
+						auto pcrSimAmounts = pcrSim.simLibFast(seqGCounts, pcrReadsOpts, read_depths_per_target[target.first], sim_sample.pcr_rounds_, currentInitial, pcrNumThreads);
+						auto pcrSeqsInOpts = SeqIOOptions::genFastaIn(pcrReadsFnp);
+						SeqInput pcrReader(pcrSeqsInOpts);
+						pcrReader.openIn();
+						seqInfo targetSeq;
+
+						while(pcrReader.readNextRead(targetSeq)){
+							MetaDataInName targetSeqMeta(targetSeq.name_);
+							++pcred_read_counts[targetSeqMeta.getMeta("hap")];
+							//blunt ending
+							if(sim_lib_pars.addBluntEndingArtifact_){
+								if('A' == targetSeq.seq_[0] && rGen() < sim_lib_pars.bluntEndingArtifactChance_){
+									readVecTrimmer::trimOffForwardBases(targetSeq, 1);
+								}
+								if ('T' == targetSeq.seq_.back()
+										&& rGen() < sim_lib_pars.bluntEndingArtifactChance_) {
+									readVecTrimmer::trimOffEndBases(targetSeq, 1);
+										}
+							}
+							//complement
+							if(sim_lib_pars.addReverseComplement_){
+								bool complement = rGen.unifRand(0,2) == 0;
+								if(complement){
+									targetSeq.reverseComplementRead(false, true);
+								}
+							}
+							//length
+							if(singleEnd){
+								//target
+								targetSeq.outPutSeq(*targetOut);
+							}else{
+								{
+									//r1
+									auto subSeq = len(targetSeq) > sim_lib_pars.pairedEndLength_? targetSeq.getSubRead(0, sim_lib_pars.pairedEndLength_) : targetSeq;
+									simulator.simR1(subSeq, sim_lib_pars.pairedEndLength_).outPutFastq(*r1Out);
+								}
+								{
+									//r2
+									targetSeq.reverseComplementRead(false, true);
+									auto subSeq = len(targetSeq) > sim_lib_pars.pairedEndLength_? targetSeq.getSubRead(0, sim_lib_pars.pairedEndLength_) : targetSeq;
+									simulator.simR2(subSeq, sim_lib_pars.pairedEndLength_).outPutFastq(*r2Out);
+								}
+							}
+						}
+						pcrReader.closeIn();
+						if(!keepPCRSeqs) {
+							bfs::remove(pcrReadsFnp);
+						}
 					}
-				}
-				uint32_t chimera_pcr_count = 0;
-				uint32_t total_pcr_count = 0;
-				for (const auto & pcred_read_count : pcred_read_counts) {
-					total_pcr_count += pcred_read_count.second;
-					if (std::string::npos !=  pcred_read_count.first.find("Chi")){
-						chimera_pcr_count+= pcred_read_count.second;
+					uint32_t chimera_pcr_count = 0;
+					uint32_t total_pcr_count = 0;
+					for (const auto & pcred_read_count : pcred_read_counts) {
+						total_pcr_count += pcred_read_count.second;
+						if (std::string::npos !=  pcred_read_count.first.find("Chi")){
+							chimera_pcr_count+= pcred_read_count.second;
+						}
 					}
-				}
-				{
-					std::lock_guard<std::mutex> lock(output_numbers_mut);
-					for (const auto &seqGCount : seqGCounts) {
-						output_numbers.addRow(
-							sampleKey,
-							sim_sample.full_haps_.size(),
-							sim_sample.sample_total_depth_,
-							target.first,
-							seqGCounts.size(),
-							read_depths_per_target[target.first],
-							seqGCount.seqBase_.name_,
-							sim_sample.starting_template_,
-							totalGenomes,
-							seqGCount.seqBase_.frac_,
-							seqGCount.genomeCnt_,
-							pcred_read_counts[seqGCount.seqBase_.name_],
-							total_pcr_count,
-							total_pcr_count - chimera_pcr_count
-							);
+					{
+						std::lock_guard<std::mutex> lock(output_numbers_mut);
+						for (const auto &seqGCount : seqGCounts) {
+							output_numbers.addRow(
+								indexKey,
+								sim_sample.mid_name_,
+								sampleKey,
+								sim_sample.full_haps_.size(),
+								sim_sample.sample_total_depth_,
+								target.first,
+								seqGCounts.size(),
+								read_depths_per_target[target.first],
+								seqGCount.seqBase_.name_,
+								sim_sample.starting_template_,
+								totalGenomes,
+								seqGCount.seqBase_.frac_,
+								seqGCount.genomeCnt_,
+								pcred_read_counts[seqGCount.seqBase_.name_],
+								total_pcr_count,
+								total_pcr_count - chimera_pcr_count
+								);
+						}
 					}
 				}
 			}
