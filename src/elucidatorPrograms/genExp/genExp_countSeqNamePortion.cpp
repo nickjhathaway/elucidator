@@ -94,8 +94,9 @@ int genExpRunner::countIlluminaSampleNumber(const njh::progutils::CmdArgs & inpu
 	seqInfo seq;
 	std::unordered_map<std::string, uint32_t> counts;
 	uint32_t totalCount = 0;
+	const std::regex illuminaNamePat{IlluminaNameFormatDecoder::DefaultNameRegPatStr_};
 	while(reader.readNextRead(seq)){
-		IlluminaNameFormatDecoder decoded(seq.name_);
+		IlluminaNameFormatDecoder decoded(seq.name_, illuminaNamePat, IlluminaNameFormatDecoder::DefaultSampleNumberPos_);
 		++counts[decoded.getSampleNumber()];
 		++totalCount;
 		if(totalCount > testNumber){

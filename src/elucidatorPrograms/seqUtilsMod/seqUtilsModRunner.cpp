@@ -85,9 +85,8 @@ int seqUtilsModRunner::breakUpSeqsOnPattern(const njh::progutils::CmdArgs & inpu
 	SeqIO reader(setUp.pars_.ioOptions_);
 	reader.openIn();
 	reader.openOut();
-
+	const njh::PatPosFinder pat{"N+"};
 	while(reader.readNextRead(seq)){
-		std::regex pat{"N+"};
 		bool mark = !doNotModName;
 		//break up
 		auto trimmedSeqs = readVecTrimmer::breakUpSeqOnPat(seq, pat);
