@@ -218,25 +218,27 @@ RoughIlluminaSimulator::ReadProfile::ReadProfile(const ReadProfileFnps & fnps, d
 	}
 }
 
-seqInfo RoughIlluminaSimulator::ReadProfile::simRead(seqInfo input, uint32_t length){ //const
-	if(length > errorRates_.size()){
+seqInfo RoughIlluminaSimulator::ReadProfile::simRead(seqInfo input, uint32_t length, bool extendPastProfile){ //const
+	if(length > errorRates_.size() && !extendPastProfile){
 		std::stringstream ss;
-		ss << __PRETTY_FUNCTION__ << ", error length is longer than can be simulated" << "\n";
+		ss << __PRETTY_FUNCTION__ << ", error length " << length << " is longer than can be simulated, " << errorRates_.size() << "\n";
 		throw std::runtime_error{ss.str()};
 	}
 	if(len(input) > length){
 		input = input.getSubRead(0, length);
 	}
 	auto lengthOfFragment = len(input);
+	const uint32_t lastProfilePos = errorRates_.size() - 1;
 	for(const auto pos : iter::range(lengthOfFragment)){
+		const uint32_t profilePos = std::min<uint32_t>(pos, lastProfilePos);
 		//decide if error
-		if(rGen_() <= errorRates_[pos]){
+		if(rGen_() <= errorRates_[profilePos]){
 			//error
 			input.seq_[pos] = errorBaseGen_.at(input.seq_[pos]).genObj();
-			input.qual_[pos] = errorQualityDist_[pos].genObj();
+			input.qual_[pos] = errorQualityDist_[profilePos].genObj();
 		}else{
 			//no error
-			input.qual_[pos] = regularQualityDist_[pos].genObj();
+			input.qual_[pos] = regularQualityDist_[profilePos].genObj();
 		}
 	}
 	//add overhang
@@ -258,11 +260,11 @@ seqInfo RoughIlluminaSimulator::ReadProfile::simRead(seqInfo input, uint32_t len
 }
 
 seqInfo RoughIlluminaSimulator::simR1(const seqInfo & input, uint32_t r1Length){ //const
-	return r1Profile_.simRead(input, r1Length);
+	return r1Profile_.simRead(input, r1Length, extendPastProfile_);
 }
 
 seqInfo RoughIlluminaSimulator::simR2(const seqInfo & input, uint32_t r2Length){ //const
-	return r2Profile_.simRead(input, r2Length);
+	return r2Profile_.simRead(input, r2Length, extendPastProfile_);
 }
 
 }  // namespace njhseq

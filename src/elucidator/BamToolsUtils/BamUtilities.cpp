@@ -438,7 +438,8 @@ void BamCountSpecficRegionsPars::setDefaults(seqSetUp & setUp){
 	setUp.setOption(matchIDCutOff, "--matchIDCutOff", "Match ID Cut Off");
 	setUp.setOption(numThreads, "--numThreads", "Number Threads");
 	setUp.setOption(pairPars.minOverlap_, "--minOverlap", "Min Overlap in overlap when stitching pairs");
-	setUp.setOption(pairPars.errorAllowed_, "--errorAllowed", "Error allowed in overlap when stitching pairs");
+	setUp.setOption(pairPars.errorAllowed_, "--errorAllowed", "Fraction of high quality mismatches allowed in overlap when stitching pairs, rounds down so an overlap under 1/this bases is allowed none");
+	setUp.setOption(pairPars.mismatchPenalty_, "--stitchMismatchPenalty", "The penalty for a mismatch when aligning mates to stitch them, harsher than the match score so a long low identity placement doesn't out score a short true overlap");
 	setUp.setOption(pairPars.hardMismatchCutOff_, "--hardMismatchCutOff", "Hard Mismatch Cut Off allowed in overlaop when stitching pairs");
 	setUp.setOption(pairPars.lqMismatchCutOff, "--lqMismatchCutOff", "low quality Mismatch Cut Off allowed in overlaop when stitching pairs");
 	setUp.setOption(pairPars.hqMismatchCutOff, "--hqMismatchCutOff", "hq Mismatch Cut Off allowed in overlaop when stitching pairs");
@@ -547,6 +548,8 @@ std::vector<std::unordered_map<std::string, uint64_t>> BamCountSpecficRegions(
 
 		uint64_t maxlen = 0;
 		PairedReadProcessor pProcess(pars.pairPars);
+		// stitching has its own scoring, alignerObj is for trimming to the region
+		aligner stitchAligner = pProcess.genStitchingAligner(std::max<uint64_t>(maxlenForRegions, 500));
 		PairedReadProcessor::ProcessedResultsCounts processCounts;
 		while(regionsQueue.getVal(currentRegion)){
 			const auto & refSeq = regionSeqs.at(currentRegion.index_);
@@ -596,7 +599,8 @@ std::vector<std::unordered_map<std::string, uint64_t>> BamCountSpecficRegions(
 										readVec::getMaxLength(secondMate, maxlen);
 										PairedRead pseq(firstMate, secondMate);
 										pseq.mateRComplemented_ = false;
-										auto pairRes = pProcess.processPairedEnd(pseq, processCounts, alignerObj);
+										stitchAligner.parts_.setMaxSize(maxlen);
+										auto pairRes = pProcess.processPairedEnd(pseq, processCounts, stitchAligner);
 										if(nullptr != pairRes.combinedSeq_){
 											readVec::getMaxLength(*pairRes.combinedSeq_, maxlen);
 											alignerObj.parts_.setMaxSize(maxlen);

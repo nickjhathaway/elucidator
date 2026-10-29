@@ -77,7 +77,8 @@ int pairProcessingRunner::StitchPairedReads(
 
 	setUp.setOption(params.minOverlap_, "--minOverlap", "Minimum overlap");
 	setUp.setOption(params.writeOverHangs_, "--writeOverHangs", "Write Over Hangs");
-	setUp.setOption(params.errorAllowed_, "--errorAllowed", "Percent Error Allowed, between 0 and 1");
+	setUp.setOption(params.errorAllowed_, "--errorAllowed", "Fraction of high quality mismatches allowed in the overlap, between 0 and 1, rounds down so an overlap under 1/this bases is allowed none");
+	setUp.setOption(params.mismatchPenalty_, "--stitchMismatchPenalty", "The penalty for a mismatch when aligning the mates (match score is --match), harsher than the general mismatch score so a long low identity placement of the mates doesn't out score a short true overlap");
 	if(params.errorAllowed_ > 1 || params.errorAllowed_ < 0){
 		setUp.failed_ = true;
 		std::stringstream ss;
@@ -98,18 +99,12 @@ int pairProcessingRunner::StitchPairedReads(
 	setUp.setOption(setUp.pars_.ioOptions_.revComplMate_, "--revCompMate", "revCompMate");
 	setUp.finishSetUp(std::cout);
 
+	params.matchScore_ = setUp.pars_.generalMatch_;
 	PairedReadProcessor processor(params);
 
 	uint64_t maxsize = processor.guessMaxReadLenFromFile(setUp.pars_.ioOptions_);
 
-	auto alnGapPars = gapScoringParameters(
-			setUp.pars_.gapInfo_.gapOpen_,
-			setUp.pars_.gapInfo_.gapExtend_,
-			0,0,
-			0,0);
-	//std::cout << alnGapPars.toJson() << std::endl;
-
-	aligner alignerObj(maxsize, alnGapPars, setUp.pars_.scoring_, false);
+	aligner alignerObj = processor.genStitchingAligner(maxsize);
 	alignerObj.qScorePars_.qualThresWindow_ = 0;
 
 	PairedReadProcessor::ProcessorOutWriters writers(outOpts);

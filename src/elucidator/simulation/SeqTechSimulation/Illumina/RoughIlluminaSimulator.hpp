@@ -47,7 +47,14 @@ public:
 		std::vector<std::unordered_map<char, njh::randObjectGen<uint32_t, uint32_t>>> overHangQualForBaseGen_;
 		njh::randomGenerator rGen_;
 
-		seqInfo simRead(seqInfo input, uint32_t length);
+		/**@brief Simulate errors and qualities for the first length bases of input, padding with the overhang profile if input is shorter than length
+		 *
+		 * @param input the sequence to simulate a read for
+		 * @param length the read length
+		 * @param extendPastProfile if true, positions past the end of the profile use the profile's last position, otherwise a length longer than the profile throws
+		 * @return the simulated read
+		 */
+		seqInfo simRead(seqInfo input, uint32_t length, bool extendPastProfile = false);
 	};
 
 	ReadProfile r1Profile_;
@@ -55,6 +62,8 @@ public:
 
 	njh::randomGenerator rGen_;
 
+
+	bool extendPastProfile_{false}; /**< allow reads longer than the profiles, positions past the end use the profiles' last position */
 
 	seqInfo simR1(const seqInfo & input, uint32_t r1Length);
 

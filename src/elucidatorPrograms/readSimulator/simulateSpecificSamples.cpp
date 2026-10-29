@@ -100,8 +100,10 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 	setUp.setOption(initialPcrRoundsMapFnp, "--initialPcrRoundsTable", "Number of Initial rounds of PCR before sampling per starting template amount, columns 1)template, 2) rounds");
 	setUp.setOption(numThreads, "--numThreads", "Number of Threads to Use");
 	setUp.setOption(pcrNumThreads, "--pcrNumThreads", "Number of Threads to Use for PCR sim");
-	setUp.setOption(singleEnd, "--singleEnd", "Single End");
+	setUp.setOption(singleEnd, "--singleEnd", "Single End, the whole read is simulated with the R1 Illumina profile, extended past its end by its last position");
 	setUp.setOption(sim_lib_pars.pairedEndLength_, "--pairedEndLength", "Paired End Length", !singleEnd);
+	bool extendIlluminaProfile = false;
+	setUp.setOption(extendIlluminaProfile, "--extendIlluminaProfile", "Allow a paired end length longer than the Illumina profile, positions past its end use its last position");
 	setUp.processDirectoryOutputName("simulateSpecificSamples_TODAY", true);
 	setUp.finishSetUp(std::cout);
 
@@ -478,7 +480,7 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 	std::function<void()> sim_sample_func = [&index_queue, &sim_samples,
 		&samples_by_index, &index_sample_numbers, &useMids,
 		&illuminaProfileDir, &sim_lib_pars,
-		&keepPCRSeqs, &singleEnd,
+		&keepPCRSeqs, &singleEnd, &extendIlluminaProfile,
 		&fastqDirectory, &extension,
 		&read_depth_biases,
 		&primers, &setUp,
@@ -491,6 +493,8 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 		//std::cout << __FILE__ << " " << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
 		njh::randObjectGen<char,uint32_t> baseRGen({'A', 'C', 'G', 'T'}, {1,1,1,1});
 		RoughIlluminaSimulator simulator(illuminaProfileDir);
+		// single end reads are the whole amplicon so can be longer than the profile
+		simulator.extendPastProfile_ = singleEnd || extendIlluminaProfile;
 		njh::randomGenerator rGen;
 		// per thread copy, drawing from a std::normal_distribution modifies it so it can't be shared between threads
 		auto thread_read_depth_biases = read_depth_biases;
@@ -634,8 +638,8 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 							}
 							//length
 							if(singleEnd){
-								//target
-								targetSeq.outPutSeq(*targetOut);
+								//target, no long read profile yet so errors and qualities come from the R1 profile
+								simulator.simR1(targetSeq, len(targetSeq)).outPutFastq(*targetOut);
 							}else{
 								{
 									//r1
