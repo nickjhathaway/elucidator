@@ -69,6 +69,20 @@ struct ProcessedForIlluminaAdaptorPars{
 
 };
 
+//the exclusive end in the un-gapped sequence for an alignment column, i.e. the number of sequence bases at or before that column
+//getRealPosForAlnPos(...) + 1 overshoots by one when the column is a gap in the sequence
+uint32_t getRealEndForAlnPos(const std::string & seqAln, size_t alnPos){
+	return std::count_if(seqAln.begin(), seqAln.begin() + alnPos + 1, [](char base){ return '-' != base; });
+}
+
+void checkAdaptorHasBarcode(const std::string & adaptor, const std::string & optionName){
+	if(std::string::npos == adaptor.find('N')){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << optionName << " needs to contain the barcode as N's, adaptor: " << adaptor << "\n";
+		throw std::runtime_error{ss.str()};
+	}
+}
+
 ProcessedForIlluminaAdaptorRes processSeqForAdaptors(seqInfo & seq,
 		const PrimerAlnInfo & frontSeqAdaptorInfo,
 		const PrimerAlnInfo & backSeqAdaptorInfo,
@@ -85,10 +99,10 @@ ProcessedForIlluminaAdaptorRes processSeqForAdaptors(seqInfo & seq,
 	if(firstNAlnPos > firstSeqBase){
 		ret.fBarPosStart_ = getRealPosForAlnPos(frontSeqAdaptorInfo.seqAln_.seq_, firstNAlnPos);
 		//forward primer barcode end
-		ret.fBarPosEnd_= getRealPosForAlnPos(frontSeqAdaptorInfo.seqAln_.seq_, frontSeqAdaptorInfo.primerAln_.seq_.rfind('N')) + 1;
+		ret.fBarPosEnd_= getRealEndForAlnPos(frontSeqAdaptorInfo.seqAln_.seq_, frontSeqAdaptorInfo.primerAln_.seq_.rfind('N'));
 		//check the forward primer
 		if('-' != frontSeqAdaptorInfo.seqAln_.seq_.back() && ret.fBarPosStart_ > 4 ){
-			ret.fprimerEnd_= getRealPosForAlnPos(frontSeqAdaptorInfo.seqAln_.seq_, frontSeqAdaptorInfo.primerAln_.seq_.find_last_not_of('-')) + 1;
+			ret.fprimerEnd_= getRealEndForAlnPos(frontSeqAdaptorInfo.seqAln_.seq_, frontSeqAdaptorInfo.primerAln_.seq_.find_last_not_of('-'));
 			ret.fwdPass_ = true;
 		}
 	}
@@ -99,13 +113,11 @@ ProcessedForIlluminaAdaptorRes processSeqForAdaptors(seqInfo & seq,
 		uint32_t lastN_AlnPos = backSeqAdaptorInfo.primerAln_.seq_.rfind('N');
 		uint32_t backSeqAlnEnd = backSeqAdaptorInfo.seqAln_.seq_.find_last_not_of('-');
 		if(lastN_AlnPos < backSeqAlnEnd){
-			ret.rprimerEnd_= seq.seq_.size();
-			if(backSeqAdaptorInfo.seqAln_.seq_.back() != '-'){
-				ret.rprimerEnd_= getRealPosForAlnPos(backSeqAdaptorInfo.seqAln_.seq_, backSeqAdaptorInfo.primerAln_.seq_.find_last_not_of('-')) + 1;
-			}
+			//positions here are relative to the back seq, shifted by startOfBackSeq below; if the primer runs off the end of the read this is the back seq length
+			ret.rprimerEnd_= getRealEndForAlnPos(backSeqAdaptorInfo.seqAln_.seq_, backSeqAdaptorInfo.primerAln_.seq_.find_last_not_of('-'));
 			ret.rprimerStart_ = getRealPosForAlnPos(backSeqAdaptorInfo.seqAln_.seq_, backSeqAdaptorInfo.primerAln_.seq_.find_first_not_of('-'));
 			ret.rBarPosStart_ = getRealPosForAlnPos(backSeqAdaptorInfo.seqAln_.seq_, firstN_AlnPos);
-			ret.rBarPosEnd_ = getRealPosForAlnPos(backSeqAdaptorInfo.seqAln_.seq_, lastN_AlnPos) + 1;
+			ret.rBarPosEnd_ = getRealEndForAlnPos(backSeqAdaptorInfo.seqAln_.seq_, lastN_AlnPos);
 			if( (seq.seq_.size() - startOfBackSeq) - ret.rBarPosEnd_ > 4){
 				ret.revPass_= true;
 			}
@@ -158,6 +170,8 @@ int seqUtilsExtractRunner::countIlluminaAaptors(const njh::progutils::CmdArgs & 
   setUp.processDirectoryOutputName(true);
   setUp.finishSetUp(std::cout);
   setUp.startARunLog(setUp.pars_.directoryName_);
+  checkAdaptorHasBarcode(illuminaForward, "--illuminaForward");
+  checkAdaptorHasBarcode(illuminaReverse, "--illuminaReverse");
 
 
   //read in barcodes
@@ -188,7 +202,8 @@ int seqUtilsExtractRunner::countIlluminaAaptors(const njh::progutils::CmdArgs & 
   gapPars.gapRightRefExtend_ = 1;
 
   auto scoring = substituteMatrix::createDegenScoreMatrixLessN(2,-2);
-  uint64_t maxLen = 500;
+  //the aligner does not grow its matrix, so it has to fit the search window and the adaptors
+  uint64_t maxLen = std::max<uint64_t>({500, searchWithin, illuminaForward.size(), illuminaReverse.size()});
   aligner alignerObj(maxLen, gapPars, scoring, false);
 
   seqInfo fwd5_3("fwd", illuminaForward);
@@ -231,6 +246,10 @@ int seqUtilsExtractRunner::countIlluminaAaptors(const njh::progutils::CmdArgs & 
   uint32_t failed_rev3_5_PrimerAln = 0;
 
   uint32_t mismatchDirections = 0;
+  //per read counts, the per primer counts above can count a read twice
+  uint32_t failedIdentityReads = 0;
+  uint32_t failedPrimerAlnReads = 0;
+  uint32_t failedOverlapCheck = 0;
 
   double total = 0;
   uint32_t passFwd = 0;
@@ -249,19 +268,19 @@ int seqUtilsExtractRunner::countIlluminaAaptors(const njh::progutils::CmdArgs & 
     seqInfo backSeq(seq.getSubRead(len(seq) -std::min<uint32_t>(searchWithin, len(seq))));
 
 
-    alignerObj.alignCacheGlobal(frontSeq, fwd5_3);
+    alignerObj.alignRegGlobal(frontSeq, fwd5_3);
     alignerObj.profilePrimerAlignment(frontSeq, fwd5_3);
     PrimerAlnInfo fwd5_3_info("fwd5_3", alignerObj.comp_, alignerObj.alignObjectA_.seqBase_, alignerObj.alignObjectB_.seqBase_);
 
-    alignerObj.alignCacheGlobal(backSeq, rev3_5);
+    alignerObj.alignRegGlobal(backSeq, rev3_5);
     alignerObj.profilePrimerAlignment(backSeq, rev3_5);
     PrimerAlnInfo rev3_5_info("rev3_5", alignerObj.comp_, alignerObj.alignObjectA_.seqBase_, alignerObj.alignObjectB_.seqBase_);
 
-    alignerObj.alignCacheGlobal(frontSeq, rev5_3);
+    alignerObj.alignRegGlobal(frontSeq, rev5_3);
     alignerObj.profilePrimerAlignment(frontSeq, rev5_3);
     PrimerAlnInfo rev5_3_info("rev5_3", alignerObj.comp_, alignerObj.alignObjectA_.seqBase_, alignerObj.alignObjectB_.seqBase_);
 
-    alignerObj.alignCacheGlobal(backSeq, fwd3_5);
+    alignerObj.alignRegGlobal(backSeq, fwd3_5);
     alignerObj.profilePrimerAlignment(backSeq, fwd3_5);
     PrimerAlnInfo fwd3_5_info("fwd3_5", alignerObj.comp_, alignerObj.alignObjectA_.seqBase_, alignerObj.alignObjectB_.seqBase_);
 
@@ -275,10 +294,10 @@ int seqUtilsExtractRunner::countIlluminaAaptors(const njh::progutils::CmdArgs & 
         << "\t" << rev5_3_info.barcode_
         << "\t" << fwd3_5_info.comp_.distances_.eventBasedIdentity_
         << "\t" << fwd3_5_info.barcode_
-        << std::endl;
+        << "\n";
 
-    std::string bestFront = rev5_3_info.comp_.distances_.eventBasedIdentity_ < fwd5_3_info.comp_.distances_.eventBasedIdentity_ ? "rev" : "fwd";
-    std::string bestBack = fwd3_5_info.comp_.distances_.eventBasedIdentity_ < rev3_5_info.comp_.distances_.eventBasedIdentity_ ? "rev" : "fwd";
+    std::string bestFront = fwd5_3_info.comp_.distances_.eventBasedIdentity_ < rev5_3_info.comp_.distances_.eventBasedIdentity_ ? "rev" : "fwd";
+    std::string bestBack = rev3_5_info.comp_.distances_.eventBasedIdentity_ < fwd3_5_info.comp_.distances_.eventBasedIdentity_ ? "rev" : "fwd";
     ++bestCounts[bestFront][bestBack];
     auto forwardScore = fwd5_3_info.comp_.distances_.eventBasedIdentity_ + rev3_5_info.comp_.distances_.eventBasedIdentity_;
     auto reverseScore = rev5_3_info.comp_.distances_.eventBasedIdentity_ + fwd3_5_info.comp_.distances_.eventBasedIdentity_;
@@ -307,6 +326,7 @@ int seqUtilsExtractRunner::countIlluminaAaptors(const njh::progutils::CmdArgs & 
         failedIdentity = true;
       }
       if(failedIdentity){
+        ++failedIdentityReads;
         continue;
       }
       uint32_t startOfBackSeq = seq.seq_.size() - std::min<uint32_t>(searchWithin, len(seq));
@@ -317,6 +337,14 @@ int seqUtilsExtractRunner::countIlluminaAaptors(const njh::progutils::CmdArgs & 
       }
       if(!processRes.revPass_){
         ++failed_fwd3_5_PrimerAln;
+      }
+      if(!processRes.fwdPass_ || !processRes.revPass_){
+        ++failedPrimerAlnReads;
+        continue;
+      }
+      if(processRes.fprimerEnd_ >= processRes.rprimerStart_) {
+        ++failedOverlapCheck;
+        continue;
       }
       if(processRes.fwdPass_ && processRes.revPass_){
         if(extractPars.keepPrimer_){
@@ -341,6 +369,7 @@ int seqUtilsExtractRunner::countIlluminaAaptors(const njh::progutils::CmdArgs & 
         failedIdentity = true;
       }
       if(failedIdentity){
+        ++failedIdentityReads;
         continue;
       }
       uint32_t startOfBackSeq = seq.seq_.size() - std::min<uint32_t>(searchWithin, len(seq));
@@ -350,6 +379,14 @@ int seqUtilsExtractRunner::countIlluminaAaptors(const njh::progutils::CmdArgs & 
       }
       if(!processRes.revPass_){
         ++failed_rev3_5_PrimerAln;
+      }
+      if(!processRes.fwdPass_ || !processRes.revPass_){
+        ++failedPrimerAlnReads;
+        continue;
+      }
+      if(processRes.fprimerEnd_ >= processRes.rprimerStart_) {
+        ++failedOverlapCheck;
+        continue;
       }
       if(processRes.fwdPass_ && processRes.revPass_){
         if(extractPars.keepPrimer_){
@@ -372,12 +409,12 @@ int seqUtilsExtractRunner::countIlluminaAaptors(const njh::progutils::CmdArgs & 
               << "\t" << rev5_3_info.barcode_
               << "\t" << fwd3_5_info.comp_.distances_.eventBasedIdentity_
               << "\t" << fwd3_5_info.barcode_
-              << std::endl;
+              << "\n";
       ++bestBarcodePairsCounts[forwardBar][reverseBar];
       outBest << seq.name_
               << "\t" << direction
               << "\t" << forwardBar
-              << "\t" << reverseBar << std::endl;
+              << "\t" << reverseBar << "\n";
     }
   }
   {
@@ -415,18 +452,16 @@ int seqUtilsExtractRunner::countIlluminaAaptors(const njh::progutils::CmdArgs & 
   }
 
   {
-    uint32_t totalFailedIdentity = failed_fwd5_3_Identity + failed_fwd3_5_Identity + failed_rev5_3_Identity + failed_rev3_5_Identity;
-    uint32_t totalFailedPrimerAln = failed_fwd5_3_PrimerAln + failed_fwd3_5_PrimerAln + failed_rev5_3_PrimerAln + failed_rev3_5_PrimerAln;
-
     OutputStream conditionCount(njh::files::make_path(setUp.pars_.directoryName_, "conditionCount.tab.txt"));
     conditionCount << "condition\tcount\tfrac" << std::endl;
     conditionCount << "passFwd" << "\t" << passFwd << "\t" << passFwd/total << std::endl;
     conditionCount << "passRev" << "\t" << passRev << "\t" << passRev/total << std::endl;
-    conditionCount << "failedIdentity" << "\t" << totalFailedIdentity << "\t" << totalFailedIdentity/total << std::endl;
-    conditionCount << "totalFailedPrimerAln" << "\t" << totalFailedPrimerAln << "\t" << totalFailedPrimerAln/total << std::endl;
+    conditionCount << "failedIdentity" << "\t" << failedIdentityReads << "\t" << failedIdentityReads/total << std::endl;
+    conditionCount << "totalFailedPrimerAln" << "\t" << failedPrimerAlnReads << "\t" << failedPrimerAlnReads/total << std::endl;
     conditionCount << "smallSeq" << "(len <" << minOutputLen << ")" << "\t" << smallSeq << "\t" << smallSeq/total << std::endl;
     conditionCount << "largeSeq" << "(len >" << maxOutputLen << ")" << "\t" << largeSeq << "\t" << largeSeq/total << std::endl;
     conditionCount << "mismatchDirections" << "\t" << mismatchDirections << "\t" << mismatchDirections/total << std::endl;
+    conditionCount << "failedOverlapCheck" << "\t" << failedOverlapCheck << "\t" << failedOverlapCheck/total << std::endl;
 
   }
   return 0;
@@ -467,6 +502,8 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 	setUp.processDirectoryOutputName(true);
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
+	checkAdaptorHasBarcode(illuminaForward, "--illuminaForward");
+	checkAdaptorHasBarcode(illuminaReverse, "--illuminaReverse");
 
 
 	//read in barcodes
@@ -536,7 +573,8 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 	gapPars.gapRightRefExtend_ = 1;
 
 	auto scoring = substituteMatrix::createDegenScoreMatrixLessN(2,-2);
-	uint64_t maxLen = 500;
+	//the aligner does not grow its matrix, so it has to fit the search window and the adaptors
+	uint64_t maxLen = std::max<uint64_t>({500, searchWithin, illuminaForward.size(), illuminaReverse.size()});
 	aligner alignerObj(maxLen, gapPars, scoring, false);
 
 	seqInfo fwd5_3("fwd", illuminaForward);
@@ -560,9 +598,6 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 
 	outPass << "seqName\tdirection\tfwd5_3_score\tfwd5_3_bar\trev3_5_score\trev3_5_bar\trev5_3_score\trev5_3_bar\tfwd3_5_score\tfwd3_5_bar" << std::endl;
 
-	SeqOutput writer(SeqIOOptions::genFastqOut(njh::files::make_path(setUp.pars_.directoryName_, "processed.fastq")));
-	writer.openOut();
-
 	std::map<std::string, std::map<std::string, uint32_t>> bestCounts;
 	std::map<std::string, uint32_t> sampleCounts;
 
@@ -581,11 +616,54 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 
 	uint32_t failedOverlapCheck = 0;
 	uint32_t mismatchDirections = 0;
+	//per read counts, the per primer counts above can count a read twice
+	uint32_t failedIdentityReads = 0;
+	uint32_t failedPrimerAlnReads = 0;
 	double total = 0;
 	uint32_t passFwd = 0;
 	uint32_t passRev = 0;
 	uint32_t fullPass = 0;
 	uint32_t sampleDetermined = 0;
+
+	//best matching samples only depend on the observed barcode, so cache them per observed barcode for each side
+	std::unordered_map<std::string, VecStr> fwdBarSampleCache;
+	std::unordered_map<std::string, VecStr> revBarSampleCache;
+	auto getBestBarSamples = [&barcodes,&alignerBarObj,&barIdentityCutOff,&fwdBarSampleCache,&revBarSampleCache](
+			const std::string & observedBar, bool fwd) -> const VecStr & {
+		auto & cache = fwd ? fwdBarSampleCache : revBarSampleCache;
+		auto cached = cache.find(observedBar);
+		if(cache.end() != cached){
+			return cached->second;
+		}
+		VecStr bestSample{"Undetermined"};
+		uint32_t bestIds = 0;
+		int32_t bestAlnScore = 0;
+		seqInfo obsBarSeq(fwd ? "determined-fwd" : "determined-rev", observedBar);
+		for(const auto & bar : barcodes){
+			const auto & expectedBar = fwd ? bar.fwBar_ : bar.revBar_;
+			alignerBarObj.alignCacheGlobal(expectedBar, obsBarSeq);
+			alignerBarObj.profilePrimerAlignment(expectedBar, obsBarSeq);
+			if(alignerBarObj.comp_.distances_.eventBasedIdentity_ >=barIdentityCutOff){
+				if(alignerBarObj.comp_.distances_.ref_.identities_ > bestIds){
+					bestSample.clear();
+					bestAlnScore = alignerBarObj.parts_.score_;
+					bestIds = alignerBarObj.comp_.distances_.ref_.identities_;
+					bestSample.emplace_back(bar.sampleName_);
+				}else if(alignerBarObj.comp_.distances_.ref_.identities_ == bestIds){
+					if(alignerBarObj.parts_.score_ > bestAlnScore){
+						bestSample.clear();
+						bestAlnScore = alignerBarObj.parts_.score_;
+						bestIds = alignerBarObj.comp_.distances_.ref_.identities_;
+						bestSample.emplace_back(bar.sampleName_);
+					}else if(alignerBarObj.parts_.score_ == bestAlnScore){
+						bestSample.emplace_back(bar.sampleName_);
+					}
+				}
+			}
+		}
+		return cache.emplace(observedBar, std::move(bestSample)).first->second;
+	};
+
 	while(seqReader.readNextRead(seq)){
 		++total;
     if(seq.seq_.size() < minOutputLen){
@@ -602,7 +680,7 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
     seqInfo backSeq(seq.getSubRead(len(seq) -std::min<uint32_t>(searchWithin, len(seq))));
 
 		//create alignment of all primers/adapters
-		alignerObj.alignCacheGlobal(frontSeq, fwd5_3);
+		alignerObj.alignRegGlobal(frontSeq, fwd5_3);
 		alignerObj.profilePrimerAlignment(frontSeq, fwd5_3);
 		PrimerAlnInfo fwd5_3_info("fwd5_3", alignerObj.comp_, alignerObj.alignObjectA_.seqBase_, alignerObj.alignObjectB_.seqBase_);
 		if(setUp.pars_.debug_) {
@@ -611,7 +689,7 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 		}
 
 
-		alignerObj.alignCacheGlobal(backSeq, rev3_5);
+		alignerObj.alignRegGlobal(backSeq, rev3_5);
 		alignerObj.profilePrimerAlignment(backSeq, rev3_5);
 		PrimerAlnInfo rev3_5_info("rev3_5", alignerObj.comp_, alignerObj.alignObjectA_.seqBase_, alignerObj.alignObjectB_.seqBase_);
 		if(setUp.pars_.debug_) {
@@ -620,7 +698,7 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 		}
 
 
-		alignerObj.alignCacheGlobal(frontSeq, rev5_3);
+		alignerObj.alignRegGlobal(frontSeq, rev5_3);
 		alignerObj.profilePrimerAlignment(frontSeq, rev5_3);
 		PrimerAlnInfo rev5_3_info("rev5_3", alignerObj.comp_, alignerObj.alignObjectA_.seqBase_, alignerObj.alignObjectB_.seqBase_);
 		if(setUp.pars_.debug_) {
@@ -629,7 +707,7 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 		}
 
 
-		alignerObj.alignCacheGlobal(backSeq, fwd3_5);
+		alignerObj.alignRegGlobal(backSeq, fwd3_5);
 		alignerObj.profilePrimerAlignment(backSeq, fwd3_5);
 		PrimerAlnInfo fwd3_5_info("fwd3_5", alignerObj.comp_, alignerObj.alignObjectA_.seqBase_, alignerObj.alignObjectB_.seqBase_);
 		if(setUp.pars_.debug_) {
@@ -652,11 +730,11 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 			<< "\t" << rev5_3_info.barcode_
 			<< "\t" << fwd3_5_info.comp_.distances_.eventBasedIdentity_
 			<< "\t" << fwd3_5_info.barcode_
-			<< std::endl;
+			<< "\n";
 
 		//determine the best alignment for the front of the sequence of either the forward primer or the reverse primer
-		std::string bestFront = rev5_3_info.comp_.distances_.eventBasedIdentity_ < fwd5_3_info.comp_.distances_.eventBasedIdentity_ ? "rev" : "fwd";
-		std::string bestBack = fwd3_5_info.comp_.distances_.eventBasedIdentity_ < rev3_5_info.comp_.distances_.eventBasedIdentity_ ? "rev" : "fwd";
+		std::string bestFront = fwd5_3_info.comp_.distances_.eventBasedIdentity_ < rev5_3_info.comp_.distances_.eventBasedIdentity_ ? "rev" : "fwd";
+		std::string bestBack = rev3_5_info.comp_.distances_.eventBasedIdentity_ < fwd3_5_info.comp_.distances_.eventBasedIdentity_ ? "rev" : "fwd";
 		++bestCounts[bestFront][bestBack];
 
 		//get the scores to see which direction should be considered
@@ -692,6 +770,7 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 				failedIdentity = true;
 			}
 			if(failedIdentity){
+				++failedIdentityReads;
 				continue;
 			}
 
@@ -708,7 +787,10 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 			if(!processRes.revPass_){
 				++failed_fwd3_5_PrimerAln;
 			}
-
+			if(!processRes.fwdPass_ || !processRes.revPass_){
+				++failedPrimerAlnReads;
+				continue;
+			}
 			if(processRes.fprimerEnd_ >= processRes.rprimerStart_) {
 				++failedOverlapCheck;
 				continue;
@@ -736,6 +818,7 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 				failedIdentity = true;
 			}
 			if(failedIdentity){
+				++failedIdentityReads;
 				continue;
 			}
 			uint32_t startOfBackSeq = seq.seq_.size() - std::min<uint32_t>(searchWithin, len(seq));
@@ -745,6 +828,10 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 			}
 			if(!processRes.revPass_){
 				++failed_rev3_5_PrimerAln;
+			}
+			if(!processRes.fwdPass_ || !processRes.revPass_){
+				++failedPrimerAlnReads;
+				continue;
 			}
 			if(processRes.fprimerEnd_ >= processRes.rprimerStart_) {
 				++failedOverlapCheck;
@@ -766,57 +853,13 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 			{
 				VecStr fwdBestSample{"Undetermined"};
 				VecStr revBestSample{"Undetermined"};
-				uint32_t bestFwdIds = 0;
-				uint32_t bestFwdAlnScore = 0;
-				uint32_t bestRevIds = 0;
-				uint32_t bestRevAlnScore = 0;
-				seqInfo fwdBarSeq("determined-fwd", forwardBar);
-				seqInfo revBarSeq("determined-rev", reverseBar);
 
 				if(forwardBar.size() < maxBarLen &&
 						reverseBar.size() < maxBarLen &&
 						forwardBar.size() > 5 &&
 						reverseBar.size() > 5){
-					for(const auto & bar : barcodes){
-						alignerBarObj.alignCacheGlobal(bar.fwBar_, fwdBarSeq);
-						alignerBarObj.profilePrimerAlignment(bar.fwBar_, fwdBarSeq);
-						if(alignerBarObj.comp_.distances_.eventBasedIdentity_ >=barIdentityCutOff){
-							if(alignerBarObj.comp_.distances_.ref_.identities_ > bestFwdIds){
-								fwdBestSample.clear();
-								bestFwdAlnScore = alignerBarObj.parts_.score_;
-								bestFwdIds = alignerBarObj.comp_.distances_.ref_.identities_;
-								fwdBestSample.emplace_back(bar.sampleName_);
-							}else if(alignerBarObj.comp_.distances_.ref_.identities_ == bestFwdIds){
-								if(alignerBarObj.parts_.score_ > bestFwdAlnScore){
-									fwdBestSample.clear();
-									bestFwdAlnScore = alignerBarObj.parts_.score_;
-									bestFwdIds = alignerBarObj.comp_.distances_.ref_.identities_;
-									fwdBestSample.emplace_back(bar.sampleName_);
-								}else if(alignerBarObj.parts_.score_ == bestFwdAlnScore){
-									fwdBestSample.emplace_back(bar.sampleName_);
-								}
-							}
-						}
-						alignerBarObj.alignCacheGlobal(bar.revBar_, revBarSeq);
-						alignerBarObj.profilePrimerAlignment(bar.revBar_, revBarSeq);
-						if(alignerBarObj.comp_.distances_.eventBasedIdentity_ >=barIdentityCutOff){
-							if(alignerBarObj.comp_.distances_.ref_.identities_ > bestRevIds){
-								revBestSample.clear();
-								bestRevAlnScore = alignerBarObj.parts_.score_;
-								bestRevIds = alignerBarObj.comp_.distances_.ref_.identities_;
-								revBestSample.emplace_back(bar.sampleName_);
-							}else if(alignerBarObj.comp_.distances_.ref_.identities_ == bestRevIds){
-								if(alignerBarObj.parts_.score_ > bestRevAlnScore){
-									revBestSample.clear();
-									bestRevAlnScore = alignerBarObj.parts_.score_;
-									bestRevIds = alignerBarObj.comp_.distances_.ref_.identities_;
-									revBestSample.emplace_back(bar.sampleName_);
-								}else if(alignerBarObj.parts_.score_ == bestRevAlnScore){
-									revBestSample.emplace_back(bar.sampleName_);
-								}
-							}
-						}
-					}
+					fwdBestSample = getBestBarSamples(forwardBar, true);
+					revBestSample = getBestBarSamples(reverseBar, false);
 				}
 				//need one for each and need to match
 				//if multiple in one or both, see if there is only one pair since barcodes can be reused several times
@@ -870,11 +913,11 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 				<< "\t" << rev5_3_info.barcode_
 				<< "\t" << fwd3_5_info.comp_.distances_.eventBasedIdentity_
 				<< "\t" << fwd3_5_info.barcode_
-				<< std::endl;
+				<< "\n";
 			outBest << seq.name_
 					<< "\t" << direction
 					<< "\t" << forwardBar
-					<< "\t" << reverseBar << std::endl;
+					<< "\t" << reverseBar << "\n";
 		}
 	}
 	OutputStream outBestCounts(njh::files::make_path(setUp.pars_.directoryName_, "bestDirectionCounts.tab.txt"));
@@ -901,8 +944,6 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 	}
 
 	{
-		uint32_t totalFailedIdentity = failed_fwd5_3_Identity + failed_fwd3_5_Identity + failed_rev5_3_Identity + failed_rev3_5_Identity;
-		uint32_t totalFailedPrimerAln = failed_fwd5_3_PrimerAln + failed_fwd3_5_PrimerAln + failed_rev5_3_PrimerAln + failed_rev3_5_PrimerAln;
 
 		OutputStream conditionCount(njh::files::make_path(setUp.pars_.directoryName_, "conditionCount.tab.txt"));
 		conditionCount << "condition\tcount\tfrac" << std::endl;
@@ -914,8 +955,8 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 		conditionCount << "sampleDetermined" << "\t" << sampleDetermined << "\t" << sampleDetermined/total << std::endl;
 
 
-		conditionCount << "failedIdentity" << "\t" << totalFailedIdentity << "\t" << totalFailedIdentity/total << std::endl;
-		conditionCount << "totalFailedPrimerAln" << "\t" << totalFailedPrimerAln << "\t" << totalFailedPrimerAln/total << std::endl;
+		conditionCount << "failedIdentity" << "\t" << failedIdentityReads << "\t" << failedIdentityReads/total << std::endl;
+		conditionCount << "totalFailedPrimerAln" << "\t" << failedPrimerAlnReads << "\t" << failedPrimerAlnReads/total << std::endl;
     conditionCount << "smallSeq" << "(len <" << minOutputLen << ")" << "\t" << smallSeq << "\t" << smallSeq/total << std::endl;
     conditionCount << "largeSeq" << "(len >" << maxOutputLen << ")" << "\t" << largeSeq << "\t" << largeSeq/total << std::endl;
 		conditionCount << "mismatchDirections" << "\t" << mismatchDirections << "\t" << mismatchDirections/total << std::endl;

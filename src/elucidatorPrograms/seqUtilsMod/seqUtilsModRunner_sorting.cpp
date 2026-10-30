@@ -243,6 +243,15 @@ int seqUtilsModRunner::sortReads(
 	SeqIO reader(setUp.pars_.ioOptions_);
 	reader.openIn();
 	auto inReads = reader.in_.readAllReads<readObject>();
+	//an empty read usually means something is wrong with the input, so error rather than sort it
+	for (const auto pos : iter::range(inReads.size())) {
+		if (inReads[pos].seqBase_.seq_.empty()) {
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "read " << pos + 1 << ", " << inReads[pos].seqBase_.name_
+					<< ", in " << setUp.pars_.ioOptions_.firstName_ << " has no sequence" << "\n";
+			throw std::runtime_error { ss.str() };
+		}
+	}
 	if (stringToLowerReturn(sortBy) == "gc") {
 		//compute each read's gc content once rather than on every comparison
 		std::vector<std::pair<double, readObject>> readsWithGc;
@@ -251,10 +260,11 @@ int seqUtilsModRunner::sortReads(
 			double gc = read.getGCContent();
 			readsWithGc.emplace_back(gc, std::move(read));
 		}
+		//ties are broken by sequence so the order is the same every run
 		std::sort(readsWithGc.begin(), readsWithGc.end(),
-				[](const std::pair<double, readObject> & first, const std::pair<double, readObject> & second) {
+				[decending](const std::pair<double, readObject> & first, const std::pair<double, readObject> & second) {
 					if (first.first != second.first) {
-						return first.first < second.first;
+						return decending ? first.first > second.first : first.first < second.first;
 					}
 					return first.second.seqBase_.seq_ < second.second.seqBase_.seq_;
 				});
