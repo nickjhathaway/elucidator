@@ -55,8 +55,8 @@ int kmerSetExpRunner::extractByKmerUniqueSets(const njh::progutils::CmdArgs &inp
   setUp.startARunLog(setUp.pars_.directoryName_);
   setUp.writeParametersFile(setUp.pars_.directoryName_ + "parametersUsed.txt", false, false);
 
-  uint32_t extractionKmer = UniqueKmerSetHelper::getKmerLenFromUniqueKmerTable(kmersPerTargetFnp);
-  auto allKmersPerTarget = UniqueKmerSetHelper::readInUniqueKmerTablePerSet(kmersPerTargetFnp);
+  uint32_t extractionKmer = KmerCollectionIO::getKmerLength(kmersPerTargetFnp);
+  auto allKmersPerTarget = KmerCollectionIO::readHashedCollections(kmersPerTargetFnp);
   if(allKmersPerTarget.empty()){
     std::stringstream ss;
     ss << __PRETTY_FUNCTION__ << ", error " << "no targets read in from " << kmersPerTargetFnp << "\n";

@@ -164,6 +164,10 @@ int kmerExpRunner::profileSharedKmerBlocks(const njh::progutils::CmdArgs & input
 	setUp.setOption(kLen, "--kLen", "kmer Len");
 	setUp.setOption(allowableMissing, "--allowableMissing", "allowable Missing for near perfect outputs");
 	setUp.processSeq(true);
+	if (!setUp.failed_ && len(setUp.pars_.seqObj_) < kLen) {
+		setUp.failed_ = true;
+		setUp.addWarning("--seq must be at least --kLen long");
+	}
 	bool seqsDirPresent = setUp.setOption(seqsDir, "--seqsDir", "Name of the directory that holds several fasta files to profile");
 	setUp.processDefaultReader(seqsDirPresent);
 	setUp.processDirectoryOutputName("_profileSharedKmerBlocks_TODAY", true);

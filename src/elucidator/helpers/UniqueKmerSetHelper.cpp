@@ -16,6 +16,163 @@ std::shared_ptr<const UniqueKmerSetHelper::InvertedKmerIndex> UniqueKmerSetHelpe
 	return njhseq::KmerSetInvertedIndex::get(sets);
 }
 
+std::shared_ptr<const UniqueKmerSetHelper::InvertedKmerIndex> UniqueKmerSetHelper::getUsableInvertedIndex(
+		const std::unordered_map<std::string, std::unordered_set<uint64_t>> & sets, bool use) {
+	if (!use) {
+		return nullptr;
+	}
+	auto index = getInvertedIndex(sets);
+	if (nullptr != index && index->usable(sets)) {
+		return index;
+	}
+	return nullptr;
+}
+
+void UniqueKmerSetHelper::countReadKmers(const std::string & seq, uint32_t klen, bool includeRevComp,
+		const SimpleKmerHash & hasher, std::unordered_map<uint64_t, uint64_t> & kmerCounts) {
+	if (seq.size() <= klen) {
+		return;
+	}
+	for (uint32_t pos = 0; pos < seq.size() - klen + 1; ++pos) {
+		++kmerCounts[hasher.hash(seq, pos, klen)];
+	}
+	if (includeRevComp) {
+		for (uint32_t pos = 0; pos < seq.size() - klen + 1; ++pos) {
+			++kmerCounts[hasher.revCompHash(seq, pos, klen)];
+		}
+	}
+}
+
+void UniqueKmerSetHelper::countPairedReadKmers(const PairedRead & pseq, uint32_t klen, bool includeRevComp,
+		const SimpleKmerHash & hasher, std::unordered_map<uint64_t, uint64_t> & kmerCounts) {
+	const auto & first = pseq.seqBase_.seq_;
+	const auto & mate = pseq.mateSeqBase_.seq_;
+	std::unordered_set<uint64_t> kmersInFirstMate;
+	if (first.size() > klen) {
+		for (uint32_t pos = 0; pos < first.size() - klen + 1; ++pos) {
+			const auto hash = hasher.hash(first, pos, klen);
+			kmersInFirstMate.emplace(hash);
+			++kmerCounts[hash];
+		}
+	}
+	if (mate.size() > klen) {
+		for (uint32_t pos = 0; pos < mate.size() - klen + 1; ++pos) {
+			const auto hash = hasher.hash(mate, pos, klen);
+			if (!njh::in(hash, kmersInFirstMate)) {
+				++kmerCounts[hash];
+			}
+		}
+	}
+	if (includeRevComp) {
+		if (first.size() > klen) {
+			for (uint32_t pos = 0; pos < first.size() - klen + 1; ++pos) {
+				const auto hash = hasher.revCompHash(first, pos, klen);
+				kmersInFirstMate.emplace(hash);
+				++kmerCounts[hash];
+			}
+		}
+		if (mate.size() > klen) {
+			for (uint32_t pos = 0; pos < mate.size() - klen + 1; ++pos) {
+				const auto hash = hasher.revCompHash(mate, pos, klen);
+				if (!njh::in(hash, kmersInFirstMate)) {
+					++kmerCounts[hash];
+				}
+			}
+		}
+	}
+}
+
+void UniqueKmerSetHelper::KmerSetTally::addRead(const std::unordered_map<uint64_t, uint64_t> & kmerCounts,
+		const std::unordered_map<std::string, std::unordered_set<uint64_t>> & uniqueKmersPerSet,
+		const std::shared_ptr<const InvertedKmerIndex> & invIndex) {
+	std::unordered_map<std::string, uint32_t> foundPerSet;
+	if (nullptr != invIndex) {
+		for (const auto & kmer : kmerCounts) {
+			const auto idx = invIndex->firstSet(kmer.first);
+			if (InvertedKmerIndex::NO_SET == idx) {
+				continue;
+			}
+			const auto & setName = invIndex->setNames_[idx];
+			occurrencesPerSet[setName][kmer.first] += kmer.second;
+			++foundPerSet[setName];
+		}
+	} else {
+		for (const auto & kmer : kmerCounts) {
+			for (const auto & uniqueKmers : uniqueKmersPerSet) {
+				if (njh::in(kmer.first, uniqueKmers.second)) {
+					occurrencesPerSet[uniqueKmers.first][kmer.first] += kmer.second;
+					++foundPerSet[uniqueKmers.first];
+					break;
+				}
+			}
+		}
+	}
+	for (const auto & found : foundPerSet) {
+		kmersPerReadPerSet[found.first].emplace_back(found.second);
+	}
+}
+
+void UniqueKmerSetHelper::KmerSetTally::add(const KmerSetTally & other) {
+	for (const auto & occurrences : other.occurrencesPerSet) {
+		auto & setOccurrences = occurrencesPerSet[occurrences.first];
+		for (const auto & count : occurrences.second) {
+			setOccurrences[count.first] += count.second;
+		}
+	}
+	for (const auto & perRead : other.kmersPerReadPerSet) {
+		addOtherVec(kmersPerReadPerSet[perRead.first], perRead.second);
+	}
+}
+
+void UniqueKmerSetHelper::KmerSetTally::writeHeader(std::ostream & out) {
+	out << "sample\tset\treads\tmeanPerRead\ttotal\ttotal1\ttotal2\tunique\tunique1\tunique2\tuniqueInSet\tmeanOccurrence\tmeanOccurrence1\tmeanOccurrence2\tfracUniqFound\tfracUniqFound1\tfracUniqFound2" << std::endl;
+}
+
+void UniqueKmerSetHelper::KmerSetTally::writeSetRow(std::ostream & out, const std::string & sampleName, const std::string & setName,
+		const std::unordered_set<uint64_t> & setKmers) const {
+	const std::unordered_map<uint64_t, uint64_t> noOccurrences;
+	const std::vector<uint64_t> noReads;
+	const auto occurrencesSearch = occurrencesPerSet.find(setName);
+	const auto & occurrences = occurrencesPerSet.end() == occurrencesSearch ? noOccurrences : occurrencesSearch->second;
+	const auto readsSearch = kmersPerReadPerSet.find(setName);
+	const auto & kmersPerRead = kmersPerReadPerSet.end() == readsSearch ? noReads : readsSearch->second;
+
+	uint64_t total = 0;
+	uint64_t totalMoreThanOnce = 0;
+	uint64_t totalMoreThanTwice = 0;
+	uint64_t kmersMoreThanOnce = 0;
+	uint64_t kmersMoreThanTwice = 0;
+	for (const auto & count : occurrences) {
+		total += count.second;
+		if (count.second > 1) {
+			totalMoreThanOnce += count.second;
+			++kmersMoreThanOnce;
+		}
+		if (count.second > 2) {
+			totalMoreThanTwice += count.second;
+			++kmersMoreThanTwice;
+		}
+	}
+	out << sampleName
+			<< "\t" << setName
+			<< "\t" << kmersPerRead.size()
+			<< "\t" << static_cast<long double>(vectorMean(kmersPerRead))
+			<< "\t" << total
+			<< "\t" << totalMoreThanOnce
+			<< "\t" << totalMoreThanTwice
+			<< "\t" << occurrences.size()
+			<< "\t" << kmersMoreThanOnce
+			<< "\t" << kmersMoreThanTwice
+			<< "\t" << setKmers.size()
+			<< "\t" << static_cast<long double>(total) / occurrences.size()
+			<< "\t" << static_cast<long double>(totalMoreThanOnce) / kmersMoreThanOnce
+			<< "\t" << static_cast<long double>(totalMoreThanTwice) / kmersMoreThanTwice
+			<< "\t" << static_cast<long double>(occurrences.size()) / setKmers.size()
+			<< "\t" << static_cast<long double>(kmersMoreThanOnce) / setKmers.size()
+			<< "\t" << static_cast<long double>(kmersMoreThanTwice) / setKmers.size()
+			<< std::endl;
+}
+
 uint32_t UniqueKmerSetHelper::CompareReadToSetRes::getTotalDetermined() const {
 	uint32_t count = 0;
 	for (auto &perSet: foundPerSet) {
@@ -25,6 +182,18 @@ uint32_t UniqueKmerSetHelper::CompareReadToSetRes::getTotalDetermined() const {
 		count += perSet.second;
 	}
 	return count;
+}
+
+void UniqueKmerSetHelper::CompareReadToSetRes::clearWinnerIfOtherSetsHit() {
+	if ("undetermined" == winnerSet) {
+		return;
+	}
+	for (const auto & perSet : winnerRevComp ? foundPerSetRevComp : foundPerSet) {
+		if (perSet.first != winnerSet && perSet.second > 0) {
+			winnerSet = "undetermined";
+			return;
+		}
+	}
 }
 
 
@@ -107,47 +276,6 @@ void UniqueKmerSetHelper::CompareReadToSetRes::writeOutput(std::ostream &out, co
 	for (const auto &row: content) {
 		out << njh::conToStr(row, delim) << "\n";
 	}
-}
-
-
-uint32_t UniqueKmerSetHelper::getKmerLenFromUniqueKmerTable(const bfs::path &uniqueKmerTable) {
-	auto toks = tokenizeString(njh::files::getFirstLine(uniqueKmerTable), "\t");
-	return toks.at(1).size();
-}
-
-
-std::unordered_map<std::string, std::unordered_set<uint64_t>>
-UniqueKmerSetHelper::readInUniqueKmerTablePerSet(const bfs::path &uniqueKmerTableFnp) {
-	std::unordered_map<std::string, std::unordered_set<uint64_t>> ret;
-	SimpleKmerHash hasher;
-	TableReader uniqKmers(TableIOOpts::genTabFileIn(uniqueKmerTableFnp, false));
-	if (uniqKmers.header_.nCol() < 2) {
-		std::stringstream ss;
-		ss << __PRETTY_FUNCTION__ << ", error " << "need to have 2 columns" << "\n";
-		throw std::runtime_error{ss.str()};
-	}
-	VecStr row;
-	while (uniqKmers.getNextRow(row)) {
-		ret[row[0]].emplace(hasher.hash(row[1]));
-	}
-	return ret;
-}
-
-std::unordered_set<uint64_t>
-UniqueKmerSetHelper::readInUniqueKmerTableSetsCollapsed(const bfs::path &uniqueKmerTableFnp) {
-	std::unordered_set<uint64_t> ret;
-	SimpleKmerHash hasher;
-	TableReader uniqKmers(TableIOOpts::genTabFileIn(uniqueKmerTableFnp, false));
-	if (uniqKmers.header_.nCol() < 2) {
-		std::stringstream ss;
-		ss << __PRETTY_FUNCTION__ << ", error " << "need to have 2 columns" << "\n";
-		throw std::runtime_error{ss.str()};
-	}
-	VecStr row;
-	while (uniqKmers.getNextRow(row)) {
-		ret.emplace(hasher.hash(row[1]));
-	}
-	return ret;
 }
 
 

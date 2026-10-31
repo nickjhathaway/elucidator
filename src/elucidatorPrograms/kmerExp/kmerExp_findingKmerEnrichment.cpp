@@ -61,7 +61,11 @@ int kmerExpRunner::findingKmerEnrichment(const njh::progutils::CmdArgs & inputCo
 	setUp.setOption(numThreads, "--numThreads", "number Threads");
 	setUp.setOption(minGroupSize, "--minGroupSize", "minGroupSize");
 	setUp.setOption(doNotAddOneToAll, "--doNotAddOneToAll", "Do not add One To All counts");
-	setUp.setOption(kmerLength, "--kmerLength", "kmer Length");
+	setUp.setOption(kmerLength, "--kmerLength", "kmer Length, 1 to 19");
+	if (kmerLength < 1 || kmerLength > 19) {
+		setUp.failed_ = true;
+		setUp.addWarning("--kmerLength must be between 1 and 19, was set to " + estd::to_string(kmerLength));
+	}
 	setUp.setOption(inputFiles, "--inputFiles", "input files", true);
 	setUp.setOption(sampleMetaFnp, "--sampleMetaFnp", "Sample Meta Fnp to find enrichment of", true);
 	setUp.setOption(ignoreMetaFields, "--fieldsToIgnore", "Meta fields to ignore");
@@ -127,10 +131,14 @@ int kmerExpRunner::findingKmerEnrichment(const njh::progutils::CmdArgs & inputCo
 			if(njh::endsWith(inputFile.string(), ".gz")){
 				sample = bfs::path(sample).replace_extension("").string();
 			}
+			const uint32_t sampleKey = sampleToKey.at(sample);
 			while(reader.readNextRead(seq)){
+				if (seq.seq_.size() < kmerLength) {
+					continue;
+				}
 				for (const auto pos : iter::range(seq.seq_.size() + 1 - kmerLength)) {
-					currentThread_kmersSamples[khasher.hash(seq.seq_, pos, kmerLength)].emplace(sampleToKey[sample]);
-					currentThread_kmersSamples[khasher.revCompHash(seq.seq_, pos, kmerLength)].emplace(sampleToKey[sample]);
+					currentThread_kmersSamples[khasher.hash(seq.seq_, pos, kmerLength)].emplace(sampleKey);
+					currentThread_kmersSamples[khasher.revCompHash(seq.seq_, pos, kmerLength)].emplace(sampleKey);
 				}
 			}
 		}

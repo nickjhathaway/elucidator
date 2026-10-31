@@ -109,6 +109,10 @@ int kmerExpRunner::kmerSearch(const njh::progutils::CmdArgs & inputCommands){
 	uint32_t minStreakSize = kLen + 1;
 	setUp.setOption(minStreakSize, "--minStreakSize", "Min Streak Size");
 	setUp.setOption(genome, "--genome", "Genome Fasta file", true);
+	if (!setUp.failed_ && len(setUp.pars_.seqObj_) < kLen) {
+		setUp.failed_ = true;
+		setUp.addWarning("--seq must be at least --kLen long");
+	}
 	setUp.processWritingOptions(outOpts);
 	setUp.finishSetUp(std::cout);
 
@@ -310,6 +314,9 @@ int kmerExpRunner::genomeKmerCompare(const njh::progutils::CmdArgs & inputComman
 	SeqInput reader(genome1Opts);
 	reader.openIn();
 	while(reader.readNextRead(seq)){
+		if (len(seq) < kLen) {
+			continue;
+		}
 		uint32_t num = 0;
 		for(const auto pos : iter::range(len(seq) - kLen + 1)){
 			auto kmer = seq.seq_.substr(pos, kLen);
@@ -550,6 +557,10 @@ int kmerExpRunner::getKmerCountsPerLocationOnSeq(const njh::progutils::CmdArgs &
 	setUp.processSeq(true);
 	setUp.processWritingOptions(outOpts);
 	setUp.setOption(kmerLength, "--kmerLength", "Kmer Length");
+	if (!setUp.failed_ && len(setUp.pars_.seqObj_) < kmerLength) {
+		setUp.failed_ = true;
+		setUp.addWarning("--seq must be at least --kmerLength long");
+	}
 	bfs::path fastq1Fnp = "";
 	bfs::path fastq2Fnp = "";
 	bfs::path fastqFnp = "";
@@ -740,10 +751,13 @@ int kmerExpRunner::getKmerCountsPerLocationOnSeqs(const njh::progutils::CmdArgs 
 	SeqInput inputReader(setUp.pars_.ioOptions_);
 	inputReader.openIn();
 	while(inputReader.readNextRead(seq)){
+		if (len(seq) < kmerLength) {
+			continue;
+		}
 		for(const auto pos : iter::range(len(seq) - kmerLength + 1 )){
 			auto kmer = seq.seq_.substr(pos, kmerLength);
 			uint32_t connectorCount = 0;
-			if(pos != len(setUp.pars_.seqObj_) - kmerLength){
+			if(pos != len(seq) - kmerLength){
 				auto nextKmer = seq.seq_.substr(pos + 1, kmerLength);
 				auto n = graph.nodes_[graph.nodePositions_[kmer]];
 				for(const auto & e : n->tailEdges_){
@@ -829,10 +843,10 @@ int kmerExpRunner::filterSeqsBelowMedianKmerCoverage(const njh::progutils::CmdAr
 	while(inputReader.readNextRead(seq)){
 		std::vector<uint32_t> counts;
 		std::vector<uint32_t> connectorCounts;
-		for(const auto pos : iter::range(len(seq) - kmerLength + 1 )){
+		for(const auto pos : iter::range(len(seq) >= kmerLength ? len(seq) - kmerLength + 1 : 0)){
 			auto kmer = seq.seq_.substr(pos, kmerLength);
 			uint32_t connectorCount = 0;
-			if(pos != len(setUp.pars_.seqObj_) - kmerLength){
+			if(pos != len(seq) - kmerLength){
 				auto nextKmer = seq.seq_.substr(pos + 1, kmerLength);
 				auto n = graph.nodes_[graph.nodePositions_[kmer]];
 				for(const auto & e : n->tailEdges_){

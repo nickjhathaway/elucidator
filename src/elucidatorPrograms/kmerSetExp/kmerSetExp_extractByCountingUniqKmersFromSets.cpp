@@ -57,8 +57,8 @@ int kmerSetExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::Cmd
 	watch.setLapName("initial");
 
 	watch.startNewLap("reading in unique kmer table");
-	compPars.klen = UniqueKmerSetHelper::getKmerLenFromUniqueKmerTable(countTable);
-	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet = UniqueKmerSetHelper::readInUniqueKmerTablePerSet(countTable);
+	compPars.klen = KmerCollectionIO::getKmerLength(countTable);
+	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet = KmerCollectionIO::readHashedCollections(countTable);
 	{
 		//the index handles shared k-mers, but whether the sets are actually exclusive changes how the
 		//winner-takes-most classification behaves, so report it rather than assume it
@@ -73,7 +73,7 @@ int kmerSetExpRunner::countingUniqKmersFromSetsPerRead(const njh::progutils::Cmd
 	std::string nonUniqueRegionName = "NON_UNIQUE";
 	std::unordered_set<uint64_t> nonUniqueKmersPerSet;
 	if (!nonUniqueKmerTable.empty()) {
-		nonUniqueKmersPerSet = UniqueKmerSetHelper::readInUniqueKmerTableSetsCollapsed(nonUniqueKmerTable);
+		nonUniqueKmersPerSet = KmerCollectionIO::readHashedKmers(nonUniqueKmerTable);
 	}
 	if(setUp.pars_.verbose_){
 		std::cout << watch.getLapName() << "\t" << watch.timeLapFormatted() <<std::endl;
@@ -538,7 +538,7 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 	watch.startNewLap("reading in unique kmer table");
 
 
-	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet = UniqueKmerSetHelper::readInUniqueKmerTablePerSet(
+	std::unordered_map<std::string, std::unordered_set<uint64_t>> uniqueKmersPerSet = KmerCollectionIO::readHashedCollections(
 					countTable);
 	{
 		//the index handles shared k-mers, but whether the sets are actually exclusive changes how the
@@ -554,7 +554,7 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 	std::string nonUniqueRegionName = "NON_UNIQUE";
 	std::unordered_set<uint64_t> nonUniqueKmersPerSet;
 	if (!nonUniqueKmerTable.empty()) {
-		nonUniqueKmersPerSet = UniqueKmerSetHelper::readInUniqueKmerTableSetsCollapsed(nonUniqueKmerTable);
+		nonUniqueKmersPerSet = KmerCollectionIO::readHashedKmers(nonUniqueKmerTable);
 	}
 
 	if(setUp.pars_.verbose_){
@@ -1383,18 +1383,11 @@ int kmerSetExpRunner::extractByCountingUniqKmersFromSets(const njh::progutils::C
 	}
 
 	if(extractingPars.writeOutFinalKmerSets){
-		SimpleKmerHash hasher;
 		watch.startNewLap(njh::pasteAsStr("write Out Final Kmer Sets"));
 		OutputStream finalUniqueKmerSetsOut(njh::files::make_path(setUp.pars_.directoryName_, "finalUniqueKmerSets.tsv.gz"));
-		for(const auto & uniqKSet : uniqueKmersPerSet){
-			for(const auto & uniqK : uniqKSet.second){
-				finalUniqueKmerSetsOut << uniqKSet.first << "\t" << hasher.reverseHash(uniqK)  << "\n";
-			}
-		}
+		KmerCollectionIO::writeHashedCollections(finalUniqueKmerSetsOut, uniqueKmersPerSet);
 		OutputStream nonUniqueKmerSets(njh::files::make_path(setUp.pars_.directoryName_, "nonUniqueKmers_finalUniqueKmerSets.tsv.gz"));
-		for(const auto & nonUniqK : nonUniqueKmersPerSet){
-			nonUniqueKmerSets << nonUniqueRegionName << "\t" << hasher.reverseHash(nonUniqK) << "\n";
-		}
+		KmerCollectionIO::writeHashedCollection(nonUniqueKmerSets, nonUniqueRegionName, nonUniqueKmersPerSet);
 	}
 	if(!keepTemporaryFiles){
 		if (bamFnpSet) {

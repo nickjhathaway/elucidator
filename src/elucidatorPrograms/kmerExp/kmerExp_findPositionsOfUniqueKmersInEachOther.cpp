@@ -711,6 +711,9 @@ int kmerExpRunner::chromVsChromUniqueComp(const njh::progutils::CmdArgs & inputC
 
 			std::string seq2Seq;
 			tReader[seq2Chrom]->getSequence(seq2Seq);
+			if (seq1Seq.size() < kmerLength) {
+				continue;
+			}
 			{
 				kmerInfo kInfo1(seq1Seq, kmerLength, false);
 				auto seq2Block = KmersSharedBlocks(seq2Chrom, seq2Seq, kmerLength);
@@ -840,6 +843,10 @@ int kmerExpRunner::findPositionsOfUniqueKmersInEachOther(const njh::progutils::C
 
 	setUp.processSeq(seq1, "--seq1", "First sequence", true);
 	setUp.processSeq(seq2, "--seq2", "Second sequence", true);
+	if (!setUp.failed_ && (len(seq1) < kmerLength || len(seq2) < kmerLength)) {
+		setUp.failed_ = true;
+		setUp.addWarning("--seq1 and --seq2 must be at least --kmerLength long");
+	}
 	setUp.finishSetUp(std::cout);
 
 	OutputStream out(outOpts);

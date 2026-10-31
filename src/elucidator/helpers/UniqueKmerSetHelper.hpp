@@ -19,34 +19,6 @@ namespace njhseq {
 class UniqueKmerSetHelper {
 public:
 
-	/**
-	 * @brief Get kmer length used to create unique kmer table
-	 * @param uniqueKmerTableFnp the file path to the table of unique kmers, headerless column 1) set name, 2) kmer
-	 * @return the kmer length of the table
-	 *
-	 * Expects the file to be a two column table with kmers in the second column, kmers can't be longer than 19 in length
-	 *
-	 */
-	static uint32_t getKmerLenFromUniqueKmerTable(const bfs::path &uniqueKmerTableFnp);
-
-	/**
-	 * @brief Read in the kmers in the file and store thier hashed values in map, key=set name, value=std::set of hashed kmer
-	 * @param uniqueKmerTableFnp the file path to the table of unique kmers, headerless column 1) set name, 2) kmer
-	 * @return unordered map key=set name, value=std::set of hashed kmer
-	 *
-	 * Expects the file to be a two column table with kmers in the second column, kmers can't be longer than 19 in length
-	 */
-	static std::unordered_map<std::string, std::unordered_set<uint64_t>> readInUniqueKmerTablePerSet(const bfs::path &uniqueKmerTableFnp);
-
-	/**
-	 * @brief Read in the second column of colum of kmers and don't store the sets they are coming from
-	 * @param uniqueKmerTableFnp the file path to the table of unique kmers, headerless column 1) set name, 2) kmer
-	 * @return an std::unordered_set of kmers
-	 *
-	 * Expects the file to be a two column table with kmers in the second column, kmers can't be longer than 19 in length
-	 */
-	static std::unordered_set<uint64_t> readInUniqueKmerTableSetsCollapsed(const bfs::path &uniqueKmerTableFnp);
-
 	struct CompareReadToSetPars {
 		bool includeRevComp = false;
 		uint32_t klen = 19;
@@ -88,6 +60,9 @@ public:
 
 
 		[[nodiscard]] uint32_t getTotalDetermined() const;
+
+		/**@brief Set the winner to "undetermined" if any other set has k-mers found in the winner's orientation */
+		void clearWinnerIfOtherSetsHit();
 
 		static VecStr genOutputHeader(const CompareReadToSetPars &compPars);
 		static void writeOutputHeader(std::ostream & out, const CompareReadToSetPars &compPars, const std::string & delim = "\t");
@@ -254,6 +229,51 @@ public:
 
 	static std::shared_ptr<const InvertedKmerIndex> getInvertedIndex(
 			const std::unordered_map<std::string, std::unordered_set<uint64_t>> & sets);
+
+	/**@brief The index for sets, or nullptr when use is false or the index can't be used for sets */
+	static std::shared_ptr<const InvertedKmerIndex> getUsableInvertedIndex(
+			const std::unordered_map<std::string, std::unordered_set<uint64_t>> & sets, bool use);
+
+	/**@brief Count each hashed k-mer of a sequence longer than klen, then of its reverse complement if includeRevComp
+	 * @param kmerCounts hashed k-mer to the number of times it was seen, added to
+	 */
+	static void countReadKmers(const std::string & seq, uint32_t klen, bool includeRevComp,
+			const SimpleKmerHash & hasher, std::unordered_map<uint64_t, uint64_t> & kmerCounts);
+
+	/**@brief Count the hashed k-mers of a pair, mate k-mers already seen in the first mate are not counted again
+	 *
+	 * The first mate's k-mers are counted, then the mate's, then if includeRevComp the first mate's reverse complement
+	 * k-mers and the mate's reverse complement k-mers. Only reads longer than klen add k-mers.
+	 * @param kmerCounts hashed k-mer to the number of times it was seen, added to
+	 */
+	static void countPairedReadKmers(const PairedRead & pseq, uint32_t klen, bool includeRevComp,
+			const SimpleKmerHash & hasher, std::unordered_map<uint64_t, uint64_t> & kmerCounts);
+
+	/**@brief Tally of the k-mers from many reads found in each unique k-mer set, a read k-mer counts toward the first set holding it */
+	struct KmerSetTally {
+		std::unordered_map<std::string, std::unordered_map<uint64_t, uint64_t>> occurrencesPerSet; ///< set to each k-mer found and the times it was found
+		std::unordered_map<std::string, std::vector<uint64_t>> kmersPerReadPerSet; ///< set to, for each read with k-mers in the set, its number of distinct k-mers in the set
+
+		/**@brief Tally one read's k-mers
+		 * @param kmerCounts the read's hashed k-mers and the times each occurs in the read
+		 * @param uniqueKmersPerSet the sets, checked in turn when invIndex is nullptr
+		 * @param invIndex the index for uniqueKmersPerSet, see getUsableInvertedIndex()
+		 */
+		void addRead(const std::unordered_map<uint64_t, uint64_t> & kmerCounts,
+				const std::unordered_map<std::string, std::unordered_set<uint64_t>> & uniqueKmersPerSet,
+				const std::shared_ptr<const InvertedKmerIndex> & invIndex);
+
+		void add(const KmerSetTally & other);
+
+		/**@brief Write the header for writeSetRow() */
+		static void writeHeader(std::ostream & out);
+
+		/**@brief Write the tab separated row for one set: sample, set, reads, meanPerRead, total, total1, total2, unique, unique1, unique2, uniqueInSet,
+		 * meanOccurrence, meanOccurrence1, meanOccurrence2, fracUniqFound, fracUniqFound1, fracUniqFound2, where 1 and 2 count only k-mers found more than once and more than twice
+		 */
+		void writeSetRow(std::ostream & out, const std::string & sampleName, const std::string & setName,
+				const std::unordered_set<uint64_t> & setKmers) const;
+	};
 
 	static std::unordered_map<std::string, std::unordered_map<uint64_t, uint32_t>>
 	readInNewKmersFromExtractedReads(const bfs::path &directoryIn,

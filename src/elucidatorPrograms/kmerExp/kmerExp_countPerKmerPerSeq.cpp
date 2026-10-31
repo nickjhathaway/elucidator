@@ -136,7 +136,7 @@ int kmerExpRunner::countPerKmerPerSeq(const njh::progutils::CmdArgs &inputComman
 		SeqInput reader(seqsInOpts);
 		reader.openIn();
 		while(reader.readNextRead(seq)){
-			if(len(seq)){
+			if(len(seq) >= kmerLength){
 				for(const auto pos : iter::range<uint32_t>(0, seq.seq_.size() + 1 - kmerLength, kmerStep)){
 					auto k = seq.seq_.substr(pos, kmerLength);
 					++kmerCountsForSeqs[k];
@@ -155,7 +155,7 @@ int kmerExpRunner::countPerKmerPerSeq(const njh::progutils::CmdArgs &inputComman
 	SeqInput reader(seqsInOpts);
 	reader.openIn();
 	while(reader.readNextRead(seq)){
-		if(len(seq)){
+		if(len(seq) >= kmerLength){
 			for(const auto pos : iter::range<uint32_t>(0, seq.seq_.size() + 1 - kmerLength, kmerStep)){
 				auto k = seq.seq_.substr(pos, kmerLength);
 				out << seq.name_

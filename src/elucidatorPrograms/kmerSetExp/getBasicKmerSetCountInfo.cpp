@@ -68,7 +68,7 @@ int kmerSetExpRunner::getBasicKmerSetCountInfo(const njh::progutils::CmdArgs & i
     outKmerInfoPerSeq << seq->seqBase_.name_
         << "\t" << len(seq->seqBase_)
         << "\t" << uniqueKmers
-        << "\t" << uniqueKmers / static_cast<double>(len(getSeqBase(seq).seq_) - kmerLength + 1)
+        << "\t" << (len(getSeqBase(seq).seq_) >= kmerLength ? uniqueKmers / static_cast<double>(len(getSeqBase(seq).seq_) - kmerLength + 1) : 0.0)
         << "\t" << vectorMean(kmerOccurrences)
         << "\t" << vectorMedianRef(kmerOccurrences);
     addOtherVec(kmerOccurrences, std::vector<uint32_t>(uniqueKmers, 1));
@@ -142,15 +142,12 @@ int kmerSetExpRunner::createMinimallyNonRedundantDownSampledSet(const njh::progu
   // std::unordered_map<char, std::unordered_map<std::string, std::unordered_set<uint32_t>>> kmerSampleCountsFinal;
   std::vector<size_t> outputIndexs;
 
-  if(!initialSeqs.empty()) {
-    for(const auto & seq : iter::enumerate(initialSeqs)) {
-      for( auto & k : seq.element->kInfo_.kmers_) {
-        // kmerCounts[k.second.k_] += k.second.positions_.size();
-        kmerSampleCounts[k.second.k_].emplace(seq.index);
-        k.second.readCnt_ = kmerSampleCounts[k.second.k_].size();
-        // kmerCountsFinal[k.second.k_] += k.second.positions_.size();
-        kmerSampleCountsFinal[k.second.k_].emplace(seq.index);
-      }
+  // initial seqs are indexed after seqs so the two sets of indexes don't collide
+  const uint32_t initialSeqsIndexStart = seqs.size();
+  for(const auto & seq : iter::enumerate(initialSeqs)) {
+    for(const auto & k : seq.element->kInfo_.kmers_) {
+      kmerSampleCounts[k.second.k_].emplace(initialSeqsIndexStart + seq.index);
+      kmerSampleCountsFinal[k.second.k_].emplace(initialSeqsIndexStart + seq.index);
     }
   }
   for(auto & seq : seqs) {
@@ -158,20 +155,52 @@ int kmerSetExpRunner::createMinimallyNonRedundantDownSampledSet(const njh::progu
       k.second.readCnt_ = kmerSampleCounts[k.second.k_].size();
     }
   }
+  // turn off a covered kmer in every seq that has it
+  auto turnOffKmerInSeqs = [&seqs,&kmerSampleCounts,&initialSeqsIndexStart](const std::string & kmer) {
+    for(const auto & idx : kmerSampleCounts.at(kmer)) {
+      if(idx < initialSeqsIndexStart) {
+        seqs[idx]->kInfo_.kmers_.at(kmer).on_ = false;
+      }
+    }
+  };
+  for(const auto & seq : initialSeqs) {
+    for(const auto & k : seq->kInfo_.kmers_) {
+      if(kmerSampleCounts.at(k.second.k_).size() >= kmerMinOccurrenceCoverage) {
+        turnOffKmerInSeqs(k.second.k_);
+      }
+    }
+  }
 
-
-  double kmersAboveCutOffCoveredFrac = 0;
   uint32_t totalNumberOfKmersAboveCutOff = 0;
   for(const auto & kCounts : kmerSampleCounts) {
     if(kCounts.second.size() >= kmerMinOccurrenceCoverage) {
       ++totalNumberOfKmersAboveCutOff;
     }
   }
+  if(0 == totalNumberOfKmersAboveCutOff) {
+    std::cerr << "No kmers found in at least " << kmerMinOccurrenceCoverage << " seqs (--kmerMinOccurrenceCoverage), only writing initial seqs" << std::endl;
+  }
+  auto getNumberOfKmersAboveCutOffCovered = [&kmerSampleCounts,&kmerSampleCountsFinal,&kmerMinOccurrenceCoverage]() {
+    uint32_t numberOfKmersAboveCutOffCovered = 0;
+    for(const auto & kCounts : kmerSampleCounts) {
+      if(kCounts.second.size() >= kmerMinOccurrenceCoverage) {
+        if(njh::in(kCounts.first, kmerSampleCountsFinal)) {
+          ++numberOfKmersAboveCutOffCovered;
+        }
+      }
+    }
+    return numberOfKmersAboveCutOffCovered;
+  };
+  double kmersAboveCutOffCoveredFrac = 0 == totalNumberOfKmersAboveCutOff ? 1 :
+      static_cast<double>(getNumberOfKmersAboveCutOffCovered())/totalNumberOfKmersAboveCutOff;
 
   if(fractionUniqueToInclude <= 1) {
     for(const auto & seqEnum : iter::enumerate(seqs)) {
       if(njh::notIn(seqEnum.index, outputIndexs)) {
         const auto & seq = seqEnum.element;
+        if(len(getSeqBase(seq).seq_) < kmerLength) {
+          continue;
+        }
         uint32_t uniqueKmers = 0;
         for(const auto & k : seq->kInfo_.kmers_) {
           if(kmerSampleCounts[k.second.k_].size() == 1) {
@@ -181,26 +210,17 @@ int kmerSetExpRunner::createMinimallyNonRedundantDownSampledSet(const njh::progu
         if( uniqueKmers / static_cast<double>(len(getSeqBase(seq).seq_) - kmerLength + 1) >= fractionUniqueToInclude) {
           outputIndexs.emplace_back(seqEnum.index);
           for(const auto & k : seqs[seqEnum.index]->kInfo_.kmers_) {
-            // kmerCountsFinal[k.second.k_] += k.second.positions_.size();
             kmerSampleCountsFinal[k.second.k_].emplace(seqEnum.index);
             if(k.second.readCnt_ >= kmerMinOccurrenceCoverage) {
-              for(const auto & idx : kmerSampleCounts[k.second.k_]) {
-                seqs[idx]->kInfo_.kmers_[k.second.k_].on_ = false;
-              }
+              turnOffKmerInSeqs(k.second.k_);
             }
           }
         }
       }
     }
-    uint32_t numberOfKmersAboveCutOffCovered = 0;
-    for(const auto & kCounts : kmerSampleCounts) {
-      if(kCounts.second.size() >= kmerMinOccurrenceCoverage) {
-        if(njh::in(kCounts.first, kmerSampleCountsFinal)) {
-          ++numberOfKmersAboveCutOffCovered;
-        }
-      }
-    }
-    kmersAboveCutOffCoveredFrac = static_cast<double>(numberOfKmersAboveCutOffCovered)/totalNumberOfKmersAboveCutOff;
+    uint32_t numberOfKmersAboveCutOffCovered = getNumberOfKmersAboveCutOffCovered();
+    kmersAboveCutOffCoveredFrac = 0 == totalNumberOfKmersAboveCutOff ? 1 :
+        static_cast<double>(numberOfKmersAboveCutOffCovered)/totalNumberOfKmersAboveCutOff;
     if(setUp.pars_.debug_) {
       std::cout << "after doing initial uniqueness cut off" << std::endl;
       std::cout <<"number of output seqs: " << outputIndexs.size() + initialSeqs.size() << "/" << seqs.size()+ initialSeqs.size() << " : "
@@ -290,26 +310,19 @@ int kmerSetExpRunner::createMinimallyNonRedundantDownSampledSet(const njh::progu
         // }
       }
     }
+    if(std::numeric_limits<uint32_t>::max() == bestIndex) {
+      break;
+    }
     watch.startNewLap("update final kmer maps");
     outputIndexs.emplace_back(bestIndex);
     for(const auto & k : seqs[bestIndex]->kInfo_.kmers_) {
-      // kmerCountsFinal[k.second.k_] += k.second.positions_.size();
       kmerSampleCountsFinal[k.second.k_].emplace(bestIndex);
       if(k.second.readCnt_ >= kmerMinOccurrenceCoverage) {
-        for(const auto & idx : kmerSampleCounts[k.second.k_]) {
-          seqs[idx]->kInfo_.kmers_[k.second.k_].on_ = false;
-        }
+        turnOffKmerInSeqs(k.second.k_);
       }
     }
     watch.startNewLap("get number of kmers covered");
-    uint32_t numberOfKmersAboveCutOffCovered = 0;
-    for(const auto & kCounts : kmerSampleCounts) {
-      if(kCounts.second.size() >= kmerMinOccurrenceCoverage) {
-        if(njh::in(kCounts.first, kmerSampleCountsFinal)) {
-          ++numberOfKmersAboveCutOffCovered;
-        }
-      }
-    }
+    uint32_t numberOfKmersAboveCutOffCovered = getNumberOfKmersAboveCutOffCovered();
     kmersAboveCutOffCoveredFrac = static_cast<double>(numberOfKmersAboveCutOffCovered)/totalNumberOfKmersAboveCutOff;
     if(setUp.pars_.debug_) {
       std::cout <<"number of output seqs: " << outputIndexs.size() + initialSeqs.size() << "/" << seqs.size()+ initialSeqs.size() << " : "

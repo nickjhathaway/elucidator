@@ -29,9 +29,6 @@ int kmerSetExpRunner::getUniqueSequenceRegions(const njh::progutils::CmdArgs &in
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
 
-	std::function<bool(const std::string&)> seqCheck = [&countPars](const std::string & k){
-		return std::all_of(k.begin(), k.end(), [&countPars](char base){return njh::in(base, countPars.allowableCharacters_);});
-	};
 	KmerGatherer kGather(countPars);
 
 	setUp.rLog_.logCurrentTime("count_all");
@@ -67,8 +64,7 @@ int kmerSetExpRunner::getUniqueSequenceRegions(const njh::progutils::CmdArgs &in
 
 			for (uint32_t pos = 0; pos < len(seq) - countPars.kmerLength_ + 1; ++pos) {
 				auto k = seq.seq_.substr(pos, countPars.kmerLength_);
-				kmerInfo kinfo(k, countPars.kmerLengthForEntropyCalc_, false);
-				if (seqCheck(k) && kinfo.computeKmerEntropy() > countPars.entropyFilter_) {
+				if (kGather.passesFilters(k)) {
 					bool unique = true;
 					auto hashk = hasher.hash(k);
 					for(const auto & other : allKmers){
