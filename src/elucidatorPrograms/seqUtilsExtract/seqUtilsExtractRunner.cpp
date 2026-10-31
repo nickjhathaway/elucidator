@@ -46,6 +46,7 @@ seqUtilsExtractRunner::seqUtilsExtractRunner()
 		                                addFunc("extractSeqsEndsWith", extractSeqsEndsWith, false),
 		                                addFunc("extractSeqsBeginsWithEndsWith", extractSeqsBeginsWithEndsWith, false),
 		                                addFunc("extractByIlluminaAaptors", extractByIlluminaAaptors, false),
+		                                addFunc("extractByNanoporeBarcodes", extractByNanoporeBarcodes, false),
 		                                addFunc("countIlluminaAaptors", countIlluminaAaptors, false),
 		                                addFunc("extractByName", extractByName, false),
 		                                addFunc("clusterByKmerSim", clusterByKmerSim, false),
