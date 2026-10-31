@@ -232,51 +232,37 @@ int kmerSetExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputCom
 		}
 	}
 
+	//filter for non-unique kmers between the input regions first
 	std::unordered_map<std::string, std::unordered_set<uint64_t>> filt_rawKmersPerInputPerSet;
-
-	if (inputAddingRegions.size() > 1 ){
-		filt_rawKmersPerInputPerSet = std::move(rawKmersPerInputPerSet);
-	} else {
-		//filter for non-unique kmers between sets first
-		for(const auto & kmerSet : rawKmersPerInputPerSet){
-			for(const auto & kmer : kmerSet.second){
-				bool pass = true;
-				for(const auto & otherKmerSet : rawKmersPerInputPerSet){
-					if(otherKmerSet.first != kmerSet.first){
-						if(njh::in(kmer, otherKmerSet.second)){
+	for(const auto & kmerSet : rawKmersPerInputPerSet){
+		for(const auto & kmer : kmerSet.second){
+			bool pass = true;
+			for(const auto & otherKmerSet : rawKmersPerInputPerSet){
+				if(otherKmerSet.first != kmerSet.first){
+					if(njh::in(kmer, otherKmerSet.second)){
+						pass = false;
+						nonUniqueKmersPerSet.emplace(kmer);
+						break;
+					}
+					if (countPars.noRevComp_) {
+						auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(kmer));
+						if(njh::in(revCompKmerHash, otherKmerSet.second)){
 							pass = false;
+							//putting the revCompHash in but could also consider placing the original kmer too
+							nonUniqueKmersPerSet.emplace(revCompKmerHash);
 							nonUniqueKmersPerSet.emplace(kmer);
 							break;
 						}
-						if (countPars.noRevComp_) {
-							auto revCompKmerHash = hasher.hash(hasher.revCompReverseHash(kmer));
-							if(njh::in(revCompKmerHash, otherKmerSet.second)){
-								pass = false;
-								//putting the revCompHash in but could also consider placing the original kmer too
-								nonUniqueKmersPerSet.emplace(revCompKmerHash);
-								nonUniqueKmersPerSet.emplace(kmer);
-								break;
-							}
-						}
 					}
 				}
-				if(pass){
-					filt_rawKmersPerInputPerSet[kmerSet.first].emplace(kmer);
-				}
+			}
+			if(pass){
+				filt_rawKmersPerInputPerSet[kmerSet.first].emplace(kmer);
 			}
 		}
 	}
 
-
-
 	std::unordered_map<std::string, std::unordered_set<uint64_t>> outputUniqueKmersPerSet;
-
-	// if the input region already exist add those kmers to the output to be added to in addition to the ones being added here
-	for (const auto & kmerSet : filt_rawKmersPerInputPerSet) {
-		if(njh::in(kmerSet.first, uniqueKmersPerSet)){
-			outputUniqueKmersPerSet[kmerSet.first] = uniqueKmersPerSet[kmerSet.first];
-		}
-	}
 
 
 	//filter the new kmers against the already determined non-unique kmers
@@ -313,23 +299,25 @@ int kmerSetExpRunner::addToUniqKmersSet(const njh::progutils::CmdArgs & inputCom
 		}
 	}
 
-	//filter other sets
+	//already determined unique kmers stay unique only if no other input region has them on either strand
 	for (const auto &set: uniqueKmersPerSet) {
-		for (const auto & kmerSet : rawKmersPerInputPerSet) {
-			if (set.first == kmerSet.first) {
-				continue;
-			}
-			for(const auto & finalKmer : set.second){
-				// have to make sure it's not in both the forward and reverse comp of the input,
-				// rawKmersPerInput_revComForFiltering will be empty if the input was reverse complemented so can be
-				// used for filtering either way
-				auto finalNewKmerRevComp = hasher.hash(hasher.revCompReverseHash(finalKmer));
-				if(!njh::in(finalKmer, kmerSet.second) && !njh::in(finalNewKmerRevComp, kmerSet.second)) {
-					outputUniqueKmersPerSet[set.first].emplace(finalKmer);
-				} else {
-					nonUniqueKmersPerSet.emplace(finalNewKmerRevComp);
-					nonUniqueKmersPerSet.emplace(finalKmer);
+		for(const auto & finalKmer : set.second){
+			auto finalKmerRevComp = hasher.hash(hasher.revCompReverseHash(finalKmer));
+			bool pass = true;
+			for (const auto & kmerSet : rawKmersPerInputPerSet) {
+				if (set.first == kmerSet.first) {
+					continue;
 				}
+				if(njh::in(finalKmer, kmerSet.second) || njh::in(finalKmerRevComp, kmerSet.second)) {
+					pass = false;
+					break;
+				}
+			}
+			if (pass) {
+				outputUniqueKmersPerSet[set.first].emplace(finalKmer);
+			} else {
+				nonUniqueKmersPerSet.emplace(finalKmerRevComp);
+				nonUniqueKmersPerSet.emplace(finalKmer);
 			}
 		}
 	}

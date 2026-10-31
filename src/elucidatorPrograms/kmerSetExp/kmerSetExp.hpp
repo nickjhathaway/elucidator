@@ -38,7 +38,6 @@ public:
 
 	static int getBasicKmerSetCountInfo(const njh::progutils::CmdArgs & inputCommands);
 	static int createMinimallyNonRedundantDownSampledSet(const njh::progutils::CmdArgs & inputCommands);
-	// static int createMinimallyNonRedundantDownSampledSetAfterFragmentation(const njh::progutils::CmdArgs & inputCommands);
 
 
 	static int createKmerPresenceMatrixFromSets(const njh::progutils::CmdArgs & inputCommands);

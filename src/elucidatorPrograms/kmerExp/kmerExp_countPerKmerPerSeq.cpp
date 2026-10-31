@@ -107,7 +107,7 @@ int kmerExpRunner::countPerKmerPerSeq(const njh::progutils::CmdArgs &inputComman
 			}
 		}
 	}
-	if(setUp.pars_.verbose_ && singlesEndSet && singlesOption.inExists()){
+	if(setUp.pars_.verbose_ && singlesEndSet && !singlesOption.inExists()){
 		std::cout << singlesOption.firstName_ << " doesn't exist, skipping " << std::endl;
 	}
 	if(singlesEndSet && singlesOption.inExists()){

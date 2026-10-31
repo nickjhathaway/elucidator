@@ -35,7 +35,7 @@ int kmerSetExpRunner::createKmerPresenceMatrixFromSets(const njh::progutils::Cmd
   setUp.finishSetUp(std::cout);
   KmerGatherer kGather(countPars);
   OutputStream out(outOpts);
-  auto allKmers = kGather.getUniqueKmersSetFromFastas(fastaFiles);
+  auto allKmers = kGather.getKmerCollectionsFromFastas(fastaFiles);
   std::set<std::string> allUniqueKmers;
   for(const auto & set : allKmers) {
     allUniqueKmers.insert(set.second.begin(), set.second.end());

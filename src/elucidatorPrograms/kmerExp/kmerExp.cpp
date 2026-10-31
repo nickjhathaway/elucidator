@@ -68,7 +68,6 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("writeKmerSimDistanceMatrix", writeKmerSimDistanceMatrix, false),
 					 addFunc("findUniqKmersBetweenSeqs", findUniqKmersBetweenSeqs, false),
 					 addFunc("kmerPositionQualCounts", kmerPositionQualCounts, false),
-					 addFunc("kmerTestingGround", kmerTestingGround, false),
 					 addFunc("pairwiseWithinComparisonOfUniqueKmers", pairwiseWithinComparisonOfUniqueKmers, false),
 					 addFunc("getWithinGenomeUniqueKmers", getWithinGenomeUniqueKmers, false),
 					 addFunc("getUniqKmerBlocksOnGenomeAgainstRef", getUniqKmerBlocksOnGenomeAgainstRef, false),
@@ -77,7 +76,6 @@ kmerExpRunner::kmerExpRunner()
           	addFunc("kmerCompareSetOfSeqsToReference", kmerCompareSetOfSeqsToReference, false),
 
 
-					 addFunc("kmerConnectionGraph", kmerConnectionGraph, false),
 					 addFunc("countKmers", countKmers, false),
 					 addFunc("getKmerSharedBlocksBetweenGenomes", getKmerSharedBlocksBetweenGenomes, false),
 					 addFunc("allByAllComparisonOfUniqueKmers", allByAllComparisonOfUniqueKmers, false),
@@ -94,19 +92,15 @@ kmerExpRunner::kmerExpRunner()
 					 addFunc("getKmerDetailedKmerDistAgainstRef", getKmerDetailedKmerDistAgainstRef, false),
 					 addFunc("findingKmerEnrichment", findingKmerEnrichment, false),
 					 addFunc("simpleHashKmer", simpleHashKmer, false),
-					 //addFunc("findUniqKmersFromGenomeSubRegions", findUniqKmersFromGenomeSubRegions, false),
 
 					 addFunc("countPerKmerPerSeq", countPerKmerPerSeq, false),
 
           	addFunc("getBestKmerDetailedKmerDistAgainstRef", getBestKmerDetailedKmerDistAgainstRef, false),
-          	// addFunc("compressPeptideKmersByScoring", compressPeptideKmersByScoring, false),
           	addFunc("comparePeptidesDistMatrixByBlosumScore", comparePeptidesDistMatrixByBlosumScore, false),
-          	// addFunc("compressPeptideKmersByReducedLibrary", compressPeptideKmersByReducedLibrary, false),
           	addFunc("compressPeptidesByReducedLibrary", compressPeptidesByReducedLibrary, false),
           	addFunc("getKmerCountsPerLocationOnSeqs", getKmerCountsPerLocationOnSeqs, false),
           	addFunc("getKmerCountsPerLocationOnSeq", getKmerCountsPerLocationOnSeq, false),
           	addFunc("filterSeqsBelowMedianKmerCoverage", filterSeqsBelowMedianKmerCoverage, false),
-            addFunc("encodingSeqsByCommonKmers", encodingSeqsByCommonKmers, false),
 
 //,
 									//

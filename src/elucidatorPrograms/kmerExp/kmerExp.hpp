@@ -110,15 +110,11 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 
 
 	static int countPerKmerPerSeq(const njh::progutils::CmdArgs & inputCommands );
-	static int kmerTestingGround(const njh::progutils::CmdArgs & inputCommands);
-	static int kmerConnectionGraph(const njh::progutils::CmdArgs & inputCommands);
 	static int countKmers(const njh::progutils::CmdArgs & inputCommands);
 	static int generateCountsTable(const njh::progutils::CmdArgs & inputCommands);
 	static int findingKmerEnrichment(const njh::progutils::CmdArgs & inputCommands);
 	static int simpleHashKmer(const njh::progutils::CmdArgs & inputCommands);
 
-	// static int compressPeptideKmersByScoring(const njh::progutils::CmdArgs & inputCommands);
-	// static int compressPeptideKmersByReducedLibrary(const njh::progutils::CmdArgs & inputCommands);
 	static int compressPeptidesByReducedLibrary(const njh::progutils::CmdArgs & inputCommands);
 
 	static int comparePeptidesDistMatrixByBlosumScore(const njh::progutils::CmdArgs & inputCommands);
@@ -128,7 +124,6 @@ class kmerExpRunner : public njh::progutils::ProgramRunner {
 	static int filterSeqsBelowMedianKmerCoverage(const njh::progutils::CmdArgs & inputCommands);
 
 
-  static int encodingSeqsByCommonKmers(const njh::progutils::CmdArgs & inputCommands);
 
 };
 } /* namespace njhseq */

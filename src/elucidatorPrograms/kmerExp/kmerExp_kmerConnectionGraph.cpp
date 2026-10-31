@@ -17,54 +17,6 @@
 
 namespace njhseq {
 
-
-
-
-class KmerSimpleConGraph {
-
-
-
-
-};
-
-
-int kmerExpRunner::kmerConnectionGraph(const njh::progutils::CmdArgs & inputCommands){
-	uint32_t kmerLength = 4;
-	OutOptions outOpts(bfs::path("out.tab.txt"));
-	seqSetUp setUp(inputCommands);
-	setUp.processVerbose();
-	setUp.processDebug();
-	bfs::path fastq1Fnp = "";
-	bfs::path fastq2Fnp = "";
-	bfs::path fastqFnp = "";
-	bfs::path fastaFnp = "";
-	bool setFastq1 = setUp.setOption(fastq1Fnp, "--fastq1", "Fastq first mate File");
-	setUp.setOption(fastq2Fnp, "--fastq2", "Fastq second mate File", setFastq1);
-	bool revCompMate = false;
-	setUp.setOption(revCompMate, "--revCompMate", "Reverse Complement Sequences in mate file");
-	bool setFastq = setUp.setOption(fastqFnp, "--fastq", "Fastq File", !setFastq1);
-	setUp.setOption(fastaFnp, "--fasta", "Fasta File", !setFastq1 && !setFastq);
-	if (setFastq1) {
-		setUp.pars_.ioOptions_.firstName_ = fastq1Fnp;
-		setUp.pars_.ioOptions_.inFormat_ = SeqIOOptions::inFormats::FASTQPAIRED;
-		setUp.pars_.ioOptions_.outFormat_ = SeqIOOptions::outFormats::FASTQPAIRED;
-	} else {
-		setUp.pars_.ioOptions_.firstName_ = fastqFnp;
-		setUp.pars_.ioOptions_.inFormat_ = SeqIOOptions::inFormats::FASTQ;
-		setUp.pars_.ioOptions_.outFormat_ = SeqIOOptions::outFormats::FASTQ;
-	}
-	setUp.processWritingOptions(outOpts);
-	setUp.setOption(kmerLength, "--kmerLength", "kmer Length");
-	setUp.finishSetUp(std::cout);
-
-
-
-
-	return 0;
-
-
-}
-
 int kmerExpRunner::countKmers(const njh::progutils::CmdArgs & inputCommands){
 
 

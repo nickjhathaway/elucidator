@@ -36,7 +36,7 @@ int kmerSetExpRunner::getUniqueSequenceRegions(const njh::progutils::CmdArgs &in
 
 	setUp.rLog_.logCurrentTime("count_all");
 	setUp.rLog_.runLogFile_.flush();
-	std::unordered_map<std::string, std::set<uint64_t>> allKmers = kGather.getUniqueKmersSetHashWithFiltersFromFastas(inputSequenceFiles);
+	std::unordered_map<std::string, std::set<uint64_t>> allKmers = kGather.getFilteredHashedKmerCollectionsFromFastas(inputSequenceFiles);
 	SimpleKmerHash hasher;
 
 	struct GrowingSegment{

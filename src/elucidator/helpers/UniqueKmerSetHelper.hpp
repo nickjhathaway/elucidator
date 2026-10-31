@@ -60,9 +60,7 @@ public:
 
 		std::set<std::string> excludeSetNames{"genomeRest"};
 
-		//!@brief Use one k-mer -> set(s) index instead of probing every set for every read k-mer.
-		//! Counts are identical either way and k-mers shared between sets are handled, so this is on
-		//! by default and exists only to fall back from.
+		//!@brief look up read k-mers in a k-mer -> set(s) index, otherwise check each set
 		bool useInvertedKmerIndex_{true};
 
 		uint32_t initialExcludeHardCountOff = 0;
@@ -76,29 +74,21 @@ public:
 
 
 	struct CompareReadToSetRes {
-		std::unordered_map<uint64_t, uint64_t> hashedInputKmers;
-		std::unordered_map<uint64_t, uint64_t> hashedInputKmersRevComp;
+		std::unordered_set<uint64_t> hashedInputKmers;
+		std::unordered_set<uint64_t> hashedInputKmersRevComp;
+		//!kmers found per set after the cut offs, every set is present
 		std::unordered_map<std::string, uint32_t> foundPerSet;
 		std::unordered_map<std::string, uint32_t> foundPerSetRevComp;
-
-		void increaseHashedInputKmerCounts(const seqInfo & seq, const CompareReadToSetPars &compPars, const SimpleKmerHash &hasher);
-		void increaseHashedInputKmerCountsRevComp(const seqInfo & seq, const CompareReadToSetPars &compPars, const SimpleKmerHash &hasher);
-		void increaseHashedInputKmerCountsBoth(const seqInfo & seq, const CompareReadToSetPars &compPars, const SimpleKmerHash &hasher);
-
-		void checkForPresenceOfHashedInputKmers(const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet,
-				bool useInvertedIndex = true);
-		void preprocessedFoundKmers(const CompareReadToSetPars &compPars, uint32_t kmersPossible);
-		void determineWinner(const std::unordered_map<std::string, std::unordered_set<uint64_t>> &uniqueKmersPerSet);
 
 		std::string winnerSet = "undetermined";
 		double bestFrac = 0;
 		bool winnerRevComp = false;
+		//!every set with kmers found in either orientation after the cut offs
 		std::set<std::string> allHits;
 
 
 		[[nodiscard]] uint32_t getTotalDetermined() const;
 
-		void zeroFillFoundSets(const VecStr &setNames);
 		static VecStr genOutputHeader(const CompareReadToSetPars &compPars);
 		static void writeOutputHeader(std::ostream & out, const CompareReadToSetPars &compPars, const std::string & delim = "\t");
 
@@ -258,11 +248,7 @@ public:
 																			 MultiSeqIO &seqOut, ProcessReadForExtractingCounts &counts);
 
 
-	/**@brief One k-mer -> the set or sets holding it, in place of probing every set per read k-mer.
-	 *
-	 * The implementation lives in njhseq so that SeekDeep, which sits below elucidator, uses the same
-	 * one. It is built once per change to the sets and re-validated on use, so a stale index cannot
-	 * produce a wrong answer.
+	/**@brief One k-mer -> the set or sets holding it, see njhseq::KmerSetInvertedIndex
 	 */
 	using InvertedKmerIndex = njhseq::KmerSetInvertedIndex;
 
