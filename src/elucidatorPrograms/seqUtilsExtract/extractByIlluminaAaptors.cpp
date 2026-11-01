@@ -789,7 +789,7 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 	//best matching samples only depend on the observed barcode, so cache them per observed barcode for each side
 	std::unordered_map<std::string, VecStr> fwdBarSampleCache;
 	std::unordered_map<std::string, VecStr> revBarSampleCache;
-	auto getBestBarSamples = [&barcodes,&alignerBarObj,&pars,&barcodeMatchMargin,&fwdBarSampleCache,&revBarSampleCache](
+	auto getBestBarSamples = [&barcodes,&alignerBarObj,&pars,&barcodeMatchMargin,&fwdBarSampleCache,&revBarSampleCache,&nanopore](
 			const std::string & observedBar, bool fwd) -> const VecStr & {
 		auto & cache = fwd ? fwdBarSampleCache : revBarSampleCache;
 		auto cached = cache.find(observedBar);
@@ -804,7 +804,12 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 		seqInfo obsBarSeq(fwd ? "determined-fwd" : "determined-rev", observedBar);
 		for(const auto & bar : barcodes){
 			const auto & expectedBar = fwd ? bar.fwBar_ : bar.revBar_;
-			alignerBarObj.alignCacheGlobal(expectedBar, obsBarSeq);
+			//nanopore barcodes almost never repeat exactly, so caching their alignments only grows memory (11GB on 4.4M reads)
+			if(nanopore){
+				alignerBarObj.alignRegGlobal(expectedBar, obsBarSeq);
+			}else{
+				alignerBarObj.alignCacheGlobal(expectedBar, obsBarSeq);
+			}
 			alignerBarObj.profilePrimerAlignment(expectedBar, obsBarSeq);
 			if(alignerBarObj.comp_.distances_.eventBasedIdentity_ >=pars.barIdentityCutOff_){
 				passingIds.emplace_back(alignerBarObj.comp_.distances_.ref_.identities_, bar.sampleName_, expectedBar.seq_);
@@ -837,6 +842,10 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 				}
 			}
 			bestSample = 1 == closeBarcodes.size() ? closeSamples : VecStr{"Undetermined"};
+		}
+		//keep the cache bounded, it's only a speed up
+		if(cache.size() >= 1000000){
+			cache.clear();
 		}
 		return cache.emplace(observedBar, std::move(bestSample)).first->second;
 	};
