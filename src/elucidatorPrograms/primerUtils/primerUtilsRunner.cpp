@@ -49,6 +49,7 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 	bfs::path genomeFnp;
 	bfs::path expectedRegionsFnp;
 	seqSetUp setUp(inputCommands);
+	setUp.processVerbose();
 	setUp.setOption(numThreads, "--numThreads", "number of Threads");
 	setUp.setOption(minLen, "--minLen", "min length of the 3` end of the alignment, (inclusive)");
 	setUp.setOption(errorAllowed, "--errorAllowed", "errors allowed");
@@ -164,6 +165,8 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 	//_blastdb
 	//.nsq
 	auto blastDatabaseFnp = bfs::path(njh::rstripRet(bfs::path(genomeFnp).replace_extension("").string(), '.') + "_blastdb");
+	njh::stopWatch screenWatch;
+	screenWatch.setLapName("finding primer sites");
 	//Either backend writes the same outfmt-6 table, so everything downstream of here is identical and the two
 	//are directly comparable. The index can only answer exact matches, so it stands in for blast when the
 	//search is for short 3' anchors that have to match exactly anyway.
@@ -278,6 +281,7 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 		throw std::runtime_error{ss.str()};
 	}
 	}
+	screenWatch.startNewLap("realigning and filtering hits");
 	std::vector<BLASTHitTab> blastHits;
 	std::vector<std::shared_ptr<ReAlignedSeq>> results;
 	uint64_t maxLen = 0;
@@ -360,8 +364,41 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 //			std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //			std::cout << hit.toJson() << std::endl;
 //			std::cout << hit.genSubjectBed6().toDelimStrWithExtra() << std::endl;
-			auto realignedSeq = ReAlignedSeq::genRealignment(hit, njh::mapAt(primerByName, hit.queryName_), alignerObj,
-																											 chromLens, genomeReader, reAlnPars);
+			//An index hit is exact by construction, so its alignment is already known and the dynamic programming
+			//that dominates this stage can be skipped. The matched reference bases are the matched primer bases,
+			//so the alignment is the primer against itself with the unmatched 5' overhang against gaps, and the
+			//genome does not have to be read at all.
+			ReAlignedSeq realignedSeq;
+			if (useKmerIndex) {
+				const auto &primerSeq = njh::mapAt(primerByName, hit.queryName_);
+				const auto primerLen = static_cast<uint32_t>(primerSeq.size());
+				auto qSeq = seqInfo(hit.queryName_, primerSeq);
+				if (hit.reverseStrand()) {
+					qSeq.reverseComplementRead(false, true);
+				}
+				const auto overhang = primerLen - hit.alignLen_;
+				//the matched run sits at the 3' end of the primer, which is the start of its reverse complement
+				const auto matched = hit.reverseStrand()
+															 ? qSeq.seq_.substr(0, hit.alignLen_)
+															 : qSeq.seq_.substr(overhang);
+				auto refAln = seqInfo(hit.subjectName_, hit.reverseStrand()
+																								? matched + std::string(overhang, '-')
+																								: std::string(overhang, '-') + matched);
+				realignedSeq.gRegion_ = hit.genSubjectBed6();
+				realignedSeq.gRegion_.meta_.meta_.clear();
+				realignedSeq.refSeq_ = seqInfo(hit.subjectName_, matched);
+				realignedSeq.querySeq_ = qSeq;
+				realignedSeq.alnRefSeq_ = refAln;
+				realignedSeq.alnQuerySeq_ = qSeq;
+				alignerObj.alignObjectA_.seqBase_ = refAln;
+				alignerObj.alignObjectB_.seqBase_ = qSeq;
+				alignerObj.profileAlignment(realignedSeq.refSeq_, qSeq, false, false, false);
+				realignedSeq.comp_ = alignerObj.comp_;
+				realignedSeq.gRegion_.reverseSrand_ = hit.reverseStrand();
+			} else {
+				realignedSeq = ReAlignedSeq::genRealignment(hit, njh::mapAt(primerByName, hit.queryName_), alignerObj,
+																										chromLens, genomeReader, reAlnPars);
+			}
 //			std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //			std::cout << "passed: " << njh::colorBool(allowableErrors.passErrorProfile(realignedSeq.comp_)) << std::endl;
 			//adjust for the new subsegment
@@ -509,6 +546,7 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 			return portion;
 		}
 	};
+	screenWatch.startNewLap("pairing sites into products");
 	std::vector<GenomeExtractResultWithHits> extractions;
 	if(results.size() > 1){
 		//A hit can only pair with one on the same chromosome whose start is within maxTargetSize of it, so
@@ -603,6 +641,7 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 		}
 	}
 
+	screenWatch.startNewLap("writing products");
 	njh::sort(extractions, [](const GenomeExtractResultWithHits &reg1In, const GenomeExtractResultWithHits &reg2In) {
 		const auto &reg1 = getRef(reg1In);
 		const auto &reg2 = getRef(reg2In);
@@ -707,6 +746,9 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 	outputPrimersForTesting.outPutContents(TableIOOpts::genTabFileOut(njh::files::make_path(setUp.pars_.directoryName_, "primersForTest.tab.txt")));
 	unexpectedOutputPrimersForTesting.outPutContents(TableIOOpts::genTabFileOut(njh::files::make_path(setUp.pars_.directoryName_, "unexpectedPrimersPairs.tab.txt")));
 
+	if(setUp.pars_.verbose_){
+		screenWatch.logLapTimes(std::cout, true, 6, true);
+	}
 	return 0;
 }
 
