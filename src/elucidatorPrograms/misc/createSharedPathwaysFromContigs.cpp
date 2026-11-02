@@ -1526,6 +1526,8 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 		subRegionComboPars.includeFromSubRegionSize = graphCorrectingPars.klen;
 	}
 	seqInfo refCorrectedInfo = refSeq;
+	//keep the uncorrected reference, refSeqLoc coordinates are relative to this sequence
+	const seqInfo originalRefSeq = refSeq;
 
 	if(graphCorrectingPars.correctionOccurenceCutOff > 0){
 		std::string prefix;
@@ -1814,9 +1816,12 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 		OutputStream sharedLocsOutRefSeq(njh::files::make_path(subsegmentInfoDir, njh::pasteAsStr("refSeqGenomicLocs.bed")));
 		table outSubSeqs(VecStr{"target", "frontSeq", "endSeq"});
 
-		aligner alignerObj(std::max(refSeq.seq_.size(), refCorrectedInfo.seq_.size()), gapScoringParameters(5,1,0,0,0,0), substituteMatrix::createDegenScoreMatrixLessN(2, -2));
-		alignerObj.alignCacheGlobal(refSeq, refCorrectedInfo);
-		alignerObj.rearrangeObjsGlobal(refSeq, refCorrectedInfo);
+		//the graph positions are relative to the final version of the ref in seqs (collapseLowFreqNodes can modify seqs),
+		//so align that against the uncorrected ref to map positions back to the genomic location
+		refCorrectedInfo = seqs[njh::mapAt(seqKey, refSeq.name_)];
+		aligner alignerObj(std::max(originalRefSeq.seq_.size(), refCorrectedInfo.seq_.size()), gapScoringParameters(5,1,0,0,0,0), substituteMatrix::createDegenScoreMatrixLessN(2, -2));
+		alignerObj.alignCacheGlobal(originalRefSeq, refCorrectedInfo);
+		alignerObj.rearrangeObjsGlobal(originalRefSeq, refCorrectedInfo);
 
 		auto transfromCorrectedRefPosition = [&alignerObj](
 				uint32_t correctSeqPos) {
@@ -2244,11 +2249,18 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 					}
 				}
 				OutputStream outSubregionCoding(njh::files::make_path(conservedRegionInfoDir, "subRegionCoded.tab.txt"));
-				outSubregionCoding << "name\t" << njh::conToStr(njh::getVecOfMapKeys(subRegionsSeqs), "\t") << std::endl;
+				auto varRegionNames = njh::getVecOfMapKeys(subRegionsSeqs);
+				outSubregionCoding << "name\t" << njh::conToStr(varRegionNames, "\t") << std::endl;
+				//write columns in header order, variableRegions[name] is unordered
 				for(const auto & name : variableRegions){
 					outSubregionCoding << name.first;
-					for(const auto & subRegion : name.second){
-						outSubregionCoding << "\t" << varRegionSeqKey[subRegion.first][subRegion.second];
+					for(const auto & varRegionName : varRegionNames){
+						outSubregionCoding << "\t";
+						if(njh::in(varRegionName, name.second)){
+							outSubregionCoding << njh::mapAt(njh::mapAt(varRegionSeqKey, varRegionName), name.second.at(varRegionName));
+						}else{
+							outSubregionCoding << "NA";
+						}
 					}
 					outSubregionCoding << std::endl;
 				}
