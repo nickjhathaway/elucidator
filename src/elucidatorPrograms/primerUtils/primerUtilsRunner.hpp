@@ -20,6 +20,9 @@ public:
 
 	static int testWithBlastForUnspecificAmplification(const njh::progutils::CmdArgs & inputCommands);
 
+	static int buildGenomeKmerPositionIndex(const njh::progutils::CmdArgs & inputCommands);
+	static int queryGenomeKmerPositionIndex(const njh::progutils::CmdArgs & inputCommands);
+
 };
 
 } //  namespace njhseq

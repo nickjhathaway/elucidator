@@ -152,6 +152,8 @@ public:
 		double primerPairVsPrimerPairWeight_{0};
 
 		double primerPairVsPrimerPairUnSpecAmpCnt_{0};
+		/*< the same count from the sensitive hot-3'-end pass, where both ends of the product are hot */
+		double primerPairVsPrimerPairHotUnSpecAmpCnt_{0};
 
 		std::unordered_map<std::string, double> primerPairIndvWeights_;
 

@@ -28,6 +28,7 @@
 
 
 #include "elucidator/objects/MiscUtility/GenomeSeqSearch.hpp"
+#include "elucidator/objects/MiscUtility/GenomeKmerPositionIndex.hpp"
 
 
 

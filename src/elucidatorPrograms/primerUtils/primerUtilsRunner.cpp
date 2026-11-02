@@ -25,6 +25,8 @@ primerUtilsRunner::primerUtilsRunner()
 								addFunc("testWithBlastForUnspecificAmplification", testWithBlastForUnspecificAmplification, false),
 								addFunc("creatingMultiplexAmpliconPools", creatingMultiplexAmpliconPools, false),
 								addFunc("testForPrimerDimers", testForPrimerDimers, false),
+								addFunc("buildGenomeKmerPositionIndex", buildGenomeKmerPositionIndex, false),
+								addFunc("queryGenomeKmerPositionIndex", queryGenomeKmerPositionIndex, false),
 								//
 				},
 				"primerUtils") {}
@@ -37,6 +39,8 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 	uint32_t maxTargetSize = 6000;
 	uint32_t minTargetSize = 100;
 	uint32_t minExtendAmountOfEndAdjustment = 5;
+	double evalue = 1000;
+	uint32_t wordSize = 6;
 	bfs::path primersFnp;
 	bfs::path genomeFnp;
 	bfs::path expectedRegionsFnp;
@@ -47,6 +51,8 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 	setUp.setOption(maxTargetSize, "--maxTargetSize", "max target size");
 	setUp.setOption(minTargetSize, "--minTargetSize", "min target size");
 	setUp.setOption(minExtendAmountOfEndAdjustment, "--minExtendAmountOfEndAdjustment", "min Extend Amount Of End Adjustment for when allowing errors in hits");
+	setUp.setOption(evalue, "--evalue", "blast e-value cut-off; the default is blastn-short's own, which on a multi-Gb genome needs about 13 exact bases, so raising it is what lets the search report the shorter 3' anchors that can still prime");
+	setUp.setOption(wordSize, "--wordSize", "blast word size");
 
 	setUp.setOption(expectedRegionsFnp, "--expectedRegionsFnp", "expected Regions Fnp, to determine if a region is expected, supply the bed6 format of the region the primer should be amplifying, any region not matching this exact region (primer location included) will be marked as unspecific", true);
 	setUp.setOption(primersFnp, "--primersFnp", "Primers", true);
@@ -152,7 +158,7 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 	//_blastdb
 	//.nsq
 	auto blastDatabaseFnp = bfs::path(njh::rstripRet(bfs::path(genomeFnp).replace_extension("").string(), '.') + "_blastdb");
-	std::string blastCmd = "blastn -query " + allPrimerFnp.string() + " -num_threads " + njh::pasteAsStr(numThreads) + " -task blastn-short -word_size 6 -db " + blastDatabaseFnp.string() + " -outfmt 6 -max_target_seqs 100000000 ";
+	std::string blastCmd = "blastn -query " + allPrimerFnp.string() + " -num_threads " + njh::pasteAsStr(numThreads) + " -task blastn-short -word_size " + njh::pasteAsStr(wordSize) + " -evalue " + njh::pasteAsStr(evalue) + " -db " + blastDatabaseFnp.string() + " -outfmt 6 -max_target_seqs 100000000 ";
 	if(0 == errorAllowed){
 		blastCmd += " -perc_identity 100 ";
 	}
@@ -397,25 +403,50 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 	};
 	std::vector<GenomeExtractResultWithHits> extractions;
 	if(results.size() > 1){
-		for(const auto pos1 : iter::range(results.size() - 1)){
-			for(const auto & pos2 : iter::range(pos1, results.size())){
-				//need to be on the same chromosome
-				//need to be on opposite strands (should both should be in 5'->3' direction
-				//and they shouldn't overlap
+		//A hit can only pair with one on the same chromosome whose start is within maxTargetSize of it, so
+		//bucket by chromosome and sort by start rather than comparing every hit with every other. At a
+		//permissive --evalue the hits run into the hundreds of thousands, where all-against-all is intractable.
+		std::unordered_map<std::string, std::vector<uint32_t>> resultsByChrom;
+		for(const auto pos : iter::range(results.size())){
+			resultsByChrom[getRef(results[pos]).gRegion_.chrom_].emplace_back(pos);
+		}
+		std::vector<std::pair<uint32_t, uint32_t>> positionPairsToTest;
+		for(auto & byChrom : resultsByChrom){
+			njh::sort(byChrom.second, [&results](const uint32_t pos1, const uint32_t pos2){
+				return getRef(results[pos1]).gRegion_.start_ < getRef(results[pos2]).gRegion_.start_;
+			});
+			const auto & positions = byChrom.second;
+			for(const auto idx1 : iter::range(positions.size())){
+				for(const auto idx2 : iter::range(idx1 + 1, positions.size())){
+					if(getRef(results[positions[idx2]]).gRegion_.start_ - getRef(results[positions[idx1]]).gRegion_.start_ > maxTargetSize){
+						//sorted by start, so every hit after this one on this chromosome is too far away as well
+						break;
+					}
+					positionPairsToTest.emplace_back(
+							std::min(positions[idx1], positions[idx2]),
+							std::max(positions[idx1], positions[idx2]));
+				}
+			}
+		}
+		//test in hit order so the bucketing does not decide which of two otherwise equal extractions comes first
+		njh::sort(positionPairsToTest);
+		for(const auto & positionPair : positionPairsToTest){
+			//need to be on opposite strands (should both should be in 5'->3' direction
+			//and they shouldn't overlap
+			//the same chromosome is guaranteed by the bucketing above
 
-				std::shared_ptr<ReAlignedSeq> p1 = results[pos1];
-				std::shared_ptr<ReAlignedSeq> p2 = results[pos2];
+			std::shared_ptr<ReAlignedSeq> p1 = results[positionPair.first];
+			std::shared_ptr<ReAlignedSeq> p2 = results[positionPair.second];
 
-				if (getRef(p1).gRegion_.chrom_ == getRef(p2).gRegion_.chrom_
-						&& getRef(p1).gRegion_.reverseSrand_ != getRef(p2).gRegion_.reverseSrand_
-						&& !getRef(p1).gRegion_.overlaps(getRef(p2).gRegion_)
-						&& getRef(p1).gRegion_.start_ != getRef(p2).gRegion_.end_
-						&& getRef(p1).gRegion_.end_ != getRef(p2).gRegion_.start_ ) {
+			if (getRef(p1).gRegion_.reverseSrand_ != getRef(p2).gRegion_.reverseSrand_
+					&& !getRef(p1).gRegion_.overlaps(getRef(p2).gRegion_)
+					&& getRef(p1).gRegion_.start_ != getRef(p2).gRegion_.end_
+					&& getRef(p1).gRegion_.end_ != getRef(p2).gRegion_.start_ ) {
 
-					if(getRef(p1).gRegion_.reverseSrand_){
-						if(getRef(p1).gRegion_.start_ > getRef(p2).gRegion_.start_){
-							GenomeExtractResultWithHits extraction(p1, p2);
-							if (extraction.extraction_.gRegion_->getLen() <= maxTargetSize && extraction.extraction_.gRegion_->getLen() >=minTargetSize) {
+				if(getRef(p1).gRegion_.reverseSrand_){
+					if(getRef(p1).gRegion_.start_ > getRef(p2).gRegion_.start_){
+						GenomeExtractResultWithHits extraction(p1, p2);
+						if (extraction.extraction_.gRegion_->getLen() <= maxTargetSize && extraction.extraction_.gRegion_->getLen() >=minTargetSize) {
 //								std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //								p1->refSeq_.outPutSeqAnsi(std::cout);
 //								p1->querySeq_.outPutSeqAnsi(std::cout);
@@ -432,14 +463,14 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 //								std::cout << extraction.p2_->gRegion_.genBedRecordCore().toDelimStrWithExtra() << std::endl;
 //								std::cout << extraction.getP2PortionOriginal53().seq_.size() << std::endl;
 //								extraction.getP2PortionOriginal53().outPutSeqAnsi(std::cout);
-								extractions.emplace_back(extraction);
+							extractions.emplace_back(extraction);
 
-							}
 						}
-					} else {
-						if(getRef(p1).gRegion_.start_ < getRef(p2).gRegion_.start_){
-							GenomeExtractResultWithHits extraction(p1, p2);
-							if (extraction.extraction_.gRegion_->getLen() <= maxTargetSize && extraction.extraction_.gRegion_->getLen() >=minTargetSize) {
+					}
+				} else {
+					if(getRef(p1).gRegion_.start_ < getRef(p2).gRegion_.start_){
+						GenomeExtractResultWithHits extraction(p1, p2);
+						if (extraction.extraction_.gRegion_->getLen() <= maxTargetSize && extraction.extraction_.gRegion_->getLen() >=minTargetSize) {
 //								std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //								p1->refSeq_.outPutSeqAnsi(std::cout);
 //								p1->querySeq_.outPutSeqAnsi(std::cout);
@@ -456,8 +487,7 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 //								std::cout << extraction.p2_->gRegion_.genBedRecordCore().toDelimStrWithExtra() << std::endl;
 //								std::cout << extraction.getP2PortionOriginal53().seq_.size() << std::endl;
 //								extraction.getP2PortionOriginal53().outPutSeqAnsi(std::cout);
-								extractions.emplace_back(extraction);
-							}
+							extractions.emplace_back(extraction);
 						}
 					}
 				}
