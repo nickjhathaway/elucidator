@@ -114,6 +114,7 @@ int primerUtilsRunner::queryGenomeKmerPositionIndex(const njh::progutils::CmdArg
 	std::vector<std::pair<std::string, std::string>> toLookUp;
 	for (const auto &q: queries) {
 		auto seq = q.second;
+		stringToUpper(seq);  //the index is case insensitive, so normalise before trimming and looking up
 		if (threePrimeLen > 0 && seq.size() > threePrimeLen) {
 			seq = seq.substr(seq.size() - threePrimeLen);
 		}
@@ -148,13 +149,16 @@ int primerUtilsRunner::queryGenomeKmerPositionIndex(const njh::progutils::CmdArg
 			throw std::runtime_error{ss.str()};
 		}
 		//independently scan the genome for each query and require the two answers to agree exactly, which
-		//catches both a wrong position and a missed occurrence
+		//catches both a wrong position and a missed occurrence. The scan is case insensitive because the index
+		//is: a soft-masked genome marks repeat content in lower case, and a primer primes there like anywhere
+		//else, so those positions belong in the index and must be matched here too.
 		std::unordered_map<std::string, std::vector<std::pair<std::string, uint64_t>>> truth;
 		SeqInput reader(SeqIOOptions::genFastaIn(genomeFnp));
 		reader.openIn();
 		seqInfo seq;
 		while (reader.readNextRead(seq)) {
 			auto chromName = seq.name_.substr(0, seq.name_.find_first_of(" \t"));
+			stringToUpper(seq.seq_);
 			for (const auto &q: hitsByQuery) {
 				const auto &needle = q.first;
 				if (seq.seq_.size() < needle.size()) {

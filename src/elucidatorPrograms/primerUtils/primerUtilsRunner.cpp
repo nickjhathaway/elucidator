@@ -3,6 +3,8 @@
 //
 
 #include "primerUtilsRunner.hpp"
+
+#include "elucidator/objects/MiscUtility/GenomeKmerPositionIndex.hpp"
 #include <njhseq/IO/SeqIO/SeqInput.hpp>
 #include <njhseq/IO/OutputStream.hpp>
 #include <njhseq/PrimerIDUtils/PrimerDimerUtils.hpp>
@@ -41,6 +43,8 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 	uint32_t minExtendAmountOfEndAdjustment = 5;
 	double evalue = 1000;
 	uint32_t wordSize = 6;
+	bool useKmerIndex = false;
+	uint32_t kmerIndexLength = 12;
 	bfs::path primersFnp;
 	bfs::path genomeFnp;
 	bfs::path expectedRegionsFnp;
@@ -53,6 +57,8 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 	setUp.setOption(minExtendAmountOfEndAdjustment, "--minExtendAmountOfEndAdjustment", "min Extend Amount Of End Adjustment for when allowing errors in hits");
 	setUp.setOption(evalue, "--evalue", "blast e-value cut-off; the default is blastn-short's own, which on a multi-Gb genome needs about 13 exact bases, so raising it is what lets the search report the shorter 3' anchors that can still prime");
 	setUp.setOption(wordSize, "--wordSize", "blast word size");
+	setUp.setOption(useKmerIndex, "--useKmerIndex", "find the primer sites with the genome's k-mer position index instead of blast. Only exact 3' anchors are found, so this suits a search for the short anchors that have to match exactly, not the lenient search for long partial matches");
+	setUp.setOption(kmerIndexLength, "--kmerIndexLength", "the k the index beside the genome was built at, used to find it; the index must have been built with at least this k and answers anchors up to it");
 
 	setUp.setOption(expectedRegionsFnp, "--expectedRegionsFnp", "expected Regions Fnp, to determine if a region is expected, supply the bed6 format of the region the primer should be amplifying, any region not matching this exact region (primer location included) will be marked as unspecific", true);
 	setUp.setOption(primersFnp, "--primersFnp", "Primers", true);
@@ -158,6 +164,107 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 	//_blastdb
 	//.nsq
 	auto blastDatabaseFnp = bfs::path(njh::rstripRet(bfs::path(genomeFnp).replace_extension("").string(), '.') + "_blastdb");
+	//Either backend writes the same outfmt-6 table, so everything downstream of here is identical and the two
+	//are directly comparable. The index can only answer exact matches, so it stands in for blast when the
+	//search is for short 3' anchors that have to match exactly anyway.
+	if (useKmerIndex) {
+		auto indexFnp = GenomeKmerPositionIndex::genIndexFnpForGenome(genomeFnp, kmerIndexLength);
+		if (!bfs::exists(indexFnp)) {
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error --useKmerIndex but no index at " << indexFnp << "\n";
+			ss << "build one with: elucidator buildGenomeKmerPositionIndex --genomeFnp " << genomeFnp
+					<< " --kmerLength " << kmerIndexLength << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+		GenomeKmerPositionIndex kmerIndex(indexFnp);
+
+		//collect every anchor hit first, then walk the genome once per chromosome to extend each match 5' for
+		//as long as it stays exact. That extension is what blast's own seed extension does, so both backends
+		//report the same maximal exact match rather than the index reporting only the anchor.
+		struct AnchorHit {
+			std::string primerName_;
+			uint32_t pos_{0};        //0-based leftmost position of the anchor on the forward strand
+			uint32_t anchorLen_{0};
+			bool reverse_{false};
+		};
+		std::unordered_map<std::string, std::vector<AnchorHit>> hitsByChrom;
+		uint64_t anchorHits = 0;
+		for (const auto &primer: primerByName) {
+			const auto primerLen = static_cast<uint32_t>(primer.second.size());
+			auto anchorLen = std::min<uint32_t>(minLen, primerLen);
+			if (std::numeric_limits<uint32_t>::max() == minLen) {
+				anchorLen = primerLen;
+			}
+			if (anchorLen > kmerIndex.k()) {
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error need a " << anchorLen << " base anchor but " << indexFnp
+						<< " was built at k=" << kmerIndex.k() << "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			const auto forwardAnchor = primer.second.substr(primerLen - anchorLen);
+			//the reverse complement of the whole primer starts with the reverse complement of its 3' anchor
+			const auto revCompPrimer = seqUtil::reverseComplement(primer.second, "DNA");
+			const auto reverseAnchor = revCompPrimer.substr(0, anchorLen);
+			for (const auto &hit: kmerIndex.find(forwardAnchor)) {
+				hitsByChrom[hit.chrom_].emplace_back(AnchorHit{primer.first, static_cast<uint32_t>(hit.pos_), anchorLen, false});
+				++anchorHits;
+			}
+			for (const auto &hit: kmerIndex.find(reverseAnchor)) {
+				hitsByChrom[hit.chrom_].emplace_back(AnchorHit{primer.first, static_cast<uint32_t>(hit.pos_), anchorLen, true});
+				++anchorHits;
+			}
+		}
+		if (setUp.pars_.verbose_) {
+			std::cout << anchorHits << " anchor hits over " << hitsByChrom.size() << " chromosomes" << std::endl;
+		}
+
+		OutputStream hitsOut(allPrimerBlastHitsTableFnp);
+		for (auto &chrom: hitsByChrom) {
+			std::string chromSeq;
+			genomeReader[chrom.first]->getSequence(chromSeq);
+			//a soft masked genome marks repeats in lower case, and a primer primes there like anywhere else
+			stringToUpper(chromSeq);
+			njh::sort(chrom.second, [](const AnchorHit &one, const AnchorHit &two) {
+				return one.pos_ < two.pos_;
+			});
+			for (const auto &hit: chrom.second) {
+				const auto &primerSeq = njh::mapAt(primerByName, hit.primerName_);
+				const auto primerLen = static_cast<uint32_t>(primerSeq.size());
+				uint32_t alignLen = hit.anchorLen_;
+				uint32_t start = hit.pos_;
+				if (hit.reverse_) {
+					const auto revCompPrimer = seqUtil::reverseComplement(primerSeq, "DNA");
+					while (alignLen < primerLen && start + alignLen < chromSeq.size()
+								 && revCompPrimer[alignLen] == chromSeq[start + alignLen]) {
+						++alignLen;
+					}
+				} else {
+					while (alignLen < primerLen && start > 0
+								 && primerSeq[primerLen - alignLen - 1] == chromSeq[start - 1]) {
+						--start;
+						++alignLen;
+					}
+				}
+				//blast reports the query ascending and, on the minus strand, the subject descending
+				const auto qStart = primerLen - alignLen + 1;
+				const auto sLeft = start + 1;
+				const auto sRight = start + alignLen;
+				hitsOut << hit.primerName_
+								<< "\t" << chrom.first
+								<< "\t" << "100.000"
+								<< "\t" << alignLen
+								<< "\t" << 0
+								<< "\t" << 0
+								<< "\t" << qStart
+								<< "\t" << primerLen
+								<< "\t" << (hit.reverse_ ? sRight : sLeft)
+								<< "\t" << (hit.reverse_ ? sLeft : sRight)
+								<< "\t" << "0.0"
+								<< "\t" << (alignLen * 2)
+								<< std::endl;
+			}
+		}
+	} else {
 	std::string blastCmd = "blastn -query " + allPrimerFnp.string() + " -num_threads " + njh::pasteAsStr(numThreads) + " -task blastn-short -word_size " + njh::pasteAsStr(wordSize) + " -evalue " + njh::pasteAsStr(evalue) + " -db " + blastDatabaseFnp.string() + " -outfmt 6 -max_target_seqs 100000000 ";
 	if(0 == errorAllowed){
 		blastCmd += " -perc_identity 100 ";
@@ -169,6 +276,7 @@ int primerUtilsRunner::testWithBlastForUnspecificAmplification(
 		ss << __PRETTY_FUNCTION__ << ", error " << "error in running: " << blastsCmdsOutput.cmd_ << "\n";
 		ss << "stderr: " << blastsCmdsOutput.stdErr_ << "\n";
 		throw std::runtime_error{ss.str()};
+	}
 	}
 	std::vector<BLASTHitTab> blastHits;
 	std::vector<std::shared_ptr<ReAlignedSeq>> results;
