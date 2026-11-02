@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04            # ubuntu-latest (26.04) lacks libfuse3-3, which the apptainer .deb needs
     steps:
       - uses: actions/checkout@v4
 
