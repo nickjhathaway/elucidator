@@ -1849,25 +1849,27 @@ std::vector<seqInfo> ContigsCompareGraphDev::readInSeqs(const SeqIOOptions & inO
 ContigsCompareGraphDev::processConservedNodesVecRes ContigsCompareGraphDev::processConservedNodesVec(const std::vector<std::shared_ptr<node>> & nodes){
 	processConservedNodesVecRes ret;
 //	std::string testSample = "PF0860-C.0[IsFieldSample=TRUE;PopUID=Pf3D7_11_v3-1920483-1921173-for.058;collection_date=NA;collection_year=2013;country=Ghana;p_name=Pf3D7_11_v3-1920483-1921173-for;readCount=729;region=West Africa;sample=PF0860-C;secondaryRegion=AFRICA;site=Navrongo]_f0.5";
-	if(1 == nodes.size()){
-		for(const auto & name : nodes.front()->inReadNamesIdx_){
-			ret.nameToSubSegments[name].emplace_back(nodes.front()->k_, 0);
-		}
-	}else if(nodes.size() > 1){
-		for(const auto & n : nodes){
-			std::unordered_map<std::string, uint32_t> nodePositionPerSeq;
-			for(const auto & h : n->headEdges_){
-				for(const auto & con : h->connectorInfos_){
+	if(nodes.empty()){
+		std::stringstream ss;
+		ss << __PRETTY_FUNCTION__ << ", error " << "nodes vector is empty, size:" << nodes.size()<< "\n";
+		throw std::runtime_error{ss.str()};
+	}
+	//positions come from the edges even when there's a single conserved node, it isn't necessarily at the start of every
+	//sequence (e.g. variable-conserved-variable)
+	for(const auto & n : nodes){
+		std::unordered_map<std::string, uint32_t> nodePositionPerSeq;
+		for(const auto & h : n->headEdges_){
+			for(const auto & con : h->connectorInfos_){
 //					if(con.readName_ == testSample){
 //						std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //						std::cout << "con.tailPos_: " << con.tailPos_ << std::endl;
 //						std::cout << "n->k_" << std::endl;
 //					}
-					nodePositionPerSeq[con.readName_] = con.tailPos_;
-				}
+				nodePositionPerSeq[con.readName_] = con.tailPos_;
 			}
-			for(const auto & t : n->tailEdges_){
-				for(const auto & con : t->connectorInfos_){
+		}
+		for(const auto & t : n->tailEdges_){
+			for(const auto & con : t->connectorInfos_){
 //					if(con.readName_ == testSample){
 //						std::cout << __FILE__ << " " << __LINE__ << std::endl;
 //						std::cout << "con.headPos_: " << con.headPos_ << std::endl;
@@ -1876,17 +1878,18 @@ ContigsCompareGraphDev::processConservedNodesVecRes ContigsCompareGraphDev::proc
 //						std::cout << "n->kLen_: " << n->kLen_ << std::endl;
 //						std::cout << "(n->k_.size() - n->kLen_): " << (n->k_.size() - n->kLen_) << std::endl;
 //					}
-					nodePositionPerSeq[con.readName_] = con.headPos_ - (n->k_.size() - n->kLen_);
-				}
-			}
-			for(const auto & seq : nodePositionPerSeq){
-				ret.nameToSubSegments[seq.first].emplace_back(n->k_, seq.second);
+				nodePositionPerSeq[con.readName_] = con.headPos_ - (n->k_.size() - n->kLen_);
 			}
 		}
-	}else{
-		std::stringstream ss;
-		ss << __PRETTY_FUNCTION__ << ", error " << "nodes vector is empty, size:" << nodes.size()<< "\n";
-		throw std::runtime_error{ss.str()};
+		//a sequence with no edges on this node is just this node, so it starts at 0
+		for(const auto & name : n->inReadNamesIdx_){
+			if(!njh::in(name, nodePositionPerSeq)){
+				nodePositionPerSeq[name] = 0;
+			}
+		}
+		for(const auto & seq : nodePositionPerSeq){
+			ret.nameToSubSegments[seq.first].emplace_back(n->k_, seq.second);
+		}
 	}
 
 	std::unordered_set<std::string> paths;

@@ -1354,6 +1354,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	uint32_t uniqueHapCountCutOff = 0;
 
 	uint32_t numThreads = 1;
+	bool reportNonRefGroups = false;
 
 	TranslatorByAlignment::RunPars variantCallerRunPars;
 	CollapsedHaps::GenPopMeasuresPar calcPopMeasuresPars;
@@ -1372,6 +1373,7 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	setUp.setOption(numThreads, "--numThreads", "num Threads");
 	setUp.setOption(uniqueHapCountCutOff, "--uniqueHapCountCutOff", "unique Hap Count Cut Off");
 	setUp.setOption(calcPopMeasuresPars.getPairwiseComps, "--getPairwiseComps", "get Pairwise Comps");
+	setUp.setOption(reportNonRefGroups, "--reportNonRefGroups", "sequences that share no path with the reference end up in other graph groups, which are left out of the reference based output (group 0); this reports their conserved nodes, the node positions within each of their sequences and their diversity");
 
 	setUp.setOption(kSimFilter, "--kSimFilter", "filter input sequences on kSimFilter for artifacts");
 	setUp.setOption(kLenForFilter, "--kLenForFilter", "filter kLenForFilter for artifacts");
@@ -1482,12 +1484,22 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	}
 
 
+	//everything downstream is relative to the reference so it can't be filtered off
+	auto throwIfRefFilteredOff = [&refSeq,&lenFiltMultiplier](const std::vector<seqInfo> & filteredSeqs){
+		if(!std::any_of(filteredSeqs.begin(), filteredSeqs.end(), [&refSeq](const seqInfo & seq){ return seq.name_ == refSeq.name_; })){
+			std::stringstream ss;
+			ss << __PRETTY_FUNCTION__ << ", error " << "--lenFilter removed the reference " << refSeq.name_ << " (length " << len(refSeq)
+					<< "), its length is too different from the median length of the input sequences for a --lenFiltMultiplier of " << lenFiltMultiplier << "\n";
+			throw std::runtime_error{ss.str()};
+		}
+	};
 	if (lenFilter) {
 		seqs = ContigsCompareGraphDev::filterSeqsOnLen(seqs, graphCorrectingPars,
 				lenFiltMultiplier,
 				SeqIOOptions::genFastaOut(
 						njh::files::make_path(setUp.pars_.directoryName_,
 								"filteredSeqs.fasta.gz")));
+		throwIfRefFilteredOff(seqs);
 	}
 
 	if (kSimFilter) {
@@ -1522,9 +1534,6 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 		klenOut << graphCorrectingPars.klen << std::endl;
 	}
 
-	if(std::numeric_limits<uint32_t>::max() == subRegionComboPars.includeFromSubRegionSize){
-		subRegionComboPars.includeFromSubRegionSize = graphCorrectingPars.klen;
-	}
 	seqInfo refCorrectedInfo = refSeq;
 	//keep the uncorrected reference, refSeqLoc coordinates are relative to this sequence
 	const seqInfo originalRefSeq = refSeq;
@@ -1551,14 +1560,12 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 																										 SeqIOOptions::genFastaOut(
 																														 njh::files::make_path(setUp.pars_.directoryName_,
 																																									 prefix +"lenFilteredSeqs.fasta.gz")));
+			throwIfRefFilteredOff(seqs);
 		}
 		graphCorrectingPars.klen = ContigsCompareGraphDev::findMinNonredundantKmer(minimumKlen, seqs, __PRETTY_FUNCTION__);
 		{
 			OutputStream klenOut(njh::files::make_path(setUp.pars_.directoryName_, prefix + "nonRedundantKlenAfterCorrection.txt"));
 			klenOut << graphCorrectingPars.klen << std::endl;
-		}
-		if(std::numeric_limits<uint32_t>::max() == subRegionComboPars.includeFromSubRegionSize){
-			subRegionComboPars.includeFromSubRegionSize = graphCorrectingPars.klen;
 		}
 	}
 
@@ -1606,16 +1613,18 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 																											 SeqIOOptions::genFastaOut(
 																															 njh::files::make_path(setUp.pars_.directoryName_,
 																																										 "lenFilteredSeqs.fasta.gz")));
+				throwIfRefFilteredOff(seqs);
 			}
 			graphCorrectingPars.klen = ContigsCompareGraphDev::findMinNonredundantKmer(minimumKlen, seqs, __PRETTY_FUNCTION__);
 			{
 				OutputStream klenOut(njh::files::make_path(setUp.pars_.directoryName_, "nonRedundantKlenAfterCorrection.txt"));
 				klenOut << graphCorrectingPars.klen << std::endl;
 			}
-			if(std::numeric_limits<uint32_t>::max() == subRegionComboPars.includeFromSubRegionSize){
-				subRegionComboPars.includeFromSubRegionSize = graphCorrectingPars.klen;
-			}
 		}
+	}
+	//default to the final k-mer length, the one the graph below is built with
+	if(std::numeric_limits<uint32_t>::max() == subRegionComboPars.includeFromSubRegionSize){
+		subRegionComboPars.includeFromSubRegionSize = graphCorrectingPars.klen;
 	}
 
 
@@ -1771,11 +1780,39 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 	}
 
 	{
-		std::unordered_map<uint32_t, std::vector<std::shared_ptr<ContigsCompareGraphDev::node>>> nodesWithFull;
+		std::map<uint32_t, std::vector<std::shared_ptr<ContigsCompareGraphDev::node>>> nodesWithFull;
 		compGraph.resetGroups();
 
+		//renumber the groups so the group with the reference in it is always group 0 (downstream tools read the 0_ref_* files),
+		//the other groups keep their relative order
+		{
+			std::set<uint32_t> refGroups;
+			std::set<uint32_t> allGroups;
+			for(const auto & n : compGraph.nodes_){
+				allGroups.emplace(n->group_);
+				if(njh::in(refSeq.name_, n->inReadNamesIdx_)){
+					refGroups.emplace(n->group_);
+				}
+			}
+			if(1 != refGroups.size()){
+				std::stringstream ss;
+				ss << __PRETTY_FUNCTION__ << ", error " << "expected the reference " << refSeq.name_ << " to be within exactly 1 graph group but found it in " << refGroups.size() << "\n";
+				throw std::runtime_error{ss.str()};
+			}
+			std::unordered_map<uint32_t, uint32_t> groupRenumbering{{*refGroups.begin(), 0}};
+			uint32_t nextGroup = 1;
+			for(const auto & group : allGroups){
+				if(group != *refGroups.begin()){
+					groupRenumbering[group] = nextGroup++;
+				}
+			}
+			for(const auto & n : compGraph.nodes_){
+				n->group_ = groupRenumbering[n->group_];
+			}
+		}
+
 		//get the max count of contigs per group to get the max
-		std::unordered_map<uint32_t, std::unordered_set<std::string>> contigCountsPerGroup;
+		std::map<uint32_t, std::unordered_set<std::string>> contigCountsPerGroup;
 		for(const auto & n : compGraph.nodes_){
 			contigCountsPerGroup[n->group_].insert(n->inReadNamesIdx_.begin(), n->inReadNamesIdx_.end());
 		}
@@ -1789,6 +1826,37 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 		groupContigCountsOut << "group\tcount" << std::endl;
 		for(const auto & group : contigCountsPerGroup){
 			groupContigCountsOut << group.first << '\t' << group.second.size() << std::endl;
+		}
+		{
+			//which group(s) each input sequence ended up in, sequences in a group other than 0 aren't in the reference based output
+			std::map<std::string, std::set<uint32_t>> groupsPerSeq;
+			for(const auto & group : contigCountsPerGroup){
+				for(const auto & name : group.second){
+					groupsPerSeq[name].emplace(group.first);
+				}
+			}
+			uint32_t notInRefGroup = 0;
+			OutputStream seqGroupsOut(njh::files::make_path(conservedRegionInfoDir, "sequenceGroups.tab.txt"));
+			seqGroupsOut << "name\tgroup" << std::endl;
+			for(const auto & seq : seqs){
+				seqGroupsOut << seq.name_ << "\t";
+				if(njh::in(seq.name_, groupsPerSeq)){
+					seqGroupsOut << njh::conToStr(groupsPerSeq[seq.name_], ",");
+					if(!njh::in(0u, groupsPerSeq[seq.name_])){
+						++notInRefGroup;
+					}
+				}else{
+					seqGroupsOut << "NA";
+					++notInRefGroup;
+				}
+				seqGroupsOut << std::endl;
+			}
+			if(notInRefGroup > 0){
+				std::cerr << "warning: " << notInRefGroup << " of " << seqs.size() << " sequences aren't within the reference's group (group 0) and are left out of the reference based sub-segment output, see " << njh::files::make_path(conservedRegionInfoDir, "sequenceGroups.tab.txt") << std::endl;
+			}
+			if(!njh::in(0u, nodesWithFull)){
+				std::cerr << "warning: no node is shared by every sequence within the reference's group (group 0), so there is no reference based sub-segment output" << std::endl;
+			}
 		}
 
 		auto uniqCorrectedSeqs = CollapsedHaps::collapseReads(seqs);
@@ -1843,21 +1911,18 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 		OutputStream conservedNodeOut(njh::files::make_path(conservedRegionInfoDir, "conservedNodesPerGroup.tab.txt"));
 		conservedNodeOut << "group\tsubSegment\tsubSegmentID\tseqCount\ttailCount\theadCount" << std::endl;
 
-		for(const auto & nodes : nodesWithFull){
-
-
-			auto processedNodes = ContigsCompareGraphDev::processConservedNodesVec(nodes.second);
-
-
+		auto writeConservedNodeInfo = [&conservedNodeOut,&conservedRegionInfoDir](uint32_t group,
+				const std::vector<std::shared_ptr<ContigsCompareGraphDev::node>> & groupNodes,
+				ContigsCompareGraphDev::processConservedNodesVecRes & processedNodes){
 			//output seqs
 			{
 				std::vector<seqInfo> conservedSeqs;
 
-				for(const auto & n : nodes.second){
+				for(const auto & n : groupNodes){
 					auto ID = processedNodes.subseqToIDKey[n->k_];
 
 					conservedSeqs.emplace_back(ID, n->k_);
-					conservedNodeOut << nodes.first
+					conservedNodeOut << group
 							<< "\t" << n->k_
 							<< "\t" << ID
 							<< "\t" << n->inReadNamesIdx_.size()
@@ -1865,18 +1930,79 @@ int miscRunner::createSharedSubSegmentsFromRefSeqs(const njh::progutils::CmdArgs
 							<< "\t" << n->headCount()
 							<< std::endl;
 				}
-				auto conservedSeqsOpts = SeqIOOptions::genFastaOut(njh::files::make_path(conservedRegionInfoDir, njh::pasteAsStr(nodes.first, "_conservedNodes.fasta")));
+				auto conservedSeqsOpts = SeqIOOptions::genFastaOut(njh::files::make_path(conservedRegionInfoDir, njh::pasteAsStr(group, "_conservedNodes.fasta")));
 				SeqOutput::write(conservedSeqs, conservedSeqsOpts);
 			}
 
 			//output conserved seq key
 			{
-				OutputStream keyOut(njh::files::make_path(conservedRegionInfoDir, njh::pasteAsStr(nodes.first, "_conservedNodesKey.tab.txt")));
+				OutputStream keyOut(njh::files::make_path(conservedRegionInfoDir, njh::pasteAsStr(group, "_conservedNodesKey.tab.txt")));
 				keyOut << "seq\tID" << std::endl;
 				for(const auto & subSeqKey : processedNodes.subseqToIDKey){
 					keyOut << subSeqKey.first << "\t" << subSeqKey.second << std::endl;
 				}
 			}
+		};
+
+		//the groups other than the reference's have no reference coordinates, so only report on their conserved nodes and diversity
+		if(reportNonRefGroups){
+			OutputStream nonRefDivMeasures(njh::files::make_path(conservedRegionInfoDir, "nonRefGroupsDivMeasures.tab.txt"));
+			nonRefDivMeasures << "group\tconservedNodes\ttotalHaps\tuniqueHaps\the\texp3\texp4\texp5\tsinglets\tdoublets\teffectiveNumOfAlleles\tShannonEntropyE" << std::endl;
+			for(const auto & group : contigCountsPerGroup){
+				if(0 == group.first){
+					continue;
+				}
+				std::vector<seqInfo> groupSeqs;
+				for(const auto & seq : seqs){
+					if(njh::in(seq.name_, group.second)){
+						groupSeqs.emplace_back(seq);
+					}
+				}
+				uint32_t conservedNodeCount = 0;
+				if(njh::in(group.first, nodesWithFull)){
+					const auto & groupNodes = nodesWithFull.at(group.first);
+					conservedNodeCount = groupNodes.size();
+					try {
+						auto processedNodes = ContigsCompareGraphDev::processConservedNodesVec(groupNodes);
+						writeConservedNodeInfo(group.first, groupNodes, processedNodes);
+						//locations of the conserved nodes within each of the group's sequences
+						OutputStream locsOut(njh::files::make_path(conservedRegionInfoDir, njh::pasteAsStr(group.first, "_sharedLocs.bed")));
+						for(const auto & nameLocs : processedNodes.nameToSubSegPositions_raw){
+							for(auto loc : nameLocs.second){
+								loc.name_ = processedNodes.subseqToIDKey[loc.name_];
+								locsOut << loc.toDelimStrWithExtra() << std::endl;
+							}
+						}
+					} catch (const std::exception & e) {
+						std::cerr << "warning: couldn't process the conserved nodes for group " << group.first << ": " << e.what() << std::endl;
+					}
+				}
+				auto divMeasures = PopGenCalculator::getGeneralMeasuresOfDiversityRawInput(groupSeqs);
+				nonRefDivMeasures << group.first
+						<< "\t" << conservedNodeCount
+						<< "\t" << groupSeqs.size()
+						<< "\t" << divMeasures.alleleNumber_
+						<< "\t" << divMeasures.heterozygostiy_
+						<< "\t" << divMeasures.expected_k_heterozygosities[3].k_heterozygosity_
+						<< "\t" << divMeasures.expected_k_heterozygosities[4].k_heterozygosity_
+						<< "\t" << divMeasures.expected_k_heterozygosities[5].k_heterozygosity_
+						<< "\t" << divMeasures.singlets_
+						<< "\t" << divMeasures.doublets_
+						<< "\t" << divMeasures.effectiveNumOfAlleles_
+						<< "\t" << divMeasures.ShannonEntropyE_
+						<< std::endl;
+			}
+		}
+
+		//the reference based output only comes from the reference's group, group 0
+		for(const auto & nodes : nodesWithFull){
+			if(0 != nodes.first){
+				continue;
+			}
+
+			auto processedNodes = ContigsCompareGraphDev::processConservedNodesVec(nodes.second);
+
+			writeConservedNodeInfo(nodes.first, nodes.second, processedNodes);
 
 			//output reference locations relative to current seq
 			{
