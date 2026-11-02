@@ -697,6 +697,7 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 	uint32_t barcodeMatchMargin = 0;
 	std::string kitName;
 	std::optional<OntBarcodeKit> kit;
+	bool development = false;
 
 	seqUtilsExtractSetUp setUp(inputCommands);
 	if(nanopore){
@@ -719,6 +720,8 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 			"A barcode needs this many more matching bases than any other to be called by itself, 0 means just take the best (ties broken by alignment score)");
 	setUp.setOption(barcodeSampleSheet, "--illuminaBarcodeSampleSheet,--barcodeSampleSheet",
 			"Barcode Sample Sheet, columns sample_name, fw, rev (barcode sequences); with --kit can instead be sample_name and barcode (e.g. barcode01) or a dorado name key (barcode name then sample, no header)", true);
+	setUp.setOption(development, "--development",
+			"Also write the per read barcode info files (info.tab.txt, infoBest.tab.txt, infoPass.tab.txt)");
 
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -754,11 +757,23 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 	//make outputs
 	auto fastqDir = njh::files::make_path(setUp.pars_.directoryName_, "fastq");
 	njh::files::makeDir(njh::files::MkdirPar{fastqDir});
+	//kept out of fastq/ so a pipeline reading every file there doesn't take the unused kit barcodes as samples
+	auto unusedBarcodesDir = njh::files::make_path(setUp.pars_.directoryName_, "unusedBarcodes");
+	if(!unusedBarcodeNames.empty()){
+		njh::files::makeDir(njh::files::MkdirPar{unusedBarcodesDir});
+	}
 	MultiSeqOutCache<seqInfo> outputs;
 	for(const auto & bar : barcodes){
-		outputs.addReader(bar.sampleName_, SeqIOOptions::genFastqOutGz(njh::files::make_path(fastqDir, bar.sampleName_)));
+		const auto & outDir = unusedBarcodeNames.count(bar.sampleName_) ? unusedBarcodesDir : fastqDir;
+		outputs.addReader(bar.sampleName_, SeqIOOptions::genFastqOutGz(njh::files::make_path(outDir, bar.sampleName_)));
 	}
 	outputs.addReader("Undetermined", SeqIOOptions::genFastqOutGz(njh::files::make_path(fastqDir, "Undetermined")));
+	//reads whose two ends were each confidently called as different samples, kept apart from Undetermined (an end that couldn't be called)
+	//and out of fastq/, since they measure between sample joining or barcode misreads rather than failed barcode calls
+	const std::string mismatchedSamplesName = "mismatchedSamples";
+	auto mismatchedSamplesDir = njh::files::make_path(setUp.pars_.directoryName_, "mismatchedSamplesFastq");
+	njh::files::makeDir(njh::files::MkdirPar{mismatchedSamplesDir});
+	outputs.addReader(mismatchedSamplesName, SeqIOOptions::genFastqOutGz(njh::files::make_path(mismatchedSamplesDir, mismatchedSamplesName)));
 	//set up for alignment of barcodes for scoring
 	maxBarLen = maxBarLen * 2;
 	gapScoringParameters gapParsBar(5,1,5,1,5,1);
@@ -772,16 +787,24 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 	seqInfo seq;
 
 
-	OutputStream out(njh::files::make_path(setUp.pars_.directoryName_, "info.tab.txt"));
-	out << "seqName\tseqLen\tfwd5_3_score\tfwd5_3_bar\trev3_5_score\trev3_5_bar\trev5_3_score\trev5_3_bar\tfwd3_5_score\tfwd3_5_bar" << std::endl;
-	OutputStream outBest(njh::files::make_path(setUp.pars_.directoryName_, "infoBest.tab.txt"));
-	outBest << "seqName\tdirection\tfbarcode\trbarcode" << std::endl;
-
-	OutputStream outPass(njh::files::make_path(setUp.pars_.directoryName_, "infoPass.tab.txt"));
-
-	outPass << "seqName\tdirection\tfwd5_3_score\tfwd5_3_bar\trev3_5_score\trev3_5_bar\trev5_3_score\trev5_3_bar\tfwd3_5_score\tfwd3_5_bar" << std::endl;
+	//per read info files are a line per read, so only written with --development; noInfoOut has no buffer and drops what's written to it
+	std::unique_ptr<OutputStream> out;
+	std::unique_ptr<OutputStream> outBest;
+	std::unique_ptr<OutputStream> outPass;
+	std::ostream noInfoOut(nullptr);
+	if(development){
+		out = std::make_unique<OutputStream>(njh::files::make_path(setUp.pars_.directoryName_, "info.tab.txt"));
+		*out << "seqName\tseqLen\tfwd5_3_score\tfwd5_3_bar\trev3_5_score\trev3_5_bar\trev5_3_score\trev5_3_bar\tfwd3_5_score\tfwd3_5_bar" << std::endl;
+		outBest = std::make_unique<OutputStream>(njh::files::make_path(setUp.pars_.directoryName_, "infoBest.tab.txt"));
+		*outBest << "seqName\tdirection\tfbarcode\trbarcode" << std::endl;
+		outPass = std::make_unique<OutputStream>(njh::files::make_path(setUp.pars_.directoryName_, "infoPass.tab.txt"));
+		*outPass << "seqName\tdirection\tfwd5_3_score\tfwd5_3_bar\trev3_5_score\trev3_5_bar\trev5_3_score\trev5_3_bar\tfwd3_5_score\tfwd3_5_bar" << std::endl;
+	}
 
 	std::map<std::string, uint32_t> sampleCounts;
+	//fwd end call, rev end call -> status of the pair and read count
+	std::map<std::pair<std::string, std::string>, std::pair<std::string, uint32_t>> barcodePairCounts;
+	std::map<std::string, uint32_t> pairStatusCounts;
 
 	uint32_t fullPass = 0;
 	uint32_t sampleDetermined = 0;
@@ -851,7 +874,7 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 	};
 
 	while(seqReader.readNextRead(seq)){
-		auto res = finder.process(seq, out);
+		auto res = finder.process(seq, out ? *out : noInfoOut);
 		if(AdaptorReadOutcome::pass != res.outcome_){
 			continue;
 		}
@@ -860,6 +883,10 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 		const auto & reverseBar = res.reverseBar_;
 		++fullPass;
 		std::string determinedSample = "Undetermined";
+		//the sample(s) each end was called as and how the two ends relate, for barcodePairCounts.tab.txt
+		std::string fwdCall = "Undetermined";
+		std::string revCall = "Undetermined";
+		std::string pairStatus = "bothEndsUndetermined";
 
 		{
 			VecStr fwdBestSample{"Undetermined"};
@@ -872,16 +899,23 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 				fwdBestSample = getBestBarSamples(forwardBar, true);
 				revBestSample = getBestBarSamples(reverseBar, false);
 			}
+			bool fwdUndetermined = njh::in(std::string("Undetermined"),fwdBestSample) || fwdBestSample.empty();
+			bool revUndetermined = njh::in(std::string("Undetermined"),revBestSample) || revBestSample.empty();
+			if(!fwdUndetermined){
+				fwdCall = njh::conToStr(fwdBestSample, ",");
+			}
+			if(!revUndetermined){
+				revCall = njh::conToStr(revBestSample, ",");
+			}
 			//need one for each and need to match
 			//if multiple in one or both, see if there is only one pair since barcodes can be reused several times
-			if (   njh::in(std::string("Undetermined"),fwdBestSample)
-					|| njh::in(std::string("Undetermined"),revBestSample)
-					|| fwdBestSample.size() == 0
-					|| revBestSample.size() == 0) {
+			if (fwdUndetermined || revUndetermined) {
 				determinedSample = "Undetermined";
+				pairStatus = fwdUndetermined && revUndetermined ? "bothEndsUndetermined" : "oneEndUndetermined";
 			}else{
 				if(fwdBestSample.size() == 1 && revBestSample.size() == 1 && fwdBestSample.front() == revBestSample.front()){
 					determinedSample = fwdBestSample.front();
+					pairStatus = "matched";
 				} else {
 					VecStr pairs;
 					for(const auto & fwdBest : fwdBestSample){
@@ -894,11 +928,23 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 					}
 					if(pairs.size() == 1){
 						determinedSample = pairs.front();
+						pairStatus = "matched";
+					}else if(pairs.empty()){
+						determinedSample = mismatchedSamplesName;
+						pairStatus = "mismatched";
 					}else{
 						determinedSample = "Undetermined";
+						pairStatus = "ambiguousPair";
 					}
 				}
 			}
+		}
+		auto pairCount = barcodePairCounts.emplace(std::make_pair(fwdCall, revCall), std::make_pair(pairStatus, 0)).first;
+		++pairCount->second.second;
+		++pairStatusCounts[pairStatus];
+		//no sample carries an unused kit barcode, so these can only be misread barcodes, the background for the other mismatches
+		if("mismatched" == pairStatus && (unusedBarcodeNames.count(fwdCall) || unusedBarcodeNames.count(revCall))){
+			++pairStatusCounts["mismatchedWithUnusedBarcode"];
 		}
 		MetaDataInName seqMeta;
 		seqMeta.addMeta("direction", res.direction_);
@@ -908,17 +954,24 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 		seqMeta.addMeta("fullBar", njh::pasteAsStr(forwardBar, "+", reverseBar));
 		seqMeta.addMeta("rprimerStart", processRes.rprimerStart_);
 		seqMeta.addMeta("sample", determinedSample);
+		if("matched" != pairStatus){
+			seqMeta.addMeta("fwdSample", fwdCall);
+			seqMeta.addMeta("revSample", revCall);
+			seqMeta.addMeta("pairStatus", pairStatus);
+		}
 		seq.name_ += seqMeta.createMetaName();
 		outputs.add(determinedSample, seq);
 		++sampleCounts[determinedSample];
-		if("Undetermined" != determinedSample && 0 == unusedBarcodeNames.count(determinedSample)) {
+		if("matched" == pairStatus && 0 == unusedBarcodeNames.count(determinedSample)) {
 			++sampleDetermined;
 		}
-		AdaptorPairFinder::writePassLine(outPass, seq.name_, res);
-		outBest << seq.name_
-				<< "\t" << res.direction_
-				<< "\t" << forwardBar
-				<< "\t" << reverseBar << "\n";
+		if(development){
+			AdaptorPairFinder::writePassLine(*outPass, seq.name_, res);
+			*outBest << seq.name_
+					<< "\t" << res.direction_
+					<< "\t" << forwardBar
+					<< "\t" << reverseBar << "\n";
+		}
 	}
 	finder.writeBestDirectionCounts(setUp.pars_.directoryName_);
 	finder.writeFailedCounts(setUp.pars_.directoryName_);
@@ -926,7 +979,11 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 		std::vector<std::pair<std::string, uint32_t>> afterPasses{
 			{"fullPass", fullPass},
 			{"Undetermined", sampleCounts["Undetermined"]},
-			{"sampleDetermined", sampleDetermined}};
+			{"sampleDetermined", sampleDetermined},
+			{mismatchedSamplesName, pairStatusCounts["mismatched"]},
+			{"oneEndUndetermined", pairStatusCounts["oneEndUndetermined"]},
+			{"bothEndsUndetermined", pairStatusCounts["bothEndsUndetermined"]},
+			{"ambiguousSamplePair", pairStatusCounts["ambiguousPair"]}};
 		if(kit){
 			uint32_t unusedBarcodeReads = 0;
 			for(const auto & sampleCount : sampleCounts){
@@ -935,6 +992,7 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 				}
 			}
 			afterPasses.emplace_back("unusedBarcode", unusedBarcodeReads);
+			afterPasses.emplace_back("mismatchedSamplesWithUnusedBarcode", pairStatusCounts["mismatchedWithUnusedBarcode"]);
 		}
 		finder.writeConditionCounts(setUp.pars_.directoryName_, afterPasses);
 	}
@@ -945,6 +1003,24 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 			sampleCountsOut << sampleCount.first
 					<< "\t" << sampleCount.second
 					<< "\t" << sampleCount.second/static_cast<double>(finder.passes()) << std::endl;
+		}
+	}
+	{
+		//every read that passed both adaptors by the sample(s) each end was called as, most common first; the mismatched rows over
+		//mismatched plus matched give the rate of reads joining barcodes of two samples
+		std::vector<std::pair<std::pair<std::string, std::string>, std::pair<std::string, uint32_t>>> pairCounts(
+				barcodePairCounts.begin(), barcodePairCounts.end());
+		std::stable_sort(pairCounts.begin(), pairCounts.end(), [](const auto & left, const auto & right){
+			return left.second.second > right.second.second;
+		});
+		OutputStream pairCountsOut(njh::files::make_path(setUp.pars_.directoryName_, "barcodePairCounts.tab.txt"));
+		pairCountsOut << "fwdSample\trevSample\tstatus\tcount\tfrac" << std::endl;
+		for(const auto & pairCount : pairCounts){
+			pairCountsOut << pairCount.first.first
+					<< "\t" << pairCount.first.second
+					<< "\t" << pairCount.second.first
+					<< "\t" << pairCount.second.second
+					<< "\t" << pairCount.second.second/static_cast<double>(fullPass) << std::endl;
 		}
 	}
 
