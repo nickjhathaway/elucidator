@@ -74,6 +74,7 @@ genExpRunner::genExpRunner()
 					 addFunc("concatenateDifferentLanes", concatenateDifferentLanes, false),
 					 addFunc("extractRefSeqsFromGenomes", extractRefSeqsFromGenomes, false),
 					 addFunc("extractRefSeqsFromGenomesWithPrimers", extractRefSeqsFromGenomesWithPrimers, false),
+					 addFunc("extractRefSeqsFromGenomesWithFlanks", extractRefSeqsFromGenomesWithFlanks, false),
 					 addFunc("findOutliersWithMuscleToRefs", findOutliersWithMuscleToRefs, false),
 					 addFunc("bioIndexGenomes", bioIndexGenomes, false),
 					 addFunc("bioIndexGenome", bioIndexGenome, false),

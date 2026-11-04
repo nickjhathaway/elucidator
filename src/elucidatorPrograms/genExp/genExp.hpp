@@ -94,6 +94,7 @@ class genExpRunner : public njh::progutils::ProgramRunner {
 
 	static int extractRefSeqsFromGenomes(const njh::progutils::CmdArgs & inputCommands);
 	static int extractRefSeqsFromGenomesWithPrimers(const njh::progutils::CmdArgs & inputCommands);
+	static int extractRefSeqsFromGenomesWithFlanks(const njh::progutils::CmdArgs & inputCommands);
 
 	static int bioIndexGenomes(const njh::progutils::CmdArgs & inputCommands);
 	static int bioIndexGenome(const njh::progutils::CmdArgs & inputCommands);
