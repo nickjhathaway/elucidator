@@ -51,17 +51,26 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
 	// only GT and AD are read from the input per-sample data; drop everything else (DP, GQ, PL, ...)
 	// since the per-sample meta is what dominates memory for a large VCF
 	for (auto & rec : input_vcf.records_) {
-		for (auto & samp : rec.sampleFormatInfos_) {
-			VecStr sample_meta_to_remove;
-			for (const auto & meta : samp.second.meta_) {
-				if (!njh::in(meta.first, {"GT", "AD"})) {
-					sample_meta_to_remove.emplace_back(meta.first);
-				}
-			}
-			for (const auto & meta : sample_meta_to_remove) {
-				samp.second.meta_.erase(meta);
+		VecStr keptKeys;
+		std::vector<size_t> keptKeyIndexes;
+		for (const auto & key : iter::enumerate(rec.formatKeys_)) {
+			if (njh::in(key.element, {"GT", "AD"})) {
+				keptKeys.emplace_back(key.element);
+				keptKeyIndexes.emplace_back(key.index);
 			}
 		}
+		for (auto & sampleValues : rec.sampleValues_) {
+			const auto vals = VCFOutput::VCFRecord::splitSampleValues(sampleValues);
+			std::string kept;
+			for (const auto & keyIndex : iter::enumerate(keptKeyIndexes)) {
+				if (0 != keyIndex.index) {
+					kept += ":";
+				}
+				kept += vals.at(keyIndex.element);
+			}
+			sampleValues = kept;
+		}
+		rec.formatKeys_ = keptKeys;
 	}
 	{
 		// keep the FORMAT header consistent with the stripped per-sample data
@@ -83,7 +92,8 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
 		//clear samples
 		output_template.samples_.clear();
 		for (auto & rec : output_template.records_) {
-			rec.sampleFormatInfos_.clear();
+			rec.formatKeys_.clear();
+			rec.sampleValues_.clear();
 		}
 		//INFO/AC,INFO/AF,INFO/AN,^FORMAT/GT,FORMAT/AD
 		output_template.otherHeaderMetaFields_.clear();
@@ -114,6 +124,7 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
   // const references so worker threads can only read the shared inputs; the non-const
   // operator[] on std::map and Json::Value inserts on a missing key, which would be a data race
   const VCFOutput & input_vcf_c = input_vcf;
+  const auto input_sample_indexes = input_vcf.getSampleIndexes();
   const VCFOutput & output_template_c = output_template;
   const Json::Value & simulated_populations_c = simulated_populations;
 
@@ -121,7 +132,7 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
   std::mutex error_mut;
   VecStr thread_errors;
 
-  std::function<void()> process_population = [&pop_queue,&input_vcf_c,&output_template_c,
+  std::function<void()> process_population = [&pop_queue,&input_vcf_c,&input_sample_indexes,&output_template_c,
     index_start, fake_total_sample_depth, reset_gt_fields_ploidy,
     &setUp,
     &simulated_populations_c,
@@ -146,6 +157,7 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
 				    ++genotype_index;
 				    std::string output_sample_name = njh::pasteAsStr(sample_name, "_", genotype_name);
 				    strains_separately.samples_.emplace_back(output_sample_name);
+				    const auto output_sample_index = strains_separately.samples_.size() - 1;
 				    for (const auto & segments : genotype["segments"]) {
 					    Bed3RecordCore current_segment(segments["chrom"].asString(), segments["start"].asUInt(), segments["end"].asUInt());
 					    const auto & ancestral_genotype = ancestral_population_index.at(segments["index"].asUInt());
@@ -159,10 +171,11 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
 							    MetaDataInName output_sample_info;
 							    // std::cout << __FILE__ << " " << __LINE__ << std::endl;
 							    // std::cout << "ancestral_genotype: " << ancestral_genotype << std::endl;
-							    output_sample_info.addMeta("GT", input_vcf_c.records_[recPos.index].sampleFormatInfos_.at(ancestral_genotype).getMeta("GT"));
-							    output_sample_info.addMeta("AD", input_vcf_c.records_[recPos.index].sampleFormatInfos_.at(ancestral_genotype).getMeta("AD"));
+							    const auto ancestral_index = input_sample_indexes.at(ancestral_genotype);
+							    output_sample_info.addMeta("GT", input_vcf_c.records_[recPos.index].getSampleField(ancestral_index, "GT"));
+							    output_sample_info.addMeta("AD", input_vcf_c.records_[recPos.index].getSampleField(ancestral_index, "AD"));
 							    // std::cout << __FILE__ << " " << __LINE__ << std::endl;
-							    strains_separately.records_[recPos.index].sampleFormatInfos_.emplace(output_sample_name, output_sample_info);
+							    strains_separately.records_[recPos.index].setSampleMeta(output_sample_index, output_sample_info);
 						    }
 					    }
 					    // std::cout << segments["chrom"].asString() << " " << segments["start"].asUInt() << " " << segments["end"].asUInt() << " " << segments["index"].asUInt() << std::endl;
@@ -182,6 +195,7 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
 			    ++sample_index;
 			    uint32_t genotype_index = 0;
 		      by_sample.samples_.emplace_back(sample_name);
+		      const auto output_sample_index = by_sample.samples_.size() - 1;
 		      std::vector<double> proportions( sim_sample["genotypes"].size(), 1.0/sim_sample["genotypes"].size());
 		      if (sim_sample.isMember("prop")) {
 		        proportions = njh::json::jsonArrayToVec<double>(sim_sample["prop"], [](const Json::Value & val){ return val.asDouble();});
@@ -204,7 +218,7 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
 						    }
 						    if (recPos.element.chrom_ == current_segment.chrom_ && zero_based_pos >= current_segment.chromStart_ && zero_based_pos < current_segment.chromEnd_) {
 
-						      auto input_AD_toks = vecStrToVecNum<uint32_t>(tokenizeString(input_vcf_c.records_[recPos.index].sampleFormatInfos_.at(ancestral_genotype).getMeta("AD"), ","));
+						      auto input_AD_toks = vecStrToVecNum<uint32_t>(tokenizeString(input_vcf_c.records_[recPos.index].getSampleField(input_sample_indexes.at(ancestral_genotype), "AD"), ","));
 						      auto AD_sum = vectorSum(input_AD_toks);
 						      std::vector<uint32_t> output_AD_toks;
 						      if (0 == AD_sum) {
@@ -218,10 +232,10 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
                     //first genotype so add to the record since none should exist yet for this sample
                     MetaDataInName output_sample_info;
                     output_sample_info.addMeta("AD", njh::conToStr(output_AD_toks, ","));
-                    by_sample.records_[recPos.index].sampleFormatInfos_.emplace(sample_name, output_sample_info);
+                    by_sample.records_[recPos.index].setSampleMeta(output_sample_index, output_sample_info);
                   } else {
                     //not first genotype so add to the already present genotype
-                    auto current_AD_toks = vecStrToVecNum<uint32_t>(tokenizeString(by_sample.records_[recPos.index].sampleFormatInfos_[sample_name].getMeta("AD"), ","));
+                    auto current_AD_toks = vecStrToVecNum<uint32_t>(tokenizeString(by_sample.records_[recPos.index].getSampleField(output_sample_index, "AD"), ","));
                     for (const auto & AD_enum : iter::enumerate(output_AD_toks)) {
                       if (AD_enum.index >= current_AD_toks.size()) {
                         std::stringstream ss;
@@ -232,7 +246,9 @@ int ampliconAnalysisRunner::simulatedPopulationToNewVcfs(const njh::progutils::C
                       }
                       current_AD_toks[AD_enum.index]+= AD_enum.element;
                     }
-                    by_sample.records_[recPos.index].sampleFormatInfos_[sample_name].addMeta("AD", njh::conToStr(current_AD_toks, ","), true);
+                    MetaDataInName output_sample_info;
+                    output_sample_info.addMeta("AD", njh::conToStr(current_AD_toks, ","));
+                    by_sample.records_[recPos.index].setSampleMeta(output_sample_index, output_sample_info);
                   }
 						    }
 					    }

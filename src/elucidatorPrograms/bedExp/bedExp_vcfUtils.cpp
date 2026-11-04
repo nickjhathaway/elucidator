@@ -100,6 +100,7 @@ int bedExpRunner::vcfRenameChroms(const njh::progutils::CmdArgs & inputCommands)
 		}
 		formatOut += format.id_;
 	}
+	const auto originalSampleIndexes = original_vcf_header.getSampleIndexes();
 	while (njh::files::crossPlatGetline(in, line)) {
 		if(line.front() != '#') {
 			auto record = original_vcf_header.processRecordLineForFixedDataAndSampleMetaData(line);
@@ -136,14 +137,14 @@ int bedExpRunner::vcfRenameChroms(const njh::progutils::CmdArgs & inputCommands)
 			out << "\t" << infoOut;
 			out << "\t" << formatOut;
 			for (const auto& sampleName: output_vcf_header.samples_) {
-				const auto& sample = record.sampleFormatInfos_.at(sampleName);
+				const auto sampleIndex = njh::mapAt(originalSampleIndexes, sampleName);
 				std::string formatOutForSample;
 				for (const auto& infoKey: formatOutputOrder) {
 					const auto& format = output_vcf_header.formatEntries_.at(infoKey);
 					if (!formatOutForSample.empty()) {
 						formatOutForSample += ":";
 					}
-					formatOutForSample += sample.getMeta(format.id_);
+					formatOutForSample += record.getSampleField(sampleIndex, format.id_);
 				}
 				out << "\t" << formatOutForSample;
 			}
@@ -159,7 +160,7 @@ int bedExpRunner::combineCustomVcfs(const njh::progutils::CmdArgs & inputCommand
 	std::vector<bfs::path> vcfFnps;
 	bfs::path intersectWithBed;
 	OutOptions outOpts;
-	VCFOutput::comnbineVCFsPars combiningVcfPars;
+	VCFOutput::combineVCFsPars combiningVcfPars;
 
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -172,7 +173,7 @@ int bedExpRunner::combineCustomVcfs(const njh::progutils::CmdArgs & inputCommand
 
 	OutputStream out(outOpts);
 
-	auto combined = VCFOutput::comnbineVCFs(vcfFnps, combiningVcfPars);
+	auto combined = VCFOutput::combineVCFs(vcfFnps, combiningVcfPars);
 	combined.writeOutFixedAndSampleMeta(out);
 	return 0;
 }
@@ -242,12 +243,14 @@ int bedExpRunner::simpleVCFDetermineMonoclonals(const njh::progutils::CmdArgs & 
 					//check if biallelic SNPs
 					if (record.alts_.size() == 1 && record.ref_.size() == 1 && record.alts_.front().size() == 1) {
 						++current_biallelic_SNP_count;
-						for (const auto & sample : record.sampleFormatInfos_) {
-							if ("."  != sample.second.getMeta("DP")) {
-								auto DP = sample.second.getMeta<uint32_t>("DP");
+						for (size_t sampleIndex = 0; sampleIndex < record.sampleValues_.size(); ++sampleIndex) {
+							const auto & sampleName = firstVcf.samples_.at(sampleIndex);
+							const auto DPVal = record.getSampleField(sampleIndex, "DP");
+							if ("."  != DPVal) {
+								auto DP = njh::StrToNumConverter::stoToNum<uint32_t>(DPVal);
 								if (DP >= mindepth) {
 									uint32_t alleleCounts = 0;
-									for (const auto & allele_AD : njh::tokenizeString(sample.second.getMeta("AD"), ",")) {
+									for (const auto & allele_AD : njh::tokenizeString(record.getSampleField(sampleIndex, "AD"), ",")) {
 										auto AD = njh::StrToNumConverter::stoToNum<uint32_t>(allele_AD);
 										if (AD/static_cast<double>(DP) > minoraf) {
 											++alleleCounts;
@@ -260,9 +263,9 @@ int bedExpRunner::simpleVCFDetermineMonoclonals(const njh::progutils::CmdArgs & 
 									// 	exit(1);
 									// }
 									if (1 == alleleCounts) {
-										current_samplePositionMixCounts[sample.first].emplace_back(true);
+										current_samplePositionMixCounts[sampleName].emplace_back(true);
 									} else {
-										current_samplePositionMixCounts[sample.first].emplace_back(false);
+										current_samplePositionMixCounts[sampleName].emplace_back(false);
 									}
 								}
 							}
