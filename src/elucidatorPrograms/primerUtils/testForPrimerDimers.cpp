@@ -5,18 +5,9 @@
 #include "primerUtilsRunner.hpp"
 #include <njhseq/IO/SeqIO/SeqInput.hpp>
 #include <njhseq/IO/OutputStream.hpp>
-#include <njhseq/PrimerIDUtils/PrimerDimerUtils.hpp>
 #include <SeekDeep/objects/TarAmpSetupUtils/PrimersAndMids.hpp>
-#include <TwoBit/IO/TwoBitFile.hpp>
-#include <njhseq/objects/BioDataObject/BLASTHitTabular.hpp>
-#include <njhseq/objects/BioDataObject/BioDataFileIO.hpp>
-#include <njhseq/BamToolsUtils/ReAlignedSeq.hpp>
-#include <njhseq/GenomeUtils/GenomeExtraction/ParsingAlignmentInfo/GenomeExtractResult.hpp>
-#include <njhseq/objects/BioDataObject/BioRecordsUtils/BedUtility.hpp>
-#include <njhseq/concurrency/PairwisePairFactory.hpp>
-#include <njhseq/objects/BioDataObject/reading.hpp>
-#include <njhseq/objects/dataContainers/tables/TableReader.hpp>
-#include <utility>
+#include <SeekDeep/objects/IlluminaUtils/PairedReadProcessor.hpp>
+#include <SeekDeep/objects/IlluminaUtils/PrimerDimerDetector.hpp>
 
 
 namespace njhseq {
@@ -25,17 +16,39 @@ int primerUtilsRunner::testForPrimerDimers(const njh::progutils::CmdArgs &inputC
 
 	OutOptions outOpts;
 	bfs::path primersFnp;
+	PrimerDimerDetector::DetectorPars detectorPars;
 	seqSetUp setUp(inputCommands);
-	comparison allowableErrors;
-	allowableErrors.hqMismatches_ = 2;
-	allowableErrors.lqMismatches_ = 3;
-	allowableErrors.oneBaseIndel_ = 2;
+	PairedReadProcessor::ProcessParams stitchPars;
+	stitchPars.minOverlap_ = 8;
+	//primer dimers are short, the usual 0.02 allows no high quality mismatches in an overlap under 50 bases
+	stitchPars.errorAllowed_ = 0.05;
+	bool noTrimLowQualWindows = false;
 	setUp.processVerbose();
 	setUp.processDebug();
-	setUp.processReadInNames(njhseq::seqSetUp::singleInFormatsAvailable_, true);
+	setUp.pars_.ioOptions_.revComplMate_ = true;
+	setUp.processReadInNames(concatVecs(njhseq::seqSetUp::singleInFormatsAvailable_, njhseq::seqSetUp::pairedReadInFormatsAvailable_), true);
 	setUp.processWritingOptions(outOpts);
-	setUp.processComparison(allowableErrors);
+	setUp.processComparison(detectorPars.allowableErrors_);
 	setUp.setOption(primersFnp, "--primers", "Primers file", true);
+	setUp.setOption(detectorPars.maxGapBetweenPrimers_, "--maxGapBetweenPrimers", "Also call front and end primers that don't touch but are separated by up to this many bases, e.g. dimers that keep a piece of adapter between the primers; 0 only calls primers that overlap or abut");
+	setUp.setOption(detectorPars.minPrimerMatchBases_, "--minPrimerMatchBases", "The fewest bases of a primer that have to match at a read's end for it to be trusted, 0 to work it out from the number of primers since the more primers there are the more likely a short match is by chance");
+	setUp.setOption(detectorPars.minCandidateMatchBases_, "--minCandidateMatchBases", "The fewest bases of a primer that have to match at a read's end for it to be kept as a possible partner of a trusted primer at the other end, which makes the read an unresolved dimer");
+	const std::string stitchGroup = "Stitching, only used with paired end input, where only the stitched R1 begins in R2 reads are tested";
+	setUp.setOption(stitchPars.minOverlap_, "--minOverlap", "The minimal amount of overlap when stitching", false, stitchGroup);
+	setUp.setOption(stitchPars.errorAllowed_, "--overLapErrorAllowed", "The fraction of high quality mismatches to allow in the overlap when stitching, rounds down so an overlap under 1/this bases is allowed none", false, stitchGroup);
+	setUp.setOption(stitchPars.hardMismatchCutOff_, "--hardMismatchCutOff", "A hard cut off for number of mismatches in the overlap when stitching", false, stitchGroup);
+	setUp.setOption(stitchPars.lqMismatchCutOff, "--lqMismatchCutOff", "A hard cut off for number of low quality mismatches in the overlap when stitching", false, stitchGroup);
+	setUp.setOption(stitchPars.hqMismatchCutOff, "--hqMismatchCutOff", "A hard cut off for number of high quality mismatches in the overlap when stitching", false, stitchGroup);
+	setUp.setOption(stitchPars.matchScore_, "--stitchMatchScore", "The score for a match when aligning the mates to stitch them", false, stitchGroup);
+	setUp.setOption(stitchPars.mismatchPenalty_, "--stitchMismatchPenalty", "The penalty for a mismatch when aligning the mates to stitch them, harsher than the match score so a long low identity placement of the mates doesn't out score a short true overlap", false, stitchGroup);
+	setUp.setOption(stitchPars.r1Trim_, "--r1Trim", "Remove this many bases off of the end of r1 reads", false, stitchGroup);
+	setUp.setOption(stitchPars.r2Trim_, "--r2Trim", "Remove this many bases off of the end of r2 reads", false, stitchGroup);
+	setUp.setOption(stitchPars.qualWindowPar_.avgQualCutOff_, "--qWindowTrimAvgQualCutOff", "Quality Window Trim Avg Qual Cut Off", false, stitchGroup);
+	setUp.setOption(stitchPars.qualWindowPar_.windowSize_, "--qWindowSize", "Quality Window Trim Size", false, stitchGroup);
+	setUp.setOption(stitchPars.qualWindowPar_.windowStep_, "--qWindowStep", "Quality Window Trim Step", false, stitchGroup);
+	setUp.setOption(noTrimLowQualWindows, "--noTrimLowQualWindows", "Don't Trim Low Qual Windows", false, stitchGroup);
+	stitchPars.trimLowQaulWindows_ = !noTrimLowQualWindows;
+	stitchPars.verbose_ = setUp.pars_.verbose_;
 	setUp.finishSetUp(std::cout);
 
 	PrimersAndMids ids(primersFnp);
@@ -47,77 +60,30 @@ int primerUtilsRunner::testForPrimerDimers(const njh::progutils::CmdArgs &inputC
 		throw std::runtime_error{ss.str()};
 	}
 	ids.initPrimerDeterminator();
-	uint64_t maxSize = ids.pDeterminator_->getMaxPrimerSize();
-	// uint32_t totalReads = 0;
-	{
+	PrimerDimerDetector detector(*ids.pDeterminator_, detectorPars);
+	const bool pairedInput = setUp.pars_.ioOptions_.isPairedIn();
+	uint64_t maxSize = 0;
+	uint64_t maxMateSize = 0;
+	if(pairedInput){
+		PairedRead pair;
+		SeqInput reader(setUp.pars_.ioOptions_);
+		reader.openIn();
+		while(reader.readNextRead(pair)){
+			readVec::getMaxLength(pair.seqBase_, maxMateSize);
+			readVec::getMaxLength(pair.mateSeqBase_, maxMateSize);
+		}
+		//a stitched read can't be longer than both of its mates laid end to end
+		maxSize = 2 * maxMateSize;
+	} else {
 		seqInfo seq;
 		SeqInput reader(setUp.pars_.ioOptions_);
 		reader.openIn();
 		while(reader.readNextRead(seq)){
 			readVec::getMaxLength(seq, maxSize);
-			// ++totalReads;
 		}
 	}
 
-	aligner alignerObj(maxSize, gapScoringParameters::genSemiGlobalQueryOnly(5,1), substituteMatrix::createDegenScoreMatrix(2,-4));
-	seqInfo seq;
-	SeqInput reader(setUp.pars_.ioOptions_);
-	reader.openIn();
-
-	struct PrimerLocalLoc{
-		PrimerLocalLoc() = default;
-		seqInfo alignA_;
-		seqInfo alignB_;
-		comparison comp_;
-		alnInfoLocal infoLocal_;
-		std::string primerName_;
-		bool revComp_{false};
-		[[nodiscard]] uint32_t get_a_end()const {
-			return infoLocal_.localAStart_ + infoLocal_.localASize_;
-		}
-
-		[[nodiscard]] uint32_t get_b_end()const {
-			return infoLocal_.localBStart_ + infoLocal_.localBSize_;
-		}
-
-		[[nodiscard]] bool aOverlapsOrAbuds(const PrimerLocalLoc &other) const {
-			return ((get_a_end() > other.infoLocal_.localAStart_ && get_a_end() <= other.get_a_end()) ||
-							get_a_end() == other.infoLocal_.localAStart_ ||
-							(other.get_a_end() > infoLocal_.localAStart_ && other.get_a_end() <=get_a_end()) ||
-							other.get_a_end() == infoLocal_.localAStart_ );
-		}
-
-		[[nodiscard]] uint32_t get_a_overlapDegree(const PrimerLocalLoc & other) const{
-			if (((get_a_end() > other.infoLocal_.localAStart_ && get_a_end() <= other.get_a_end()) ||
-					 (other.get_a_end() > infoLocal_.localAStart_ && other.get_a_end() <= get_a_end()))) {
-				auto startOverLap = std::max(infoLocal_.localAStart_, other.infoLocal_.localAStart_);
-				auto endOverLap = std::min(get_a_end(), other.get_a_end());
-				return endOverLap - startOverLap;
-			}
-			return 0;
-		}
-	};
-
-	struct PrimerLocalLocPair {
-		PrimerLocalLocPair(PrimerLocalLoc front, PrimerLocalLoc end) : front_(std::move(front)), end_(std::move(end)) {
-
-		}
-
-		PrimerLocalLoc front_;
-		PrimerLocalLoc end_;
-
-		[[nodiscard]] double getAlnScoreSum()const{
-			return front_.comp_.alnScore_ + end_.comp_.alnScore_;
-		}
-
-		[[nodiscard]] double getIdentitySum()const {
-			return front_.comp_.distances_.eventBasedIdentity_ + end_.comp_.distances_.eventBasedIdentity_;
-		}
-
-		[[nodiscard]] double getIdentityHqSum()const {
-			return front_.comp_.distances_.eventBasedIdentityHq_ + end_.comp_.distances_.eventBasedIdentityHq_;
-		}
-	};
+	aligner alignerObj = detector.genAligner(maxSize);
 
 	OutputStream out(outOpts);
 	out
@@ -145,215 +111,37 @@ int primerUtilsRunner::testForPrimerDimers(const njh::progutils::CmdArgs &inputC
 					<< "\t" << "endDimerPrimer_seqEnd"
 					<< "\t" << "endDimerPrimer_primerStart"
 					<< "\t" << "endDimerPrimer_primerEnd"
+					<< "\t" << "gapBetweenPrimers"
+					<< "\t" << "readCategory"
+					<< "\t" << "candidatePartners"
 
 					<< std::endl;
 	auto filenameOut = bfs::basename(bfs::path(setUp.pars_.ioOptions_.firstName_).replace_extension(""));
-	while(reader.readNextRead(seq)){
-		std::vector<PrimerLocalLoc> frontDeterminedPrimers;
-		std::vector<PrimerLocalLoc> endDeterminedPrimers;
-
-		for (const auto& currentPrimer : ids.pDeterminator_->primers_) {
-			for(const auto & fwd : currentPrimer.second.fwds_){
-				{
-					alignerObj.alignCacheLocal(seq, fwd.info_);
-					alignerObj.rearrangeObjsLocal(seq, fwd.info_);
-					alignerObj.profileAlignment(seq, fwd.info_, false, true, false);
-//					if("MN01689:44:000H57G73:1:11102:13521:7834 1:N:0:TGCTCTGTTGTC+AGTGGTTCTGCA"  == seq.name_ && fwd.info_.name_ == "Pf03-0221484-0221679"){
-//						seq.outPutSeqAnsi(std::cout);
-//						alignerObj.alignObjectA_.seqBase_.outPutSeqAnsi(std::cout);
-//						alignerObj.alignObjectB_.seqBase_.outPutSeqAnsi(std::cout);
-//						std::cout << alignerObj.comp_.toJson() << std::endl;
-//						std::cout << "alignerObj.parts_.lHolder_.localAStart_: " << alignerObj.parts_.lHolder_.localAStart_ << std::endl;
-//						std::cout << "alignerObj.parts_.lHolder_.localAStart_: " << alignerObj.parts_.lHolder_.localBStart_ << std::endl;
-//						std::cout << "alignerObj.parts_.lHolder_.localAStart_ + alignerObj.parts_.lHolder_.localASize_: " << alignerObj.parts_.lHolder_.localAStart_ + alignerObj.parts_.lHolder_.localASize_ << std::endl;
-//						std::cout << "alignerObj.parts_.lHolder_.localBStart_ + alignerObj.parts_.lHolder_.localBSize_: " << alignerObj.parts_.lHolder_.localBStart_ + alignerObj.parts_.lHolder_.localBSize_ << std::endl;
-//						std::cout << "seq.seq_.size(): " << seq.seq_.size() << std::endl;
-//						std::cout << "rev.infoRC_.seq_.size(): " << fwd.info_.seq_.size() << std::endl;
-//						std::cout << ": " << std::endl;
-//						exit(1);
-//					}
-					if(allowableErrors.passErrorProfile(alignerObj.comp_) &&  0 == alignerObj.parts_.lHolder_.localAStart_ && 0 == alignerObj.parts_.lHolder_.localBStart_){
-						PrimerLocalLoc loc;
-						loc.alignA_ = alignerObj.alignObjectA_.seqBase_;
-						loc.alignB_ = alignerObj.alignObjectB_.seqBase_;
-						loc.comp_ = alignerObj.comp_;
-						loc.infoLocal_ = alignerObj.parts_.lHolder_;
-						loc.primerName_ = fwd.info_.name_ + "_F";
-						loc.revComp_ = false;
-						frontDeterminedPrimers.emplace_back(loc);
-					}
-					if(allowableErrors.passErrorProfile(alignerObj.comp_) && seq.seq_.size() == (alignerObj.parts_.lHolder_.localAStart_ + alignerObj.parts_.lHolder_.localASize_) && fwd.info_.seq_.size() == (alignerObj.parts_.lHolder_.localBStart_ + alignerObj.parts_.lHolder_.localBSize_)){
-						PrimerLocalLoc loc;
-						loc.alignA_ = alignerObj.alignObjectA_.seqBase_;
-						loc.alignB_ = alignerObj.alignObjectB_.seqBase_;
-						loc.comp_ = alignerObj.comp_;
-						loc.infoLocal_ = alignerObj.parts_.lHolder_;
-						loc.primerName_ = fwd.info_.name_ + "_F";
-						loc.revComp_ = false;
-						endDeterminedPrimers.emplace_back(loc);
-					}
-				}
-				{
-					alignerObj.alignCacheLocal(seq, fwd.infoRC_);
-					alignerObj.rearrangeObjsLocal(seq, fwd.infoRC_);
-
-					alignerObj.profileAlignment(seq, fwd.infoRC_, false, true, false);
-					if(allowableErrors.passErrorProfile(alignerObj.comp_) && 0 == alignerObj.parts_.lHolder_.localAStart_ && 0 == alignerObj.parts_.lHolder_.localBStart_){
-						PrimerLocalLoc loc;
-						loc.alignA_ = alignerObj.alignObjectA_.seqBase_;
-						loc.alignB_ = alignerObj.alignObjectB_.seqBase_;
-						loc.comp_ = alignerObj.comp_;
-						loc.infoLocal_ = alignerObj.parts_.lHolder_;
-						loc.primerName_ = fwd.infoRC_.name_ + "_F";
-						loc.revComp_ = true;
-						frontDeterminedPrimers.emplace_back(loc);
-					}
-					if(allowableErrors.passErrorProfile(alignerObj.comp_) && seq.seq_.size() == (alignerObj.parts_.lHolder_.localAStart_ + alignerObj.parts_.lHolder_.localASize_) && fwd.infoRC_.seq_.size() == (alignerObj.parts_.lHolder_.localBStart_ + alignerObj.parts_.lHolder_.localBSize_)){
-						PrimerLocalLoc loc;
-						loc.alignA_ = alignerObj.alignObjectA_.seqBase_;
-						loc.alignB_ = alignerObj.alignObjectB_.seqBase_;
-						loc.comp_ = alignerObj.comp_;
-						loc.infoLocal_ = alignerObj.parts_.lHolder_;
-						loc.primerName_ = fwd.infoRC_.name_ + "_F";
-						loc.revComp_ = true;
-						endDeterminedPrimers.emplace_back(loc);
-					}
-				}
-			}
-			for(const auto & rev : currentPrimer.second.revs_){
-				{
-					alignerObj.alignCacheLocal(seq, rev.info_);
-					alignerObj.rearrangeObjsLocal(seq, rev.info_);
-					alignerObj.profileAlignment(seq, rev.info_, false, true, false);
-					if(allowableErrors.passErrorProfile(alignerObj.comp_) && 0 == alignerObj.parts_.lHolder_.localAStart_ && 0 == alignerObj.parts_.lHolder_.localBStart_){
-						PrimerLocalLoc loc;
-						loc.alignA_ = alignerObj.alignObjectA_.seqBase_;
-						loc.alignB_ = alignerObj.alignObjectB_.seqBase_;
-						loc.comp_ = alignerObj.comp_;
-						loc.infoLocal_ = alignerObj.parts_.lHolder_;
-						loc.primerName_ = rev.info_.name_ + "_R";
-						loc.revComp_ = false;
-						frontDeterminedPrimers.emplace_back(loc);
-					}
-					if(allowableErrors.passErrorProfile(alignerObj.comp_) && seq.seq_.size() == (alignerObj.parts_.lHolder_.localAStart_ + alignerObj.parts_.lHolder_.localASize_) && rev.info_.seq_.size() == (alignerObj.parts_.lHolder_.localBStart_ + alignerObj.parts_.lHolder_.localBSize_)){
-						PrimerLocalLoc loc;
-						loc.alignA_ = alignerObj.alignObjectA_.seqBase_;
-						loc.alignB_ = alignerObj.alignObjectB_.seqBase_;
-						loc.comp_ = alignerObj.comp_;
-						loc.infoLocal_ = alignerObj.parts_.lHolder_;
-						loc.primerName_ = rev.info_.name_ + "_R";
-						loc.revComp_ = false;
-						endDeterminedPrimers.emplace_back(loc);
-					}
-				}
-				{
-					alignerObj.alignCacheLocal(seq, rev.infoRC_);
-					alignerObj.rearrangeObjsLocal(seq, rev.infoRC_);
-
-					alignerObj.profileAlignment(seq, rev.infoRC_, false, true, false);
-//					if(seq.name_ == "MN01689:44:000H57G73:1:11102:11431:17330 1:N:0:TGCTCTGTTGTC+AGTGGTTCTGCA" && rev.infoRC_.name_ == "Pf14-0294537-0294730"){
-//						seq.outPutSeqAnsi(std::cout);
-//						alignerObj.alignObjectA_.seqBase_.outPutSeqAnsi(std::cout);
-//						alignerObj.alignObjectB_.seqBase_.outPutSeqAnsi(std::cout);
-//						std::cout << alignerObj.comp_.toJson() << std::endl;
-//						std::cout << "alignerObj.parts_.lHolder_.localAStart_: " << alignerObj.parts_.lHolder_.localAStart_ << std::endl;
-//						std::cout << "alignerObj.parts_.lHolder_.localAStart_: " << alignerObj.parts_.lHolder_.localBStart_ << std::endl;
-//						std::cout << "alignerObj.parts_.lHolder_.localAStart_ + alignerObj.parts_.lHolder_.localASize_: " << alignerObj.parts_.lHolder_.localAStart_ + alignerObj.parts_.lHolder_.localASize_ << std::endl;
-//						std::cout << "alignerObj.parts_.lHolder_.localBStart_ + alignerObj.parts_.lHolder_.localBSize_: " << alignerObj.parts_.lHolder_.localBStart_ + alignerObj.parts_.lHolder_.localBSize_ << std::endl;
-//						std::cout << "seq.seq_.size(): " << seq.seq_.size() << std::endl;
-//						std::cout << "rev.infoRC_.seq_.size(): " << rev.infoRC_.seq_.size() << std::endl;
-//						std::cout << ": " << std::endl;
-//						exit(1);
-//					}
-					if(allowableErrors.passErrorProfile(alignerObj.comp_) && 0 == alignerObj.parts_.lHolder_.localAStart_ && 0 == alignerObj.parts_.lHolder_.localBStart_){
-						PrimerLocalLoc loc;
-						loc.alignA_ = alignerObj.alignObjectA_.seqBase_;
-						loc.alignB_ = alignerObj.alignObjectB_.seqBase_;
-						loc.comp_ = alignerObj.comp_;
-						loc.infoLocal_ = alignerObj.parts_.lHolder_;
-						loc.primerName_ = rev.infoRC_.name_ + "_R";
-						loc.revComp_ = true;
-						frontDeterminedPrimers.emplace_back(loc);
-					}
-					if(allowableErrors.passErrorProfile(alignerObj.comp_) && seq.seq_.size() == (alignerObj.parts_.lHolder_.localAStart_ + alignerObj.parts_.lHolder_.localASize_) && rev.infoRC_.seq_.size() == (alignerObj.parts_.lHolder_.localBStart_ + alignerObj.parts_.lHolder_.localBSize_)){
-						PrimerLocalLoc loc;
-						loc.alignA_ = alignerObj.alignObjectA_.seqBase_;
-						loc.alignB_ = alignerObj.alignObjectB_.seqBase_;
-						loc.comp_ = alignerObj.comp_;
-						loc.infoLocal_ = alignerObj.parts_.lHolder_;
-						loc.primerName_ = rev.infoRC_.name_ + "_R";
-						loc.revComp_ = true;
-						endDeterminedPrimers.emplace_back(loc);
-					}
-				}
-			}
-		}
-		std::vector<PrimerLocalLocPair> overlaps;
-		for(const auto & front : frontDeterminedPrimers){
-			for(const auto & end : endDeterminedPrimers){
-				if(front.aOverlapsOrAbuds(end)){
-					overlaps.emplace_back(front, end);
-				}
-			}
-		}
-		std::vector<PrimerLocalLocPair> bestOverlaps;
-
-		if (overlaps.size() > 1) {
-			double bestAlnScore = 0;
-			double bestIdentity = 0;
-			for (const auto &overlap: overlaps) {
-				if (bestAlnScore == overlap.getAlnScoreSum()) {
-					if (overlap.getIdentitySum() == bestIdentity) {
-						bestOverlaps.emplace_back(overlap);
-					} else if (overlap.getIdentitySum() >= bestIdentity) {
-						bestAlnScore = overlap.getAlnScoreSum();
-						bestIdentity = overlap.getIdentitySum();
-						bestOverlaps.clear();
-						bestOverlaps.emplace_back(overlap);
-					}
-				} else if (overlap.getAlnScoreSum() > bestAlnScore) {
-					bestAlnScore = overlap.getAlnScoreSum();
-					bestIdentity = overlap.getIdentitySum();
-					bestOverlaps.clear();
-					bestOverlaps.emplace_back(overlap);
-				}
-			}
-		} else if (1 == overlaps.size()) {
-			bestOverlaps = overlaps;
-		} else {
-/*			if(!frontDeterminedPrimers.empty() || !endDeterminedPrimers.empty()){
-				seq.outPutSeqAnsi(std::cout);
-				std::cout << "bestOverlaps.size(): " << bestOverlaps.size() << std::endl;
-				std::cout << "overlaps.size(): " << overlaps.size() << std::endl;
-				std::cout << "frontDeterminedPrimers.size(): " << frontDeterminedPrimers.size() << std::endl;
-				std::cout << "endDeterminedPrimers.size(): " << endDeterminedPrimers.size() << std::endl;
-				for(const auto & front : frontDeterminedPrimers){
-					std::cout << seq.getSeqAnsi() << std::endl;
-					std::cout << front.alignB_.getSeqAnsi() << std::endl;
-				}
-				for(const auto & end : endDeterminedPrimers){
-					std::cout << seq.getSeqAnsi() << std::endl;
-					std::cout << std::string(end.infoLocal_.localAStart_, ' ') << end.alignB_.getSeqAnsi()
-										<< std::endl;
-				}
-			}*/
-		}
+	std::unordered_map<PrimerDimerDetector::ReadCategory, uint32_t> categoryCounts;
+	const auto testForDimers = [&](const seqInfo & seq){
+		const auto res = detector.detect(seq, alignerObj);
+		++categoryCounts[res.category_];
 		VecStr frontNames;
-		VecStr ednNames;
-		for(const auto & front : frontDeterminedPrimers){
+		VecStr endNames;
+		for(const auto & front : res.frontMatches_){
 			frontNames.emplace_back(front.primerName_);
 		}
-		for(const auto & end : endDeterminedPrimers){
-			ednNames.emplace_back(end.primerName_);
+		for(const auto & end : res.endMatches_){
+			endNames.emplace_back(end.primerName_);
 		}
-		if(bestOverlaps.empty()){
+		const auto categoryStr = PrimerDimerDetector::getReadCategoryStr(res.category_);
+		VecStr candidatePartners;
+		for(const auto & candidate : res.candidatePartners_){
+			candidatePartners.emplace_back(njh::pasteAsStr(candidate.primerName_, ":", candidate.primerBasesMatched()));
+		}
+		if(res.dimers_.empty()){
 			out << filenameOut << "\t" << seq.name_
 					<< "\t" << seq.seq_
-					<< "\t" << bestOverlaps.size()
-					<< "\t" << frontDeterminedPrimers.size()
+					<< "\t" << res.dimers_.size()
+					<< "\t" << res.frontMatches_.size()
 					<< "\t" << njh::conToStr(frontNames, ";")
-					<< "\t" << endDeterminedPrimers.size()
-					<< "\t" << njh::conToStr(ednNames, ";")
+					<< "\t" << res.endMatches_.size()
+					<< "\t" << njh::conToStr(endNames, ";")
 					<< "\t" << ""
 					<< "\t" << ""
 					<< "\t" << ""
@@ -370,34 +158,40 @@ int primerUtilsRunner::testForPrimerDimers(const njh::progutils::CmdArgs &inputC
 					<< "\t" << ""
 					<< "\t" << ""
 					<< "\t" << ""
+					<< "\t" << ""
+					<< "\t" << categoryStr
+					<< "\t" << njh::conToStr(candidatePartners, ";")
 
 					<< std::endl;
 		} else {
 			uint32_t overlapCount = 0;
-			for (const auto &overlap: bestOverlaps) {
+			for (const auto &dimer: res.dimers_) {
 				out << filenameOut << "\t" << seq.name_
 						<< "\t" << seq.seq_
-						<< "\t" << bestOverlaps.size()
-						<< "\t" << frontDeterminedPrimers.size()
+						<< "\t" << res.dimers_.size()
+						<< "\t" << res.frontMatches_.size()
 						<< "\t" << njh::conToStr(frontNames, ";")
-						<< "\t" << endDeterminedPrimers.size()
-						<< "\t" << njh::conToStr(ednNames, ";")
+						<< "\t" << res.endMatches_.size()
+						<< "\t" << njh::conToStr(endNames, ";")
 						<< "\t" << overlapCount
-						<< "\t" << overlap.front_.primerName_ << "-" << overlap.end_.primerName_
-						<< "\t" << overlap.front_.get_a_overlapDegree(overlap.end_)
-						<< "\t" << overlap.front_.primerName_
-						<< "\t" << njh::boolToStr(overlap.front_.revComp_)
-						<< "\t" << overlap.front_.infoLocal_.localAStart_
-						<< "\t" << overlap.front_.get_a_end()
-						<< "\t" << overlap.front_.infoLocal_.localBStart_
-						<< "\t" << overlap.end_.get_b_end()
+						<< "\t" << dimer.front_.primerName_ << "-" << dimer.end_.primerName_
+						<< "\t" << dimer.getOverlap()
+						<< "\t" << dimer.front_.primerName_
+						<< "\t" << njh::boolToStr(dimer.front_.revComp_)
+						<< "\t" << dimer.front_.seqStart_
+						<< "\t" << dimer.front_.seqEnd_
+						<< "\t" << dimer.front_.primerStart_
+						<< "\t" << dimer.front_.primerEnd_
 
-						<< "\t" << overlap.end_.primerName_
-						<< "\t" << njh::boolToStr(overlap.end_.revComp_)
-						<< "\t" << overlap.end_.infoLocal_.localAStart_
-						<< "\t" << overlap.end_.get_a_end()
-						<< "\t" << overlap.end_.infoLocal_.localBStart_
-						<< "\t" << overlap.end_.get_b_end()
+						<< "\t" << dimer.end_.primerName_
+						<< "\t" << njh::boolToStr(dimer.end_.revComp_)
+						<< "\t" << dimer.end_.seqStart_
+						<< "\t" << dimer.end_.seqEnd_
+						<< "\t" << dimer.end_.primerStart_
+						<< "\t" << dimer.end_.primerEnd_
+						<< "\t" << dimer.getGap()
+						<< "\t" << categoryStr
+						<< "\t" << ""
 
 						<< std::endl;
 				++overlapCount;
@@ -405,30 +199,96 @@ int primerUtilsRunner::testForPrimerDimers(const njh::progutils::CmdArgs &inputC
 		}
 		if(setUp.pars_.debug_){
 			seq.outPutSeqAnsi(std::cout);
-			std::cout << "bestOverlaps.size(): " << bestOverlaps.size() << std::endl;
-			std::cout << "overlaps.size(): " << overlaps.size() << std::endl;
-			std::cout << "frontDeterminedPrimers.size(): " << frontDeterminedPrimers.size() << std::endl;
-			std::cout << "endDeterminedPrimers.size(): " << endDeterminedPrimers.size() << std::endl;
-			for(const auto & overlap : bestOverlaps){
+			std::cout << "category: " << categoryStr << std::endl;
+			std::cout << "dimers: " << res.dimers_.size() << std::endl;
+			std::cout << "frontMatches: " << res.frontMatches_.size() << std::endl;
+			std::cout << "endMatches: " << res.endMatches_.size() << std::endl;
+			for(const auto & dimer : res.dimers_){
 				seq.outPutSeqAnsi(std::cout);
-				std::cout << overlap.front_.alignB_.getSeqAnsi() << std::endl;
-				std::cout << std::string(overlap.end_.infoLocal_.localAStart_, ' ') << overlap.end_.alignB_.getSeqAnsi() << std::endl;
-				std::cout << overlap.front_.primerName_ << " " << njh::colorBool(overlap.front_.revComp_) << " " << overlap.front_.infoLocal_.localAStart_ << ":" << overlap.front_.get_a_end() << std::endl;
-				std::cout << overlap.end_.primerName_ << " " << njh::colorBool(overlap.end_.revComp_)<< " " << overlap.end_.infoLocal_.localAStart_ << ":" << overlap.end_.get_a_end() << std::endl;
-				std::cout << "overlap.front_.get_a_overlapDegree(overlap.end_): " << overlap.front_.get_a_overlapDegree(overlap.end_)  << std::endl;
-				std::cout << "overlap.end_.comp_.alnScore_ + overlap.front_.comp_.alnScore_: " << overlap.end_.comp_.alnScore_ + overlap.front_.comp_.alnScore_  << std::endl;
-				std::cout << "overlap.end_.comp_.distances_.eventBasedIdentityHq_ + overlap.front_.comp_.distances_.eventBasedIdentityHq_: " << overlap.end_.comp_.distances_.eventBasedIdentityHq_ + overlap.front_.comp_.distances_.eventBasedIdentityHq_  << std::endl;
-				std::cout << "overlap.end_.comp_.distances_.eventBasedIdentity_ + overlap.front_.comp_.distances_.eventBasedIdentity_: " << overlap.end_.comp_.distances_.eventBasedIdentity_ + overlap.front_.comp_.distances_.eventBasedIdentity_  << std::endl;
+				std::cout << dimer.front_.alignedPrimer_.getSeqAnsi() << std::endl;
+				std::cout << std::string(dimer.end_.seqStart_, ' ') << dimer.end_.alignedPrimer_.getSeqAnsi() << std::endl;
+				std::cout << dimer.front_.primerName_ << " " << dimer.front_.seqStart_ << ":" << dimer.front_.seqEnd_ << std::endl;
+				std::cout << dimer.end_.primerName_ << " " << dimer.end_.seqStart_ << ":" << dimer.end_.seqEnd_ << std::endl;
+				std::cout << "overlap: " << dimer.getOverlap() << std::endl;
+				std::cout << "gap: " << dimer.getGap() << std::endl;
+				std::cout << "alnScoreSum: " << dimer.getAlnScoreSum() << std::endl;
+				std::cout << "identitySum: " << dimer.getIdentitySum() << std::endl;
 				std::cout << std::endl;
 			}
 			std::cout << std::endl;
 		}
+	};
+
+	if(pairedInput){
+		std::unique_ptr<OutputStream> stitchCountsFile;
+		if(!outOpts.outFilename_.empty()){
+			OutOptions stitchCountsOpts(bfs::path(outOpts.outFilename_.string() + "_stitchCounts.tsv"));
+			stitchCountsOpts.transferOverwriteOpts(outOpts);
+			stitchCountsFile = std::make_unique<OutputStream>(stitchCountsOpts);
+		}
+		PairedReadProcessor pairProcessor(stitchPars);
+		aligner stitchingAligner = pairProcessor.genStitchingAligner(maxMateSize);
+		stitchingAligner.qScorePars_.qualThresWindow_ = 0;
+		PairedReadProcessor::ProcessedResultsCounts stitchCounts;
+		PairedRead pair;
+		SeqInput reader(setUp.pars_.ioOptions_);
+		reader.openIn();
+		while(reader.readNextRead(pair)){
+			++stitchCounts.total;
+			auto stitched = pairProcessor.processPairedEnd(pair, stitchCounts, stitchingAligner);
+			//primer dimers are short enough for the mates to read through each other
+			if(PairedReadProcessor::ReadPairOverLapStatus::R1BEGINSINR2 == stitched.status_){
+				testForDimers(*stitched.combinedSeq_);
+			}
+		}
+		const auto dimersCalled = categoryCounts[PrimerDimerDetector::ReadCategory::DIMER];
+		std::ostream & stitchCountsOut = stitchCountsFile ? static_cast<std::ostream &>(*stitchCountsFile) : std::cerr;
+		stitchCountsOut
+						<< "filename"
+						<< "\t" << "total"
+						<< "\t" << "notCombined"
+						<< "\t" << "perfectOverlapCombined"
+						<< "\t" << "r1EndsInR2Combined"
+						<< "\t" << "r1BeginsInR2Combined"
+						<< "\t" << "r1AllInR2Combined"
+						<< "\t" << "r2AllInR1Combined"
+						<< "\t" << "possibleDimersCalled"
+						<< "\t" << "possibleDimersCalledPerc"
+						<< "\t" << "primersFarApart"
+						<< "\t" << "unresolvedDimers"
+						<< "\t" << "unresolvedDimersPerc"
+						<< "\t" << "onePrimer"
+						<< "\t" << "noPrimer"
+						<< "\t" << "minPrimerMatchBases"
+						<< std::endl;
+		stitchCountsOut
+						<< filenameOut
+						<< "\t" << stitchCounts.total
+						<< "\t" << stitchCounts.overlapFail
+						<< "\t" << stitchCounts.perfectOverlapCombined
+						<< "\t" << stitchCounts.r1EndsInR2Combined
+						<< "\t" << stitchCounts.r1BeginsInR2Combined
+						<< "\t" << stitchCounts.r1AllInR2Combined
+						<< "\t" << stitchCounts.r2AllInR1Combined
+						<< "\t" << dimersCalled
+						<< "\t" << (0 == stitchCounts.total ? 0.0 : 100.0 * dimersCalled / stitchCounts.total)
+						<< "\t" << categoryCounts[PrimerDimerDetector::ReadCategory::PRIMERS_FAR_APART]
+						<< "\t" << categoryCounts[PrimerDimerDetector::ReadCategory::UNRESOLVED_DIMER]
+						<< "\t" << (0 == stitchCounts.total ? 0.0 : 100.0 * categoryCounts[PrimerDimerDetector::ReadCategory::UNRESOLVED_DIMER] / stitchCounts.total)
+						<< "\t" << categoryCounts[PrimerDimerDetector::ReadCategory::ONE_PRIMER]
+						<< "\t" << categoryCounts[PrimerDimerDetector::ReadCategory::NO_PRIMER]
+						<< "\t" << detector.pars_.minPrimerMatchBases_
+						<< std::endl;
+	} else {
+		seqInfo seq;
+		SeqInput reader(setUp.pars_.ioOptions_);
+		reader.openIn();
+		while(reader.readNextRead(seq)){
+			testForDimers(seq);
+		}
 	}
-
-
 
 	return 0;
 }
 
 } // namespace njhseq
-

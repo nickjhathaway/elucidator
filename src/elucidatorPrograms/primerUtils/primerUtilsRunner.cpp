@@ -759,6 +759,7 @@ int primerUtilsRunner::computeDimerizationScore(
 	bool outputRawMatrix = false;
 	uint32_t numThreads = 1;
 	bfs::path primersFnp;
+	bfs::path proofreadingOutFnp;
 	seqSetUp setUp(inputCommands);
 	setUp.setOption(primersFnp, "--primersFnp", "primer table to read in instead of a fasta file");
 	setUp.setOption(numThreads, "--numThreads", "number of CPUs to use");
@@ -766,6 +767,7 @@ int primerUtilsRunner::computeDimerizationScore(
 	setUp.processReadInNames(VecStr{"--fasta", "--fastagz"}, primersFnp.empty());
 	setUp.processWritingOptions(outOpts);
 	setUp.setOption(outputRawMatrix, "--outputRawMatrix", "Output raw matrix without column and row names");
+	setUp.setOption(proofreadingOutFnp, "--proofreadingOut", "also write a matrix of the score for polymerases that remove unpaired 3' bases to this file");
 	setUp.finishSetUp(std::cout);
 	OutputStream out(outOpts);
 
@@ -791,6 +793,12 @@ int primerUtilsRunner::computeDimerizationScore(
 	PrimerDimerUtils dimerScorer;
 	std::vector<std::vector<double>> scores = dimerScorer.computeFullScoreMatrix(primers, numThreads);
 	PrimerDimerUtils::writeMatrix(scores, out, primers, outputRawMatrix);
+	if (!proofreadingOutFnp.empty()) {
+		OutOptions proofreadingOutOpts(proofreadingOutFnp);
+		proofreadingOutOpts.overWriteFile_ = outOpts.overWriteFile_;
+		OutputStream proofreadingOut(proofreadingOutOpts);
+		PrimerDimerUtils::writeMatrix(dimerScorer.computeFullProofreadingScoreMatrix(primers, numThreads), proofreadingOut, primers, outputRawMatrix);
+	}
 
 
 //	dimerScorer.debug_  = true;
