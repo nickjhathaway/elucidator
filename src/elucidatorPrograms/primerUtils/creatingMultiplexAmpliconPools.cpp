@@ -43,6 +43,9 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 
 	double diversityFactor = 2;
 	double dimerFactor = 0.5;
+	std::string dimerScoreType = "worst";
+	double worstDimerFactor = 0.5;
+	const double dimerNormPerInteraction = 20.0/3.0;
 	double pairPenaltyFactor = 1;
 	double unspecificAmpFactor = 0.50;
 
@@ -99,6 +102,12 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 
 	setUp.setOption(diversityFactor, "--diversityFactor", "diversity Factor");
 	setUp.setOption(dimerFactor, "--dimerFactor", "dimer Factor");
+	setUp.setOption(dimerScoreType, "--dimerScoreType", "the dimer score the optimiser penalises: standard, proofreading (for polymerases that remove unpaired 3' bases), or worst (the lower of the two for each primer pair)");
+	if (!njh::in(dimerScoreType, VecStr{"standard", "proofreading", "worst"})) {
+		setUp.failed_ = true;
+		setUp.addWarning(njh::pasteAsStr("--dimerScoreType must be standard, proofreading or worst, not ", dimerScoreType));
+	}
+	setUp.setOption(worstDimerFactor, "--worstDimerFactor", "when choosing the pool, weight of the single most negative dimer score in a primer pair and between two primer pairs, on top of --dimerFactor's sum of all of them; it doesn't affect which of a region's primer pairs go forward; 0 turns it off");
 	setUp.setOption(pairPenaltyFactor, "--pairPenaltyFactor", "pair Penalty Factor");
 	setUp.setOption(unspecificAmpFactor, "--unspecificAmpFactor", "unspecific Amp Factor");
 	setUp.setOption(hardUnspecAmpCutOff, "--hardUnspecAmpCutOff", "if a primer pair or primer pair match up have more than this amount of unspecific amplification turn completely off");
@@ -232,6 +241,48 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 		OutputStream dimerScoresOut(njh::files::make_path(setUp.pars_.directoryName_, "dimerScores.txt"));
 		PrimerDimerUtils::writeMatrix(dimerScores, dimerScoresOut, allUniquePrimers, false);
 	}
+	std::vector<std::vector<double>> proofreadingDimerScores = dimerScorer.computeFullProofreadingScoreMatrix(allUniquePrimers, numThreads);
+	{
+		OutputStream dimerScoresOut(njh::files::make_path(setUp.pars_.directoryName_, "dimerScores_proofreading.txt"));
+		PrimerDimerUtils::writeMatrix(proofreadingDimerScores, dimerScoresOut, allUniquePrimers, false);
+	}
+	//the scores the optimiser penalises, chosen by --dimerScoreType
+	std::vector<std::vector<double>> worstDimerScores;
+	if ("worst" == dimerScoreType) {
+		worstDimerScores = dimerScores;
+		for (const auto row: iter::range(worstDimerScores.size())) {
+			for (const auto col: iter::range(worstDimerScores[row].size())) {
+				worstDimerScores[row][col] = std::min(dimerScores[row][col], proofreadingDimerScores[row][col]);
+			}
+		}
+	}
+	const auto &designDimerScores = "worst" == dimerScoreType ? worstDimerScores : ("proofreading" == dimerScoreType ? proofreadingDimerScores : dimerScores);
+	//both scores for each interaction within a pair, with the summary columns on the chosen score
+	auto genDimerScoresTab = [&](const table &primer3ResTab) {
+		table dimerScoresTab = table(VecStr{"SeqIDPrimerPairName", "forwardPrimerSelfDimer", "reversePrimerSelfDimer", "forwardReverseDimer",
+																				"forwardPrimerSelfDimerProofreading", "reversePrimerSelfDimerProofreading", "forwardReverseDimerProofreading",
+																				"sumDimerScores", "forwardReverseDimerNormScore", "worstDimerNormScore"});
+		for (const auto &row: iter::enumerate(primer3ResTab.content_)) {
+			const auto forwardIdx = primerToIdx[row.element[primer3ResTab.getColPos("left_seq")]];
+			const auto reverseIdx = primerToIdx[row.element[primer3ResTab.getColPos("right_seq")]];
+			auto sumDimerScores = designDimerScores[forwardIdx][forwardIdx] + designDimerScores[reverseIdx][reverseIdx] + designDimerScores[forwardIdx][reverseIdx];
+			auto forwardReverseDimerNormScore = -1.0 * sumDimerScores/20.0;
+			auto worstDimerNormScore = -1.0 * std::min({0.0, designDimerScores[forwardIdx][forwardIdx], designDimerScores[reverseIdx][reverseIdx], designDimerScores[forwardIdx][reverseIdx]})/dimerNormPerInteraction;
+			dimerScoresTab.addRow(
+							row.element[primer3ResTab.getColPos("SeqIDPrimerPairName")],
+							dimerScores[forwardIdx][forwardIdx],
+							dimerScores[reverseIdx][reverseIdx],
+							dimerScores[forwardIdx][reverseIdx],
+							proofreadingDimerScores[forwardIdx][forwardIdx],
+							proofreadingDimerScores[reverseIdx][reverseIdx],
+							proofreadingDimerScores[forwardIdx][reverseIdx],
+							sumDimerScores,
+							forwardReverseDimerNormScore,
+							worstDimerNormScore
+							);
+		}
+		return dimerScoresTab;
+	};
 	{
 		OutputStream subsegmentDirsWithResultsOut(njh::files::make_path(setUp.pars_.directoryName_, "subsegmentDirsWithResults.txt"));
 		subsegmentDirsWithResultsOut << njh::conToStr(subsegmentDirsWithResults, "\n") << std::endl;
@@ -346,25 +397,7 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 		}
 		primer3ResTab.addColumn(OneMinusExpP5PlusPairPenalty, "1-"+diversityMeasurement+"+pair_penalty_noSize");
 		//add in dimer scores for this pair
-		table dimerScoresTab = table(VecStr{"SeqIDPrimerPairName", "forwardPrimerSelfDimer", "reversePrimerSelfDimer", "forwardReverseDimer", "sumDimerScores", "forwardReverseDimerNormScore"});
-		for(const auto & row : iter::enumerate(primer3ResTab.content_)){
-			auto forwardPrimer = row.element[primer3ResTab.getColPos("left_seq")];
-			auto reversePrimer = row.element[primer3ResTab.getColPos("right_seq")];
-			auto forwardPrimerSelfDimer = dimerScores[primerToIdx[forwardPrimer]][primerToIdx[forwardPrimer]];
-			auto reversePrimerSelfDimer = dimerScores[primerToIdx[reversePrimer]][primerToIdx[reversePrimer]];
-			auto forwardReverseDimer = dimerScores[primerToIdx[forwardPrimer]][primerToIdx[reversePrimer]];
-			auto sumDimerScores = forwardPrimerSelfDimer + reversePrimerSelfDimer + forwardReverseDimer;
-			auto forwardReverseDimerNormScore = -1.0 * sumDimerScores/20.0;
-			dimerScoresTab.addRow(
-							row.element[primer3ResTab.getColPos("SeqIDPrimerPairName")],
-							forwardPrimerSelfDimer,
-							reversePrimerSelfDimer,
-							forwardReverseDimer,
-							sumDimerScores,
-							forwardReverseDimerNormScore
-							);
-			//OneMinusExpP5PlusPairPenalty[row.index] = njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("1-"+diversityMeasurement+"")]) + njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("pair_penalty_noSize")]);
-		}
+		auto dimerScoresTab = genDimerScoresTab(primer3ResTab);
 		primer3ResTab = table::cbind(std::vector<table>{primer3ResTab, dimerScoresTab}, "SeqIDPrimerPairName", false);
 		//primer3ResTab.cbind(dimerScoresTab, false);
 		//add in a score based on 1-ExpP5+pair_penalty_noSize+normDimer
@@ -444,25 +477,7 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 		}
 		primer3ResTab.addColumn(OneMinusExpP5PlusPairPenalty, "1-"+diversityMeasurement+"+pair_penalty_noSize");
 		//add in dimer scores for this pair
-		table dimerScoresTab = table(VecStr{"SeqIDPrimerPairName", "forwardPrimerSelfDimer", "reversePrimerSelfDimer", "forwardReverseDimer", "sumDimerScores", "forwardReverseDimerNormScore"});
-		for(const auto & row : iter::enumerate(primer3ResTab.content_)){
-			auto forwardPrimer = row.element[primer3ResTab.getColPos("left_seq")];
-			auto reversePrimer = row.element[primer3ResTab.getColPos("right_seq")];
-			auto forwardPrimerSelfDimer = dimerScores[primerToIdx[forwardPrimer]][primerToIdx[forwardPrimer]];
-			auto reversePrimerSelfDimer = dimerScores[primerToIdx[reversePrimer]][primerToIdx[reversePrimer]];
-			auto forwardReverseDimer = dimerScores[primerToIdx[forwardPrimer]][primerToIdx[reversePrimer]];
-			auto sumDimerScores = forwardPrimerSelfDimer + reversePrimerSelfDimer + forwardReverseDimer;
-			auto forwardReverseDimerNormScore = -1.0 * sumDimerScores/20.0;
-			dimerScoresTab.addRow(
-							row.element[primer3ResTab.getColPos("SeqIDPrimerPairName")],
-							forwardPrimerSelfDimer,
-							reversePrimerSelfDimer,
-							forwardReverseDimer,
-							sumDimerScores,
-							forwardReverseDimerNormScore
-			);
-			//OneMinusExpP5PlusPairPenalty[row.index] = njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("1-"+diversityMeasurement+"")]) + njh::StrToNumConverter::stoToNum<double>(row.element[primer3ResTab.getColPos("pair_penalty_noSize")]);
-		}
+		auto dimerScoresTab = genDimerScoresTab(primer3ResTab);
 		primer3ResTab = table::cbind(std::vector<table>{primer3ResTab, dimerScoresTab}, "SeqIDPrimerPairName", false);
 		//primer3ResTab.cbind(dimerScoresTab, false);
 		//add in a score based on 1-ExpP5+pair_penalty_noSize+normDimer
@@ -803,6 +818,7 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 							diversityFactor * njh::StrToNumConverter::stoToNum<double>(row.element[top.getColPos(""+diversityMeasurement+"")]) -
 							pairPenaltyFactor * njh::StrToNumConverter::stoToNum<double>(row.element[top.getColPos("norm_pair_penalty_noSize")]) -
 							dimerFactor * njh::StrToNumConverter::stoToNum<double>(row.element[top.getColPos("forwardReverseDimerNormScore")]) -
+							worstDimerFactor * njh::StrToNumConverter::stoToNum<double>(row.element[top.getColPos("worstDimerNormScore")]) -
 							unspecificAmpFactor * njh::StrToNumConverter::stoToNum<double>(row.element[top.getColPos("unspecificAmpsCnt")]) -
 							hotUnspecificAmpFactor * njh::StrToNumConverter::stoToNum<double>(row.element[top.getColPos("hotUnspecificAmpsCnt")]) -
 							threePrimeTmFactor * njh::StrToNumConverter::stoToNum<double>(row.element[top.getColPos("threePrimeTmPenalty")]) ;
@@ -851,16 +867,17 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 				//dimer cost, dimerization between self and between the two primers within the pair are already taken into account with the cost of the primer so can just do the between pairs interactions
 				//so the costs would be p1-F -> p2-F, p1-F -< p2-R, p1-R -> p2-F, p1-R -> p2-R
 				//so 4 cost in total
-				auto p1_forwardPrimer = primerPairToForward[regionRow];
-				auto p1_reversePrimer = primerPairToReverse[regionRow];
-				auto p2_forwardPrimer = primerPairToForward[regionCol];
-				auto p2_reversePrimer = primerPairToReverse[regionCol];
-				auto p1_forwardPrimer_vs_p2_forwardPrimer = dimerScores[primerToIdx[p1_forwardPrimer]][primerToIdx[p2_forwardPrimer]];
-				auto p1_forwardPrimer_vs_p2_reversePrimer = dimerScores[primerToIdx[p1_forwardPrimer]][primerToIdx[p2_reversePrimer]];
-				auto p1_reversePrimer_vs_p2_forwardPrimer = dimerScores[primerToIdx[p1_reversePrimer]][primerToIdx[p2_forwardPrimer]];
-				auto p1_reversePrimer_vs_p2_reversePrimer = dimerScores[primerToIdx[p1_reversePrimer]][primerToIdx[p2_reversePrimer]];
+				auto p1_forwardPrimer = njh::mapAt(primerPairToForward, allPrimerPairs[pair.row_]);
+				auto p1_reversePrimer = njh::mapAt(primerPairToReverse, allPrimerPairs[pair.row_]);
+				auto p2_forwardPrimer = njh::mapAt(primerPairToForward, allPrimerPairs[pair.col_]);
+				auto p2_reversePrimer = njh::mapAt(primerPairToReverse, allPrimerPairs[pair.col_]);
+				auto p1_forwardPrimer_vs_p2_forwardPrimer = designDimerScores[primerToIdx[p1_forwardPrimer]][primerToIdx[p2_forwardPrimer]];
+				auto p1_forwardPrimer_vs_p2_reversePrimer = designDimerScores[primerToIdx[p1_forwardPrimer]][primerToIdx[p2_reversePrimer]];
+				auto p1_reversePrimer_vs_p2_forwardPrimer = designDimerScores[primerToIdx[p1_reversePrimer]][primerToIdx[p2_forwardPrimer]];
+				auto p1_reversePrimer_vs_p2_reversePrimer = designDimerScores[primerToIdx[p1_reversePrimer]][primerToIdx[p2_reversePrimer]];
 				auto dimerNormScore = dimerFactor * ((p1_forwardPrimer_vs_p2_forwardPrimer + p1_forwardPrimer_vs_p2_reversePrimer + p1_reversePrimer_vs_p2_forwardPrimer + p1_reversePrimer_vs_p2_reversePrimer)/26.666667);
-				e->primerPairVsPrimerPairWeight_ = dimerNormScore -unspecificAmpFactor * numberOfBetweenPairsUnspecificAmps[allPrimerPairs[pair.row_]][allPrimerPairs[pair.col_]]
+				auto worstDimerNormScore = worstDimerFactor * std::min({0.0, p1_forwardPrimer_vs_p2_forwardPrimer, p1_forwardPrimer_vs_p2_reversePrimer, p1_reversePrimer_vs_p2_forwardPrimer, p1_reversePrimer_vs_p2_reversePrimer})/dimerNormPerInteraction;
+				e->primerPairVsPrimerPairWeight_ = dimerNormScore + worstDimerNormScore -unspecificAmpFactor * numberOfBetweenPairsUnspecificAmps[allPrimerPairs[pair.row_]][allPrimerPairs[pair.col_]]
 						- hotUnspecificAmpFactor * numberOfBetweenPairsHotUnspecificAmps[allPrimerPairs[pair.row_]][allPrimerPairs[pair.col_]];
 				e->regionToOtherRegion_[regionRow] = regionCol;
 				e->regionToOtherRegion_[regionCol] = regionRow;
@@ -902,7 +919,7 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 		std::cout << "pool.nodes_.size(): " << pool.nodes_.size() << std::endl;
 		std::cout << "pool.edges_.size(): " << pool.edges_.size() << std::endl;
 	}
-	pool.greedyDetermineHeaviestPool();
+	pool.greedyAccumulateHeaviestPool();
 	auto determinedPoolDir = njh::files::make_path(setUp.pars_.directoryName_, "determinedPool");
 	njh::files::makeDir(njh::files::MkdirPar{determinedPoolDir});
 	Json::Value finalResults;
@@ -1023,6 +1040,16 @@ int primerUtilsRunner::creatingMultiplexAmpliconPools(
 			{
 				OutputStream dimerScoresOut(njh::files::make_path(determinedPoolDir, "dimerScores.txt"));
 				PrimerDimerUtils::writeMatrix(finalDimerScores, dimerScoresOut, allFinalPrimerSeqs, false);
+			}
+			{
+				std::vector<std::vector<double>> finalProofreadingDimerScores = dimerScorer.computeFullProofreadingScoreMatrix(allFinalPrimerSeqs, numThreads);
+				std::vector<double> all_finalProofreadingDimerScores;
+				for(const auto & scoreVec : finalProofreadingDimerScores){
+					addOtherVec(all_finalProofreadingDimerScores, scoreVec);
+				}
+				finalResults["proofreadingDimerizationScores_stats"] = njh::json::toJson(getStatsOnVec(all_finalProofreadingDimerScores));
+				OutputStream dimerScoresOut(njh::files::make_path(determinedPoolDir, "dimerScores_proofreading.txt"));
+				PrimerDimerUtils::writeMatrix(finalProofreadingDimerScores, dimerScoresOut, allFinalPrimerSeqs, false);
 			}
 		}
 

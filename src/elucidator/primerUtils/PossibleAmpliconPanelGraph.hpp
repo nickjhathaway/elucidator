@@ -234,17 +234,87 @@ public:
 						}
 					}
 				}
-				//turn off all other primers
-				nodes_[nodeIdx_[topEdge->regionToOtherRegion_.begin()->first]].turnOffAllOtherPrimers(topEdge->regionToPrimerName_[topEdge->regionToOtherRegion_.begin()->first]);
-				nodes_[nodeIdx_[topEdge->regionToOtherRegion_[topEdge->regionToOtherRegion_.begin()->first]]].turnOffAllOtherPrimers(topEdge->regionToPrimerName_[topEdge->regionToOtherRegion_[topEdge->regionToOtherRegion_.begin()->first]]);
-				//turn off all other connections between these two regions
-				nodes_[nodeIdx_[topEdge->regionToOtherRegion_.begin()->first]].turnOfOtherEdgesForOtherRegion(*topEdge);
-				nodes_[nodeIdx_[topEdge->regionToOtherRegion_[topEdge->regionToOtherRegion_.begin()->first]]].turnOfOtherEdgesForOtherRegion(*topEdge);
 			}
+			if(nullptr == topEdge){
+				break;
+			}
+			//turn off all other primers
+			nodes_[nodeIdx_[topEdge->regionToOtherRegion_.begin()->first]].turnOffAllOtherPrimers(topEdge->regionToPrimerName_[topEdge->regionToOtherRegion_.begin()->first]);
+			nodes_[nodeIdx_[topEdge->regionToOtherRegion_[topEdge->regionToOtherRegion_.begin()->first]]].turnOffAllOtherPrimers(topEdge->regionToPrimerName_[topEdge->regionToOtherRegion_[topEdge->regionToOtherRegion_.begin()->first]]);
+			//turn off all other connections between these two regions
+			nodes_[nodeIdx_[topEdge->regionToOtherRegion_.begin()->first]].turnOfOtherEdgesForOtherRegion(*topEdge);
+			nodes_[nodeIdx_[topEdge->regionToOtherRegion_[topEdge->regionToOtherRegion_.begin()->first]]].turnOfOtherEdgesForOtherRegion(*topEdge);
 			topEdges.emplace_back(topEdge);
 			topEdgeUids.emplace(topEdge->getUid());
 		}
 		return topEdges;
+	}
+
+	/**
+	 * @brief Start from the heaviest edge, then keep adding the primer pair that scores best against every primer pair chosen so far
+	 *
+	 * A primer pair with an edge turned off to any chosen primer pair can't be added, and a region left with none ends up without a primer pair
+	 */
+	void greedyAccumulateHeaviestPool(){
+		std::shared_ptr<edge> startEdge = nullptr;
+		for(const auto & e : edges_){
+			if(e->on_ && (nullptr == startEdge || e->getTotalWeights() > startEdge->getTotalWeights())){
+				startEdge = e;
+			}
+		}
+		std::unordered_map<std::string, std::string> chosenPrimerPairs;
+		if(nullptr != startEdge){
+			chosenPrimerPairs = startEdge->regionToPrimerName_;
+		}
+		while(nullptr != startEdge && chosenPrimerPairs.size() < nodes_.size()){
+			bool found = false;
+			double bestScore = 0;
+			std::string bestRegion;
+			std::string bestPrimerPair;
+			for(const auto & n : nodes_){
+				if(njh::in(n.region_, chosenPrimerPairs)){
+					continue;
+				}
+				VecStr candidates;
+				std::unordered_map<std::string, double> vsChosenWeights;
+				std::unordered_map<std::string, uint32_t> vsChosenCounts;
+				for(const auto & e : n.edges_){
+					const auto & otherRegion = e->regionToOtherRegion_.at(n.region_);
+					auto chosen = chosenPrimerPairs.find(otherRegion);
+					if(e->on_ && chosenPrimerPairs.end() != chosen && e->regionToPrimerName_.at(otherRegion) == chosen->second){
+						const auto & candidate = e->regionToPrimerName_.at(n.region_);
+						if(!njh::in(candidate, vsChosenCounts)){
+							candidates.emplace_back(candidate);
+							vsChosenWeights[candidate] = e->primerPairIndvWeights_.at(candidate);
+						}
+						vsChosenWeights[candidate] += e->primerPairVsPrimerPairWeight_;
+						++vsChosenCounts[candidate];
+					}
+				}
+				for(const auto & candidate : candidates){
+					if(vsChosenCounts[candidate] == chosenPrimerPairs.size() && (!found || vsChosenWeights[candidate] > bestScore)){
+						found = true;
+						bestScore = vsChosenWeights[candidate];
+						bestRegion = n.region_;
+						bestPrimerPair = candidate;
+					}
+				}
+			}
+			if(!found){
+				break;
+			}
+			chosenPrimerPairs[bestRegion] = bestPrimerPair;
+		}
+		for(auto & n : nodes_){
+			auto chosen = chosenPrimerPairs.find(n.region_);
+			if(chosenPrimerPairs.end() != chosen){
+				n.turnOffAllOtherPrimers(chosen->second);
+			}else{
+				for(auto & e : n.edges_){
+					e->on_ = false;
+				}
+			}
+		}
 	}
 
 	double getTotalOnWeight(){
