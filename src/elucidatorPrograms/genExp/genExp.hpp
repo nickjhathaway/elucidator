@@ -117,6 +117,7 @@ class genExpRunner : public njh::progutils::ProgramRunner {
 	static int countIlluminaSampleNumber(const njh::progutils::CmdArgs & inputCommands);
 	static int countBasesPerPosition(const njh::progutils::CmdArgs & inputCommands);
 	static int translateSeqsBasedOnGFF(const njh::progutils::CmdArgs & inputCommands);
+	static int translateSeqsAgainstBestGenome(const njh::progutils::CmdArgs & inputCommands);
 	static int randomSampConsensusCompareToExpected(const njh::progutils::CmdArgs & inputCommands);
 	static int evaluateContigsAgainstExpected(const njh::progutils::CmdArgs & inputCommands);
 

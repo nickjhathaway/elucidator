@@ -91,6 +91,7 @@ genExpRunner::genExpRunner()
 					 addFunc("countIlluminaSampleNumber", countIlluminaSampleNumber, false),
 					 addFunc("countBasesPerPosition", countBasesPerPosition, false),
 					 addFunc("translateSeqsBasedOnGFF", translateSeqsBasedOnGFF, false),
+					 addFunc("translateSeqsAgainstBestGenome", translateSeqsAgainstBestGenome, false),
 					 addFunc("randomSampConsensusCompareToExpected", randomSampConsensusCompareToExpected, false),
 					 addFunc("evaluateContigsAgainstExpected", evaluateContigsAgainstExpected, false),
 					 addFunc("evaluateContigsWithBowtie2", evaluateContigsAgainstExpected, true),

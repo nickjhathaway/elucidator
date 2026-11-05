@@ -29,6 +29,7 @@
 #include "elucidator/objects/BioDataObject.h"
 #include "elucidator/objects/dataContainers/graphs.h"
 #include <njhseq/GenomeUtils.h>
+#include <njhseq/readVectorManipulation/readVectorHelpers/readVecTrimmer.hpp>
 
 namespace njhseq {
 
@@ -45,6 +46,8 @@ struct FlankPairResult {
 	uint32_t leftHits_{0};
 	uint32_t rightHits_{0};
 	GenomicRegion span_;
+	uint32_t fivePrimeTrim_{0};
+	uint32_t threePrimeTrim_{0};
 };
 
 /**@brief carve a flank out of a region, in genomic (left/right) coordinates
@@ -101,6 +104,88 @@ double bestTandemPeriodicity(const std::string & seq, uint32_t maxPeriod = 60) {
 	return best;
 }
 
+/**@brief how many bases to shave off one end of an extracted span to land back on
+ * the edge of the original bed record
+ *
+ * The reference is a window of the primary genome that straddles the edge: it
+ * reaches from the outer end of the anchor to some way inside the record, so the
+ * edge always sits at a known index within it. Aligning that window against the
+ * matching end of the span, and asking where that index landed, puts the record
+ * edge back without ever aligning the whole locus. Doing it on the whole locus is the obvious reading of
+ * trimToRefWithGlobalAlignmentToRefPositions, but the aligner carries a
+ * maxSize_ x maxSize_ score matrix of 16 byte cells and setMaxSize only ever
+ * grows it, so a 23 kb record would claim ~8.8 GB and hold it for the rest of the
+ * run. Only the edges are moving, so only the edges need aligning.
+ *
+ * @param refSeq the primary genome window straddling this edge, in record sense
+ * @param spanSeq the extracted span, reading in the same direction as the record
+ * @param edgeIdx index within refSeq of the record's edge base
+ * @param fivePrimeSide whether this is the start of the record rather than its end
+ * @param ok set false when the alignment could not place the edge
+ * @return bases to remove from that end of spanSeq
+ */
+uint32_t findEdgeTrim(const seqInfo & refSeq, const seqInfo & spanSeq,
+		uint32_t edgeIdx, bool fivePrimeSide, aligner & alignerObj, bool & ok,
+		bool verbose = false) {
+	ok = false;
+	uint32_t anchorLen = len(refSeq);
+	if (0 == anchorLen || edgeIdx >= anchorLen) {
+		return 0;
+	}
+	//take only the end of the span that holds this edge, with room for the anchor
+	//to have picked up an indel on the way
+	uint32_t chunkLen = std::min<uint32_t>(len(spanSeq), 2 * anchorLen);
+	if (chunkLen < anchorLen) {
+		return 0;
+	}
+	seqInfo chunk = spanSeq;
+	if (fivePrimeSide) {
+		chunk.setClip(0, chunkLen - 1);
+	} else {
+		chunk.setClip(len(spanSeq) - chunkLen, len(spanSeq) - 1);
+	}
+	readVecTrimmer::GlobalAlnTrimPars trimPars{};
+	if (fivePrimeSide) {
+		//keep from the record's first base to the inner end of the reference
+		trimPars.startInclusive_ = edgeIdx;
+		trimPars.endInclusive_ = anchorLen - 1;
+	} else {
+		//keep from the inner end of the reference up to the record's last base
+		trimPars.startInclusive_ = 0;
+		trimPars.endInclusive_ = edgeIdx;
+	}
+	uint64_t needed = std::max<uint64_t>(len(chunk), anchorLen) + 10;
+	if (needed >= alignerObj.parts_.maxSize_) {
+		alignerObj.parts_.setMaxSize(needed);
+	}
+	auto trimmed = chunk;
+	readVecTrimmer::trimSeqToRefByGlobalAln(trimmed, refSeq, trimPars, alignerObj);
+	if (!trimmed.on_ || trimmed.seq_.empty()) {
+		if (verbose) {
+			std::cerr << "  trim " << (fivePrimeSide ? "5p" : "3p")
+					<< ": alignment could not place the edge (on_="
+					<< njh::boolToStr(trimmed.on_) << ", trimmedLen=" << trimmed.seq_.size()
+					<< ", refLen=" << anchorLen << ", chunkLen=" << chunkLen
+					<< ", refRange=" << trimPars.startInclusive_ << "-"
+					<< trimPars.endInclusive_ << ")" << std::endl;
+		}
+		return 0;
+	}
+	auto pos = chunk.seq_.find(trimmed.seq_);
+	if (std::string::npos == pos) {
+		if (verbose) {
+			std::cerr << "  trim " << (fivePrimeSide ? "5p" : "3p")
+					<< ": trimmed piece is not a substring of the chunk" << std::endl;
+		}
+		return 0;
+	}
+	ok = true;
+	if (fivePrimeSide) {
+		return pos;
+	}
+	return chunkLen - (pos + len(trimmed));
+}
+
 } // namespace
 
 int genExpRunner::extractRefSeqsFromGenomesWithFlanks(
@@ -126,13 +211,13 @@ int genExpRunner::extractRefSeqsFromGenomesWithFlanks(
 	double maxSpanMultiplier = 3.0;
 	uint32_t maxSpanPad = 2000;
 	bool allowAmbiguousFlanks = false;
+	bool noTrimToBedEdges = false;
 
 	MultiGenomeMapper::getRefSeqsWithPrimaryGenomePars extractPars;
 	extractPars.lzPars.identity = 80;
 	extractPars.lzPars.coverage = 90;
 
 	bfs::path gffDir = "";
-	std::string gffExtraAttributesStr = "description";
 
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -167,15 +252,18 @@ int genExpRunner::extractRefSeqsFromGenomesWithFlanks(
 			"Added to the --maxSpanMultiplier bound before rejecting a span");
 	setUp.setOption(allowAmbiguousFlanks, "--allowAmbiguousFlanks",
 			"Keep a genome even when a flank hit more than one locus, using the best hit; off by default because paralogous flanks can otherwise pair across two different loci");
+	setUp.setOption(noTrimToBedEdges, "--noTrimToBedEdges",
+			"Report the whole anchor to anchor span instead of trimming it back to the edges of the bed record. On by default: when an anchor is pushed outwards, by --flankOutset or by --autoFlankSearch, the span starts and ends outside the record, so each extraction is reported with that outset still on it. Trimming aligns each anchor to the matching end of the span to put the record edge back, which also keeps the reported length ratio honest. Turn this off when you want the outset sequence kept");
+	const bool trimToBedEdges = !noTrimToBedEdges;
 
 	setUp.setOption(extractPars.shortNames, "--shortNames", "Short Names");
 	setUp.setOption(writeOutAllSeqsFile, "--writeOutAllSeqsFile", "Write Out All Seqs File");
 	setUp.setOption(combineByGenome, "--combineByGenome",
 			"Combine and merge regions extracted and create a bed file for each genome");
 	setUp.setOption(extractPars.extendAndTrim, "--extendAndTrim",
-			"Extend the determine region and then trim back, can be helpful for when variation falls at the very ends of the sequence");
+			"Refine each individual FLANK HIT by extending it and trimming it back to the flank sequence, which can help when variation falls at the very ends of an anchor. This acts on the anchors, not on the final locus: trimming the locus back to the bed record is --noTrimToBedEdges");
 	setUp.setOption(extractPars.extendAndTrimLen, "--extendAndTrimLen",
-			"When extending and trimming, use this length");
+			"Length to extend by when refining flank hits with --extendAndTrim");
 	setUp.setOption(extractPars.lzPars.identity, "--identity",
 			"Identity to use for when searching with lastz");
 	setUp.setOption(extractPars.lzPars.coverage, "--coverage",
@@ -185,8 +273,6 @@ int genExpRunner::extractRefSeqsFromGenomesWithFlanks(
 	setUp.setOption(genomeMappingPars.numThreads_, "--numThreads", "Number of CPUs to utilize");
 	setUp.setOption(gffDir, "--gffDir",
 			"A directory with a gff for the genomes in --genomeDir, should be named GENOME.gff (for GENOME.fasta)");
-	setUp.setOption(gffExtraAttributesStr, "--gffExtraAttributes",
-			"Extra attributes to add to genome that has an accompany gff");
 	setUp.setOption(keepRefAlignments, "--keepRefAlignments", "Keep Ref Alignments");
 
 	setUp.setOption(bedFile, "--bed", "Bed file of the regions to extract", true);
@@ -196,8 +282,14 @@ int genExpRunner::extractRefSeqsFromGenomesWithFlanks(
 	std::string selectedGenomesStr;
 	setUp.setOption(selectedGenomesStr, "--selectedGenomes",
 			"Name of the other genomes in --genomeDir to be read in, leave blank to just do all fastas");
+	//comma separated gff attributes to carry onto the hits found in a genome that
+	//has a gff in --gffDir. MultiGenomeMapper already defaults this to
+	//"description", so an empty value here means keep that, not take nothing.
+	//extractRefSeqsFromGenomes also exposes a --gffExtraAttributes that is read
+	//into a local string and never used again, which is why it is absent here.
 	std::string extraGffAttributes;
-	setUp.setOption(extraGffAttributes, "--extraGffAttributes", "Extra Gff Attributes");
+	setUp.setOption(extraGffAttributes, "--extraGffAttributes",
+			"Comma separated extra attributes to add for a genome with an accompanying gff in --gffDir; leave blank to keep the default of description");
 	if (!extraGffAttributes.empty()) {
 		genomeMappingPars.gffIntersectPars_.extraAttributes_ = tokenizeString(extraGffAttributes, ",");
 	}
@@ -257,6 +349,10 @@ int genExpRunner::extractRefSeqsFromGenomesWithFlanks(
 
 	for (auto & region : regions) {
 		std::string rUid = region.createUidFromCoordsStrand();
+		//setUidWtihCoordsStrand throws the bed record's name away, so keep it for the
+		//bed output: a regions.bed holding every genome is only readable if each row
+		//still says which locus it is
+		std::string regionName = region.uid_.empty() ? rUid : region.uid_;
 		region.setUidWtihCoordsStrand();
 		auto regionDir = njh::files::make_path(outputDir, rUid);
 		if (bfs::exists(regionDir) && !overWriteDirs) {
@@ -433,9 +529,15 @@ int genExpRunner::extractRefSeqsFromGenomesWithFlanks(
 					span.chrom_ = lh.chrom_;
 					span.start_ = spanStart;
 					span.end_ = spanEnd;
-					//a flank that maps reversed means the region is inverted relative to the bed
-					span.reverseSrand_ =
-							lh.reverseSrand_ ? !region.reverseSrand_ : region.reverseSrand_;
+					//The anchors go to lastz already in the record's own sense, because
+					//genFlankRegion inherits the record's strand. So a reversed flank hit means
+					//the genomic span runs opposite to the sense sequence and has to be reverse
+					//complemented to read as the gene does, and a forward hit means it already
+					//reads that way. The record's strand is therefore already accounted for and
+					//must not be applied a second time: doing that wrote every minus strand
+					//record in genomic forward orientation, antisense to the gene, and labelled
+					//it '+'.
+					span.reverseSrand_ = lh.reverseSrand_;
 					span.uid_ = genome;
 					pr.span_ = span;
 					pr.usable_ = true;
@@ -445,35 +547,154 @@ int genExpRunner::extractRefSeqsFromGenomesWithFlanks(
 			pairedByGenome[genome] = pr;
 		}
 
-		//write out the flank beds, the paired region beds and the sequences
+		//An outset puts the anchors outside the record, so every span, including the
+		//primary genome's own, starts and ends that far outside the bed record it came
+		//from. Put the edges back by aligning each anchor to the matching end of the
+		//span. Nothing to do when neither side moved: the anchors are then the first
+		//and last bases of the record and the span already lands on its edges.
+		if (trimToBedEdges && (leftOutsetUsed > 0 || rightOutsetUsed > 0)) {
+			//The trim reference is not the search anchor: an outset larger than the anchor
+			//leaves the record edge outside it entirely, with nothing to align the edge to.
+			//So build a window per side that reaches from the outer end of the anchor to
+			//trimMargin bases inside the record, which always straddles the edge whatever
+			//the outset. genFlankRegion already clamps to the chromosome, so read the edge
+			//index back off the window's own coordinates rather than assuming the outset.
+			uint32_t trimMargin = std::min<uint32_t>(flankLength, region.getLen());
+			auto leftTrimReg = genFlankRegion(region, leftOutsetUsed + trimMargin,
+					leftOutsetUsed, true, chromLength);
+			auto rightTrimReg = genFlankRegion(region, rightOutsetUsed + trimMargin,
+					rightOutsetUsed, false, chromLength);
+			//genFlankRegion works in genomic left/right while the span reads in the
+			//record's direction, so on a minus strand record the genomically right window
+			//is the one holding the 5' edge
+			const auto & fivePrimeReg = region.reverseSrand_ ? rightTrimReg : leftTrimReg;
+			const auto & threePrimeReg = region.reverseSrand_ ? leftTrimReg : rightTrimReg;
+			//index of the edge base within each window, read in record sense
+			uint32_t fivePrimeEdge = region.reverseSrand_
+					? static_cast<uint32_t>(fivePrimeReg.end_ - region.end_)
+					: static_cast<uint32_t>(region.start_ - fivePrimeReg.start_);
+			uint32_t threePrimeEdge = region.reverseSrand_
+					? static_cast<uint32_t>(threePrimeReg.end_ - 1 - region.start_)
+					: static_cast<uint32_t>(region.end_ - 1 - threePrimeReg.start_);
+			//only a side that was actually pushed outwards has anything to give back
+			const bool trimFive = (region.reverseSrand_ ? rightOutsetUsed : leftOutsetUsed) > 0;
+			const bool trimThree = (region.reverseSrand_ ? leftOutsetUsed : rightOutsetUsed) > 0;
+			auto fivePrimeRef = gMapper->extractGenomeRegion(primaryGenome, fivePrimeReg);
+			auto threePrimeRef = gMapper->extractGenomeRegion(primaryGenome, threePrimeReg);
+			for (auto & genomePair : pairedByGenome) {
+				auto & pr = genomePair.second;
+				if (!pr.usable_) {
+					continue;
+				}
+				auto spanSeq = gMapper->extractGenomeRegion(genomePair.first, pr.span_);
+				bool fiveOk = true;
+				bool threeOk = true;
+				uint32_t fiveTrim = 0;
+				uint32_t threeTrim = 0;
+				if (trimFive) {
+					fiveTrim = findEdgeTrim(fivePrimeRef, spanSeq, fivePrimeEdge, true,
+							alignerObj, fiveOk, setUp.pars_.verbose_);
+				}
+				if (trimThree) {
+					threeTrim = findEdgeTrim(threePrimeRef, spanSeq, threePrimeEdge, false,
+							alignerObj, threeOk, setUp.pars_.verbose_);
+				}
+				if (setUp.pars_.verbose_) {
+					std::cerr << "  " << rUid << " " << genomePair.first << " trim 5p="
+							<< fiveTrim << " 3p=" << threeTrim << std::endl;
+				}
+				if (fiveTrim + threeTrim >= pr.span_.getLen()) {
+					//trimming everything away means the alignment is not telling the truth
+					pr.status_ = "ok_trim_overran";
+					continue;
+				}
+				if (pr.span_.reverseSrand_) {
+					pr.span_.start_ += threeTrim;
+					pr.span_.end_ -= fiveTrim;
+				} else {
+					pr.span_.start_ += fiveTrim;
+					pr.span_.end_ -= threeTrim;
+				}
+				pr.fivePrimeTrim_ = fiveTrim;
+				pr.threePrimeTrim_ = threeTrim;
+				if (!fiveOk || !threeOk) {
+					//the span is still usable, it just keeps the outset on the side that
+					//could not be placed
+					pr.status_ = njh::pasteAsStr("ok_untrimmed_",
+							(!fiveOk && !threeOk) ? "both" : (!fiveOk ? "5p" : "3p"));
+				}
+			}
+		}
+
+		//One bed per region rather than one per genome per region: with 13 genomes the
+		//old layout left 26 bed files in every region directory. The genome goes in the
+		//first extra field as [genome=X] so rows can be split back out, and different
+		//assemblies mostly use different chrom names anyway. Any gff annotation lands in
+		//the field after it, since intersectBedLocsWtihGffRecords appends one field of
+		//its own.
+		auto annotateWithGff = [&gMapper](std::vector<Bed6RecordCore> & beds,
+				const std::string & genome) {
+			if (beds.empty()) {
+				return;
+			}
+			const auto & gffFnp = gMapper->genomes_.at(genome)->gffFnp_;
+			if (gffFnp.empty()) {
+				return;
+			}
+			intersectBedLocsWtihGffRecordsPars intersectPars(gffFnp);
+			intersectPars.selectFeatures_ = gMapper->pars_.gffIntersectPars_.selectFeatures_;
+			intersectPars.extraAttributes_ = gMapper->pars_.gffIntersectPars_.extraAttributes_;
+			intersectBedLocsWtihGffRecords(beds, intersectPars);
+		};
+
 		std::vector<seqInfo> refSeqs;
+		std::vector<Bed6RecordCore> allRegionBeds;
+		std::vector<Bed6RecordCore> allFlankBeds;
+		std::unordered_map<std::string, std::string> gffAnnotByGenome;
 		for (const auto & genome : genomeNames) {
 			const auto & pr = pairedByGenome.at(genome);
 			{
-				OutputStream flankBedOut(njh::files::make_path(bedsDir, genome + "_flanks.bed"));
-				if (njh::in(genome, leftRes)) {
-					for (const auto & h : leftRes.at(genome).all_individual_regions) {
+				//each genome is annotated against its own gff, so the beds are gathered and
+				//intersected a genome at a time before being pooled
+				std::vector<Bed6RecordCore> flankBedsForGenome;
+				auto addFlankHits = [&flankBedsForGenome,&genome,&regionName](
+						const std::vector<GenomicRegion> & hits, const std::string & side) {
+					for (const auto & h : hits) {
 						auto b = h.genBedRecordCore();
-						b.name_ = genome + "_leftFlank";
-						flankBedOut << b.toDelimStrWithExtra() << std::endl;
+						b.name_ = regionName + "_" + side + "Flank";
+						MetaDataInName bedMeta;
+						bedMeta.addMeta("genome", genome);
+						bedMeta.addMeta("side", side);
+						b.extraFields_.emplace_back(bedMeta.createMetaName());
+						flankBedsForGenome.emplace_back(b);
 					}
+				};
+				if (njh::in(genome, leftRes)) {
+					addFlankHits(leftRes.at(genome).all_individual_regions, "left");
 				}
 				if (njh::in(genome, rightRes)) {
-					for (const auto & h : rightRes.at(genome).all_individual_regions) {
-						auto b = h.genBedRecordCore();
-						b.name_ = genome + "_rightFlank";
-						flankBedOut << b.toDelimStrWithExtra() << std::endl;
-					}
+					addFlankHits(rightRes.at(genome).all_individual_regions, "right");
 				}
+				annotateWithGff(flankBedsForGenome, genome);
+				addOtherVec(allFlankBeds, flankBedsForGenome);
 			}
 			if (!pr.usable_) {
 				continue;
 			}
 			{
-				OutputStream regionBedOut(njh::files::make_path(bedsDir, genome + "_region.bed"));
 				auto b = pr.span_.genBedRecordCore();
-				b.name_ = genome;
-				regionBedOut << b.toDelimStrWithExtra() << std::endl;
+				b.name_ = regionName;
+				MetaDataInName bedMeta;
+				bedMeta.addMeta("genome", genome);
+				b.extraFields_.emplace_back(bedMeta.createMetaName());
+				std::vector<Bed6RecordCore> regionBedForGenome { b };
+				annotateWithGff(regionBedForGenome, genome);
+				//the gff put its hits in the field after the genome meta, carry it to the
+				//info table so the annotation is readable without opening the bed
+				if (regionBedForGenome.front().extraFields_.size() > 1) {
+					gffAnnotByGenome[genome] = regionBedForGenome.front().extraFields_[1];
+				}
+				addOtherVec(allRegionBeds, regionBedForGenome);
 			}
 			auto extracted = gMapper->extractGenomeRegion(genome, pr.span_);
 			extracted.name_ = genome;
@@ -488,6 +709,19 @@ int genExpRunner::extractRefSeqsFromGenomesWithFlanks(
 				extracted.name_ += " " + refMeta.createMetaName();
 			}
 			refSeqs.emplace_back(extracted);
+		}
+
+		{
+			OutputStream regionBedOut(njh::files::make_path(bedsDir, "regions.bed"));
+			for (const auto & b : allRegionBeds) {
+				regionBedOut << b.toDelimStrWithExtra() << std::endl;
+			}
+		}
+		{
+			OutputStream flankBedOut(njh::files::make_path(bedsDir, "flanks.bed"));
+			for (const auto & b : allFlankBeds) {
+				flankBedOut << b.toDelimStrWithExtra() << std::endl;
+			}
 		}
 
 		if (writeOutAllSeqsFile) {
@@ -514,7 +748,9 @@ int genExpRunner::extractRefSeqsFromGenomesWithFlanks(
 
 		{
 			OutputStream infoOut(njh::files::make_path(bedsDir, "flankExtractionInfo.tab.txt"));
-			infoOut << "genome\tregion\tflankLength\tleftOutset\trightOutset\tleftFlankHits\trightFlankHits\tchrom\tstart\tend\tstrand\tspanLength\tprimaryLength\tspanRatio\tstatus"
+			//the trim columns go after status so that status stays column 15 for anything
+			//already reading these tables
+			infoOut << "genome\tregion\tflankLength\tleftOutset\trightOutset\tleftFlankHits\trightFlankHits\tchrom\tstart\tend\tstrand\tspanLength\tprimaryLength\tspanRatio\tstatus\tfivePrimeTrim\tthreePrimeTrim\tgffAnnotation"
 					<< std::endl;
 			for (const auto & genome : genomeNames) {
 				const auto & pr = pairedByGenome.at(genome);
@@ -528,7 +764,15 @@ int genExpRunner::extractRefSeqsFromGenomesWithFlanks(
 				} else {
 					infoOut << "\t*\t*\t*\t*\t*\t" << region.getLen() << "\t*";
 				}
-				infoOut << "\t" << pr.status_ << std::endl;
+				infoOut << "\t" << pr.status_;
+				if (pr.usable_) {
+					infoOut << "\t" << pr.fivePrimeTrim_ << "\t" << pr.threePrimeTrim_;
+				} else {
+					infoOut << "\t*\t*";
+				}
+				infoOut << "\t"
+						<< (njh::in(genome, gffAnnotByGenome) ? gffAnnotByGenome.at(genome) : "*");
+				infoOut << std::endl;
 			}
 		}
 
@@ -560,11 +804,24 @@ int genExpRunner::extractRefSeqsFromGenomesWithFlanks(
 		for (const auto & genome : genomeNames) {
 			std::vector<GenomicRegion> rawRegionsForGenome;
 			for (const auto & region : regions) {
+				//regions.bed now holds every genome, so pick this one out by its genome meta
 				auto bedFnp = njh::files::make_path(outputDir,
-						region.createUidFromCoordsStrand(), "beds", genome + "_region.bed");
-				if (bfs::exists(bedFnp)) {
-					addOtherVec(rawRegionsForGenome, bedPtrsToGenomicRegs(getBeds(bedFnp)));
+						region.createUidFromCoordsStrand(), "beds", "regions.bed");
+				if (!bfs::exists(bedFnp)) {
+					continue;
 				}
+				std::vector<std::shared_ptr<Bed6RecordCore>> bedsForGenome;
+				for (const auto & b : getBeds(bedFnp)) {
+					if (b->extraFields_.empty()
+							|| !MetaDataInName::nameHasMetaData(b->extraFields_.front())) {
+						continue;
+					}
+					MetaDataInName bedMeta(b->extraFields_.front());
+					if (bedMeta.containsMeta("genome") && genome == bedMeta.getMeta("genome")) {
+						bedsForGenome.emplace_back(b);
+					}
+				}
+				addOtherVec(rawRegionsForGenome, bedPtrsToGenomicRegs(bedsForGenome));
 			}
 			auto regionsForGenome = mergeRegionsStrandAware(rawRegionsForGenome);
 			OutputStream bedOut(njh::files::make_path(combinedByGenomeMkPars.dirName_, genome + ".bed"));
