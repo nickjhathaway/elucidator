@@ -192,6 +192,8 @@ struct AdaptorReadRes{
 	std::string direction_ = "fwd";
 	std::string forwardBar_;
 	std::string reverseBar_;
+	//for mismatchDirections, whether the one adaptor found at both ends is the forward adaptor; forwardBar_ is then the barcode at the front of the read and reverseBar_ the one at the back, both in the orientation of that adaptor
+	bool sameAdaptorIsForward_ = true;
 	ProcessedForIlluminaAdaptorRes processRes_;
 	std::optional<PrimerAlnInfo> fwd5_3_;
 	std::optional<PrimerAlnInfo> rev3_5_;
@@ -276,6 +278,11 @@ public:
 		if(bestFront != bestBack){
 			++mismatchDirections_;
 			ret.outcome_ = AdaptorReadOutcome::mismatchDirections;
+			//the best front and best back are the same adaptor, e.g. a read that folded back on itself carries one adaptor at both ends
+			ret.sameAdaptorIsForward_ = "fwd" == bestFront;
+			ret.direction_ = ret.sameAdaptorIsForward_ ? "fwdAdaptorBothEnds" : "revAdaptorBothEnds";
+			ret.forwardBar_ = ret.sameAdaptorIsForward_ ? fwd5_3_info.barcode_ : rev5_3_info.barcode_;
+			ret.reverseBar_ = seqUtil::reverseComplement(ret.sameAdaptorIsForward_ ? fwd3_5_info.barcode_ : rev3_5_info.barcode_, "DNA");
 			return ret;
 		}
 		//assume the forward position unless the reverse score is better
@@ -327,19 +334,41 @@ public:
 			ret.outcome_ = AdaptorReadOutcome::failedOverlapCheck;
 			return ret;
 		}
-		if (pars_.extractPars_.keepPrimer_) {
-			seq = seq.getSubRead(processRes.fprimerStart_, processRes.rprimerEnd_ - processRes.fprimerStart_);
-		} else {
-			seq = seq.getSubRead(processRes.fprimerEnd_, processRes.rprimerStart_ - processRes.fprimerEnd_);
-		}
+		trimToBetweenAdaptors(seq, processRes, reverse);
 		if(reverse){
-			seq.reverseComplementRead(false, true);
 			++passRev_;
 		}else{
 			++passFwd_;
 		}
 		ret.outcome_ = AdaptorReadOutcome::pass;
 		return ret;
+	}
+
+	/**@brief trim a mismatchDirections read to what is between its two adaptors, holding it to the same checks as a read with its direction called
+	 *
+	 * A read with the reverse adaptor at the front is reverse complemented, as any other read with that adaptor at the front is
+	 *
+	 * @param seq the read, only changed if the adaptors pass the checks
+	 * @param res the result from process() for this read
+	 * @return whether the adaptors passed
+	 */
+	bool trimMismatchDirectionRead(seqInfo & seq, AdaptorReadRes & res) const {
+		const auto & frontInfo = res.sameAdaptorIsForward_ ? *res.fwd5_3_ : *res.rev5_3_;
+		const auto & backInfo = res.sameAdaptorIsForward_ ? *res.fwd3_5_ : *res.rev3_5_;
+		if(frontInfo.comp_.distances_.eventBasedIdentity_ < pars_.primerIdentityCutOff_
+				|| backInfo.comp_.distances_.eventBasedIdentity_ < pars_.primerIdentityCutOff_){
+			return false;
+		}
+		//processSeqForAdaptors can change the case of the primers, so leave seq alone until this is known to pass
+		seqInfo trimmed = seq;
+		uint32_t startOfBackSeq = seq.seq_.size() - std::min<uint32_t>(pars_.searchWithin_, len(seq));
+		res.processRes_ = processSeqForAdaptors(trimmed, frontInfo, backInfo, startOfBackSeq, pars_.extractPars_);
+		if(!res.processRes_.fwdPass_ || !res.processRes_.revPass_ || res.processRes_.fprimerEnd_ >= res.processRes_.rprimerStart_){
+			return false;
+		}
+		trimToBetweenAdaptors(trimmed, res.processRes_, !res.sameAdaptorIsForward_);
+		seq = trimmed;
+		return true;
 	}
 
 	static void writePassLine(std::ostream & out, const std::string & seqName, const AdaptorReadRes & res){
@@ -383,8 +412,10 @@ public:
 	/**@brief write conditionCount.tab.txt
 	 * @param dir output directory
 	 * @param afterPasses extra conditions to report right after passFwd and passRev
+	 * @param afterMismatchDirections extra conditions to report right after mismatchDirections
 	 */
-	void writeConditionCounts(const bfs::path & dir, const std::vector<std::pair<std::string, uint32_t>> & afterPasses) const {
+	void writeConditionCounts(const bfs::path & dir, const std::vector<std::pair<std::string, uint32_t>> & afterPasses,
+			const std::vector<std::pair<std::string, uint32_t>> & afterMismatchDirections = {}) const {
 		OutputStream conditionCount(njh::files::make_path(dir, "conditionCount.tab.txt"));
 		conditionCount << "condition\tcount\tfrac" << std::endl;
 		conditionCount << "passFwd" << "\t" << passFwd_ << "\t" << passFwd_/total_ << std::endl;
@@ -397,6 +428,9 @@ public:
 		conditionCount << "smallSeq" << "(len <" << pars_.minOutputLen_ << ")" << "\t" << smallSeq_ << "\t" << smallSeq_/total_ << std::endl;
 		conditionCount << "largeSeq" << "(len >" << pars_.maxOutputLen_ << ")" << "\t" << largeSeq_ << "\t" << largeSeq_/total_ << std::endl;
 		conditionCount << "mismatchDirections" << "\t" << mismatchDirections_ << "\t" << mismatchDirections_/total_ << std::endl;
+		for(const auto & condition : afterMismatchDirections){
+			conditionCount << condition.first << "\t" << condition.second << "\t" << condition.second/total_ << std::endl;
+		}
 		conditionCount << "failedOverlapCheck" << "\t" << failedOverlapCheck_ << "\t" << failedOverlapCheck_/total_ << std::endl;
 	}
 
@@ -405,6 +439,17 @@ public:
 	}
 
 private:
+	void trimToBetweenAdaptors(seqInfo & seq, const ProcessedForIlluminaAdaptorRes & processRes, bool reverse) const {
+		if (pars_.extractPars_.keepPrimer_) {
+			seq = seq.getSubRead(processRes.fprimerStart_, processRes.rprimerEnd_ - processRes.fprimerStart_);
+		} else {
+			seq = seq.getSubRead(processRes.fprimerEnd_, processRes.rprimerStart_ - processRes.fprimerEnd_);
+		}
+		if(reverse){
+			seq.reverseComplementRead(false, true);
+		}
+	}
+
 	static gapScoringParameters genGapPars(){
 		gapScoringParameters gapPars(5,1,0,0,0,0);
 		gapPars.gapLeftRefOpen_ = 5;
@@ -698,16 +743,24 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 	std::string kitName;
 	std::optional<OntBarcodeKit> kit;
 	bool development = false;
+	bool keepMismatchDirectionsWithMatchingBarcodes = false;
+	//0 means any two ends that call different samples count as mismatched
+	double mismatchConfirmIdentityCutOff = 0;
 
 	seqUtilsExtractSetUp setUp(inputCommands);
 	if(nanopore){
+		setUp.setOption(keepMismatchDirectionsWithMatchingBarcodes, "--keepMismatchDirectionsWithMatchingBarcodes",
+				"Reads with the same adaptor at both ends (mismatchDirections, only possible with a kit like PCR barcoding that has different adaptors, native reads can't be called this way) go to the regular sample file, trimmed like the other reads, when both barcodes call that sample and the adaptors pass the usual checks, otherwise all of them are kept untrimmed in mismatchDirectionsFastq/");
 		setUp.description_ = "Demultiplex nanopore reads on the ONT barcodes at both ends of the read, allowing the barcode at the end of the read to be cut short";
 		pars.searchWithin_ = 175;
 		pars.minOutputLen_ = 100;
 		pars.extractPars_.minTruncatedBackBarcodeBases_ = 14;
 		//with the margin a lower cut off lets primer/insert sequence match several barcodes and leaves the end undecided
-		pars.barIdentityCutOff_ = .70;
+		pars.barIdentityCutOff_ = .75;
 		barcodeMatchMargin = 3;
+		mismatchConfirmIdentityCutOff = .80;
+		setUp.setOption(mismatchConfirmIdentityCutOff, "--mismatchConfirmIdentityCutOff",
+				"Reads whose ends call different samples only count as mismatched (mismatchedSamples) when both called barcodes reach this identity, otherwise they go to Undetermined as unconfirmed; assignment to samples only uses --barIdentityCutOff");
 		setUp.setOption(kitName, "--kit", "ONT barcoding kit, sets the adaptors and the barcode names for the sample sheet, e.g. SQK-NBD114-96 or EXP-PBC096", true);
 		if(!kitName.empty()){
 			kit = getOntBarcodeKit(kitName);
@@ -774,6 +827,13 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 	auto mismatchedSamplesDir = njh::files::make_path(setUp.pars_.directoryName_, "mismatchedSamplesFastq");
 	njh::files::makeDir(njh::files::MkdirPar{mismatchedSamplesDir});
 	outputs.addReader(mismatchedSamplesName, SeqIOOptions::genFastqOutGz(njh::files::make_path(mismatchedSamplesDir, mismatchedSamplesName)));
+	//reads with the same adaptor at both ends, left untrimmed since this is where the foldback reads of a kit with two different adaptors end up
+	const std::string mismatchDirectionsName = "mismatchDirections";
+	if(nanopore){
+		auto mismatchDirectionsDir = njh::files::make_path(setUp.pars_.directoryName_, "mismatchDirectionsFastq");
+		njh::files::makeDir(njh::files::MkdirPar{mismatchDirectionsDir});
+		outputs.addReader(mismatchDirectionsName, SeqIOOptions::genFastqOutGz(njh::files::make_path(mismatchDirectionsDir, mismatchDirectionsName)));
+	}
 	//set up for alignment of barcodes for scoring
 	maxBarLen = maxBarLen * 2;
 	gapScoringParameters gapParsBar(5,1,5,1,5,1);
@@ -802,18 +862,23 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 	}
 
 	std::map<std::string, uint32_t> sampleCounts;
-	//fwd end call, rev end call -> status of the pair and read count
-	std::map<std::pair<std::string, std::string>, std::pair<std::string, uint32_t>> barcodePairCounts;
+	//fwd end call, rev end call, status of the pair -> read count
+	std::map<std::tuple<std::string, std::string, std::string>, uint32_t> barcodePairCounts;
 	std::map<std::string, uint32_t> pairStatusCounts;
 
 	uint32_t fullPass = 0;
 	uint32_t sampleDetermined = 0;
 
 	//best matching samples only depend on the observed barcode, so cache them per observed barcode for each side
-	std::unordered_map<std::string, VecStr> fwdBarSampleCache;
-	std::unordered_map<std::string, VecStr> revBarSampleCache;
+	struct BarEndCall {
+		VecStr samples_;
+		//identity of the called barcode, 0 when the end wasn't called
+		double identity_ = 0;
+	};
+	std::unordered_map<std::string, BarEndCall> fwdBarSampleCache;
+	std::unordered_map<std::string, BarEndCall> revBarSampleCache;
 	auto getBestBarSamples = [&barcodes,&alignerBarObj,&pars,&barcodeMatchMargin,&fwdBarSampleCache,&revBarSampleCache,&nanopore](
-			const std::string & observedBar, bool fwd) -> const VecStr & {
+			const std::string & observedBar, bool fwd) -> const BarEndCall & {
 		auto & cache = fwd ? fwdBarSampleCache : revBarSampleCache;
 		auto cached = cache.find(observedBar);
 		if(cache.end() != cached){
@@ -823,7 +888,7 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 		uint32_t bestIds = 0;
 		int32_t bestAlnScore = 0;
 		//identities, sample and barcode of every barcode that passes the identity cut off, for the margin
-		std::vector<std::tuple<uint32_t, std::string, std::string>> passingIds;
+		std::vector<std::tuple<uint32_t, std::string, std::string, double>> passingIds;
 		seqInfo obsBarSeq(fwd ? "determined-fwd" : "determined-rev", observedBar);
 		for(const auto & bar : barcodes){
 			const auto & expectedBar = fwd ? bar.fwBar_ : bar.revBar_;
@@ -835,7 +900,7 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 			}
 			alignerBarObj.profilePrimerAlignment(expectedBar, obsBarSeq);
 			if(alignerBarObj.comp_.distances_.eventBasedIdentity_ >=pars.barIdentityCutOff_){
-				passingIds.emplace_back(alignerBarObj.comp_.distances_.ref_.identities_, bar.sampleName_, expectedBar.seq_);
+				passingIds.emplace_back(alignerBarObj.comp_.distances_.ref_.identities_, bar.sampleName_, expectedBar.seq_, alignerBarObj.comp_.distances_.eventBasedIdentity_);
 				if(alignerBarObj.comp_.distances_.ref_.identities_ > bestIds){
 					bestSample.clear();
 					bestAlnScore = alignerBarObj.parts_.score_;
@@ -866,15 +931,143 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 			}
 			bestSample = 1 == closeBarcodes.size() ? closeSamples : VecStr{"Undetermined"};
 		}
+		BarEndCall call;
+		for(const auto & passing : passingIds){
+			if(njh::in(std::get<1>(passing), bestSample)){
+				call.identity_ = std::max(call.identity_, std::get<3>(passing));
+			}
+		}
+		call.samples_ = std::move(bestSample);
 		//keep the cache bounded, it's only a speed up
 		if(cache.size() >= 1000000){
 			cache.clear();
 		}
-		return cache.emplace(observedBar, std::move(bestSample)).first->second;
+		return cache.emplace(observedBar, std::move(call)).first->second;
 	};
+
+	//the sample(s) each end was called as and how the two ends relate
+	struct BarcodePairCall {
+		std::string determinedSample_ = "Undetermined";
+		std::string fwdCall_ = "Undetermined";
+		std::string revCall_ = "Undetermined";
+		std::string pairStatus_ = "bothEndsUndetermined";
+	};
+	/**@brief call the samples of the barcodes at the two ends of a read
+	 * @param forwardBar the observed barcode of the first end
+	 * @param reverseBar the observed barcode of the second end
+	 * @param forwardBarIsFwd whether the first end's barcode is compared against the samples' fw barcodes rather than rev barcodes
+	 * @param reverseBarIsFwd same for the second end
+	 */
+	auto callBarcodePair = [&getBestBarSamples,&maxBarLen,&mismatchedSamplesName,&mismatchConfirmIdentityCutOff](
+			const std::string & forwardBar, const std::string & reverseBar, bool forwardBarIsFwd, bool reverseBarIsFwd){
+		BarcodePairCall ret;
+		VecStr fwdBestSample{"Undetermined"};
+		VecStr revBestSample{"Undetermined"};
+		double fwdIdentity = 0;
+		double revIdentity = 0;
+
+		if(forwardBar.size() < maxBarLen &&
+				reverseBar.size() < maxBarLen &&
+				forwardBar.size() > 5 &&
+				reverseBar.size() > 5){
+			const auto & fwdEndCall = getBestBarSamples(forwardBar, forwardBarIsFwd);
+			fwdBestSample = fwdEndCall.samples_;
+			fwdIdentity = fwdEndCall.identity_;
+			const auto & revEndCall = getBestBarSamples(reverseBar, reverseBarIsFwd);
+			revBestSample = revEndCall.samples_;
+			revIdentity = revEndCall.identity_;
+		}
+		bool fwdUndetermined = njh::in(std::string("Undetermined"),fwdBestSample) || fwdBestSample.empty();
+		bool revUndetermined = njh::in(std::string("Undetermined"),revBestSample) || revBestSample.empty();
+		if(!fwdUndetermined){
+			ret.fwdCall_ = njh::conToStr(fwdBestSample, ",");
+		}
+		if(!revUndetermined){
+			ret.revCall_ = njh::conToStr(revBestSample, ",");
+		}
+		//need one for each and need to match
+		//if multiple in one or both, see if there is only one pair since barcodes can be reused several times
+		if (fwdUndetermined || revUndetermined) {
+			ret.determinedSample_ = "Undetermined";
+			ret.pairStatus_ = fwdUndetermined && revUndetermined ? "bothEndsUndetermined" : "oneEndUndetermined";
+		}else{
+			if(fwdBestSample.size() == 1 && revBestSample.size() == 1 && fwdBestSample.front() == revBestSample.front()){
+				ret.determinedSample_ = fwdBestSample.front();
+				ret.pairStatus_ = "matched";
+			} else {
+				VecStr pairs;
+				for(const auto & fwdBest : fwdBestSample){
+					for(const auto & revBest : revBestSample){
+						if(revBest  == fwdBest){
+							pairs.emplace_back(fwdBest);
+							break;
+						}
+					}
+				}
+				if(pairs.size() == 1){
+					ret.determinedSample_ = pairs.front();
+					ret.pairStatus_ = "matched";
+				}else if(pairs.empty()){
+					//a weak call at either end is more often a misread than a read joining two samples, keep those out of the mismatch counts
+					if(fwdIdentity >= mismatchConfirmIdentityCutOff && revIdentity >= mismatchConfirmIdentityCutOff){
+						ret.determinedSample_ = mismatchedSamplesName;
+						ret.pairStatus_ = "mismatched";
+					}else{
+						ret.determinedSample_ = "Undetermined";
+						ret.pairStatus_ = "mismatchedUnconfirmed";
+					}
+				}else{
+					ret.determinedSample_ = "Undetermined";
+					ret.pairStatus_ = "ambiguousPair";
+				}
+			}
+		}
+		return ret;
+	};
+
+	//adaptor at both ends, front call, back call, status of the pair -> read count
+	std::map<std::tuple<std::string, std::string, std::string, std::string>, uint32_t> mismatchDirectionPairCounts;
+	std::map<std::string, uint32_t> mismatchDirectionStatusCounts;
+	uint32_t mismatchDirectionsToSamples = 0;
 
 	while(seqReader.readNextRead(seq)){
 		auto res = finder.process(seq, out ? *out : noInfoOut);
+		if(nanopore && AdaptorReadOutcome::mismatchDirections == res.outcome_){
+			//both barcodes come from the one adaptor, so they're both compared against the barcodes for that adaptor
+			auto call = callBarcodePair(res.forwardBar_, res.reverseBar_, res.sameAdaptorIsForward_, res.sameAdaptorIsForward_);
+			++mismatchDirectionPairCounts[std::make_tuple(res.direction_, call.fwdCall_, call.revCall_, call.pairStatus_)];
+			++mismatchDirectionStatusCounts[call.pairStatus_];
+			if("mismatched" == call.pairStatus_ && (unusedBarcodeNames.count(call.fwdCall_) || unusedBarcodeNames.count(call.revCall_))){
+				++mismatchDirectionStatusCounts["mismatchedWithUnusedBarcode"];
+			}
+			if("matched" == call.pairStatus_ && unusedBarcodeNames.count(call.determinedSample_)){
+				++mismatchDirectionStatusCounts["matchedUnusedBarcode"];
+			}
+			MetaDataInName seqMeta;
+			seqMeta.addMeta("direction", res.direction_);
+			seqMeta.addMeta("forwardBar", res.forwardBar_);
+			seqMeta.addMeta("reverseBar", res.reverseBar_);
+			seqMeta.addMeta("fullBar", njh::pasteAsStr(res.forwardBar_, "+", res.reverseBar_));
+			if(keepMismatchDirectionsWithMatchingBarcodes && "matched" == call.pairStatus_ && finder.trimMismatchDirectionRead(seq, res)){
+				seqMeta.addMeta("fprimerStart", res.processRes_.fprimerStart_);
+				seqMeta.addMeta("rprimerStart", res.processRes_.rprimerStart_);
+				seqMeta.addMeta("sample", call.determinedSample_);
+				seq.name_ += seqMeta.createMetaName();
+				outputs.add(call.determinedSample_, seq);
+				++sampleCounts[call.determinedSample_];
+				++mismatchDirectionsToSamples;
+				if(0 == unusedBarcodeNames.count(call.determinedSample_)){
+					++sampleDetermined;
+				}
+			}else{
+				seqMeta.addMeta("frontSample", call.fwdCall_);
+				seqMeta.addMeta("backSample", call.revCall_);
+				seqMeta.addMeta("pairStatus", call.pairStatus_);
+				seq.name_ += seqMeta.createMetaName();
+				outputs.add(mismatchDirectionsName, seq);
+			}
+			continue;
+		}
 		if(AdaptorReadOutcome::pass != res.outcome_){
 			continue;
 		}
@@ -882,65 +1075,12 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 		const auto & forwardBar = res.forwardBar_;
 		const auto & reverseBar = res.reverseBar_;
 		++fullPass;
-		std::string determinedSample = "Undetermined";
-		//the sample(s) each end was called as and how the two ends relate, for barcodePairCounts.tab.txt
-		std::string fwdCall = "Undetermined";
-		std::string revCall = "Undetermined";
-		std::string pairStatus = "bothEndsUndetermined";
-
-		{
-			VecStr fwdBestSample{"Undetermined"};
-			VecStr revBestSample{"Undetermined"};
-
-			if(forwardBar.size() < maxBarLen &&
-					reverseBar.size() < maxBarLen &&
-					forwardBar.size() > 5 &&
-					reverseBar.size() > 5){
-				fwdBestSample = getBestBarSamples(forwardBar, true);
-				revBestSample = getBestBarSamples(reverseBar, false);
-			}
-			bool fwdUndetermined = njh::in(std::string("Undetermined"),fwdBestSample) || fwdBestSample.empty();
-			bool revUndetermined = njh::in(std::string("Undetermined"),revBestSample) || revBestSample.empty();
-			if(!fwdUndetermined){
-				fwdCall = njh::conToStr(fwdBestSample, ",");
-			}
-			if(!revUndetermined){
-				revCall = njh::conToStr(revBestSample, ",");
-			}
-			//need one for each and need to match
-			//if multiple in one or both, see if there is only one pair since barcodes can be reused several times
-			if (fwdUndetermined || revUndetermined) {
-				determinedSample = "Undetermined";
-				pairStatus = fwdUndetermined && revUndetermined ? "bothEndsUndetermined" : "oneEndUndetermined";
-			}else{
-				if(fwdBestSample.size() == 1 && revBestSample.size() == 1 && fwdBestSample.front() == revBestSample.front()){
-					determinedSample = fwdBestSample.front();
-					pairStatus = "matched";
-				} else {
-					VecStr pairs;
-					for(const auto & fwdBest : fwdBestSample){
-						for(const auto & revBest : revBestSample){
-							if(revBest  == fwdBest){
-								pairs.emplace_back(fwdBest);
-								break;
-							}
-						}
-					}
-					if(pairs.size() == 1){
-						determinedSample = pairs.front();
-						pairStatus = "matched";
-					}else if(pairs.empty()){
-						determinedSample = mismatchedSamplesName;
-						pairStatus = "mismatched";
-					}else{
-						determinedSample = "Undetermined";
-						pairStatus = "ambiguousPair";
-					}
-				}
-			}
-		}
-		auto pairCount = barcodePairCounts.emplace(std::make_pair(fwdCall, revCall), std::make_pair(pairStatus, 0)).first;
-		++pairCount->second.second;
+		auto call = callBarcodePair(forwardBar, reverseBar, true, false);
+		const auto & determinedSample = call.determinedSample_;
+		const auto & fwdCall = call.fwdCall_;
+		const auto & revCall = call.revCall_;
+		const auto & pairStatus = call.pairStatus_;
+		++barcodePairCounts[std::make_tuple(fwdCall, revCall, pairStatus)];
 		++pairStatusCounts[pairStatus];
 		//no sample carries an unused kit barcode, so these can only be misread barcodes, the background for the other mismatches
 		if("mismatched" == pairStatus && (unusedBarcodeNames.count(fwdCall) || unusedBarcodeNames.count(revCall))){
@@ -994,7 +1134,23 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 			afterPasses.emplace_back("unusedBarcode", unusedBarcodeReads);
 			afterPasses.emplace_back("mismatchedSamplesWithUnusedBarcode", pairStatusCounts["mismatchedWithUnusedBarcode"]);
 		}
-		finder.writeConditionCounts(setUp.pars_.directoryName_, afterPasses);
+		if(nanopore){
+			afterPasses.emplace_back("mismatchedSamplesUnconfirmed", pairStatusCounts["mismatchedUnconfirmed"]);
+		}
+		std::vector<std::pair<std::string, uint32_t>> afterMismatchDirections;
+		if(nanopore){
+			afterMismatchDirections = {
+				{"mismatchDirectionsMatchingBarcodes", mismatchDirectionStatusCounts["matched"]},
+				{"mismatchDirectionsMatchingUnusedBarcode", mismatchDirectionStatusCounts["matchedUnusedBarcode"]},
+				{"mismatchDirectionsDifferentBarcodes", mismatchDirectionStatusCounts["mismatched"]},
+				{"mismatchDirectionsDifferentBarcodesWithUnusedBarcode", mismatchDirectionStatusCounts["mismatchedWithUnusedBarcode"]},
+				{"mismatchDirectionsDifferentBarcodesUnconfirmed", mismatchDirectionStatusCounts["mismatchedUnconfirmed"]},
+				{"mismatchDirectionsOneEndUndetermined", mismatchDirectionStatusCounts["oneEndUndetermined"]},
+				{"mismatchDirectionsBothEndsUndetermined", mismatchDirectionStatusCounts["bothEndsUndetermined"]},
+				{"mismatchDirectionsAmbiguousSamplePair", mismatchDirectionStatusCounts["ambiguousPair"]},
+				{"mismatchDirectionsWrittenToSamples", mismatchDirectionsToSamples}};
+		}
+		finder.writeConditionCounts(setUp.pars_.directoryName_, afterPasses, afterMismatchDirections);
 	}
 	{
 		OutputStream sampleCountsOut(njh::files::make_path(setUp.pars_.directoryName_, "sampleCounts.tab.txt"));
@@ -1002,25 +1158,47 @@ int runExtractByAdaptors(const njh::progutils::CmdArgs & inputCommands, bool nan
 		for(const auto & sampleCount : sampleCounts){
 			sampleCountsOut << sampleCount.first
 					<< "\t" << sampleCount.second
-					<< "\t" << sampleCount.second/static_cast<double>(finder.passes()) << std::endl;
+					<< "\t" << sampleCount.second/static_cast<double>(finder.passes() + mismatchDirectionsToSamples) << std::endl;
+		}
+	}
+	if(nanopore){
+		//every read with the same adaptor at both ends by the sample(s) each end was called as, most common first
+		std::vector<std::pair<std::tuple<std::string, std::string, std::string, std::string>, uint32_t>> pairCounts(
+				mismatchDirectionPairCounts.begin(), mismatchDirectionPairCounts.end());
+		std::stable_sort(pairCounts.begin(), pairCounts.end(), [](const auto & left, const auto & right){
+			return left.second > right.second;
+		});
+		uint32_t totalMismatchDirections = 0;
+		for(const auto & pairCount : pairCounts){
+			totalMismatchDirections += pairCount.second;
+		}
+		OutputStream pairCountsOut(njh::files::make_path(setUp.pars_.directoryName_, "mismatchDirectionsBarcodePairCounts.tab.txt"));
+		pairCountsOut << "adaptor\tfrontSample\tbackSample\tstatus\tcount\tfrac" << std::endl;
+		for(const auto & pairCount : pairCounts){
+			pairCountsOut << std::get<0>(pairCount.first)
+					<< "\t" << std::get<1>(pairCount.first)
+					<< "\t" << std::get<2>(pairCount.first)
+					<< "\t" << std::get<3>(pairCount.first)
+					<< "\t" << pairCount.second
+					<< "\t" << pairCount.second/static_cast<double>(totalMismatchDirections) << std::endl;
 		}
 	}
 	{
 		//every read that passed both adaptors by the sample(s) each end was called as, most common first; the mismatched rows over
 		//mismatched plus matched give the rate of reads joining barcodes of two samples
-		std::vector<std::pair<std::pair<std::string, std::string>, std::pair<std::string, uint32_t>>> pairCounts(
+		std::vector<std::pair<std::tuple<std::string, std::string, std::string>, uint32_t>> pairCounts(
 				barcodePairCounts.begin(), barcodePairCounts.end());
 		std::stable_sort(pairCounts.begin(), pairCounts.end(), [](const auto & left, const auto & right){
-			return left.second.second > right.second.second;
+			return left.second > right.second;
 		});
 		OutputStream pairCountsOut(njh::files::make_path(setUp.pars_.directoryName_, "barcodePairCounts.tab.txt"));
 		pairCountsOut << "fwdSample\trevSample\tstatus\tcount\tfrac" << std::endl;
 		for(const auto & pairCount : pairCounts){
-			pairCountsOut << pairCount.first.first
-					<< "\t" << pairCount.first.second
-					<< "\t" << pairCount.second.first
-					<< "\t" << pairCount.second.second
-					<< "\t" << pairCount.second.second/static_cast<double>(fullPass) << std::endl;
+			pairCountsOut << std::get<0>(pairCount.first)
+					<< "\t" << std::get<1>(pairCount.first)
+					<< "\t" << std::get<2>(pairCount.first)
+					<< "\t" << pairCount.second
+					<< "\t" << pairCount.second/static_cast<double>(fullPass) << std::endl;
 		}
 	}
 
