@@ -49,146 +49,13 @@ geneExpRunner::geneExpRunner()
 //
 
 
-template <typename BEDREC>
-std::unordered_map<uint32_t, std::vector<GFFCore>> getGffRecordsIntersectWithBeds(
-		std::vector<BEDREC> & beds,
-		const bfs::path & gffFnp,
-		const VecStr & selectFeatures = VecStr{"gene", "protein_coding_gene"}){
-	std::unordered_map<uint32_t, std::vector<GFFCore>> ret;
-
-	std::unordered_map<std::string, std::vector<uint32_t>> bedsByChrome;
-
-	BioDataFileIO<GFFCore> reader { IoOptions(InOptions(gffFnp)) };
-	reader.openIn();
-	// uint32_t count = 0;
-	std::string line;
-	std::shared_ptr<GFFCore> gRecord = reader.readNextRecord();
-	for (const auto bPos : iter::range(beds.size())) {
-		bedsByChrome[getRef(beds[bPos]).chrom_].emplace_back(bPos);
-	}
-
-	while (nullptr != gRecord) {
-		if (selectFeatures.empty() || njh::in(gRecord->type_, selectFeatures)) {
-			for (auto & inputRegionPos : bedsByChrome[gRecord->seqid_]) {
-				if (Bed3RecordCore::getOverlapLen(getRef(beds[inputRegionPos]).chrom_,
-					getRef(beds[inputRegionPos]).chromStart_,
-					getRef(beds[inputRegionPos]).chromEnd_,
-					gRecord->seqid_,
-					gRecord->start_ - 1,
-					gRecord->end_) >=1){
-					ret[inputRegionPos].emplace_back(*gRecord);
-				}
-			}
-		}
-		bool end = false;
-		while ('#' == reader.inFile_->peek()) {
-			if (njh::files::nextLineBeginsWith(*reader.inFile_, "##FASTA")) {
-				end = true;
-				break;
-			}
-			njh::files::crossPlatGetline(*reader.inFile_, line);
-		}
-		if (end) {
-			break;
-		}
-		gRecord = reader.readNextRecord();
-		// ++count;
-	}
-	return ret;
-}
-
-
-template<typename BEDREC>
-std::unordered_map<uint32_t, std::vector<MultiGenomeMapper::IntersectedProteinInfo>>
-addIntersectingGeneInfosToLocs(
-	std::vector<BEDREC>&regions,
-	const intersectBedLocsWtihGffRecordsPars & pars,
-	const bfs::path & twoBitFnp) {
-	std::unordered_map<uint32_t, std::vector<MultiGenomeMapper::IntersectedProteinInfo>> ret;
-	auto gffRecords = getGffRecordsIntersectWithBeds(regions, pars.gffFnp_, pars.selectFeatures_);
-	std::set<std::string> rawReneIdsSet;
-	for (const auto & gRecForBed : gffRecords) {
-		for (const auto & g : gRecForBed.second) {
-			rawReneIdsSet.insert(g.getIDAttr());
-		}
-	}
-
-	auto rawGenes = GeneFromGffs::getGenesFromGffForIds(pars.gffFnp_, rawReneIdsSet);
-	std::unordered_map<std::string, std::shared_ptr<GeneFromGffs>> genes;
-	for (const auto&gene: rawGenes) {
-		bool failFilter = false;
-		for (const auto&transcript: gene.second->mRNAs_) {
-			if (njh::in(njh::strToLowerRet(transcript->type_), VecStr{"rrna", "trna", "snorna", "snrna", "ncrna"})) {
-				failFilter = true;
-				break;
-			}
-		}
-		if (!failFilter) {
-			genes[gene.first] = gene.second;
-		}
-	}
-	for (const auto&regPos: iter::range(regions.size())) {
-		if (njh::notIn(regPos, gffRecords)) {
-			continue;
-		}
-
-		for (const auto & gffRec: gffRecords[regPos]) {
-			if (njh::in(gffRec.getIDAttr(), genes)) {
-				TwoBit::TwoBitFile tReader(twoBitFnp);
-				const auto & gene = njh::mapAt(genes, gffRec.getIDAttr());
-				auto infos = gene->generateGeneSeqInfo(tReader, false);
-				auto detailedName = gene->getGeneDetailedName();
-				for (const auto&info: infos) {
-
-					auto posInfos = info.second->getInfosByGDNAPos();
-					auto minPos = vectorMinimum(getVectorOfMapKeys(posInfos));
-					auto maxPos = vectorMaximum(getVectorOfMapKeys(posInfos));
-					auto startPos = std::max(minPos, getRef(regions[regPos]).chromStart_);
-					auto stopPos = std::min(maxPos, getRef(regions[regPos]).chromEnd_);
-					if (stopPos == getRef(regions[regPos]).chromEnd_) {
-						stopPos = getRef(regions[regPos]).chromEnd_ - 1;
-					}
-					//stop position is inclusive
-					uint32_t aaStartPos = std::numeric_limits<uint32_t>::max();
-					uint32_t aaStopPos = 0;
-
-					for (const auto posInGene: iter::range(startPos, stopPos + 1)) {
-						if (std::numeric_limits<uint32_t>::max() != posInfos[posInGene].aaPos_) {
-							if (posInfos[posInGene].aaPos_ < aaStartPos) {
-								aaStartPos = posInfos[posInGene].aaPos_;
-							}
-							if (posInfos[posInGene].aaPos_ > aaStopPos) {
-								aaStopPos = posInfos[posInGene].aaPos_;
-							}
-						}
-					}
-					//if the region is completely within the intron the final stop and stops will be max() and 0;
-					if (std::numeric_limits<uint32_t>::max() == aaStartPos) {
-						aaStopPos = std::numeric_limits<uint32_t>::max();
-					} else {
-						//make 1 based
-						++aaStopPos;
-						++aaStartPos; //
-					}
-					std::string geneName = gffRec.getIDAttr();
-					if (gene->gene_->hasAttr("Name") && "NA" != gene->gene_->getAttr("Name") && !gene->gene_->getAttr("Name").empty()) {
-						geneName = gene->gene_->getAttr("Name");
-					}
-					ret[regPos].emplace_back(info.second->geneID_, info.second->transcriptID_, geneName, aaStartPos, aaStopPos, detailedName[info.first]);
-					ret[regPos].back().allMeta_.meta_ = gffRec.attributes_;
-				}
-			}
-		}
-	}
-	return ret;
-}
-
 int geneExpRunner::bedGetOverlappingAminoAcidPositions(const njh::progutils::CmdArgs & inputCommands){
 	intersectBedLocsWtihGffRecordsPars pars;
 	pars.selectFeatures_ = VecStr{"gene", "protein_coding_gene"};
 	pars.extraAttributes_ = VecStr{"ID"};
 	bfs::path genomeTwoBit;
 	bfs::path input;
+	bool requireFullCodon = false;
 	OutOptions outOpts(bfs::path(""), ".bed");
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
@@ -196,7 +63,7 @@ int geneExpRunner::bedGetOverlappingAminoAcidPositions(const njh::progutils::Cmd
 	setUp.setOption(genomeTwoBit, "--genomeTwoBit", "genome Two Bit", true);
 	setUp.setOption(pars.selectFeatures_, "--selectFeatures", "select gff Features");
 	setUp.setOption(pars.extraAttributes_, "--extraAttributes", "extra gff Attributes to add to output");
-
+	setUp.setOption(requireFullCodon, "--requireFullCodon", "Only report amino acids with all 3 bases of their codon in the region, otherwise a codon with at least 1 base in the region is reported");
 
 	setUp.setOption(input, "--bed", "input bed", true);
 	setUp.processWritingOptions(outOpts);
@@ -219,7 +86,7 @@ int geneExpRunner::bedGetOverlappingAminoAcidPositions(const njh::progutils::Cmd
 	out << "\t" << njh::conToStr(pars.extraAttributes_, "\t");
 	out << std::endl;
 
-	auto results = addIntersectingGeneInfosToLocs(beds, pars, genomeTwoBit);
+	auto results = MultiGenomeMapper::addIntersectingGeneInfosToLocs(beds, pars, genomeTwoBit, requireFullCodon);
 	for (const auto bedPos: iter::range(beds.size())) {
 		if (njh::in(bedPos, results)) {
 			for (const auto & result: results[bedPos]) {
