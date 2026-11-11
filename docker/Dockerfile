@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM ubuntu:24.04 AS base
 LABEL authors="nicholashathaway"
 
@@ -64,7 +65,9 @@ ENV PATH="/opt/conda/bin:$PATH"
 
 # All R packages in one layer — only what the etc/*.qmd reports require
 COPY install_packages.R /opt/install_packages.R
-RUN mkdir -p /usr/local/lib/R/etc/ /usr/lib/R/etc/ && \
+# GITHUB_PAT (optional build secret) lifts install_github's 60/hr unauthenticated API limit; never stored in the image
+RUN --mount=type=secret,id=GITHUB_PAT,env=GITHUB_PAT \
+    mkdir -p /usr/local/lib/R/etc/ /usr/lib/R/etc/ && \
     echo "options(repos = c(CRAN = 'https://cran.rstudio.com/'), \
       download.file.method = 'libcurl', Ncpus = ${CPU_COUNT})" \
       | tee /usr/local/lib/R/etc/Rprofile.site | tee /usr/lib/R/etc/Rprofile.site && \
