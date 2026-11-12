@@ -1049,6 +1049,9 @@ struct InnerAdaptorSplitPars {
 	double flankIdentityCutOff_ = .75;
 	//pieces on either side of a junction that share this fraction of k-mers with each other's reverse complement are one molecule folded back on itself, those are left whole
 	double foldbackKmerFrac_ = .2;
+	//exact k-mers of the adaptor's inner flank (the fixed bases between the barcode and the insert, e.g. the first round primer tail), these find partial or bare tails
+	//that don't pass the adaptor check, used to cut a read assigned on one end; 0 turns it off. None of the panel targets has one of these 12-mers (2.4 per Mb of Pf3D7)
+	uint32_t innerFlankKmerLen_ = 12;
 };
 
 void setInnerAdaptorSplitOptions(seqUtilsExtractSetUp & setUp, InnerAdaptorSplitPars & pars){
@@ -1062,6 +1065,8 @@ void setInnerAdaptorSplitOptions(seqUtilsExtractSetUp & setUp, InnerAdaptorSplit
 	setUp.setOption(pars.flankIdentityCutOff_, "--innerAdaptorFlankIdentityCutOff", "Inner adaptor split: identity of the fixed adaptor bases needed to call the adaptor");
 	setUp.setOption(pars.foldbackKmerFrac_, "--innerAdaptorFoldbackKmerFrac",
 			"Inner adaptor split: pieces sharing at least this fraction of k-mers with the reverse complement of the piece next to them are a fold back of one molecule and are left joined");
+	setUp.setOption(pars.innerFlankKmerLen_, "--innerAdaptorTailKmerLen",
+			"Length of the exact k-mers of the adaptor's inner flank (the fixed bases between the barcode and the insert) used to find partial adaptor tails in a read assigned on one end's barcode, the read is cut back to before them; 0 turns this off");
 	if(0 == pars.seedKmerLen_ || pars.seedKmerLen_ > 31){
 		setUp.failed_ = true;
 		setUp.addWarning(njh::pasteAsStr("--innerAdaptorSeedKmerLen should be between 1 and 31, not ", pars.seedKmerLen_));
@@ -1109,6 +1114,16 @@ public:
 							adaptorWithBar.replace(firstN, barSeq.size(), barSeq);
 							filled.emplace(adaptorWithBar);
 						}
+					}
+				}
+			}
+			//the fixed bases between the barcode and the insert
+			if(std::string::npos != lastN && pars_.innerFlankKmerLen_ > 0 && adaptor.size() - lastN - 1 >= pars_.innerFlankKmerLen_){
+				auto innerFlank = adaptor.substr(lastN + 1);
+				for(uint32_t orientation = 0; orientation < 2; ++orientation){
+					auto oriented = 0 == orientation ? innerFlank : seqUtil::reverseComplement(innerFlank, "DNA");
+					for(uint32_t pos = 0; pos + pars_.innerFlankKmerLen_ <= oriented.size(); ++pos){
+						innerFlankKmers_[oriented.substr(pos, pars_.innerFlankKmerLen_)].emplace_back(pos, oriented.size());
 					}
 				}
 			}
@@ -1206,6 +1221,52 @@ public:
 		return true;
 	}
 
+	/**@brief every adaptor (or bare adaptor tail, the fixed bases are what is checked) confirmed in the read, without cutting it
+	 *
+	 * For a read assigned on the barcode of one end, everything past the first of these belongs to another molecule whose own barcode wasn't read
+	 *
+	 * @param read the read
+	 * @return the start and end of each adaptor in the read, sorted
+	 */
+	std::vector<std::pair<uint32_t, uint32_t>> findAdaptorSpans(const seqInfo & read){
+		std::vector<std::pair<uint32_t, uint32_t>> spans;
+		for(const auto & candidate : findCandidates(read)){
+			uint32_t boundary = 0;
+			std::pair<uint32_t, uint32_t> span;
+			if(alignAt(read, candidate.windowStart_, candidate.windowEnd_ - candidate.windowStart_, candidate.orientation_, boundary, span)){
+				spans.emplace_back(span);
+			}
+		}
+		std::sort(spans.begin(), spans.end());
+		return spans;
+	}
+
+	/**@brief where exact k-mers of an adaptor's inner flank (the fixed bases between the barcode and the insert) are in the read, a partial or bare adaptor tail
+	 * @param read the read
+	 * @return the span of the whole inner flank each hit implies, sorted
+	 */
+	std::vector<std::pair<uint32_t, uint32_t>> findInnerFlankSpans(const seqInfo & read) const {
+		std::vector<std::pair<uint32_t, uint32_t>> spans;
+		const auto kLen = pars_.innerFlankKmerLen_;
+		if(0 == kLen || len(read) < kLen){
+			return spans;
+		}
+		for(uint32_t pos = 0; pos + kLen <= len(read); ++pos){
+			auto hits = innerFlankKmers_.find(read.seq_.substr(pos, kLen));
+			if(innerFlankKmers_.end() == hits){
+				continue;
+			}
+			for(const auto & hit : hits->second){
+				int64_t start = static_cast<int64_t>(pos) - hit.first;
+				spans.emplace_back(static_cast<uint32_t>(std::max<int64_t>(0, start)),
+						static_cast<uint32_t>(std::min<int64_t>(len(read), start + hit.second)));
+			}
+		}
+		std::sort(spans.begin(), spans.end());
+		spans.erase(std::unique(spans.begin(), spans.end()), spans.end());
+		return spans;
+	}
+
 	uint32_t readsSplit() const {
 		return readsSplit_;
 	}
@@ -1260,8 +1321,20 @@ private:
 		}
 	}
 
-	//positions in the read to cut at, an adaptor starting a molecule is cut before it and one ending a molecule after it
-	std::vector<uint32_t> findBoundaries(const seqInfo & read){
+	//a place in the read the seeds say an adaptor may be
+	struct Candidate {
+		uint32_t orientation_;
+		int64_t windowStart_;
+		int64_t windowEnd_;
+		//whether the seeds put this adaptor too close to an end of the read to be cut at
+		bool nearReadEnd_;
+	};
+
+	/**@brief where the seeds say adaptors may be in the read
+	 * @param read the read
+	 * @return the candidates, seeds on about the same diagonal (allowing for indels) of the same orientation are one candidate adaptor
+	 */
+	std::vector<Candidate> findCandidates(const seqInfo & read){
 		//orientation, diagonal (read position the adaptor would start at), read position of the seed
 		std::vector<std::tuple<uint32_t, int64_t, uint32_t>> hits;
 		const auto & seq = read.seq_;
@@ -1289,23 +1362,12 @@ private:
 				hits.emplace_back(hit.orientation_, static_cast<int64_t>(kmerStart) - hit.offset_, kmerStart);
 			}
 		}
-		std::vector<uint32_t> boundaries;
-		adaptorSpans_.clear();
-		if(hits.size() < pars_.minSeedHits_){
-			return boundaries;
-		}
-		++readsWithSeeds_;
-		std::sort(hits.begin(), hits.end());
-		//seeds on about the same diagonal (allowing for indels) of the same orientation are one candidate adaptor,
-		//the forward and reverse adaptor share their barcodes so both are aligned and the better one kept
-		struct Candidate {
-			uint32_t orientation_;
-			int64_t windowStart_;
-			int64_t windowEnd_;
-			//whether the seeds put this adaptor too close to an end of the read to be cut at
-			bool nearReadEnd_;
-		};
 		std::vector<Candidate> candidates;
+		if(hits.size() < pars_.minSeedHits_){
+			return candidates;
+		}
+		std::sort(hits.begin(), hits.end());
+		//the forward and reverse adaptor share their barcodes so both are aligned and the better one kept
 		const int64_t readLen = seq.size();
 		for(size_t clusterStart = 0; clusterStart < hits.size();){
 			size_t clusterEnd = clusterStart + 1;
@@ -1334,6 +1396,18 @@ private:
 			}
 			clusterStart = clusterEnd;
 		}
+		return candidates;
+	}
+
+	//positions in the read to cut at, an adaptor starting a molecule is cut before it and one ending a molecule after it
+	std::vector<uint32_t> findBoundaries(const seqInfo & read){
+		std::vector<uint32_t> boundaries;
+		adaptorSpans_.clear();
+		auto candidates = findCandidates(read);
+		if(candidates.empty()){
+			return boundaries;
+		}
+		++readsWithSeeds_;
 		auto alignCandidate = [&](const Candidate & candidate){
 			uint32_t boundary = 0;
 			std::pair<uint32_t, uint32_t> span;
@@ -1428,6 +1502,8 @@ private:
 	std::unordered_map<uint64_t, std::vector<SeedHit>> seeds_;
 	//where the adaptors confirmed in the current read are
 	std::vector<std::pair<uint32_t, uint32_t>> adaptorSpans_;
+	//inner flank k-mer -> its position in the oriented flank and the flank's length
+	std::unordered_map<std::string, std::vector<std::pair<uint32_t, uint32_t>>> innerFlankKmers_;
 
 	uint32_t readsLongEnough_ = 0;
 	uint32_t readsWithSeeds_ = 0;
@@ -1598,6 +1674,8 @@ struct OneEndRescuePars {
 	bool fromMismatched_ = false;
 	//the other end calling a different sample at the looser cut off is often a real swap too, keeping these doubled the reads put in the wrong panel in PCR barcoding run 3
 	bool keepConflicting_ = false;
+	//by default a read assigned on one end is cut back to the first adaptor inside it
+	bool keepPastInnerAdaptor_ = false;
 	//below this the reads called as unused kit barcodes start climbing (21 of 24 bases)
 	double barcodeMatchFrac_ = .875;
 	uint32_t barcodeMargin_ = 3;
@@ -1700,6 +1778,8 @@ int seqUtilsExtractRunner::extractByNanoporeBarcodes(const njh::progutils::CmdAr
 	setUp.setOption(rescuePars.fromMismatched_, "--oneEndFromMismatched", "Also assign on one end's barcode when the two ends confidently called different samples, otherwise those stay in mismatchedSamplesFastq/");
 	setUp.setOption(rescuePars.keepConflicting_, "--oneEndKeepConflicting",
 			"Also assign on one end's barcode when the other end called a different sample below the one end check, by default these are left out since many of them are real swaps");
+	setUp.setOption(rescuePars.keepPastInnerAdaptor_, "--oneEndKeepPastInnerAdaptor",
+			"When assigning on one end's barcode, keep the read past an adaptor (or bare adaptor tail) found inside it; by default the read is cut back to the first one, since what is past it is another molecule whose barcode wasn't read");
 	setUp.setOption(rescuePars.barcodeMatchFrac_, "--oneEndBarcodeMatchFrac",
 			"To assign a read on one end's barcode, the fraction of the barcode's bases that have to match, a barcode cut short by the end of the read counts against this");
 	setUp.setOption(rescuePars.barcodeMargin_, "--oneEndBarcodeMargin",
@@ -1800,6 +1880,10 @@ int seqUtilsExtractRunner::extractByNanoporeBarcodes(const njh::progutils::CmdAr
 	uint32_t sampleDeterminedOneEnd = 0;
 	uint32_t oneEndToUnusedBarcode = 0;
 	uint32_t oneEndConflicting = 0;
+	uint32_t oneEndCutAtInnerAdaptor = 0;
+	uint32_t oneEndNoInsertBeforeInnerAdaptor = 0;
+	//an inner adaptor counts as past the assigning one when it starts no more than this before the assigning adaptor's end
+	const uint32_t innerAdaptorSlop = 10;
 
 	/**@brief try to assign a read that didn't get the same barcode at both ends on just one end
 	 * @param wholeRead the read before any trimming
@@ -1858,6 +1942,44 @@ int seqUtilsExtractRunner::extractByNanoporeBarcodes(const njh::progutils::CmdAr
 				++oneEndConflicting;
 			}
 		}
+		//an adaptor (or a bare adaptor tail) inside a read assigned on one end means it is joined to another molecule whose own barcode wasn't read,
+		//so only what is between the assigning barcode and the first of these is kept (run 3: 122 wrong panel reads per 1000 past a bare tail, 5 with nothing in between,
+		//while reads assigned on both ends stay clean with one)
+		if(("front" == assignedOn || "back" == assignedOn) && !rescuePars.keepPastInnerAdaptor_){
+			auto spans = splitter.findAdaptorSpans(wholeRead);
+			//partial or bare tails the adaptor check misses
+			auto tailSpans = splitter.findInnerFlankSpans(wholeRead);
+			spans.insert(spans.end(), tailSpans.begin(), tailSpans.end());
+			std::sort(spans.begin(), spans.end());
+			bool cut = false;
+			if("front" == assignedOn){
+				for(const auto & span : spans){
+					//mostly past the assigning adaptor, the assigning adaptor itself is found again here too
+					if(span.first + innerAdaptorSlop >= front.adaptorEnd_ && span.second > front.adaptorEnd_ + innerAdaptorSlop && span.first + innerAdaptorSlop < keepEnd){
+						keepEnd = span.first;
+						trimBack = false;
+						cut = true;
+						break;
+					}
+				}
+			}else{
+				for(auto span = spans.rbegin(); span != spans.rend(); ++span){
+					if(span->second <= back.adaptorStart_ + innerAdaptorSlop && span->first + innerAdaptorSlop < back.adaptorStart_ && span->second > keepStart + innerAdaptorSlop){
+						keepStart = span->second;
+						trimFront = false;
+						cut = true;
+						break;
+					}
+				}
+			}
+			if(cut){
+				++oneEndCutAtInnerAdaptor;
+				if(keepEnd <= keepStart || keepEnd - keepStart < pars.minOutputLen_){
+					assignedOn = "none";
+					++oneEndNoInsertBeforeInnerAdaptor;
+				}
+			}
+		}
 		if(oneEndInfoOut){
 			auto writeEnd = [&oneEndInfoOut](const NanoporeEndHit & hit){
 				*oneEndInfoOut << "\t" << njh::boolToStr(hit.inWindow_)
@@ -1902,6 +2024,8 @@ int seqUtilsExtractRunner::extractByNanoporeBarcodes(const njh::progutils::CmdAr
 		seqMeta.addMeta("trimmedFront", njh::boolToStr(trimFront));
 		seqMeta.addMeta("trimmedBack", njh::boolToStr(trimBack));
 		seqMeta.addMeta("sample", sample);
+		//how many of the read's ends had the sample's barcode, for clustering to count (SeekDeep processClusters --minBothEndsBarcodeReads)
+		seqMeta.addMeta("barcodeEnds", "both" == assignedOn ? 2 : 1);
 		trimmed.name_ += seqMeta.createMetaName();
 		outputs.add(sample, trimmed);
 		++sampleCounts[sample];
@@ -1950,6 +2074,7 @@ int seqUtilsExtractRunner::extractByNanoporeBarcodes(const njh::progutils::CmdAr
 					seqMeta.addMeta("fprimerStart", res.processRes_.fprimerStart_);
 					seqMeta.addMeta("rprimerStart", res.processRes_.rprimerStart_);
 					seqMeta.addMeta("sample", call.determinedSample_);
+					seqMeta.addMeta("barcodeEnds", 2);
 					seq.name_ += seqMeta.createMetaName();
 					outputs.add(call.determinedSample_, seq);
 					++sampleCounts[call.determinedSample_];
@@ -1997,6 +2122,10 @@ int seqUtilsExtractRunner::extractByNanoporeBarcodes(const njh::progutils::CmdAr
 			seqMeta.addMeta("fullBar", njh::pasteAsStr(forwardBar, "+", reverseBar));
 			seqMeta.addMeta("rprimerStart", processRes.rprimerStart_);
 			seqMeta.addMeta("sample", determinedSample);
+			//how many of the read's ends had the sample's barcode, for clustering to count (SeekDeep processClusters --minBothEndsBarcodeReads)
+			if("matched" == pairStatus){
+				seqMeta.addMeta("barcodeEnds", 2);
+			}
 			if("matched" != pairStatus){
 				seqMeta.addMeta("fwdSample", fwdCall);
 				seqMeta.addMeta("revSample", revCall);
@@ -2031,6 +2160,8 @@ int seqUtilsExtractRunner::extractByNanoporeBarcodes(const njh::progutils::CmdAr
 			{"sampleDeterminedOneEnd", sampleDeterminedOneEnd},
 			{"oneEndToUnusedBarcode", oneEndToUnusedBarcode},
 			{"oneEndSkippedOtherEndConflicts", oneEndConflicting},
+			{"oneEndCutAtInnerAdaptor", oneEndCutAtInnerAdaptor},
+			{"oneEndNoInsertBeforeInnerAdaptor", oneEndNoInsertBeforeInnerAdaptor},
 			{"readsSplitAtInnerAdaptors", splitter.readsSplit()},
 			{"piecesFromSplitReads", splitter.piecesFromSplits()},
 			{"oneEndAssignedOnFront", oneEndUsedCounts["front"]},
