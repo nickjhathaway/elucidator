@@ -12,8 +12,11 @@
 
 #include <njhseq/IO/SeqIO.h>
 #include <njhseq/alignment/aligner/aligner.hpp>
+#include <njhcpp/concurrency/concurrencyUtils.hpp>
 #include <optional>
 #include <utility>
+#include <mutex>
+#include <sstream>
 
 
 namespace njhseq {
@@ -446,6 +449,33 @@ public:
 
 	uint32_t passes() const {
 		return passFwd_ + passRev_;
+	}
+
+	/**@brief add another finder's counts to this one's, for combining the finders of several threads
+	 */
+	void addCounts(const AdaptorPairFinder & other){
+		for(const auto & front : other.bestCounts_){
+			for(const auto & back : front.second){
+				bestCounts_[front.first][back.first] += back.second;
+			}
+		}
+		total_ += other.total_;
+		smallSeq_ += other.smallSeq_;
+		largeSeq_ += other.largeSeq_;
+		failed_fwd5_3_Identity_ += other.failed_fwd5_3_Identity_;
+		failed_fwd3_5_Identity_ += other.failed_fwd3_5_Identity_;
+		failed_rev5_3_Identity_ += other.failed_rev5_3_Identity_;
+		failed_rev3_5_Identity_ += other.failed_rev3_5_Identity_;
+		failed_fwd5_3_PrimerAln_ += other.failed_fwd5_3_PrimerAln_;
+		failed_fwd3_5_PrimerAln_ += other.failed_fwd3_5_PrimerAln_;
+		failed_rev5_3_PrimerAln_ += other.failed_rev5_3_PrimerAln_;
+		failed_rev3_5_PrimerAln_ += other.failed_rev3_5_PrimerAln_;
+		mismatchDirections_ += other.mismatchDirections_;
+		failedIdentityReads_ += other.failedIdentityReads_;
+		failedPrimerAlnReads_ += other.failedPrimerAlnReads_;
+		failedOverlapCheck_ += other.failedOverlapCheck_;
+		passFwd_ += other.passFwd_;
+		passRev_ += other.passRev_;
 	}
 
 private:
@@ -986,13 +1016,21 @@ struct AdaptorInfoFiles {
 		}
 	}
 
-	//noInfoOut_ has no buffer and drops what's written to it
-	std::ostream & info(){
-		return out_ ? *out_ : noInfoOut_;
+	bool on() const {
+		return nullptr != out_;
+	}
+
+	//lines a thread wrote for info.tab.txt
+	void writeInfo(const std::string & lines){
+		if(out_ && !lines.empty()){
+			std::lock_guard<std::mutex> lock(mut_);
+			*out_ << lines;
+		}
 	}
 
 	void writePass(const std::string & seqName, const AdaptorReadRes & res){
 		if(out_){
+			std::lock_guard<std::mutex> lock(mut_);
 			AdaptorPairFinder::writePassLine(*outPass_, seqName, res);
 			*outBest_ << seqName
 					<< "\t" << res.direction_
@@ -1005,6 +1043,59 @@ struct AdaptorInfoFiles {
 	std::unique_ptr<OutputStream> outBest_;
 	std::unique_ptr<OutputStream> outPass_;
 	std::ostream noInfoOut_;
+	std::mutex mut_;
+};
+
+template<typename MAP>
+void addMapCounts(MAP & into, const MAP & from){
+	for(const auto & count : from){
+		into[count.first] += count.second;
+	}
+}
+
+//read counts the demultiplexers keep, each thread keeps its own and they're added together at the end
+struct DemuxCounts {
+	std::map<std::string, uint32_t> sampleCounts;
+	std::map<std::string, uint32_t> oneEndSampleCounts;
+	//fwd end call, rev end call, status of the pair -> read count
+	std::map<std::tuple<std::string, std::string, std::string>, uint32_t> barcodePairCounts;
+	std::map<std::string, uint32_t> pairStatusCounts;
+	//adaptor at both ends, front call, back call, status of the pair -> read count
+	std::map<std::tuple<std::string, std::string, std::string, std::string>, uint32_t> mismatchDirectionPairCounts;
+	std::map<std::string, uint32_t> mismatchDirectionStatusCounts;
+	//what the first pass made of the read -> reads assigned on one end's barcode
+	std::map<std::string, uint32_t> oneEndFromCounts;
+	std::map<std::string, uint32_t> oneEndUsedCounts;
+
+	uint32_t mismatchDirectionsToSamples = 0;
+	uint32_t fullPass = 0;
+	uint32_t sampleDetermined = 0;
+	uint32_t sampleDeterminedBothEnds = 0;
+	uint32_t sampleDeterminedOneEnd = 0;
+	uint32_t oneEndToUnusedBarcode = 0;
+	uint32_t oneEndConflicting = 0;
+	uint32_t oneEndCutAtInnerAdaptor = 0;
+	uint32_t oneEndNoInsertBeforeInnerAdaptor = 0;
+
+	void add(const DemuxCounts & other){
+		addMapCounts(sampleCounts, other.sampleCounts);
+		addMapCounts(oneEndSampleCounts, other.oneEndSampleCounts);
+		addMapCounts(barcodePairCounts, other.barcodePairCounts);
+		addMapCounts(pairStatusCounts, other.pairStatusCounts);
+		addMapCounts(mismatchDirectionPairCounts, other.mismatchDirectionPairCounts);
+		addMapCounts(mismatchDirectionStatusCounts, other.mismatchDirectionStatusCounts);
+		addMapCounts(oneEndFromCounts, other.oneEndFromCounts);
+		addMapCounts(oneEndUsedCounts, other.oneEndUsedCounts);
+		mismatchDirectionsToSamples += other.mismatchDirectionsToSamples;
+		fullPass += other.fullPass;
+		sampleDetermined += other.sampleDetermined;
+		sampleDeterminedBothEnds += other.sampleDeterminedBothEnds;
+		sampleDeterminedOneEnd += other.sampleDeterminedOneEnd;
+		oneEndToUnusedBarcode += other.oneEndToUnusedBarcode;
+		oneEndConflicting += other.oneEndConflicting;
+		oneEndCutAtInnerAdaptor += other.oneEndCutAtInnerAdaptor;
+		oneEndNoInsertBeforeInnerAdaptor += other.oneEndNoInsertBeforeInnerAdaptor;
+	}
 };
 
 //how the fixed bases of an adaptor aligned, the barcode N's match anything so the whole adaptor's identity passes on nearly any sequence
@@ -1082,6 +1173,21 @@ void setInnerAdaptorSplitOptions(seqUtilsExtractSetUp & setUp, InnerAdaptorSplit
  */
 class InnerAdaptorSplitter {
 public:
+	/**@brief add another splitter's counts to this one's, for combining the splitters of several threads
+	 */
+	void addCounts(const InnerAdaptorSplitter & other){
+		readsLongEnough_ += other.readsLongEnough_;
+		readsWithSeeds_ += other.readsWithSeeds_;
+		windowsAligned_ += other.windowsAligned_;
+		adaptorsFound_[0] += other.adaptorsFound_[0];
+		adaptorsFound_[1] += other.adaptorsFound_[1];
+		adaptorsNearEnd_ += other.adaptorsNearEnd_;
+		foldbackJunctions_ += other.foldbackJunctions_;
+		shortPiecesDropped_ += other.shortPiecesDropped_;
+		readsSplit_ += other.readsSplit_;
+		piecesFromSplits_ += other.piecesFromSplits_;
+	}
+
 	InnerAdaptorSplitter(const AdaptorExtractPars & extractPars, const std::vector<IlluminaDualBarCode> & barcodes, const InnerAdaptorSplitPars & pars) :
 			pars_(pars), minPieceLen_(std::max<uint32_t>(1, extractPars.minOutputLen_)),
 			maxAdaptorLen_(std::max(extractPars.forwardAdaptor_.size(), extractPars.reverseAdaptor_.size())),
@@ -1533,6 +1639,8 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 	setInnerAdaptorSplitOptions(setUp, splitPars);
 	setUp.setOption(development, "--development",
 			"Also write the per read barcode info files (info.tab.txt, infoBest.tab.txt, infoPass.tab.txt)");
+	uint32_t numThreads = 1;
+	setUp.setOption(numThreads, "--numThreads", "Number of threads, reads are written out in a different order with more than one");
 
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -1560,62 +1668,87 @@ int seqUtilsExtractRunner::extractByIlluminaAaptors(const njh::progutils::CmdArg
 	njh::files::makeDir(njh::files::MkdirPar{mismatchedSamplesDir});
 	outputs.addReader(mismatchedSamplesName, SeqIOOptions::genFastqOutGz(njh::files::make_path(mismatchedSamplesDir, mismatchedSamplesName)));
 
-	BarcodeEndCaller caller(barcodes, pars.barIdentityCutOff_, barcodeMatchMargin, true);
-	AdaptorPairFinder finder(pars, setUp.pars_.debug_);
-	InnerAdaptorSplitter splitter(pars, barcodes, splitPars);
+	//the per thread finders and splitters are added into these for the reports
+	AdaptorPairFinder finderTotals(pars, setUp.pars_.debug_);
+	InnerAdaptorSplitter splitterTotals(pars, barcodes, splitPars);
 
 	SeqInput seqReader(setUp.pars_.ioOptions_);
 	seqReader.openIn();
-	seqInfo inRead;
-	std::vector<seqInfo> pieces;
 
 	AdaptorInfoFiles infoFiles(setUp.pars_.directoryName_, development);
+	DemuxCounts counts;
+	std::mutex outMut;
+	std::mutex countsMut;
 
-	std::map<std::string, uint32_t> sampleCounts;
-	//fwd end call, rev end call, status of the pair -> read count
-	std::map<std::tuple<std::string, std::string, std::string>, uint32_t> barcodePairCounts;
-	std::map<std::string, uint32_t> pairStatusCounts;
-
-	uint32_t fullPass = 0;
-	uint32_t sampleDetermined = 0;
-
-	while(seqReader.readNextRead(inRead)){
-		//a read holding several library molecules is demultiplexed a molecule at a time
-		splitter.split(inRead, pieces);
-		for(auto & seq : pieces){
-			auto res = finder.process(seq, infoFiles.info());
-			if(AdaptorReadOutcome::pass != res.outcome_){
-				continue;
+	std::function<void()> demuxReads = [&](){
+		//aligners and caches aren't shared between threads
+		BarcodeEndCaller caller(barcodes, pars.barIdentityCutOff_, barcodeMatchMargin, true);
+		AdaptorPairFinder finder(pars, setUp.pars_.debug_);
+		InnerAdaptorSplitter splitter(pars, barcodes, splitPars);
+		DemuxCounts local;
+		std::ostringstream infoBuf;
+		std::ostream noInfo(nullptr);
+		std::ostream & infoOut = infoFiles.on() ? static_cast<std::ostream &>(infoBuf) : noInfo;
+		auto writeOut = [&outputs, &outMut](const std::string & sample, const seqInfo & read){
+			std::lock_guard<std::mutex> lock(outMut);
+			outputs.add(sample, read);
+		};
+		seqInfo inRead;
+		std::vector<seqInfo> pieces;
+		while(seqReader.readNextReadLock(inRead)){
+			//a read holding several library molecules is demultiplexed a molecule at a time
+			splitter.split(inRead, pieces);
+			for(auto & seq : pieces){
+				auto res = finder.process(seq, infoOut);
+				if(AdaptorReadOutcome::pass != res.outcome_){
+					continue;
+				}
+				const auto & processRes = res.processRes_;
+				const auto & forwardBar = res.forwardBar_;
+				const auto & reverseBar = res.reverseBar_;
+				++local.fullPass;
+				auto call = callBarcodePair(caller, forwardBar, reverseBar, true, false, 0);
+				++local.barcodePairCounts[std::make_tuple(call.fwdCall_, call.revCall_, call.pairStatus_)];
+				++local.pairStatusCounts[call.pairStatus_];
+				MetaDataInName seqMeta;
+				seqMeta.addMeta("direction", res.direction_);
+				seqMeta.addMeta("fprimerStart", processRes.fprimerStart_);
+				seqMeta.addMeta("forwardBar", forwardBar);
+				seqMeta.addMeta("reverseBar", reverseBar);
+				seqMeta.addMeta("fullBar", njh::pasteAsStr(forwardBar, "+", reverseBar));
+				seqMeta.addMeta("rprimerStart", processRes.rprimerStart_);
+				seqMeta.addMeta("sample", call.determinedSample_);
+				if("matched" != call.pairStatus_){
+					seqMeta.addMeta("fwdSample", call.fwdCall_);
+					seqMeta.addMeta("revSample", call.revCall_);
+					seqMeta.addMeta("pairStatus", call.pairStatus_);
+				}
+				seq.name_ += seqMeta.createMetaName();
+				writeOut(call.determinedSample_, seq);
+				++local.sampleCounts[call.determinedSample_];
+				if("matched" == call.pairStatus_) {
+					++local.sampleDetermined;
+				}
+				infoFiles.writePass(seq.name_, res);
 			}
-			const auto & processRes = res.processRes_;
-			const auto & forwardBar = res.forwardBar_;
-			const auto & reverseBar = res.reverseBar_;
-			++fullPass;
-			auto call = callBarcodePair(caller, forwardBar, reverseBar, true, false, 0);
-			++barcodePairCounts[std::make_tuple(call.fwdCall_, call.revCall_, call.pairStatus_)];
-			++pairStatusCounts[call.pairStatus_];
-			MetaDataInName seqMeta;
-			seqMeta.addMeta("direction", res.direction_);
-			seqMeta.addMeta("fprimerStart", processRes.fprimerStart_);
-			seqMeta.addMeta("forwardBar", forwardBar);
-			seqMeta.addMeta("reverseBar", reverseBar);
-			seqMeta.addMeta("fullBar", njh::pasteAsStr(forwardBar, "+", reverseBar));
-			seqMeta.addMeta("rprimerStart", processRes.rprimerStart_);
-			seqMeta.addMeta("sample", call.determinedSample_);
-			if("matched" != call.pairStatus_){
-				seqMeta.addMeta("fwdSample", call.fwdCall_);
-				seqMeta.addMeta("revSample", call.revCall_);
-				seqMeta.addMeta("pairStatus", call.pairStatus_);
+			if(infoFiles.on()){
+				infoFiles.writeInfo(infoBuf.str());
+				infoBuf.str("");
 			}
-			seq.name_ += seqMeta.createMetaName();
-			outputs.add(call.determinedSample_, seq);
-			++sampleCounts[call.determinedSample_];
-			if("matched" == call.pairStatus_) {
-				++sampleDetermined;
-			}
-			infoFiles.writePass(seq.name_, res);
 		}
-	}
+		std::lock_guard<std::mutex> lock(countsMut);
+		counts.add(local);
+		finderTotals.addCounts(finder);
+		splitterTotals.addCounts(splitter);
+	};
+	njh::concurrent::runVoidFunctionThreaded(demuxReads, numThreads);
+	auto & finder = finderTotals;
+	auto & splitter = splitterTotals;
+	auto & sampleCounts = counts.sampleCounts;
+	auto & barcodePairCounts = counts.barcodePairCounts;
+	auto & pairStatusCounts = counts.pairStatusCounts;
+	const uint32_t fullPass = counts.fullPass;
+	const uint32_t sampleDetermined = counts.sampleDetermined;
 	finder.writeBestDirectionCounts(setUp.pars_.directoryName_);
 	finder.writeFailedCounts(setUp.pars_.directoryName_);
 	{
@@ -1792,6 +1925,8 @@ int seqUtilsExtractRunner::extractByNanoporeBarcodes(const njh::progutils::CmdAr
 			"Also write the per read barcode info files (info.tab.txt, infoBest.tab.txt, infoPass.tab.txt, oneEndInfo.tab.txt)");
 	InnerAdaptorSplitPars splitPars;
 	setInnerAdaptorSplitOptions(setUp, splitPars);
+	uint32_t numThreads = 1;
+	setUp.setOption(numThreads, "--numThreads", "Number of threads, reads are written out in a different order with more than one");
 
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -1842,15 +1977,12 @@ int seqUtilsExtractRunner::extractByNanoporeBarcodes(const njh::progutils::CmdAr
 	njh::files::makeDir(njh::files::MkdirPar{mismatchDirectionsDir});
 	outputs.addReader(mismatchDirectionsName, SeqIOOptions::genFastqOutGz(njh::files::make_path(mismatchDirectionsDir, mismatchDirectionsName)));
 
-	BarcodeEndCaller caller(barcodes, pars.barIdentityCutOff_, barcodeMatchMargin, false);
-	AdaptorPairFinder finder(pars, setUp.pars_.debug_);
-	//seeded with the unused kit barcodes too, since joined molecules can come from any of them
-	InnerAdaptorSplitter splitter(pars, barcodes, splitPars);
+	//the per thread finders and splitters are added into these for the reports
+	AdaptorPairFinder finderTotals(pars, setUp.pars_.debug_);
+	InnerAdaptorSplitter splitterTotals(pars, barcodes, splitPars);
 
 	SeqInput seqReader(setUp.pars_.ioOptions_);
 	seqReader.openIn();
-	seqInfo inRead;
-	std::vector<seqInfo> pieces;
 
 	AdaptorInfoFiles infoFiles(setUp.pars_.directoryName_, development);
 	std::unique_ptr<OutputStream> oneEndInfoOut;
@@ -1862,284 +1994,333 @@ int seqUtilsExtractRunner::extractByNanoporeBarcodes(const njh::progutils::CmdAr
 				<< "\tassignedOn\tsample" << std::endl;
 	}
 
-	std::map<std::string, uint32_t> sampleCounts;
-	std::map<std::string, uint32_t> oneEndSampleCounts;
-	//fwd end call, rev end call, status of the pair -> read count
-	std::map<std::tuple<std::string, std::string, std::string>, uint32_t> barcodePairCounts;
-	std::map<std::string, uint32_t> pairStatusCounts;
-	//adaptor at both ends, front call, back call, status of the pair -> read count
-	std::map<std::tuple<std::string, std::string, std::string, std::string>, uint32_t> mismatchDirectionPairCounts;
-	std::map<std::string, uint32_t> mismatchDirectionStatusCounts;
-	//what the first pass made of the read -> reads assigned on one end's barcode
-	std::map<std::string, uint32_t> oneEndFromCounts;
-	std::map<std::string, uint32_t> oneEndUsedCounts;
-
-	uint32_t mismatchDirectionsToSamples = 0;
-	uint32_t fullPass = 0;
-	uint32_t sampleDeterminedBothEnds = 0;
-	uint32_t sampleDeterminedOneEnd = 0;
-	uint32_t oneEndToUnusedBarcode = 0;
-	uint32_t oneEndConflicting = 0;
-	uint32_t oneEndCutAtInnerAdaptor = 0;
-	uint32_t oneEndNoInsertBeforeInnerAdaptor = 0;
+	DemuxCounts counts;
 	//an inner adaptor counts as past the assigning one when it starts no more than this before the assigning adaptor's end
 	const uint32_t innerAdaptorSlop = 10;
+	std::mutex outMut;
+	std::mutex infoMut;
+	std::mutex countsMut;
 
-	/**@brief try to assign a read that didn't get the same barcode at both ends on just one end
-	 * @param wholeRead the read before any trimming
-	 * @param res the result from process() for this read
-	 * @param firstPass what the first pass made of this read
-	 * @return whether the read was written out to a sample
-	 */
-	auto assignOnOneEnd = [&](const seqInfo & wholeRead, const AdaptorReadRes & res, const std::string & firstPass){
-		uint32_t startOfBackSeq = wholeRead.seq_.size() - std::min<uint32_t>(pars.searchWithin_, len(wholeRead));
-		auto front = getNanoporeEndHit(*res.fwd5_3_, *res.rev5_3_, true, 0, caller, rescuePars);
-		auto back = getNanoporeEndHit(*res.rev3_5_, *res.fwd3_5_, false, startOfBackSeq, caller, rescuePars);
-		std::string assignedOn = "none";
-		std::string sample;
-		//same adaptor really at both ends is a foldback, those are kept out of the samples
-		bool foldback = front.adaptorDetected_ && back.adaptorDetected_ && front.forwardAdaptor_ == back.forwardAdaptor_;
-		if(!foldback && !rescuePars.bothEndsOnly_){
-			if(front.strictCall_ && back.strictCall_){
-				if(front.call_.samples_.front() == back.call_.samples_.front()){
-					assignedOn = "both";
+	std::function<void()> demuxReads = [&](){
+		//aligners and caches aren't shared between threads
+		BarcodeEndCaller caller(barcodes, pars.barIdentityCutOff_, barcodeMatchMargin, false);
+		AdaptorPairFinder finder(pars, setUp.pars_.debug_);
+		//seeded with the unused kit barcodes too, since joined molecules can come from any of them
+		InnerAdaptorSplitter splitter(pars, barcodes, splitPars);
+
+		DemuxCounts local;
+		auto & sampleCounts = local.sampleCounts;
+		auto & oneEndSampleCounts = local.oneEndSampleCounts;
+		auto & barcodePairCounts = local.barcodePairCounts;
+		auto & pairStatusCounts = local.pairStatusCounts;
+		auto & mismatchDirectionPairCounts = local.mismatchDirectionPairCounts;
+		auto & mismatchDirectionStatusCounts = local.mismatchDirectionStatusCounts;
+		auto & oneEndFromCounts = local.oneEndFromCounts;
+		auto & oneEndUsedCounts = local.oneEndUsedCounts;
+		auto & mismatchDirectionsToSamples = local.mismatchDirectionsToSamples;
+		auto & fullPass = local.fullPass;
+		auto & sampleDeterminedBothEnds = local.sampleDeterminedBothEnds;
+		auto & sampleDeterminedOneEnd = local.sampleDeterminedOneEnd;
+		auto & oneEndToUnusedBarcode = local.oneEndToUnusedBarcode;
+		auto & oneEndConflicting = local.oneEndConflicting;
+		auto & oneEndCutAtInnerAdaptor = local.oneEndCutAtInnerAdaptor;
+		auto & oneEndNoInsertBeforeInnerAdaptor = local.oneEndNoInsertBeforeInnerAdaptor;
+		std::ostringstream infoBuf;
+		std::ostream noInfo(nullptr);
+		std::ostream & infoOut = infoFiles.on() ? static_cast<std::ostream &>(infoBuf) : noInfo;
+		auto writeOut = [&outputs, &outMut](const std::string & sample, const seqInfo & read){
+			std::lock_guard<std::mutex> lock(outMut);
+			outputs.add(sample, read);
+		};
+		seqInfo inRead;
+		std::vector<seqInfo> pieces;
+
+		/**@brief try to assign a read that didn't get the same barcode at both ends on just one end
+		 * @param wholeRead the read before any trimming
+		 * @param res the result from process() for this read
+		 * @param firstPass what the first pass made of this read
+		 * @return whether the read was written out to a sample
+		 */
+		auto assignOnOneEnd = [&](const seqInfo & wholeRead, const AdaptorReadRes & res, const std::string & firstPass){
+			uint32_t startOfBackSeq = wholeRead.seq_.size() - std::min<uint32_t>(pars.searchWithin_, len(wholeRead));
+			auto front = getNanoporeEndHit(*res.fwd5_3_, *res.rev5_3_, true, 0, caller, rescuePars);
+			auto back = getNanoporeEndHit(*res.rev3_5_, *res.fwd3_5_, false, startOfBackSeq, caller, rescuePars);
+			std::string assignedOn = "none";
+			std::string sample;
+			//same adaptor really at both ends is a foldback, those are kept out of the samples
+			bool foldback = front.adaptorDetected_ && back.adaptorDetected_ && front.forwardAdaptor_ == back.forwardAdaptor_;
+			if(!foldback && !rescuePars.bothEndsOnly_){
+				if(front.strictCall_ && back.strictCall_){
+					if(front.call_.samples_.front() == back.call_.samples_.front()){
+						assignedOn = "both";
+						sample = front.call_.samples_.front();
+					}
+				}else if(front.strictCall_){
+					assignedOn = "front";
 					sample = front.call_.samples_.front();
-				}
-			}else if(front.strictCall_){
-				assignedOn = "front";
-				sample = front.call_.samples_.front();
-			}else if(back.strictCall_){
-				assignedOn = "back";
-				sample = back.call_.samples_.front();
-			}
-		}
-		bool trimFront = false;
-		bool trimBack = false;
-		if("none" != assignedOn){
-			trimFront = "back" != assignedOn || front.adaptorDetected_;
-			trimBack = "front" != assignedOn || back.adaptorDetected_;
-			//the adaptors can only overlap when one of them isn't real, the end the read was assigned on is real
-			if(trimFront && trimBack && front.adaptorEnd_ >= back.adaptorStart_){
-				("back" == assignedOn ? trimFront : trimBack) = false;
-			}
-		}
-		uint32_t keepStart = 0;
-		uint32_t keepEnd = wholeRead.seq_.size();
-		if(trimFront){
-			keepStart = pars.extractPars_.keepPrimer_ ? front.adaptorStart_ : front.adaptorEnd_;
-		}
-		if(trimBack){
-			keepEnd = pars.extractPars_.keepPrimer_ ? back.adaptorEnd_ : back.adaptorStart_;
-		}
-		if("none" != assignedOn && (keepEnd <= keepStart || keepEnd - keepStart < pars.minOutputLen_)){
-			assignedOn = "none";
-		}
-		//checked after the length so the count is only reads that would have been written out
-		if(("front" == assignedOn || "back" == assignedOn) && !rescuePars.keepConflicting_){
-			const auto & otherCall = "front" == assignedOn ? back.call_ : front.call_;
-			if(!otherCall.undetermined() && !njh::in(sample, otherCall.samples_)){
-				assignedOn = "none";
-				++oneEndConflicting;
-			}
-		}
-		//an adaptor (or a bare adaptor tail) inside a read assigned on one end means it is joined to another molecule whose own barcode wasn't read,
-		//so only what is between the assigning barcode and the first of these is kept (run 3: 122 wrong panel reads per 1000 past a bare tail, 5 with nothing in between,
-		//while reads assigned on both ends stay clean with one)
-		if(("front" == assignedOn || "back" == assignedOn) && !rescuePars.keepPastInnerAdaptor_){
-			auto spans = splitter.findAdaptorSpans(wholeRead);
-			//partial or bare tails the adaptor check misses
-			auto tailSpans = splitter.findInnerFlankSpans(wholeRead);
-			spans.insert(spans.end(), tailSpans.begin(), tailSpans.end());
-			std::sort(spans.begin(), spans.end());
-			bool cut = false;
-			if("front" == assignedOn){
-				for(const auto & span : spans){
-					//mostly past the assigning adaptor, the assigning adaptor itself is found again here too
-					if(span.first + innerAdaptorSlop >= front.adaptorEnd_ && span.second > front.adaptorEnd_ + innerAdaptorSlop && span.first + innerAdaptorSlop < keepEnd){
-						keepEnd = span.first;
-						trimBack = false;
-						cut = true;
-						break;
-					}
-				}
-			}else{
-				for(auto span = spans.rbegin(); span != spans.rend(); ++span){
-					if(span->second <= back.adaptorStart_ + innerAdaptorSlop && span->first + innerAdaptorSlop < back.adaptorStart_ && span->second > keepStart + innerAdaptorSlop){
-						keepStart = span->second;
-						trimFront = false;
-						cut = true;
-						break;
-					}
+				}else if(back.strictCall_){
+					assignedOn = "back";
+					sample = back.call_.samples_.front();
 				}
 			}
-			if(cut){
-				++oneEndCutAtInnerAdaptor;
-				if(keepEnd <= keepStart || keepEnd - keepStart < pars.minOutputLen_){
-					assignedOn = "none";
-					++oneEndNoInsertBeforeInnerAdaptor;
+			bool trimFront = false;
+			bool trimBack = false;
+			if("none" != assignedOn){
+				trimFront = "back" != assignedOn || front.adaptorDetected_;
+				trimBack = "front" != assignedOn || back.adaptorDetected_;
+				//the adaptors can only overlap when one of them isn't real, the end the read was assigned on is real
+				if(trimFront && trimBack && front.adaptorEnd_ >= back.adaptorStart_){
+					("back" == assignedOn ? trimFront : trimBack) = false;
 				}
 			}
-		}
-		if(oneEndInfoOut){
-			auto writeEnd = [&oneEndInfoOut](const NanoporeEndHit & hit){
-				*oneEndInfoOut << "\t" << njh::boolToStr(hit.inWindow_)
-						<< "\t" << (hit.forwardAdaptor_ ? "fwd" : "rev")
-						<< "\t" << hit.flank_.matches_
-						<< "\t" << hit.flank_.columns_
-						<< "\t" << hit.barcode_.size()
-						<< "\t" << njh::conToStr(hit.call_.samples_, ",")
-						<< "\t" << hit.call_.matches_
-						<< "\t" << hit.call_.nextBestMatches_
-						<< "\t" << hit.call_.barcodeLen_
-						<< "\t" << hit.call_.identity_;
-			};
-			*oneEndInfoOut << wholeRead.name_ << "\t" << len(wholeRead) << "\t" << firstPass;
-			writeEnd(front);
-			writeEnd(back);
-			*oneEndInfoOut << "\t" << assignedOn << "\t" << ("none" == assignedOn ? "NA" : sample) << "\n";
-		}
-		if("none" == assignedOn){
-			return false;
-		}
-		seqInfo trimmed = wholeRead.getSubRead(keepStart, keepEnd - keepStart);
-		if(pars.extractPars_.keepPrimer_ && !pars.extractPars_.primerUpper_){
+			uint32_t keepStart = 0;
+			uint32_t keepEnd = wholeRead.seq_.size();
 			if(trimFront){
-				changeSubStrToLower(trimmed.seq_, 0, front.adaptorEnd_ - front.adaptorStart_);
+				keepStart = pars.extractPars_.keepPrimer_ ? front.adaptorStart_ : front.adaptorEnd_;
 			}
 			if(trimBack){
-				changeSubStrToLower(trimmed.seq_, back.adaptorStart_ - keepStart, back.adaptorEnd_ - back.adaptorStart_);
+				keepEnd = pars.extractPars_.keepPrimer_ ? back.adaptorEnd_ : back.adaptorStart_;
 			}
-		}
-		const auto & usedEnd = "back" == assignedOn ? back : front;
-		bool reverse = "back" == assignedOn ? usedEnd.forwardAdaptor_ : !usedEnd.forwardAdaptor_;
-		if(reverse){
-			trimmed.reverseComplementRead(false, true);
-		}
-		MetaDataInName seqMeta;
-		seqMeta.addMeta("direction", reverse ? "rev" : "fwd");
-		seqMeta.addMeta("assignedOn", assignedOn);
-		seqMeta.addMeta("firstPass", firstPass);
-		seqMeta.addMeta("frontBar", front.barcode_);
-		seqMeta.addMeta("backBar", back.barcode_);
-		seqMeta.addMeta("trimmedFront", njh::boolToStr(trimFront));
-		seqMeta.addMeta("trimmedBack", njh::boolToStr(trimBack));
-		seqMeta.addMeta("sample", sample);
-		//how many of the read's ends had the sample's barcode, for clustering to count (SeekDeep processClusters --minBothEndsBarcodeReads)
-		seqMeta.addMeta("barcodeEnds", "both" == assignedOn ? 2 : 1);
-		trimmed.name_ += seqMeta.createMetaName();
-		outputs.add(sample, trimmed);
-		++sampleCounts[sample];
-		++oneEndSampleCounts[sample];
-		++oneEndFromCounts[firstPass];
-		++oneEndUsedCounts[assignedOn];
-		if(unusedBarcodeNames.count(sample)){
-			++oneEndToUnusedBarcode;
-		}else{
-			++sampleDeterminedOneEnd;
-		}
-		return true;
-	};
+			if("none" != assignedOn && (keepEnd <= keepStart || keepEnd - keepStart < pars.minOutputLen_)){
+				assignedOn = "none";
+			}
+			//checked after the length so the count is only reads that would have been written out
+			if(("front" == assignedOn || "back" == assignedOn) && !rescuePars.keepConflicting_){
+				const auto & otherCall = "front" == assignedOn ? back.call_ : front.call_;
+				if(!otherCall.undetermined() && !njh::in(sample, otherCall.samples_)){
+					assignedOn = "none";
+					++oneEndConflicting;
+				}
+			}
+			//an adaptor (or a bare adaptor tail) inside a read assigned on one end means it is joined to another molecule whose own barcode wasn't read,
+			//so only what is between the assigning barcode and the first of these is kept (run 3: 122 wrong panel reads per 1000 past a bare tail, 5 with nothing in between,
+			//while reads assigned on both ends stay clean with one)
+			if(("front" == assignedOn || "back" == assignedOn) && !rescuePars.keepPastInnerAdaptor_){
+				auto spans = splitter.findAdaptorSpans(wholeRead);
+				//partial or bare tails the adaptor check misses
+				auto tailSpans = splitter.findInnerFlankSpans(wholeRead);
+				spans.insert(spans.end(), tailSpans.begin(), tailSpans.end());
+				std::sort(spans.begin(), spans.end());
+				bool cut = false;
+				if("front" == assignedOn){
+					for(const auto & span : spans){
+						//mostly past the assigning adaptor, the assigning adaptor itself is found again here too
+						if(span.first + innerAdaptorSlop >= front.adaptorEnd_ && span.second > front.adaptorEnd_ + innerAdaptorSlop && span.first + innerAdaptorSlop < keepEnd){
+							keepEnd = span.first;
+							trimBack = false;
+							cut = true;
+							break;
+						}
+					}
+				}else{
+					for(auto span = spans.rbegin(); span != spans.rend(); ++span){
+						if(span->second <= back.adaptorStart_ + innerAdaptorSlop && span->first + innerAdaptorSlop < back.adaptorStart_ && span->second > keepStart + innerAdaptorSlop){
+							keepStart = span->second;
+							trimFront = false;
+							cut = true;
+							break;
+						}
+					}
+				}
+				if(cut){
+					++oneEndCutAtInnerAdaptor;
+					if(keepEnd <= keepStart || keepEnd - keepStart < pars.minOutputLen_){
+						assignedOn = "none";
+						++oneEndNoInsertBeforeInnerAdaptor;
+					}
+				}
+			}
+			if(oneEndInfoOut){
+				std::ostringstream line;
+				auto writeEnd = [&line](const NanoporeEndHit & hit){
+					line << "\t" << njh::boolToStr(hit.inWindow_)
+							<< "\t" << (hit.forwardAdaptor_ ? "fwd" : "rev")
+							<< "\t" << hit.flank_.matches_
+							<< "\t" << hit.flank_.columns_
+							<< "\t" << hit.barcode_.size()
+							<< "\t" << njh::conToStr(hit.call_.samples_, ",")
+							<< "\t" << hit.call_.matches_
+							<< "\t" << hit.call_.nextBestMatches_
+							<< "\t" << hit.call_.barcodeLen_
+							<< "\t" << hit.call_.identity_;
+				};
+				line << wholeRead.name_ << "\t" << len(wholeRead) << "\t" << firstPass;
+				writeEnd(front);
+				writeEnd(back);
+				line << "\t" << assignedOn << "\t" << ("none" == assignedOn ? "NA" : sample) << "\n";
+				std::lock_guard<std::mutex> lock(infoMut);
+				*oneEndInfoOut << line.str();
+			}
+			if("none" == assignedOn){
+				return false;
+			}
+			seqInfo trimmed = wholeRead.getSubRead(keepStart, keepEnd - keepStart);
+			if(pars.extractPars_.keepPrimer_ && !pars.extractPars_.primerUpper_){
+				if(trimFront){
+					changeSubStrToLower(trimmed.seq_, 0, front.adaptorEnd_ - front.adaptorStart_);
+				}
+				if(trimBack){
+					changeSubStrToLower(trimmed.seq_, back.adaptorStart_ - keepStart, back.adaptorEnd_ - back.adaptorStart_);
+				}
+			}
+			const auto & usedEnd = "back" == assignedOn ? back : front;
+			bool reverse = "back" == assignedOn ? usedEnd.forwardAdaptor_ : !usedEnd.forwardAdaptor_;
+			if(reverse){
+				trimmed.reverseComplementRead(false, true);
+			}
+			MetaDataInName seqMeta;
+			seqMeta.addMeta("direction", reverse ? "rev" : "fwd");
+			seqMeta.addMeta("assignedOn", assignedOn);
+			seqMeta.addMeta("firstPass", firstPass);
+			seqMeta.addMeta("frontBar", front.barcode_);
+			seqMeta.addMeta("backBar", back.barcode_);
+			seqMeta.addMeta("trimmedFront", njh::boolToStr(trimFront));
+			seqMeta.addMeta("trimmedBack", njh::boolToStr(trimBack));
+			seqMeta.addMeta("sample", sample);
+			//how many of the read's ends had the sample's barcode, for clustering to count (SeekDeep processClusters --minBothEndsBarcodeReads)
+			seqMeta.addMeta("barcodeEnds", "both" == assignedOn ? 2 : 1);
+			trimmed.name_ += seqMeta.createMetaName();
+			writeOut(sample, trimmed);
+			++sampleCounts[sample];
+			++oneEndSampleCounts[sample];
+			++oneEndFromCounts[firstPass];
+			++oneEndUsedCounts[assignedOn];
+			if(unusedBarcodeNames.count(sample)){
+				++oneEndToUnusedBarcode;
+			}else{
+				++sampleDeterminedOneEnd;
+			}
+			return true;
+		};
 
-	while(seqReader.readNextRead(inRead)){
-		//a read holding several library molecules is demultiplexed a molecule at a time, so each insert goes with the barcodes closest to it
-		splitter.split(inRead, pieces);
-		for(auto & seq : pieces){
-			//process() trims the reads that pass, assigning on one end decides itself what to trim
-			seqInfo wholeRead = seq;
-			auto res = finder.process(seq, infoFiles.info());
-			if(AdaptorReadOutcome::smallSeq == res.outcome_ || AdaptorReadOutcome::largeSeq == res.outcome_){
-				continue;
-			}
-			if(AdaptorReadOutcome::mismatchDirections == res.outcome_){
-				//both barcodes come from the one adaptor, so they're both compared against the barcodes for that adaptor
-				auto call = callBarcodePair(caller, res.forwardBar_, res.reverseBar_, res.sameAdaptorIsForward_, res.sameAdaptorIsForward_, mismatchConfirmIdentityCutOff);
-				++mismatchDirectionPairCounts[std::make_tuple(res.direction_, call.fwdCall_, call.revCall_, call.pairStatus_)];
-				++mismatchDirectionStatusCounts[call.pairStatus_];
-				if("mismatched" == call.pairStatus_ && (unusedBarcodeNames.count(call.fwdCall_) || unusedBarcodeNames.count(call.revCall_))){
-					++mismatchDirectionStatusCounts["mismatchedWithUnusedBarcode"];
+		while(seqReader.readNextReadLock(inRead)){
+			//a read holding several library molecules is demultiplexed a molecule at a time, so each insert goes with the barcodes closest to it
+			splitter.split(inRead, pieces);
+			for(auto & seq : pieces){
+				//process() trims the reads that pass, assigning on one end decides itself what to trim
+				seqInfo wholeRead = seq;
+				auto res = finder.process(seq, infoOut);
+				if(AdaptorReadOutcome::smallSeq == res.outcome_ || AdaptorReadOutcome::largeSeq == res.outcome_){
+					continue;
 				}
-				if("matched" == call.pairStatus_ && unusedBarcodeNames.count(call.determinedSample_)){
-					++mismatchDirectionStatusCounts["matchedUnusedBarcode"];
+				if(AdaptorReadOutcome::mismatchDirections == res.outcome_){
+					//both barcodes come from the one adaptor, so they're both compared against the barcodes for that adaptor
+					auto call = callBarcodePair(caller, res.forwardBar_, res.reverseBar_, res.sameAdaptorIsForward_, res.sameAdaptorIsForward_, mismatchConfirmIdentityCutOff);
+					++mismatchDirectionPairCounts[std::make_tuple(res.direction_, call.fwdCall_, call.revCall_, call.pairStatus_)];
+					++mismatchDirectionStatusCounts[call.pairStatus_];
+					if("mismatched" == call.pairStatus_ && (unusedBarcodeNames.count(call.fwdCall_) || unusedBarcodeNames.count(call.revCall_))){
+						++mismatchDirectionStatusCounts["mismatchedWithUnusedBarcode"];
+					}
+					if("matched" == call.pairStatus_ && unusedBarcodeNames.count(call.determinedSample_)){
+						++mismatchDirectionStatusCounts["matchedUnusedBarcode"];
+					}
+					//most of these only look like the same adaptor at both ends because one end has no adaptor and either adaptor fits it about as well
+					if("matched" != call.pairStatus_ && ("mismatched" != call.pairStatus_ || rescuePars.fromMismatched_) && assignOnOneEnd(wholeRead, res, "mismatchDirections")){
+						continue;
+					}
+					MetaDataInName seqMeta;
+					seqMeta.addMeta("direction", res.direction_);
+					seqMeta.addMeta("forwardBar", res.forwardBar_);
+					seqMeta.addMeta("reverseBar", res.reverseBar_);
+					seqMeta.addMeta("fullBar", njh::pasteAsStr(res.forwardBar_, "+", res.reverseBar_));
+					if(keepMismatchDirectionsWithMatchingBarcodes && "matched" == call.pairStatus_ && finder.trimMismatchDirectionRead(seq, res)){
+						seqMeta.addMeta("fprimerStart", res.processRes_.fprimerStart_);
+						seqMeta.addMeta("rprimerStart", res.processRes_.rprimerStart_);
+						seqMeta.addMeta("sample", call.determinedSample_);
+						seqMeta.addMeta("barcodeEnds", 2);
+						seq.name_ += seqMeta.createMetaName();
+						writeOut(call.determinedSample_, seq);
+						++sampleCounts[call.determinedSample_];
+						++mismatchDirectionsToSamples;
+						if(0 == unusedBarcodeNames.count(call.determinedSample_)){
+							++sampleDeterminedBothEnds;
+						}
+					}else{
+						seqMeta.addMeta("frontSample", call.fwdCall_);
+						seqMeta.addMeta("backSample", call.revCall_);
+						seqMeta.addMeta("pairStatus", call.pairStatus_);
+						seq.name_ += seqMeta.createMetaName();
+						writeOut(mismatchDirectionsName, seq);
+					}
+					continue;
 				}
-				//most of these only look like the same adaptor at both ends because one end has no adaptor and either adaptor fits it about as well
-				if("matched" != call.pairStatus_ && ("mismatched" != call.pairStatus_ || rescuePars.fromMismatched_) && assignOnOneEnd(wholeRead, res, "mismatchDirections")){
+				if(AdaptorReadOutcome::pass != res.outcome_){
+					//these were never written out, but the end that made it through can still have a good barcode
+					assignOnOneEnd(wholeRead, res, getOutcomeName(res.outcome_));
+					continue;
+				}
+				const auto & processRes = res.processRes_;
+				const auto & forwardBar = res.forwardBar_;
+				const auto & reverseBar = res.reverseBar_;
+				++fullPass;
+				auto call = callBarcodePair(caller, forwardBar, reverseBar, true, false, mismatchConfirmIdentityCutOff);
+				const auto & determinedSample = call.determinedSample_;
+				const auto & fwdCall = call.fwdCall_;
+				const auto & revCall = call.revCall_;
+				const auto & pairStatus = call.pairStatus_;
+				++barcodePairCounts[std::make_tuple(fwdCall, revCall, pairStatus)];
+				++pairStatusCounts[pairStatus];
+				//no sample carries an unused kit barcode, so these can only be misread barcodes, the background for the other mismatches
+				if("mismatched" == pairStatus && (unusedBarcodeNames.count(fwdCall) || unusedBarcodeNames.count(revCall))){
+					++pairStatusCounts["mismatchedWithUnusedBarcode"];
+				}
+				if("matched" != pairStatus && "ambiguousPair" != pairStatus && ("mismatched" != pairStatus || rescuePars.fromMismatched_) && assignOnOneEnd(wholeRead, res, pairStatus)){
 					continue;
 				}
 				MetaDataInName seqMeta;
 				seqMeta.addMeta("direction", res.direction_);
-				seqMeta.addMeta("forwardBar", res.forwardBar_);
-				seqMeta.addMeta("reverseBar", res.reverseBar_);
-				seqMeta.addMeta("fullBar", njh::pasteAsStr(res.forwardBar_, "+", res.reverseBar_));
-				if(keepMismatchDirectionsWithMatchingBarcodes && "matched" == call.pairStatus_ && finder.trimMismatchDirectionRead(seq, res)){
-					seqMeta.addMeta("fprimerStart", res.processRes_.fprimerStart_);
-					seqMeta.addMeta("rprimerStart", res.processRes_.rprimerStart_);
-					seqMeta.addMeta("sample", call.determinedSample_);
+				seqMeta.addMeta("fprimerStart", processRes.fprimerStart_);
+				seqMeta.addMeta("forwardBar", forwardBar);
+				seqMeta.addMeta("reverseBar", reverseBar);
+				seqMeta.addMeta("fullBar", njh::pasteAsStr(forwardBar, "+", reverseBar));
+				seqMeta.addMeta("rprimerStart", processRes.rprimerStart_);
+				seqMeta.addMeta("sample", determinedSample);
+				//how many of the read's ends had the sample's barcode, for clustering to count (SeekDeep processClusters --minBothEndsBarcodeReads)
+				if("matched" == pairStatus){
 					seqMeta.addMeta("barcodeEnds", 2);
-					seq.name_ += seqMeta.createMetaName();
-					outputs.add(call.determinedSample_, seq);
-					++sampleCounts[call.determinedSample_];
-					++mismatchDirectionsToSamples;
-					if(0 == unusedBarcodeNames.count(call.determinedSample_)){
-						++sampleDeterminedBothEnds;
-					}
-				}else{
-					seqMeta.addMeta("frontSample", call.fwdCall_);
-					seqMeta.addMeta("backSample", call.revCall_);
-					seqMeta.addMeta("pairStatus", call.pairStatus_);
-					seq.name_ += seqMeta.createMetaName();
-					outputs.add(mismatchDirectionsName, seq);
 				}
-				continue;
+				if("matched" != pairStatus){
+					seqMeta.addMeta("fwdSample", fwdCall);
+					seqMeta.addMeta("revSample", revCall);
+					seqMeta.addMeta("pairStatus", pairStatus);
+				}
+				seq.name_ += seqMeta.createMetaName();
+				writeOut(determinedSample, seq);
+				++sampleCounts[determinedSample];
+				if("matched" == pairStatus && 0 == unusedBarcodeNames.count(determinedSample)) {
+					++sampleDeterminedBothEnds;
+				}
+				infoFiles.writePass(seq.name_, res);
 			}
-			if(AdaptorReadOutcome::pass != res.outcome_){
-				//these were never written out, but the end that made it through can still have a good barcode
-				assignOnOneEnd(wholeRead, res, getOutcomeName(res.outcome_));
-				continue;
+			if(infoFiles.on()){
+				infoFiles.writeInfo(infoBuf.str());
+				infoBuf.str("");
 			}
-			const auto & processRes = res.processRes_;
-			const auto & forwardBar = res.forwardBar_;
-			const auto & reverseBar = res.reverseBar_;
-			++fullPass;
-			auto call = callBarcodePair(caller, forwardBar, reverseBar, true, false, mismatchConfirmIdentityCutOff);
-			const auto & determinedSample = call.determinedSample_;
-			const auto & fwdCall = call.fwdCall_;
-			const auto & revCall = call.revCall_;
-			const auto & pairStatus = call.pairStatus_;
-			++barcodePairCounts[std::make_tuple(fwdCall, revCall, pairStatus)];
-			++pairStatusCounts[pairStatus];
-			//no sample carries an unused kit barcode, so these can only be misread barcodes, the background for the other mismatches
-			if("mismatched" == pairStatus && (unusedBarcodeNames.count(fwdCall) || unusedBarcodeNames.count(revCall))){
-				++pairStatusCounts["mismatchedWithUnusedBarcode"];
-			}
-			if("matched" != pairStatus && "ambiguousPair" != pairStatus && ("mismatched" != pairStatus || rescuePars.fromMismatched_) && assignOnOneEnd(wholeRead, res, pairStatus)){
-				continue;
-			}
-			MetaDataInName seqMeta;
-			seqMeta.addMeta("direction", res.direction_);
-			seqMeta.addMeta("fprimerStart", processRes.fprimerStart_);
-			seqMeta.addMeta("forwardBar", forwardBar);
-			seqMeta.addMeta("reverseBar", reverseBar);
-			seqMeta.addMeta("fullBar", njh::pasteAsStr(forwardBar, "+", reverseBar));
-			seqMeta.addMeta("rprimerStart", processRes.rprimerStart_);
-			seqMeta.addMeta("sample", determinedSample);
-			//how many of the read's ends had the sample's barcode, for clustering to count (SeekDeep processClusters --minBothEndsBarcodeReads)
-			if("matched" == pairStatus){
-				seqMeta.addMeta("barcodeEnds", 2);
-			}
-			if("matched" != pairStatus){
-				seqMeta.addMeta("fwdSample", fwdCall);
-				seqMeta.addMeta("revSample", revCall);
-				seqMeta.addMeta("pairStatus", pairStatus);
-			}
-			seq.name_ += seqMeta.createMetaName();
-			outputs.add(determinedSample, seq);
-			++sampleCounts[determinedSample];
-			if("matched" == pairStatus && 0 == unusedBarcodeNames.count(determinedSample)) {
-				++sampleDeterminedBothEnds;
-			}
-			infoFiles.writePass(seq.name_, res);
 		}
-	}
+		std::lock_guard<std::mutex> lock(countsMut);
+		counts.add(local);
+		finderTotals.addCounts(finder);
+		splitterTotals.addCounts(splitter);
+	};
+	njh::concurrent::runVoidFunctionThreaded(demuxReads, numThreads);
+	auto & finder = finderTotals;
+	auto & splitter = splitterTotals;
+	auto & sampleCounts = counts.sampleCounts;
+	auto & oneEndSampleCounts = counts.oneEndSampleCounts;
+	auto & barcodePairCounts = counts.barcodePairCounts;
+	auto & pairStatusCounts = counts.pairStatusCounts;
+	auto & mismatchDirectionPairCounts = counts.mismatchDirectionPairCounts;
+	auto & mismatchDirectionStatusCounts = counts.mismatchDirectionStatusCounts;
+	auto & oneEndFromCounts = counts.oneEndFromCounts;
+	auto & oneEndUsedCounts = counts.oneEndUsedCounts;
+	auto & mismatchDirectionsToSamples = counts.mismatchDirectionsToSamples;
+	auto & fullPass = counts.fullPass;
+	auto & sampleDeterminedBothEnds = counts.sampleDeterminedBothEnds;
+	auto & sampleDeterminedOneEnd = counts.sampleDeterminedOneEnd;
+	auto & oneEndToUnusedBarcode = counts.oneEndToUnusedBarcode;
+	auto & oneEndConflicting = counts.oneEndConflicting;
+	auto & oneEndCutAtInnerAdaptor = counts.oneEndCutAtInnerAdaptor;
+	auto & oneEndNoInsertBeforeInnerAdaptor = counts.oneEndNoInsertBeforeInnerAdaptor;
 	if(splitPars.split_){
 		splitter.writeCounts(setUp.pars_.directoryName_);
 	}
