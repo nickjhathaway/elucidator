@@ -663,32 +663,43 @@ shinyApp(ui, server)
 )APPR";
 
 int popGenExpRunner::cluster_samples_dist_of_microhaps_sharing(const njh::progutils::CmdArgs & inputCommands){
-	double minimumLociCoverageToKeepSamples = 0.90;
-  double concordance_cut_off = 0.95;
-  double rmse_cut_off = 0.15;
-  bool cluster_on_rmse = false;
-  njhUndirWeightedGraph<double, std::vector<double>>::dbscanPars dbscanPars;
-  // dbscanPars.eps_ = 0.50;
-  dbscanPars.minEpNeighbors_ = 5;
+	HapsSampleClustering::Pars clusterPars;
+	double concordance_cut_off = 0.95;
+	double rmse_cut_off = 0.15;
+	double jaccard_cut_off = 0.90;
+	bool cluster_on_rmse = false;
+	bool cluster_on_jaccard = false;
 	HapsEncodedMatrix::SetWithExternalPars pars;
-  uint32_t pairwise_factor_bin_size = 1000;
+	uint32_t pairwise_factor_bin_size = 1000;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
-  setUp.setOption(pairwise_factor_bin_size, "--pairwise_factor_bin_size", "pairwise_factor_bin_size");
-	setUp.setOption(minimumLociCoverageToKeepSamples, "--minimumLociCoverageToKeepSamples", "minimum Loci Coverage To Keep Samples in post analysis steps, must have reads for at least this frction of the total loci");
-  setUp.setOption(concordance_cut_off, "--concordance_cut_off", "concordance cut off");
-  dbscanPars.eps_ = 1 - concordance_cut_off;
-  setUp.setOption(dbscanPars.minEpNeighbors_, "--min_neighbors", "The minimum neighbors for the DB scan clustering");
-  setUp.setOption(rmse_cut_off, "--rmse_cut_off", "RMSE cut off");
-  setUp.setOption(cluster_on_rmse, "--cluster_on_rmse", "cluster on RMSE");
-  if (cluster_on_rmse) {
-    dbscanPars.eps_ = rmse_cut_off;
-  }
+	setUp.setOption(pairwise_factor_bin_size, "--pairwise_factor_bin_size", "pairwise_factor_bin_size");
+	setUp.setOption(clusterPars.minLociCoverage_, "--minimumLociCoverageToKeepSamples", "minimum Loci Coverage To Keep Samples in post analysis steps, must have reads for at least this frction of the total loci");
+	setUp.setOption(concordance_cut_off, "--concordance_cut_off", "concordance cut off");
+	setUp.setOption(clusterPars.minNeighbors_, "--min_neighbors", "The minimum neighbors for the DB scan clustering");
+	setUp.setOption(rmse_cut_off, "--rmse_cut_off", "RMSE cut off");
+	setUp.setOption(cluster_on_rmse, "--cluster_on_rmse", "cluster on RMSE");
+	setUp.setOption(jaccard_cut_off, "--jaccard_cut_off", "Jaccard cut off, on the haplotypes of the targets two samples share");
+	setUp.setOption(cluster_on_jaccard, "--cluster_on_jaccard", "cluster on Jaccard");
+	if (cluster_on_rmse && cluster_on_jaccard) {
+		setUp.failed_ = true;
+		setUp.addWarning("can only use one of --cluster_on_rmse or --cluster_on_jaccard");
+	}
+	if (cluster_on_rmse) {
+		clusterPars.measure_ = HapsSampleClustering::Measure::rmse;
+		clusterPars.cutOff_ = rmse_cut_off;
+	} else if (cluster_on_jaccard) {
+		clusterPars.measure_ = HapsSampleClustering::Measure::jaccard;
+		clusterPars.cutOff_ = jaccard_cut_off;
+	} else {
+		clusterPars.cutOff_ = concordance_cut_off;
+	}
 
-  pars.setDefaults(setUp);
+	pars.setDefaults(setUp);
+	clusterPars.numThreads_ = pars.numThreads;
 
-  setUp.processDirectoryOutputName(bfs::path(bfs::basename(pars.tableFnp)).string() + "_cluster_TODAY", true);
+	setUp.processDirectoryOutputName(bfs::path(bfs::basename(pars.tableFnp)).string() + "_cluster_TODAY", true);
 	setUp.finishSetUp(std::cout);
 
 	setUp.startARunLog(setUp.pars_.directoryName_);
@@ -696,272 +707,150 @@ int popGenExpRunner::cluster_samples_dist_of_microhaps_sharing(const njh::progut
 	setUp.timer_.setLapName("initial");
 	setUp.timer_.startNewLap("encode haplotypes");
 
-  HapsEncodedMatrix haps(pars);
-	setUp.timer_.startNewLap("get hap probabilities");
-	haps.calcHapProbs();
-	setUp.timer_.startNewLap("add relative abundances");
-  haps.add_relative_abundance();
-  setUp.timer_.startNewLap("get index measures");
-  auto indexRes = haps.genIndexMeasures(setUp.pars_.verbose_);
-  setUp.timer_.startNewLap("calc rmse and ccc");
-	auto original_measures = haps.calc_ccc_rmse_measures(pairwise_factor_bin_size, setUp.pars_.verbose_);
-  setUp.timer_.startNewLap("writing output matrices");
-  auto measures_dir = njh::files::make_path(setUp.pars_.directoryName_, "measures/");
-  njh::files::makeDir(measures_dir);
-  //write out measures
+	HapsEncodedMatrix haps(pars);
+	setUp.timer_.startNewLap("calc rmse, ccc and jaccard");
+	auto measures = HapsSampleClustering::calcMeasures(haps, pairwise_factor_bin_size, setUp.pars_.verbose_);
+	setUp.timer_.startNewLap("writing output matrices");
+	auto measures_dir = njh::files::make_path(setUp.pars_.directoryName_, "measures/");
+	njh::files::makeDir(measures_dir);
+	//write out measures
 	OutputStream outSampNamesOut(njh::files::make_path(measures_dir, "sampleNames.tab.txt"));
 	outSampNamesOut << njh::conToStr(haps.sampNamesVec_, "\n") << std::endl;
-  {
-	  auto ccc_out_fnp = njh::files::make_path(measures_dir, "ccc_on_targets_shared.tab.txt.gz");
-	  OutputStream ccc_out(ccc_out_fnp);
-	  for(const auto & ccc_row : original_measures.ccc){
-	    ccc_out << njh::conToStr(ccc_row, "\t") << std::endl;
-	  }
-  }
-  {
-	  auto rmse_out_fnp = njh::files::make_path(measures_dir, "rmse_on_targets_shared.tab.txt.gz");
-	  OutputStream rmse_out(rmse_out_fnp);
-	  for(const auto & rmse_row : original_measures.rmse){
-	    rmse_out << njh::conToStr(rmse_row, "\t") << std::endl;
-	  }
-  }
-  {
-	  auto jaccard_out_fnp = njh::files::make_path(measures_dir, "jaccard_on_targets_shared.tab.txt.gz");
-	  OutputStream jaccard_out(jaccard_out_fnp);
-	  for(const auto & jaccard_row : indexRes.byHapsTarShared){
-	    jaccard_out << njh::conToStr(jaccard_row, "\t") << std::endl;
-	  }
-  }
-  {
-	  auto targets_shared_out_fnp = njh::files::make_path(measures_dir, "targets_shared.tab.txt.gz");
-	  OutputStream targets_shared_out(targets_shared_out_fnp);
-	  for(const auto & targets_shared_row : original_measures.targets_shared){
-	    targets_shared_out << njh::conToStr(targets_shared_row, "\t") << std::endl;
-	  }
-  }
-  setUp.timer_.startNewLap("getting loci coverage info");
-
-	std::unordered_map<std::string, double> lociCoveragePerSample = haps.getTargetCoveragePerSample();
 	{
-		table numTargetsPerSample = haps.getTableNumberTargetsPerSample(minimumLociCoverageToKeepSamples);
+		auto ccc_out_fnp = njh::files::make_path(measures_dir, "ccc_on_targets_shared.tab.txt.gz");
+		OutputStream ccc_out(ccc_out_fnp);
+		for(const auto & ccc_row : measures.cccRmse_.ccc){
+			ccc_out << njh::conToStr(ccc_row, "\t") << std::endl;
+		}
+	}
+	{
+		auto rmse_out_fnp = njh::files::make_path(measures_dir, "rmse_on_targets_shared.tab.txt.gz");
+		OutputStream rmse_out(rmse_out_fnp);
+		for(const auto & rmse_row : measures.cccRmse_.rmse){
+			rmse_out << njh::conToStr(rmse_row, "\t") << std::endl;
+		}
+	}
+	{
+		auto jaccard_out_fnp = njh::files::make_path(measures_dir, "jaccard_on_targets_shared.tab.txt.gz");
+		OutputStream jaccard_out(jaccard_out_fnp);
+		for(const auto & jaccard_row : measures.jaccard_){
+			jaccard_out << njh::conToStr(jaccard_row, "\t") << std::endl;
+		}
+	}
+	{
+		auto targets_shared_out_fnp = njh::files::make_path(measures_dir, "targets_shared.tab.txt.gz");
+		OutputStream targets_shared_out(targets_shared_out_fnp);
+		for(const auto & targets_shared_row : measures.cccRmse_.targets_shared){
+			targets_shared_out << njh::conToStr(targets_shared_row, "\t") << std::endl;
+		}
+	}
+	setUp.timer_.startNewLap("getting loci coverage info");
+	{
+		table numTargetsPerSample = haps.getTableNumberTargetsPerSample(clusterPars.minLociCoverage_);
 		OutputStream lociCoverageOut(njh::files::make_path(setUp.pars_.directoryName_, "loci_coverage_per_sample_info.tsv"));
 		numTargetsPerSample.outPutContents(lociCoverageOut, "\t");
 	}
 
-  setUp.timer_.setLapName("transforming matrix");
-  auto inverse_ccc = original_measures.ccc;
-	{
-	  //for the distance functions below to work, have to transform CCC so that the lower the better, CCC runs from -1 to 1, so below will transform it so it runs from 0 to 2 with 0 being CCC of 1, 1 being CCC 0, and 2 being CCC -2
-	  PairwisePairFactory pairFactory(inverse_ccc.size());
-	  uint32_t pairBatchCount = 100000;
-	  std::function<void()> transform_ccc =
-    [&pairFactory,
-      &pairBatchCount,
-      &inverse_ccc]() {
-      PairwisePairFactory::PairwisePairVec pairs;
-      while (pairFactory.setNextPairs(pairs, pairBatchCount)) {
-        for (const auto & pair : pairs.pairs_) {
-          inverse_ccc[pair.row_][pair.col_] = -1 * (inverse_ccc[pair.row_][pair.col_] - 1);
-          inverse_ccc[pair.col_][pair.row_] = inverse_ccc[pair.row_][pair.col_];
-        }
-      }
-    };
-	  njh::concurrent::runVoidFunctionThreaded(transform_ccc, pars.numThreads);
-    // fill the diagonal
-	  for (uint32_t pos = 0; pos < inverse_ccc.size(); ++pos) {
-	    inverse_ccc[pos][pos] = 0;
-	  }
+	setUp.timer_.startNewLap("dbscan");
+	auto clusters = HapsSampleClustering::cluster(haps, measures, clusterPars);
+	if (setUp.pars_.verbose_) {
+		std::cout << "Determined " << clusters.numberOfGroups_ << " groups" << std::endl;
 	}
 
-  const std::vector<std::vector<double> > &distance_matrix = cluster_on_rmse ? original_measures.rmse : inverse_ccc;
-
-  setUp.timer_.setLapName("building matrix");
-  auto dist_graph = std::make_unique<njhUndirWeightedGraph<double, std::vector<double> > > ();
-  for (const auto & pos : iter::range(distance_matrix.size())) {
-    dist_graph->addNode(estd::to_string(pos), distance_matrix[pos]);
-  }
-	{
-	  uint32_t belowEp = 0;
-	  PairwisePairFactory pairFactory(distance_matrix.size());
-	  uint32_t pairBatchCount = 100000;
-	  std::mutex graphMut;
-	  struct PairDist {
-	    PairDist(const PairwisePairFactory::PairwisePair & pair, double dist) :
-          pair_(pair), dist_(dist) {
-	    }
-	    PairwisePairFactory::PairwisePair pair_;
-	    double dist_;
-	  };
-
-    std::function<void()> addToGraph =
-        [&graphMut, &pairFactory,&pairBatchCount,&belowEp,
-          &distance_matrix, &dbscanPars,
-          &haps, &dist_graph,
-          &lociCoveragePerSample, &minimumLociCoverageToKeepSamples]() {
-      PairwisePairFactory::PairwisePairVec pairs;
-      std::vector<PairDist> belowEps;
-      while (pairFactory.setNextPairs(pairs, pairBatchCount)) {
-        for (const auto &pair: pairs.pairs_) {
-          if (lociCoveragePerSample[haps.sampNamesVec_[pair.row_]] < minimumLociCoverageToKeepSamples ||
-              lociCoveragePerSample[haps.sampNamesVec_[pair.col_]] < minimumLociCoverageToKeepSamples) {
-            continue;
-          }
-          auto dist = distance_matrix[pair.row_][pair.col_];
-          if (dist <= dbscanPars.eps_) {
-            belowEps.emplace_back(PairDist{pair, dist});
-          }
-        }
-      }
-      if (!belowEps.empty()) {
-        std::lock_guard<std::mutex> lock(graphMut);
-        belowEp += belowEps.size();
-        for (const auto &bEps: belowEps) {
-          dist_graph->addEdge(estd::to_string(bEps.pair_.row_),
-                              estd::to_string(bEps.pair_.col_),
-                              bEps.dist_);
-        }
-      }
-    };
-	  njh::concurrent::runVoidFunctionThreaded(addToGraph, pars.numThreads);
+	setUp.timer_.startNewLap("output");
+	OutputStream outFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters.tsv")));
+	outFile << "sample\tgroup";
+	outFile << std::endl;
+	for (const auto &group: clusters.groupIndexes_) {
+		for (const auto &idx: group.second) {
+			if (clusters.lowCoverage_[idx]) {
+				outFile << haps.sampNamesVec_[idx] << "\t" << "low_coverage_not_clustered";
+			} else if (group.first == HapsSampleClustering::noGroup) {
+				outFile << haps.sampNamesVec_[idx] << "\t" << "nogroup";
+			} else {
+				outFile << haps.sampNamesVec_[idx] << "\t" << group.first;
+			}
+			outFile << std::endl;
+		}
 	}
 
-  setUp.timer_.startNewLap("dbscan");
-  dist_graph->dbscan(dbscanPars);
-  if (dbscanPars.minEpNeighbors_ > 2) {
-    dist_graph->add_small_groups_in_off_nodes(dbscanPars);
-  }
-  if (setUp.pars_.verbose_) {
-    std::cout << "Determined " << dist_graph->numberOfGroups_ << " groups" << std::endl;
-  }
+	OutputStream outGroupCountsFile(
+		OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_groupCounts.tsv")));
+	outGroupCountsFile << "group\tsample_count";
+	outGroupCountsFile << "\tmin_ccc\tmedian_ccc\tmean_ccc\tmax_ccc";
+	outGroupCountsFile << "\tmin_rmse\tmedian_rmse\tmean_rmse\tmax_rmse";
+	outGroupCountsFile << "\tmin_jaccard\tmedian_jaccard\tmean_jaccard\tmax_jaccard";
+	outGroupCountsFile << std::endl;
+	for (const auto &group: clusters.groupIndexes_) {
+		if (group.first == HapsSampleClustering::noGroup) {
+			uint32_t low_coverage_not_clustered_cnt = 0;
+			for (const auto &samp_idx: group.second) {
+				if (clusters.lowCoverage_[samp_idx]) {
+					low_coverage_not_clustered_cnt++;
+				}
+			}
+			outGroupCountsFile << "nogroup" << "\t" << group.second.size() - low_coverage_not_clustered_cnt;
+			outGroupCountsFile << "\t" << "NA"
+					<< "\t" << "NA"
+					<< "\t" << "NA"
+					<< "\t" << "NA";
+			outGroupCountsFile << "\t" << "NA"
+					<< "\t" << "NA"
+					<< "\t" << "NA"
+					<< "\t" << "NA";
+			outGroupCountsFile << "\t" << "NA"
+					<< "\t" << "NA"
+					<< "\t" << "NA"
+					<< "\t" << "NA";
+			outGroupCountsFile << std::endl;
 
+			outGroupCountsFile << "low_coverage_not_clustered" << "\t" << low_coverage_not_clustered_cnt;
+			outGroupCountsFile << "\t" << "NA"
+					<< "\t" << "NA"
+					<< "\t" << "NA"
+					<< "\t" << "NA";
+			outGroupCountsFile << "\t" << "NA"
+					<< "\t" << "NA"
+					<< "\t" << "NA"
+					<< "\t" << "NA";
+			outGroupCountsFile << "\t" << "NA"
+					<< "\t" << "NA"
+					<< "\t" << "NA"
+					<< "\t" << "NA";
+			outGroupCountsFile << std::endl;
+		} else {
+			const auto & cccStats = clusters.cccStats_.at(group.first);
+			const auto & rmseStats = clusters.rmseStats_.at(group.first);
+			const auto & jaccardStats = clusters.jaccardStats_.at(group.first);
+			outGroupCountsFile << group.first << "\t" << group.second.size();
+			outGroupCountsFile << "\t" << cccStats.at("min")
+					<< "\t" << cccStats.at("median")
+					<< "\t" << cccStats.at("mean")
+					<< "\t" << cccStats.at("max");
+			outGroupCountsFile << "\t" << rmseStats.at("min")
+					<< "\t" << rmseStats.at("median")
+					<< "\t" << rmseStats.at("mean")
+					<< "\t" << rmseStats.at("max");
+			outGroupCountsFile << "\t" << jaccardStats.at("min")
+					<< "\t" << jaccardStats.at("median")
+					<< "\t" << jaccardStats.at("mean")
+					<< "\t" << jaccardStats.at("max");
+			outGroupCountsFile << std::endl;
+		}
+	}
 
-  setUp.timer_.startNewLap("output");
-  OutputStream outFile(OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters.tsv")));
-  outFile << "sample\tgroup";
-  outFile << std::endl;
-
-  std::map<uint32_t, std::vector<uint32_t>> groupIndexes;
-  std::vector<uint32_t> allGroupedIndices;
-  for(const auto & n : iter::enumerate(dist_graph->nodes_)) {
-    groupIndexes[n.element->group_].emplace_back(n.index);
-    if (std::numeric_limits<uint32_t>::max() != n.element->group_) {
-      allGroupedIndices.emplace_back(n.index);
-    }
-  }
-  std::unordered_map<uint32_t, std::map<std::string, double> > groups_ccc_stats;
-  std::unordered_map<uint32_t, std::map<std::string, double> > groups_rmse_stats;
-  std::unordered_map<uint32_t, std::map<std::string, double> > groups_jaccard_stats;
-  for (const auto &group: groupIndexes) {
-    std::vector<double> cccsWithinGroup;
-    std::vector<double> rmsesWithinGroup;
-    std::vector<double> jaccardsWithinGroup;
-    {
-      PairwisePairFactory pfac(group.second.size());
-      PairwisePairFactory::PairwisePair pair;
-      while (pfac.setNextPair(pair)) {
-        //have to transform back due to the previous transform
-        //cccsWithinGroup.emplace_back(measures.ccc[group.second[pair.col_]][group.second[pair.row_]] * -1 + 1);
-        cccsWithinGroup.emplace_back(original_measures.ccc[group.second[pair.col_]][group.second[pair.row_]]);
-        rmsesWithinGroup.emplace_back(original_measures.rmse[group.second[pair.col_]][group.second[pair.row_]]);
-        jaccardsWithinGroup.emplace_back(indexRes.byHapsTarShared[group.second[pair.col_]][group.second[pair.row_]]);
-      }
-    }
-    groups_ccc_stats[group.first] = getStatsOnVec(cccsWithinGroup);
-    groups_rmse_stats[group.first] = getStatsOnVec(rmsesWithinGroup);
-    groups_jaccard_stats[group.first] = getStatsOnVec(jaccardsWithinGroup);
-
-    for (const auto &idx: group.second) {
-      if (lociCoveragePerSample[haps.sampNamesVec_[idx]] < minimumLociCoverageToKeepSamples) {
-        outFile << haps.sampNamesVec_[idx] << "\t" << "low_coverage_not_clustered";
-      } else if (group.first == std::numeric_limits<uint32_t>::max()) {
-        outFile << haps.sampNamesVec_[idx] << "\t" << "nogroup";
-      } else {
-        outFile << haps.sampNamesVec_[idx] << "\t" << group.first;
-      }
-      outFile << std::endl;
-    }
-  }
-
-  OutputStream outGroupCountsFile(
-    OutOptions(njh::files::make_path(setUp.pars_.directoryName_, "clusters_groupCounts.tsv")));
-  outGroupCountsFile << "group\tsample_count";
-  outGroupCountsFile << "\tmin_ccc\tmedian_ccc\tmean_ccc\tmax_ccc";
-  outGroupCountsFile << "\tmin_rmse\tmedian_rmse\tmean_rmse\tmax_rmse";
-  outGroupCountsFile << "\tmin_jaccard\tmedian_jaccard\tmean_jaccard\tmax_jaccard";
-  outGroupCountsFile << std::endl;
-  for (const auto &group: groupIndexes) {
-    if (group.first == std::numeric_limits<uint32_t>::max()) {
-      uint32_t low_coverage_not_clustered_cnt = 0;
-      for (const auto &samp_idx: group.second) {
-        if (lociCoveragePerSample[haps.sampNamesVec_[samp_idx]] < minimumLociCoverageToKeepSamples) {
-          low_coverage_not_clustered_cnt++;
-        }
-      }
-      outGroupCountsFile << "nogroup" << "\t" << group.second.size() - low_coverage_not_clustered_cnt;
-      outGroupCountsFile << "\t" << "NA"
-          << "\t" << "NA"
-          << "\t" << "NA"
-          << "\t" << "NA";
-      outGroupCountsFile << "\t" << "NA"
-          << "\t" << "NA"
-          << "\t" << "NA"
-          << "\t" << "NA";
-      outGroupCountsFile << "\t" << "NA"
-          << "\t" << "NA"
-          << "\t" << "NA"
-          << "\t" << "NA";
-      outGroupCountsFile << std::endl;
-
-      outGroupCountsFile << "low_coverage_not_clustered" << "\t" << low_coverage_not_clustered_cnt;
-      outGroupCountsFile << "\t" << "NA"
-          << "\t" << "NA"
-          << "\t" << "NA"
-          << "\t" << "NA";
-      outGroupCountsFile << "\t" << "NA"
-          << "\t" << "NA"
-          << "\t" << "NA"
-          << "\t" << "NA";
-      outGroupCountsFile << "\t" << "NA"
-          << "\t" << "NA"
-          << "\t" << "NA"
-          << "\t" << "NA";
-      outGroupCountsFile << std::endl;
-    } else {
-      outGroupCountsFile << group.first << "\t" << group.second.size();
-      outGroupCountsFile << "\t" << groups_ccc_stats[group.first]["min"]
-          << "\t" << groups_ccc_stats[group.first]["median"]
-          << "\t" << groups_ccc_stats[group.first]["mean"]
-          << "\t" << groups_ccc_stats[group.first]["max"];
-      outGroupCountsFile << "\t" << groups_rmse_stats[group.first]["min"]
-          << "\t" << groups_rmse_stats[group.first]["median"]
-          << "\t" << groups_rmse_stats[group.first]["mean"]
-          << "\t" << groups_rmse_stats[group.first]["max"];
-      outGroupCountsFile << "\t" << groups_jaccard_stats[group.first]["min"]
-          << "\t" << groups_jaccard_stats[group.first]["median"]
-          << "\t" << groups_jaccard_stats[group.first]["mean"]
-          << "\t" << groups_jaccard_stats[group.first]["max"];
-      outGroupCountsFile << std::endl;
-    }
-  }
-
-  OutputStream adjacency_list_out(njh::files::make_path(setUp.pars_.directoryName_, "adjacency_list.tsv.gz"));
-  adjacency_list_out << "node1\tnode2\tgroup\ttargets_shared\tccc\trmse\tjaccard" << std::endl;
-  for (const auto & e : dist_graph->edges_) {
-    if (e->on_) {
-      auto node1 = e->nodeToNode_.begin()->second.lock();
-      auto node2 = e->nodeToNode_.rbegin()->second.lock();
-      auto node1_idx = njh::StrToNumConverter::stoToNum<uint32_t>(node1->name_);
-      auto node2_idx = njh::StrToNumConverter::stoToNum<uint32_t>(node2->name_);
-      adjacency_list_out << haps.sampNamesVec_[node1_idx]
-        << "\t" << haps.sampNamesVec_[node2_idx]
-        << "\t" << node1->group_
-        << "\t" << original_measures.targets_shared[node1_idx][node2_idx]
-        << "\t" << original_measures.ccc[node1_idx][node2_idx]
-        << "\t" << original_measures.rmse[node1_idx][node2_idx]
-        << "\t" << indexRes.byHapsTarShared[node1_idx][node2_idx]
-        << std::endl;
-    }
-  }
+	OutputStream adjacency_list_out(njh::files::make_path(setUp.pars_.directoryName_, "adjacency_list.tsv.gz"));
+	adjacency_list_out << "node1\tnode2\tgroup\ttargets_shared\tccc\trmse\tjaccard" << std::endl;
+	for (const auto & e : clusters.edges_) {
+		adjacency_list_out << haps.sampNamesVec_[e.sample1_]
+			<< "\t" << haps.sampNamesVec_[e.sample2_]
+			<< "\t" << e.group_
+			<< "\t" << measures.cccRmse_.targets_shared[e.sample1_][e.sample2_]
+			<< "\t" << measures.cccRmse_.ccc[e.sample1_][e.sample2_]
+			<< "\t" << measures.cccRmse_.rmse[e.sample1_][e.sample2_]
+			<< "\t" << measures.jaccard_[e.sample1_][e.sample2_]
+			<< std::endl;
+	}
 
 	haps.exportEncodedTable().outPutContents(TableIOOpts::genTabFileOut(njh::files::make_path(setUp.pars_.directoryName_, "haps.tsv.gz")));
 	OutputStream static_qmd_out(njh::files::make_path(setUp.pars_.directoryName_, "process.qmd"));
@@ -1048,7 +937,7 @@ int popGenExpRunner::doPairwiseComparisonOnHapsSharing(const njh::progutils::Cmd
 
 
 	setUp.timer_.startNewLap("get index measures");
-	auto indexRes = haps.genIndexMeasures(setUp.pars_.verbose_);
+	auto indexRes = haps.genIndexMeasures(1000, setUp.pars_.verbose_);
 	OutputStream outSampNamesOut(njh::files::make_path(setUp.pars_.directoryName_, "sampleNames.tab.txt"));
 	outSampNamesOut << njh::conToStr(haps.sampNamesVec_, "\n") << std::endl;
 
