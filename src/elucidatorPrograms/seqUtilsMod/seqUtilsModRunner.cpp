@@ -255,71 +255,17 @@ int seqUtilsModRunner::guessAProteinFromSeq(
 	reader.openOut();
 
 	seqInfo seq;
-	njh::PatPosFinder pFinder(R"(\*+)");
 
 	while (reader.readNextRead(seq)) {
 		if (getLongest) {
-			std::shared_ptr<readVecTrimmer::BreakUpRes> longest;
-			uint32_t frameWithLongest = std::numeric_limits<uint32_t>::max();
-			uint32_t lengthOfLongestFrame = std::numeric_limits<uint32_t>::max();
-			bool isRevComp = false;
-			for (auto comp : {false, true}){
-				for (const auto start : iter::range(3)) {
-					auto prot = seq.translateRet(comp, comp, start, forceMStart);
-					auto possibleSubSeqs = readVecTrimmer::breakUpSeqOnPat(prot, pFinder);
-					for (const auto & possible : possibleSubSeqs) {
-						if (nullptr == longest) {
-							longest = std::make_shared<readVecTrimmer::BreakUpRes>(possible);
-							frameWithLongest = start;
-							lengthOfLongestFrame = len(prot);
-							isRevComp = comp;
-						} else if (len(possible.seqBase_) > len(longest->seqBase_)) {
-							longest = std::make_shared<readVecTrimmer::BreakUpRes>(possible);
-							frameWithLongest = start;
-							lengthOfLongestFrame = len(prot);
-							isRevComp = comp;
-						}
-					}
-				}
+			LongestTranslation::Pars longestPars;
+			longestPars.removeTrailingStop_ = removeTrailingStop;
+			longestPars.forceMStart_ = forceMStart;
+			auto longest = LongestTranslation::translate(seq, longestPars);
+			if (mark) {
+				longest.markName(overWriteMeta);
 			}
-
-			uint32_t seqStart = longest->start_ * 3 + frameWithLongest;
-			uint32_t seqStop = longest->end_ * 3 + frameWithLongest;
-			uint32_t aaStop = longest->end_;
-			if(!removeTrailingStop && longest->end_ != lengthOfLongestFrame){
-
-				//if the end doesn't equal the length of the protein that must mean that it broke on a stop codon
-				longest->seqBase_.append("*");
-				++aaStop;
-				seqStop += 3;
-//				std::cout << "longest->end_: " << longest->end_ << "  lengthOfLongestFrame: " << lengthOfLongestFrame<< std::endl;
-//				auto protDebug = seq.translateRet(false, false, frameWithLongest);
-//				std::cout << '\t' << protDebug.seq_.size() << " " << protDebug.seq_ << std::endl;
-//				std::cout << "\t" << seq.seq_.substr(seqStart, seqStop - seqStart) << std::endl;
-			}
-			if(mark){
-				MetaDataInName meta;
-				bool nameHasMeta = false;
-				if(MetaDataInName::nameHasMetaData(seq.name_)){
-					meta = MetaDataInName(seq.name_);
-					nameHasMeta = true;
-				}
-				meta.addMeta("frame", frameWithLongest, overWriteMeta);
-				meta.addMeta("seqStart", seqStart, overWriteMeta);
-				meta.addMeta("seqStop", seqStop, overWriteMeta);
-				meta.addMeta("seqLen", len(seq), overWriteMeta);
-				meta.addMeta("aaStart", longest->start_, overWriteMeta);
-				meta.addMeta("aaStop", aaStop, overWriteMeta);
-				meta.addMeta("aaLen", lengthOfLongestFrame, overWriteMeta);
-				meta.addMeta("isRevComp", isRevComp);
-				if(nameHasMeta){
-					meta.resetMetaInName(longest->seqBase_.name_);
-				}else{
-					longest->seqBase_.name_.append(" " + meta.createMetaName());
-				}
-			}
-
-			reader.write(longest);
+			reader.write(longest.protein_);
 
 		} else {
 			std::unordered_map<bool, std::vector<seqInfo>>  translatedSeqs;
