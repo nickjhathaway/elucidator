@@ -39,13 +39,14 @@ RUN echo "$LANG UTF-8" >> /etc/locale.gen && \
     dpkg-reconfigure -f noninteractive tzdata
 
 # Miniforge + all conda tools in one layer
+# salmon is pinned: index formats change between 2.x minors (2.11 cannot read a 2.8 index)
 RUN wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh \
       -O /tmp/miniforge.sh \
  && bash /tmp/miniforge.sh -b -p /opt/conda \
  && rm /tmp/miniforge.sh \
  && /opt/conda/bin/mamba install -y -c bioconda -c conda-forge \
       muscle minimap2 bowtie2 bwa samtools bcftools \
-      bedtools seqkit hmmer blast salmon ncbi-datasets-cli \
+      bedtools seqkit hmmer blast salmon=2.8.0 ncbi-datasets-cli \
       gffread subread mosdepth fastp seqtk mummer \
  && /opt/conda/bin/mamba clean -afy \
  && find /opt/conda -name "*.pyc" -delete \
