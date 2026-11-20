@@ -41,7 +41,12 @@ int readSimulatorRunner::testPCRSim(
 	uint32_t numThreads = 1;
 	uint32_t startingTemplate = 1000;
 	uint32_t finalReadAmount = 5000;
-	double pcrEfficiency = 0.95;
+	double pcrEfficiency = PCRSimulator::defaultPcrEfficiency;
+	double templateSwitchRate = PCRSimulator::defaultTemplateSwitchRate;
+	std::string templateSwitchScalingStr = PCRSimulator::templateSwitchScalingToStr(PCRSimulator::defaultTemplateSwitchScaling);
+	double switchPlateau = PCRSimulator::defaultSwitchPlateau;
+	double targetProductMax = PCRSimulator::defaultTargetProductMax;
+	double switchExponent = PCRSimulator::defaultSwitchExponent;
 	seqSetUp setUp(inputCommands);
 	setUp.processVerbose();
 	setUp.processDebug();
@@ -54,7 +59,13 @@ int readSimulatorRunner::testPCRSim(
 
 	setUp.setOption(startingTemplate, "--startingTemplate", "Starting Template");
 	setUp.setOption(finalReadAmount, "--finalReadAmount", "Final Read Amount");
-	setUp.setOption(pcrEfficiency, "--pcrEfficiency", "PCR Efficiency, between 0-1, chance a product gets amplified");
+	setUp.setOption(pcrEfficiency, "--pcrEfficiency", "PCR amplification efficiency, between 0-1: chance a template is copied in a round (yield, drift of low-template haplotypes, PCR-error copies); does not set the chimera rate, see --templateSwitchRate");
+	setUp.setOption(templateSwitchRate, "--templateSwitchRate", "Template switch rate: with power or product scaling the rate when the target's product reaches --switchPlateau, with constant scaling the chance every round that a newly copied strand stops early and is finished on a different template; set 0 for no chimeras");
+	setUp.setOption(templateSwitchScalingStr, "--templateSwitchScaling", "How the template switch rate changes over the PCR, product being all strands made so far for the target: constant (--templateSwitchRate every round), product (--templateSwitchRate * min(1, product / --switchPlateau), so switching happens mostly in late rounds) or power (min(1, --templateSwitchRate * (product / --switchPlateau)^--switchExponent), not capped, so the chimera share keeps rising with starting template)");
+	setUp.setOption(switchPlateau, "--switchPlateau", "With --templateSwitchScaling product or power, the amount of product (strands of the target) at which the switch rate reaches --templateSwitchRate");
+	setUp.setOption(switchExponent, "--switchExponent", "With --templateSwitchScaling power, the exponent of product / --switchPlateau in the switch rate; the chimera share rises with starting template about as template^switchExponent");
+	setUp.setOption(targetProductMax, "--targetProductMax", "Shared per-target plateau for the rounds after --initialPcrRounds: each template is copied with probability --pcrEfficiency * max(0, 1 - product / --targetProductMax), product being all strands of the target; 0 uses --templateCap (a per-haplotype cap) instead");
+	const auto templateSwitchScaling = PCRSimulator::templateSwitchScalingFromStr(templateSwitchScalingStr);
 
 	setUp.finishSetUp(std::cout);
 	setUp.startARunLog(setUp.pars_.directoryName_);
@@ -63,6 +74,11 @@ int readSimulatorRunner::testPCRSim(
 	PCRSimulator pcrSim(intErrorRate);
 	pcrSim.verbose_ = setUp.pars_.verbose_;
 	pcrSim.pcrEfficiency_ = pcrEfficiency;
+	pcrSim.templateSwitchRate_ = templateSwitchRate;
+	pcrSim.templateSwitchScaling_ = templateSwitchScaling;
+	pcrSim.switchPlateau_ = switchPlateau;
+	pcrSim.targetProductMax_ = targetProductMax;
+	pcrSim.switchExponent_ = switchExponent;
 
 	OutOptions pcrSeqFileOpts(
 			njh::files::make_path(setUp.pars_.directoryName_, "pcrSeqs.fasta"));
@@ -87,7 +103,12 @@ int readSimulatorRunner::testPCRChimeraSim(const njh::progutils::CmdArgs & input
 	uint32_t numThreads = 1;
 	uint32_t startingTemplate = 1000;
 	uint32_t finalReadAmount = 5000;
-	double pcrEfficiency = 0.95;
+	double pcrEfficiency = PCRSimulator::defaultPcrEfficiency;
+	double templateSwitchRate = PCRSimulator::defaultTemplateSwitchRate;
+	std::string templateSwitchScalingStr = PCRSimulator::templateSwitchScalingToStr(PCRSimulator::defaultTemplateSwitchScaling);
+	double switchPlateau = PCRSimulator::defaultSwitchPlateau;
+	double targetProductMax = PCRSimulator::defaultTargetProductMax;
+	double switchExponent = PCRSimulator::defaultSwitchExponent;
 	uint32_t chimeraBasesIn = 5;
 	uint32_t templateCap = 500000000;
 	bool noChimeras = false;
@@ -104,7 +125,13 @@ int readSimulatorRunner::testPCRChimeraSim(const njh::progutils::CmdArgs & input
 
 	setUp.setOption(startingTemplate, "--startingTemplate", "Starting Template");
 	setUp.setOption(finalReadAmount, "--finalReadAmount", "Final Read Amount");
-	setUp.setOption(pcrEfficiency, "--pcrEfficiency", "PCR Efficiency, between 0-1, chance a product gets amplified");
+	setUp.setOption(pcrEfficiency, "--pcrEfficiency", "PCR amplification efficiency, between 0-1: chance a template is copied in a round (yield, drift of low-template haplotypes, PCR-error copies); does not set the chimera rate, see --templateSwitchRate");
+	setUp.setOption(templateSwitchRate, "--templateSwitchRate", "Template switch rate: with power or product scaling the rate when the target's product reaches --switchPlateau, with constant scaling the chance every round that a newly copied strand stops early and is finished on a different template; set 0 for no chimeras");
+	setUp.setOption(templateSwitchScalingStr, "--templateSwitchScaling", "How the template switch rate changes over the PCR, product being all strands made so far for the target: constant (--templateSwitchRate every round), product (--templateSwitchRate * min(1, product / --switchPlateau), so switching happens mostly in late rounds) or power (min(1, --templateSwitchRate * (product / --switchPlateau)^--switchExponent), not capped, so the chimera share keeps rising with starting template)");
+	setUp.setOption(switchPlateau, "--switchPlateau", "With --templateSwitchScaling product or power, the amount of product (strands of the target) at which the switch rate reaches --templateSwitchRate");
+	setUp.setOption(switchExponent, "--switchExponent", "With --templateSwitchScaling power, the exponent of product / --switchPlateau in the switch rate; the chimera share rises with starting template about as template^switchExponent");
+	setUp.setOption(targetProductMax, "--targetProductMax", "Shared per-target plateau for the rounds after --initialPcrRounds: each template is copied with probability --pcrEfficiency * max(0, 1 - product / --targetProductMax), product being all strands of the target; 0 uses --templateCap (a per-haplotype cap) instead");
+	const auto templateSwitchScaling = PCRSimulator::templateSwitchScalingFromStr(templateSwitchScalingStr);
 
 	setUp.setOption(noChimeras, "--noChimeras", "Don't simulate chimeras");
 	setUp.setOption(templateCap, "--templateCap", "Template Cap");
@@ -118,6 +145,11 @@ int readSimulatorRunner::testPCRChimeraSim(const njh::progutils::CmdArgs & input
 	pcrSim.verbose_ = setUp.pars_.verbose_;
 
 	pcrSim.pcrEfficiency_ = pcrEfficiency;
+	pcrSim.templateSwitchRate_ = templateSwitchRate;
+	pcrSim.templateSwitchScaling_ = templateSwitchScaling;
+	pcrSim.switchPlateau_ = switchPlateau;
+	pcrSim.targetProductMax_ = targetProductMax;
+	pcrSim.switchExponent_ = switchExponent;
 	pcrSim.templateCap_ = templateCap;
 	pcrSim.noChimeras_ = noChimeras;
 	pcrSim.chimeraPad_ = chimeraBasesIn;

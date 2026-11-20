@@ -34,7 +34,12 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 	std::map<uint32_t, uint32_t> initialPcrRoundsMap;
 	bfs::path initialPcrRoundsMapFnp;
 	long double errorRate = 3.5e-06;
-	double pcrEfficiency = 0.85;
+	double pcrEfficiency = PCRSimulator::defaultPcrEfficiency;
+	double templateSwitchRate = PCRSimulator::defaultTemplateSwitchRate;
+	std::string templateSwitchScalingStr = PCRSimulator::templateSwitchScalingToStr(PCRSimulator::defaultTemplateSwitchScaling);
+	double switchPlateau = PCRSimulator::defaultSwitchPlateau;
+	double targetProductMax = PCRSimulator::defaultTargetProductMax;
+	double switchExponent = PCRSimulator::defaultSwitchExponent;
 	bool keepPCRSeqs = false;
 	uint32_t chimeraBasesIn = 5;
 	uint32_t templateCap = 500000000;
@@ -53,7 +58,13 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 	setUp.setOption(chimeraBasesIn, "--chimeraBasesIn", "The number of bases needed for a template to lay down");
 	setUp.setOption(keepPCRSeqs, "--keepPCRSeqs", "Keep PCR Seqs");
 	setUp.setOption(errorRate, "--errorRate", "Polymerase Error Rate");
-	setUp.setOption(pcrEfficiency, "--pcrEfficiency", "PCR Efficiency, between 0-1, chance a product gets amplified");
+	setUp.setOption(pcrEfficiency, "--pcrEfficiency", "PCR amplification efficiency, between 0-1: chance a template is copied in a round (yield, drift of low-template haplotypes, PCR-error copies); does not set the chimera rate, see --templateSwitchRate");
+	setUp.setOption(templateSwitchRate, "--templateSwitchRate", "Template switch rate: with power or product scaling the rate when the target's product reaches --switchPlateau, with constant scaling the chance every round that a newly copied strand stops early and is finished on a different template; set 0 for no chimeras");
+	setUp.setOption(templateSwitchScalingStr, "--templateSwitchScaling", "How the template switch rate changes over the PCR, product being all strands made so far for the target: constant (--templateSwitchRate every round), product (--templateSwitchRate * min(1, product / --switchPlateau), so switching happens mostly in late rounds) or power (min(1, --templateSwitchRate * (product / --switchPlateau)^--switchExponent), not capped, so the chimera share keeps rising with starting template)");
+	setUp.setOption(switchPlateau, "--switchPlateau", "With --templateSwitchScaling product or power, the amount of product (strands of the target) at which the switch rate reaches --templateSwitchRate");
+	setUp.setOption(switchExponent, "--switchExponent", "With --templateSwitchScaling power, the exponent of product / --switchPlateau in the switch rate; the chimera share rises with starting template about as template^switchExponent");
+	setUp.setOption(targetProductMax, "--targetProductMax", "Shared per-target plateau for the rounds after --initialPcrRounds: each template is copied with probability --pcrEfficiency * max(0, 1 - product / --targetProductMax), product being all strands of the target; 0 uses --templateCap (a per-haplotype cap) instead");
+	const auto templateSwitchScaling = PCRSimulator::templateSwitchScalingFromStr(templateSwitchScalingStr);
 	setUp.setOption(defaultPcrRounds, "--pcrRounds", "Number of PCR rounds");
 	setUp.setOption(initialPcrRounds, "--initialPcrRounds", "Number of Initial rounds of PCR before sampling");
 	setUp.setOption(initialPcrRoundsMapFnp, "--initialPcrRoundsTable", "Number of Initial rounds of PCR before sampling per starting template amount, columns 1)template, 2) rounds");
@@ -168,7 +179,7 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 	std::function<void()> simSample = [&samplesQueue,&extension,&sampleCountAtom,&fastqDirectory,
 										&lSetup,&illuminaProfileDir,&singleEnd,&refSeqs,
 										&intErrorRate, &defaultPcrRounds, &initialPcrRounds,&verbose,
-										&keepPCRSeqs, &pcrNumThreads,&pcrEfficiency,&simAmountsDir,
+										&keepPCRSeqs, &pcrNumThreads,&pcrEfficiency,&templateSwitchRate,&templateSwitchScaling,&switchPlateau,&switchExponent,&targetProductMax,&simAmountsDir,
 										&chimeraDirectory,&templateCap,&noChimeras,&chimeraBasesIn,&initialPcrRoundsMap,
 										&finalReadAmountSDFrac](){
 
@@ -270,6 +281,11 @@ int readSimulatorRunner::simMultipleMixtureSimPCR(const njh::progutils::CmdArgs 
 				PCRSimulator pcrSim(intErrorRate);
 				pcrSim.verbose_ = verbose;
 				pcrSim.pcrEfficiency_ = pcrEfficiency;
+				pcrSim.templateSwitchRate_ = templateSwitchRate;
+				pcrSim.templateSwitchScaling_ = templateSwitchScaling;
+				pcrSim.switchPlateau_ = switchPlateau;
+				pcrSim.targetProductMax_ = targetProductMax;
+				pcrSim.switchExponent_ = switchExponent;
 				pcrSim.templateCap_ = templateCap;
 				pcrSim.noChimeras_ = noChimeras;
 				pcrSim.chimeraPad_ = chimeraBasesIn;

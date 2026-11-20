@@ -157,10 +157,54 @@ public:
 	uint64_t intErrorRate_;/**< the error rate of PCR converted into uint64_t number, takes the rate and times std::numeric_limits<uint64_t>::max() */
 	bool verbose_{false};
 	/**@todo make this dependent on length of template **/
-	double pcrEfficiency_{0.95}; /**< chance a product gets amplified into the next round*/
+	/**@brief defaults shared by every program that builds a PCRSimulator (simulateSpecificSamples, simMultipleMixtureSimPCR, testPCRSim)
+	 * The default chimera model is power switching (see switchExponent_) on a shared per-target plateau (targetProductMax_), so the chimera share
+	 * rises with starting template. A single rate every round with the per-haplotype templateCap_ is TemplateSwitchScaling::constant with a lower
+	 * templateSwitchRate_ (e.g. 0.0035) and targetProductMax_ = 0
+	 */
+	static constexpr double defaultPcrEfficiency = 0.90;
+	static constexpr double defaultTemplateSwitchRate = 0.163;
+	static constexpr double defaultSwitchExponent = 0.5;
+	static constexpr double defaultTargetProductMax = 1e13;
+	double pcrEfficiency_{defaultPcrEfficiency}; /**< amplification only: chance a template is copied in a round (yield, drift of low-template haplotypes, how many copies carry PCR errors); does not set the chimera rate*/
+	double templateSwitchRate_{defaultTemplateSwitchRate}; /**< chance a newly synthesised strand stops early in a round and is finished on a different template in a later round (template switching); only switches between differing haplotypes inside shared stretches give a chimera. With TemplateSwitchScaling::product this is the rate at and past switchPlateau_, with power the rate when product equals switchPlateau_ */
+
+	/**@brief how the template switch rate changes over the rounds of a PCR, product being all strands made so far for the target (input haplotypes and chimeras, finished and partial)
+	 * constant: templateSwitchRate_ every round
+	 * product: templateSwitchRate_ * min(1, product / switchPlateau_), so switching happens mostly in late rounds, once product has built up
+	 * power: min(1, templateSwitchRate_ * (product / switchPlateau_)^switchExponent_), not capped at switchPlateau_, so the rate keeps rising with product
+	 */
+	enum class TemplateSwitchScaling {
+		constant,
+		product,
+		power
+	};
+	static std::string templateSwitchScalingToStr(TemplateSwitchScaling scaling);
+	static TemplateSwitchScaling templateSwitchScalingFromStr(const std::string & scaling);
+	static constexpr TemplateSwitchScaling defaultTemplateSwitchScaling = TemplateSwitchScaling::power;
+	static constexpr double defaultSwitchPlateau = 1e13;
+	TemplateSwitchScaling templateSwitchScaling_{defaultTemplateSwitchScaling};
+	double switchPlateau_{defaultSwitchPlateau}; /**< with TemplateSwitchScaling::product or power, the amount of product (strands of the target) at which the switch rate reaches templateSwitchRate_ */
+	/**@brief with TemplateSwitchScaling::power, the exponent of product / switchPlateau_ in the switch rate; while product grows with starting template
+	 * the chimera share rises about as template^switchExponent_
+	 */
+	double switchExponent_{defaultSwitchExponent};
+
+	/**@brief the template switch rate for a round that starts with this much product, see TemplateSwitchScaling
+	 */
+	[[nodiscard]] double templateSwitchRateForProduct(double product) const;
 	bool noChimeras_ = false;  /**< whether to simulate chimeras or not */
 	uint32_t chimeraPad_ = 5; /**< number of bases needed for a partial template to lay down */
 	uint64_t templateCap_ = 500000000; /**< maximum amount of template that can be amplified in a round */
+	/**@brief shared per-target plateau for the rounds after initialPcrRounds, replacing the per-haplotype templateCap_ when above 0
+	 * Each template is copied with probability pcrEfficiency_ * max(0, 1 - product / targetProductMax_), product being all strands of the target,
+	 * so every haplotype of a target slows down together as primers and reagents run out, and targets with more starting template make more product.
+	 * 0 uses the per-haplotype templateCap_ instead
+	 */
+	double targetProductMax_{defaultTargetProductMax};
+	/**@brief the chance a template is copied in a round after initialPcrRounds that starts with this much product, see targetProductMax_
+	 */
+	[[nodiscard]] double pcrEfficiencyForProduct(double product) const;
 	/**@brief Generate the number of mutated sequences with how many bases mutated
 	 *
 	 * @param gen the random number generator
@@ -226,6 +270,12 @@ public:
 		std::unordered_map<std::string, MutInfo> chimerasSampledForSequencing_;
 		std::vector<seqInfo> chimeraSeqs_;
 
+		uint64_t finishedCopies_{0}; /**< full-length copies made while chimeras were modelled (only when more than one differing haplotype was amplified) */
+		uint64_t partialCopies_{0}; /**< partial (switching) copies made while chimeras were modelled, partialCopies_/(finishedCopies_ + partialCopies_) is the copy-weighted switch rate */
+		uint32_t switchPlateauRound_{0}; /**< first round that started with product at or past switchPlateau_ (TemplateSwitchScaling::product or power only), 0 if it never did */
+		double finalProduct_{0}; /**< product (all strands of the target) after the last round, while chimeras were modelled */
+		std::map<std::string, double> phaseSeconds_; /**< wall seconds spent in each phase of simLibFast, for profiling (read_selection and read_finish_pcr are from sampleReadsWithoutReplacementFinishPCR, the other phases exclude them) */
+
 	};
 
 	struct SeqGenomeCnt {
@@ -257,7 +307,8 @@ public:
 			std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>> & multipleSeqCounts,
 			uint64_t finalReadAmount, std::ostream & sequenceOutFile,
 			std::mutex & seqFileLock, uint32_t numberOfPCRRoundsLeft,
-			uint32_t numThreads);
+			uint32_t numThreads,
+			std::map<std::string, double> * phaseSeconds = nullptr);
 
 	std::string runPcrSampleSingleTemplate(
 			uint32_t roundsOfPcr,

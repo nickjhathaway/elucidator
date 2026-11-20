@@ -51,7 +51,12 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 	std::map<uint32_t, uint32_t> initialPcrRoundsMap;
 	bfs::path initialPcrRoundsMapFnp;
 	long double errorRate = 3.5e-06;
-	double pcrEfficiency = 0.85;
+	double pcrEfficiency = PCRSimulator::defaultPcrEfficiency;
+	double templateSwitchRate = PCRSimulator::defaultTemplateSwitchRate;
+	std::string templateSwitchScalingStr = PCRSimulator::templateSwitchScalingToStr(PCRSimulator::defaultTemplateSwitchScaling);
+	double switchPlateau = PCRSimulator::defaultSwitchPlateau;
+	double targetProductMax = PCRSimulator::defaultTargetProductMax;
+	double switchExponent = PCRSimulator::defaultSwitchExponent;
 	bool keepPCRSeqs = false;
 	uint32_t chimeraBasesIn = 5;
 	uint32_t templateCap = 500000000;
@@ -90,11 +95,21 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 
 	setUp.setOption(finalReadAmountSDFrac, "--finalReadAmountSDFrac", "final Read Amount SD Frac, the standard deviation of a sample's total read depth as a fraction of sample_total_depth", njh::progutils::ProgramSetUp::CheckCase::GREATERZERO);
 	setUp.setOption(noChimeras, "--noChimeras", "Don't simulate chimeras");
+	uint64_t chimeraSummaryMinReads = 10;
+	double chimeraSummaryMinFrac = 0.005;
+	setUp.setOption(chimeraSummaryMinReads, "--chimeraSummaryMinReads", "Reporting only, simulation_summary.tsv also gives parent/chimera ratios for chimeras with more than this many reads in their sample x target (and at least --chimeraSummaryMinFrac)");
+	setUp.setOption(chimeraSummaryMinFrac, "--chimeraSummaryMinFrac", "Reporting only, see --chimeraSummaryMinReads");
 	setUp.setOption(templateCap, "--templateCap", "Template Cap");
 	setUp.setOption(chimeraBasesIn, "--chimeraBasesIn", "The number of bases needed for a template to lay down");
 	setUp.setOption(keepPCRSeqs, "--keepPCRSeqs", "Keep PCR Seqs");
 	setUp.setOption(errorRate, "--errorRate", "Polymerase Error Rate");
-	setUp.setOption(pcrEfficiency, "--pcrEfficiency", "PCR Efficiency, between 0-1, chance a product gets amplified");
+	setUp.setOption(pcrEfficiency, "--pcrEfficiency", "PCR amplification efficiency, between 0-1: chance a template is copied in a round (yield, drift of low-template haplotypes, PCR-error copies); does not set the chimera rate, see --templateSwitchRate");
+	setUp.setOption(templateSwitchRate, "--templateSwitchRate", "Template switch rate: with power or product scaling the rate when the target's product reaches --switchPlateau, with constant scaling the chance every round that a newly copied strand stops early and is finished on a different template; set 0 for no chimeras");
+	setUp.setOption(templateSwitchScalingStr, "--templateSwitchScaling", "How the template switch rate changes over the PCR, product being all strands made so far for the target: constant (--templateSwitchRate every round), product (--templateSwitchRate * min(1, product / --switchPlateau), so switching happens mostly in late rounds) or power (min(1, --templateSwitchRate * (product / --switchPlateau)^--switchExponent), not capped, so the chimera share keeps rising with starting template)");
+	setUp.setOption(switchPlateau, "--switchPlateau", "With --templateSwitchScaling product or power, the amount of product (strands of the target) at which the switch rate reaches --templateSwitchRate");
+	setUp.setOption(switchExponent, "--switchExponent", "With --templateSwitchScaling power, the exponent of product / --switchPlateau in the switch rate; the chimera share rises with starting template about as template^switchExponent");
+	setUp.setOption(targetProductMax, "--targetProductMax", "Shared per-target plateau for the rounds after --initialPcrRounds: each template is copied with probability --pcrEfficiency * max(0, 1 - product / --targetProductMax), product being all strands of the target; 0 uses --templateCap (a per-haplotype cap) instead");
+	const auto templateSwitchScaling = PCRSimulator::templateSwitchScalingFromStr(templateSwitchScalingStr);
 	setUp.setOption(defaultPcrRounds, "--pcrRounds", "Number of PCR rounds, used when the sample setup file has no pcr_rounds column");
 	setUp.setOption(initialPcrRounds, "--initialPcrRounds", "Number of Initial rounds of PCR before sampling");
 	setUp.setOption(initialPcrRoundsMapFnp, "--initialPcrRoundsTable", "Number of Initial rounds of PCR before sampling per starting template amount, columns 1)template, 2) rounds");
@@ -475,9 +490,69 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 		"non_chimera_total_pcr_count"
 	});
 	std::mutex output_numbers_mut;
+
+	// error and chimera reporting
+	// per source (true haplotype or chimera) per sample x target read counts, PCR errors, sequencing errors and chimera parents
+	// chimera_first_pcr_round is the round the chimera's sequence first formed; the same sequence formed again in later rounds is counted under that first name
+	// pcr errors are substitutions vs the source sequence, sequencing errors are substitutions vs the fragment over the bases each mate covers (seq_bases)
+	table source_read_counts(VecStr{
+		"index", "mid", "sample_name", "target",
+		"source", "is_chimera", "chimera_first_pcr_round",
+		"reads", "frac_of_target_reads",
+		"source_length", "reads_with_pcr_errors", "pcr_error_bases",
+		"reads_with_seq_errors", "seq_error_bases", "seq_bases",
+		"parent_5prime", "parent_3prime", "parent_5prime_reads", "parent_3prime_reads",
+		"weaker_parent_to_chimera_ratio"
+	});
+	struct SampleTargetSummary {
+		std::string index_;
+		std::string mid_;
+		std::string sample_name_;
+		std::string target_;
+		uint32_t haps_amplified_{0};
+		uint64_t starting_genomes_{0};
+		uint64_t finished_copies_{0};
+		uint64_t partial_copies_{0};
+		uint32_t switch_plateau_round_{0};
+		double final_product_{0};
+		uint64_t total_reads_{0};
+		uint64_t chimeric_reads_{0};
+		uint32_t chimera_seqs_{0};
+		uint32_t chimera_seqs_two_parent_{0};
+		uint64_t pcr_reads_with_errors_{0};
+		uint64_t pcr_error_bases_{0};
+		uint64_t pcr_bases_{0};
+		uint64_t seq_reads_with_errors_{0};
+		uint64_t seq_error_bases_{0};
+		uint64_t seq_bases_{0};
+	};
+	struct ChimeraRecord {
+		std::string target_;
+		uint64_t reads_{0};
+		double frac_{0};
+		bool two_parent_{false};
+		double weaker_parent_ratio_{std::numeric_limits<double>::quiet_NaN()};
+	};
+	std::vector<SampleTargetSummary> sample_target_summaries;
+	std::vector<ChimeraRecord> chimera_records;
 	njh::concurrent::LockableQueue<std::string> index_queue(index_names);
 
-	std::function<void()> sim_sample_func = [&index_queue, &sim_samples,
+	// wall seconds summed over samples and sample x targets, for profiling (phase_timings.tsv): the phases of
+	// PCRSimulator::simLibFast plus simLibFast_total, target_total (simulation and reporting per sample x target) and sample_total
+	std::map<std::string, double> phase_seconds;
+	std::mutex phase_seconds_mut;
+	struct PhaseTimer {
+		std::map<std::string, double> & seconds_;
+		std::mutex & mut_;
+		std::string phase_;
+		njh::stopWatch watch_;
+		PhaseTimer(std::map<std::string, double> & seconds, std::mutex & mut, std::string phase) : seconds_(seconds), mut_(mut), phase_(std::move(phase)) {}
+		~PhaseTimer() {
+			std::lock_guard<std::mutex> lock(mut_);
+			seconds_[phase_] += watch_.totalTime();
+		}
+	};
+	std::function<void()> sim_sample_func = [&index_queue, &sim_samples, &phase_seconds, &phase_seconds_mut,
 		&samples_by_index, &index_sample_numbers, &useMids,
 		&illuminaProfileDir, &sim_lib_pars,
 		&keepPCRSeqs, &singleEnd, &extendIlluminaProfile,
@@ -485,10 +560,48 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 		&read_depth_biases,
 		&primers, &setUp,
 		&pcrNumThreads,
-		&intErrorRate, &pcrEfficiency, &templateCap,&noChimeras, &chimeraBasesIn,
+		&intErrorRate, &pcrEfficiency, &templateSwitchRate, &templateSwitchScaling, &switchPlateau, &switchExponent, &targetProductMax, &templateCap,&noChimeras, &chimeraBasesIn,
 		&initialPcrRounds, &initialPcrRoundsMap, &finalReadAmountSDFrac,
 		&population_haps_by_target,
-		&output_numbers, &output_numbers_mut]() {
+		&output_numbers, &output_numbers_mut,
+		&source_read_counts, &sample_target_summaries, &chimera_records]() {
+		// number of positions that differ, plus any length difference
+		auto count_mismatches = [](const std::string & seq, const std::string & ref) -> uint32_t {
+			uint32_t ret = 0;
+			const auto shared_len = std::min(seq.size(), ref.size());
+			for (uint32_t pos = 0; pos < shared_len; ++pos) {
+				if (seq[pos] != ref[pos]) {
+					++ret;
+				}
+			}
+			ret += std::max(seq.size(), ref.size()) - shared_len;
+			return ret;
+		};
+		// sequencing errors in a simulated read, only over the bases that come from the fragment (not the overhang past its end)
+		auto count_seq_errors = [](const std::string & fragment, const std::string & read) -> uint32_t {
+			uint32_t ret = 0;
+			const auto shared_len = std::min(fragment.size(), read.size());
+			for (uint32_t pos = 0; pos < shared_len; ++pos) {
+				if (fragment[pos] != read[pos]) {
+					++ret;
+				}
+			}
+			return ret;
+		};
+		auto common_prefix_len = [](const std::string & a, const std::string & b) -> uint32_t {
+			uint32_t ret = 0;
+			while (ret < a.size() && ret < b.size() && a[ret] == b[ret]) {
+				++ret;
+			}
+			return ret;
+		};
+		auto common_suffix_len = [](const std::string & a, const std::string & b) -> uint32_t {
+			uint32_t ret = 0;
+			while (ret < a.size() && ret < b.size() && a[a.size() - 1 - ret] == b[b.size() - 1 - ret]) {
+				++ret;
+			}
+			return ret;
+		};
 		std::string indexKey;
 		//std::cout << __FILE__ << " " << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
 		njh::randObjectGen<char,uint32_t> baseRGen({'A', 'C', 'G', 'T'}, {1,1,1,1});
@@ -507,6 +620,7 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 			return njh::pasteAsStr(baseRGen.genObjs(numBases));
 		};
 		while (index_queue.getVal(indexKey)) {
+			PhaseTimer sampleTimer(phase_seconds, phase_seconds_mut, "sample_total");
 			uint32_t sampleNumber = index_sample_numbers.at(indexKey);
 			OutOptions targetOutOpts(njh::files::make_path(fastqDirectory, njh::pasteAsStr(indexKey, "_S", sampleNumber, extension)));
 			OutOptions r1OutOpts(njh::files::make_path(fastqDirectory, njh::pasteAsStr(indexKey, "_S", sampleNumber, "_R1_001" + extension)));
@@ -545,6 +659,7 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 
 
 				for (const auto & target : starting_templates_per_hap_id) {
+					PhaseTimer targetTimer(phase_seconds, phase_seconds_mut, "target_total");
 					std::vector<PCRSimulator::SeqGenomeCnt> seqGCounts;
 					// every expected hap including ones that ended up with 0 starting templates, used for reporting only
 					std::vector<PCRSimulator::SeqGenomeCnt> allSeqGCounts;
@@ -586,6 +701,11 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 					PCRSimulator pcrSim(intErrorRate);
 					pcrSim.verbose_ = setUp.pars_.verbose_;
 					pcrSim.pcrEfficiency_ = pcrEfficiency;
+					pcrSim.templateSwitchRate_ = templateSwitchRate;
+					pcrSim.templateSwitchScaling_ = templateSwitchScaling;
+					pcrSim.switchPlateau_ = switchPlateau;
+					pcrSim.targetProductMax_ = targetProductMax;
+					pcrSim.switchExponent_ = switchExponent;
 					pcrSim.templateCap_ = templateCap;
 					pcrSim.noChimeras_ = noChimeras;
 					pcrSim.chimeraPad_ = chimeraBasesIn;
@@ -602,8 +722,42 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 						}
 					}
 					std::unordered_map<std::string, uint32_t> pcred_read_counts;
+					// the sequence each read was amplified from, the input haplotypes plus any chimeras the PCR made
+					std::unordered_map<std::string, std::string> source_seqs;
+					for (const auto & seqGCount : seqGCounts) {
+						source_seqs[seqGCount.seqBase_.name_] = seqGCount.seqBase_.seq_;
+					}
+					struct SourceStats {
+						uint64_t reads_{0};
+						uint64_t reads_with_pcr_errors_{0};
+						uint64_t pcr_error_bases_{0};
+						uint64_t reads_with_seq_errors_{0};
+						uint64_t seq_error_bases_{0};
+						uint64_t seq_bases_{0};
+					};
+					std::map<std::string, SourceStats> source_stats;
+					// copies made while chimeras were modelled, for the copy-weighted switch rate in sample_target_summary.tsv
+					uint64_t simFinishedCopies = 0;
+					uint64_t simPartialCopies = 0;
+					uint32_t simSwitchPlateauRound = 0;
+					double simFinalProduct = 0;
 					if (read_depths_per_target.at(target.first) > 0 && totalGenomes > 0) {
+						njh::stopWatch simLibFastWatch;
 						auto pcrSimAmounts = pcrSim.simLibFast(seqGCounts, pcrReadsOpts, read_depths_per_target.at(target.first), sim_sample.pcr_rounds_, currentInitial, pcrNumThreads);
+						{
+							std::lock_guard<std::mutex> lock(phase_seconds_mut);
+							phase_seconds["simLibFast_total"] += simLibFastWatch.totalTime();
+							for (const auto & phase : pcrSimAmounts.phaseSeconds_) {
+								phase_seconds[phase.first] += phase.second;
+							}
+						}
+						simFinishedCopies = pcrSimAmounts.finishedCopies_;
+						simPartialCopies = pcrSimAmounts.partialCopies_;
+						simSwitchPlateauRound = pcrSimAmounts.switchPlateauRound_;
+						simFinalProduct = pcrSimAmounts.finalProduct_;
+						for (const auto & chi : pcrSimAmounts.chimeraSeqs_) {
+							source_seqs[chi.name_] = chi.seq_;
+						}
 						auto pcrSeqsInOpts = SeqIOOptions::genFastaIn(pcrReadsFnp);
 						SeqInput pcrReader(pcrSeqsInOpts);
 						pcrReader.openIn();
@@ -611,13 +765,28 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 
 						while(pcrReader.readNextRead(targetSeq)){
 							MetaDataInName targetSeqMeta(targetSeq.name_);
-							++pcred_read_counts[targetSeqMeta.getMeta("hap")];
+							const auto source_name = targetSeqMeta.getMeta("hap");
+							++pcred_read_counts[source_name];
+							auto source_seq_search = source_seqs.find(source_name);
+							if (source_seqs.end() == source_seq_search) {
+								std::stringstream ss;
+								ss << __PRETTY_FUNCTION__ << ", error " << "no source sequence for read " << targetSeq.name_ << " in sample " << sampleKey << " target " << target.first << "\n";
+								throw std::runtime_error{ss.str()};
+							}
+							auto & current_source_stats = source_stats[source_name];
+							++current_source_stats.reads_;
+							const uint32_t pcr_errors = count_mismatches(targetSeq.seq_, source_seq_search->second);
+							if (pcr_errors > 0) {
+								++current_source_stats.reads_with_pcr_errors_;
+								current_source_stats.pcr_error_bases_ += pcr_errors;
+							}
 							// hap ids and idNums repeat across targets and samples, so add where the read came from to keep names unique within the output fastq
 							targetSeqMeta.addMeta("sample", sampleKey);
 							targetSeqMeta.addMeta("target", target.first);
 							if (useMids) {
 								targetSeqMeta.addMeta("mid", sim_sample.mid_name_);
 							}
+							targetSeqMeta.addMeta("pcrErrors", pcr_errors);
 							targetSeqMeta.resetMetaInName(targetSeq.name_);
 							//blunt ending
 							if(sim_lib_pars.addBluntEndingArtifact_){
@@ -637,21 +806,37 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 								}
 							}
 							//length
+							uint32_t seq_errors = 0;
 							if(singleEnd){
 								//target, no long read profile yet so errors and qualities come from the R1 profile
-								simulator.simR1(targetSeq, len(targetSeq)).outPutFastq(*targetOut);
+								auto simRead = simulator.simR1(targetSeq, len(targetSeq));
+								seq_errors = count_seq_errors(targetSeq.seq_, simRead.seq_);
+								current_source_stats.seq_bases_ += len(targetSeq);
+								targetSeqMeta.addMeta("seqErrors", seq_errors);
+								targetSeqMeta.resetMetaInName(simRead.name_);
+								simRead.outPutFastq(*targetOut);
 							}else{
-								{
-									//r1
-									auto subSeq = len(targetSeq) > sim_lib_pars.pairedEndLength_? targetSeq.getSubRead(0, sim_lib_pars.pairedEndLength_) : targetSeq;
-									simulator.simR1(subSeq, sim_lib_pars.pairedEndLength_).outPutFastq(*r1Out);
-								}
-								{
-									//r2
-									targetSeq.reverseComplementRead(false, true);
-									auto subSeq = len(targetSeq) > sim_lib_pars.pairedEndLength_? targetSeq.getSubRead(0, sim_lib_pars.pairedEndLength_) : targetSeq;
-									simulator.simR2(subSeq, sim_lib_pars.pairedEndLength_).outPutFastq(*r2Out);
-								}
+								//r1
+								auto r1SubSeq = len(targetSeq) > sim_lib_pars.pairedEndLength_? targetSeq.getSubRead(0, sim_lib_pars.pairedEndLength_) : targetSeq;
+								auto r1Read = simulator.simR1(r1SubSeq, sim_lib_pars.pairedEndLength_);
+								seq_errors += count_seq_errors(r1SubSeq.seq_, r1Read.seq_);
+								current_source_stats.seq_bases_ += len(r1SubSeq);
+								//r2
+								targetSeq.reverseComplementRead(false, true);
+								auto r2SubSeq = len(targetSeq) > sim_lib_pars.pairedEndLength_? targetSeq.getSubRead(0, sim_lib_pars.pairedEndLength_) : targetSeq;
+								auto r2Read = simulator.simR2(r2SubSeq, sim_lib_pars.pairedEndLength_);
+								seq_errors += count_seq_errors(r2SubSeq.seq_, r2Read.seq_);
+								current_source_stats.seq_bases_ += len(r2SubSeq);
+								// seqErrors is the total over both mates
+								targetSeqMeta.addMeta("seqErrors", seq_errors);
+								targetSeqMeta.resetMetaInName(r1Read.name_);
+								targetSeqMeta.resetMetaInName(r2Read.name_);
+								r1Read.outPutFastq(*r1Out);
+								r2Read.outPutFastq(*r2Out);
+							}
+							if (seq_errors > 0) {
+								++current_source_stats.reads_with_seq_errors_;
+								current_source_stats.seq_error_bases_ += seq_errors;
 							}
 						}
 						pcrReader.closeIn();
@@ -690,17 +875,299 @@ int readSimulatorRunner::simulateSpecificSamples(const njh::progutils::CmdArgs &
 								);
 						}
 					}
+					// per source counts, errors, and chimera parents
+					{
+						SampleTargetSummary summary;
+						summary.index_ = indexKey;
+						summary.mid_ = sim_sample.mid_name_;
+						summary.sample_name_ = sampleKey;
+						summary.target_ = target.first;
+						summary.haps_amplified_ = seqGCounts.size();
+						summary.starting_genomes_ = totalGenomes;
+						summary.finished_copies_ = simFinishedCopies;
+						summary.partial_copies_ = simPartialCopies;
+						summary.switch_plateau_round_ = simSwitchPlateauRound;
+						summary.final_product_ = simFinalProduct;
+						summary.total_reads_ = total_pcr_count;
+						std::vector<ChimeraRecord> current_chimera_records;
+						auto add_source_row = [&](const std::string & source_name, const SourceStats & stats, std::vector<std::string> && chimera_cols) {
+							summary.pcr_reads_with_errors_ += stats.reads_with_pcr_errors_;
+							summary.pcr_error_bases_ += stats.pcr_error_bases_;
+							summary.pcr_bases_ += stats.reads_ * source_seqs.at(source_name).size();
+							summary.seq_reads_with_errors_ += stats.reads_with_seq_errors_;
+							summary.seq_error_bases_ += stats.seq_error_bases_;
+							summary.seq_bases_ += stats.seq_bases_;
+							const bool is_chimera = !chimera_cols.empty();
+							std::string chimera_round = "NA";
+							if (is_chimera) {
+								auto round_start = source_name.find("[PCRRound=");
+								if (std::string::npos != round_start) {
+									round_start += std::string("[PCRRound=").size();
+									chimera_round = source_name.substr(round_start, source_name.find(']', round_start) - round_start);
+								}
+							} else {
+								chimera_cols = VecStr{"NA", "NA", "NA", "NA", "NA"};
+							}
+							std::lock_guard<std::mutex> lock(output_numbers_mut);
+							source_read_counts.addRow(
+								indexKey, sim_sample.mid_name_, sampleKey, target.first,
+								source_name, njh::boolToStr(is_chimera), chimera_round,
+								stats.reads_, 0 == total_pcr_count ? 0.0 : static_cast<double>(stats.reads_) / total_pcr_count,
+								source_seqs.at(source_name).size(), stats.reads_with_pcr_errors_, stats.pcr_error_bases_,
+								stats.reads_with_seq_errors_, stats.seq_error_bases_, stats.seq_bases_,
+								chimera_cols[0], chimera_cols[1], chimera_cols[2], chimera_cols[3], chimera_cols[4]);
+						};
+						for (const auto & seqGCount : seqGCounts) {
+							add_source_row(seqGCount.seqBase_.name_, source_stats[seqGCount.seqBase_.name_], {});
+						}
+						for (const auto & source : source_stats) {
+							if (!njh::beginsWith(source.first, "Chi.")) {
+								continue;
+							}
+							++summary.chimera_seqs_;
+							summary.chimeric_reads_ += source.second.reads_;
+							// best two-parent explanation among the input haplotypes, a single crossover with the 5' end from one and 3' end from the other,
+							// picking the pair with the most reads in its less abundant parent
+							const auto & chimera_seq = source_seqs.at(source.first);
+							std::string best_5prime;
+							std::string best_3prime;
+							uint64_t best_weaker_reads = 0;
+							bool found_pair = false;
+							for (const auto & parent_5prime : seqGCounts) {
+								const auto prefix_len = common_prefix_len(chimera_seq, parent_5prime.seqBase_.seq_);
+								for (const auto & parent_3prime : seqGCounts) {
+									if (parent_5prime.seqBase_.name_ == parent_3prime.seqBase_.name_) {
+										continue;
+									}
+									if (prefix_len + common_suffix_len(chimera_seq, parent_3prime.seqBase_.seq_) >= chimera_seq.size()) {
+										const auto weaker_reads = std::min(source_stats[parent_5prime.seqBase_.name_].reads_, source_stats[parent_3prime.seqBase_.name_].reads_);
+										if (!found_pair || weaker_reads > best_weaker_reads) {
+											found_pair = true;
+											best_weaker_reads = weaker_reads;
+											best_5prime = parent_5prime.seqBase_.name_;
+											best_3prime = parent_3prime.seqBase_.name_;
+										}
+									}
+								}
+							}
+							ChimeraRecord record;
+							record.target_ = target.first;
+							record.reads_ = source.second.reads_;
+							record.frac_ = 0 == total_pcr_count ? 0.0 : static_cast<double>(source.second.reads_) / total_pcr_count;
+							record.two_parent_ = found_pair;
+							VecStr chimera_cols;
+							if (found_pair) {
+								++summary.chimera_seqs_two_parent_;
+								record.weaker_parent_ratio_ = static_cast<double>(best_weaker_reads) / source.second.reads_;
+								chimera_cols = VecStr{best_5prime, best_3prime,
+									njh::pasteAsStr(source_stats[best_5prime].reads_),
+									njh::pasteAsStr(source_stats[best_3prime].reads_),
+									njh::pasteAsStr(record.weaker_parent_ratio_)};
+							} else {
+								// made from more than two input haplotypes (a chimera of a chimera)
+								chimera_cols = VecStr{"multiple", "multiple", "NA", "NA", "NA"};
+							}
+							current_chimera_records.emplace_back(record);
+							add_source_row(source.first, source.second, std::move(chimera_cols));
+						}
+						std::lock_guard<std::mutex> lock(output_numbers_mut);
+						sample_target_summaries.emplace_back(summary);
+						addOtherVec(chimera_records, current_chimera_records);
+					}
 				}
 			}
 		}
 	};
 
+	njh::stopWatch simulationWatch;
 	njh::concurrent::runVoidFunctionThreaded(sim_sample_func, numThreads);
+	{
+		table phase_timings_tab(VecStr{"phase", "seconds", "frac_of_simLibFast"});
+		const double simLibFastTotal = phase_seconds.count("simLibFast_total") ? phase_seconds.at("simLibFast_total") : 0;
+		phase_timings_tab.addRow("wall_simulation", simulationWatch.totalTime(), std::numeric_limits<double>::quiet_NaN());
+		for (const auto & phase : phase_seconds) {
+			phase_timings_tab.addRow(phase.first, phase.second, simLibFastTotal > 0 ? phase.second / simLibFastTotal : std::numeric_limits<double>::quiet_NaN());
+		}
+		OutputStream phase_timings_out(njh::files::make_path(setUp.pars_.directoryName_, "phase_timings.tsv"));
+		phase_timings_tab.outPutContents(phase_timings_out, "\t");
+	}
 	//std::cout << __FILE__ << " " << __PRETTY_FUNCTION__ << " " << __LINE__ << std::endl;
 
 	output_numbers.sortTable("sample_name", false);
 	OutputStream out_sample_counts(njh::files::make_path(setUp.pars_.directoryName_, "output_numbers.tsv"));
 	output_numbers.outPutContents(out_sample_counts, "\t");
+
+	// error and chimera reports
+	{
+		source_read_counts.sortTable("sample_name", "target", false);
+		OutputStream source_read_counts_out(njh::files::make_path(setUp.pars_.directoryName_, "source_read_counts.tsv"));
+		source_read_counts.outPutContents(source_read_counts_out, "\t");
+	}
+	auto safe_div = [](double num, double denom) -> double {
+		return 0 == denom ? 0.0 : num / denom;
+	};
+	// quantile, type 7 (R's default)
+	auto quantile = [](std::vector<double> vals, double prob) -> double {
+		if (vals.empty()) {
+			return std::numeric_limits<double>::quiet_NaN();
+		}
+		njh::sort(vals);
+		const double h = (vals.size() - 1) * prob;
+		const auto lower = static_cast<size_t>(std::floor(h));
+		const auto upper = std::min(lower + 1, vals.size() - 1);
+		return vals[lower] + (h - lower) * (vals[upper] - vals[lower]);
+	};
+	auto frac_above = [](const std::vector<double> & vals, double cutoff) -> double {
+		if (vals.empty()) {
+			return std::numeric_limits<double>::quiet_NaN();
+		}
+		return static_cast<double>(std::count_if(vals.begin(), vals.end(), [&cutoff](double val) { return val > cutoff; })) / vals.size();
+	};
+	{
+		table sample_target_summary_tab(VecStr{
+			"index", "mid", "sample_name", "target", "haps_amplified", "starting_genomes",
+			"effective_switch_rate", "switch_plateau_round", "final_product",
+			"total_reads", "chimeric_reads", "frac_chimeric", "chimera_seqs", "chimera_seqs_two_parent",
+			"reads_with_pcr_errors", "frac_reads_with_pcr_errors", "pcr_error_bases", "pcr_error_rate",
+			"reads_with_seq_errors", "frac_reads_with_seq_errors", "seq_error_bases", "seq_error_rate"
+		});
+		for (const auto & summary : sample_target_summaries) {
+			sample_target_summary_tab.addRow(
+				summary.index_, summary.mid_, summary.sample_name_, summary.target_, summary.haps_amplified_, summary.starting_genomes_,
+				// copy-weighted switch rate, NaN when chimeras weren't modelled (a single haplotype, or no shared stretches)
+				0 == summary.finished_copies_ + summary.partial_copies_ ? std::numeric_limits<double>::quiet_NaN() : safe_div(summary.partial_copies_, summary.finished_copies_ + summary.partial_copies_),
+				summary.switch_plateau_round_,
+				// all strands of the target after the last round, 0 when chimeras weren't modelled
+				summary.final_product_,
+				summary.total_reads_, summary.chimeric_reads_, safe_div(summary.chimeric_reads_, summary.total_reads_),
+				summary.chimera_seqs_, summary.chimera_seqs_two_parent_,
+				summary.pcr_reads_with_errors_, safe_div(summary.pcr_reads_with_errors_, summary.total_reads_),
+				summary.pcr_error_bases_, safe_div(summary.pcr_error_bases_, summary.pcr_bases_),
+				summary.seq_reads_with_errors_, safe_div(summary.seq_reads_with_errors_, summary.total_reads_),
+				summary.seq_error_bases_, safe_div(summary.seq_error_bases_, summary.seq_bases_));
+		}
+		sample_target_summary_tab.sortTable("sample_name", "target", false);
+		OutputStream sample_target_summary_out(njh::files::make_path(setUp.pars_.directoryName_, "sample_target_summary.tsv"));
+		sample_target_summary_tab.outPutContents(sample_target_summary_out, "\t");
+	}
+	{
+		struct TargetTotals {
+			uint32_t sample_targets_{0};
+			uint32_t multi_hap_sample_targets_{0};
+			uint32_t multi_hap_sample_targets_with_chimeras_{0};
+			uint64_t total_reads_{0};
+			uint64_t multi_hap_reads_{0};
+			uint64_t chimeric_reads_{0};
+			uint64_t chimera_seqs_{0};
+			uint64_t pcr_error_bases_{0};
+			uint64_t pcr_bases_{0};
+			uint64_t seq_error_bases_{0};
+			uint64_t seq_bases_{0};
+			std::vector<double> multi_hap_frac_chimeric_;
+			std::vector<double> weaker_parent_ratios_;
+		};
+		std::map<std::string, TargetTotals> target_totals;
+		TargetTotals all_totals;
+		for (const auto & summary : sample_target_summaries) {
+			for (auto * totals : std::vector<TargetTotals *>{&target_totals[summary.target_], &all_totals}) {
+				++totals->sample_targets_;
+				totals->total_reads_ += summary.total_reads_;
+				totals->chimeric_reads_ += summary.chimeric_reads_;
+				totals->chimera_seqs_ += summary.chimera_seqs_;
+				totals->pcr_error_bases_ += summary.pcr_error_bases_;
+				totals->pcr_bases_ += summary.pcr_bases_;
+				totals->seq_error_bases_ += summary.seq_error_bases_;
+				totals->seq_bases_ += summary.seq_bases_;
+				if (summary.haps_amplified_ > 1 && summary.total_reads_ > 0) {
+					++totals->multi_hap_sample_targets_;
+					totals->multi_hap_reads_ += summary.total_reads_;
+					totals->multi_hap_frac_chimeric_.emplace_back(safe_div(summary.chimeric_reads_, summary.total_reads_));
+					if (summary.chimeric_reads_ > 0) {
+						++totals->multi_hap_sample_targets_with_chimeras_;
+					}
+				}
+			}
+		}
+		std::vector<double> all_ratios;
+		std::vector<double> passing_ratios;
+		std::vector<double> failing_ratios;
+		uint64_t two_parent_chimera_seqs = 0;
+		for (const auto & record : chimera_records) {
+			if (!record.two_parent_) {
+				continue;
+			}
+			++two_parent_chimera_seqs;
+			target_totals[record.target_].weaker_parent_ratios_.emplace_back(record.weaker_parent_ratio_);
+			all_ratios.emplace_back(record.weaker_parent_ratio_);
+			if (record.reads_ > chimeraSummaryMinReads && record.frac_ >= chimeraSummaryMinFrac) {
+				passing_ratios.emplace_back(record.weaker_parent_ratio_);
+			} else {
+				failing_ratios.emplace_back(record.weaker_parent_ratio_);
+			}
+		}
+		table target_summary_tab(VecStr{
+			"target", "sample_targets", "multi_hap_sample_targets", "multi_hap_sample_targets_with_chimeras",
+			"total_reads", "multi_hap_reads", "chimeric_reads", "frac_chimeric_multi_hap", "median_sample_frac_chimeric_multi_hap",
+			"chimera_seqs", "two_parent_chimera_seqs", "median_weaker_parent_to_chimera_ratio",
+			"pcr_error_rate", "seq_error_rate"
+		});
+		for (const auto & totals : target_totals) {
+			target_summary_tab.addRow(
+				totals.first, totals.second.sample_targets_, totals.second.multi_hap_sample_targets_, totals.second.multi_hap_sample_targets_with_chimeras_,
+				totals.second.total_reads_, totals.second.multi_hap_reads_, totals.second.chimeric_reads_,
+				safe_div(totals.second.chimeric_reads_, totals.second.multi_hap_reads_),
+				quantile(totals.second.multi_hap_frac_chimeric_, 0.5),
+				totals.second.chimera_seqs_, totals.second.weaker_parent_ratios_.size(),
+				quantile(totals.second.weaker_parent_ratios_, 0.5),
+				safe_div(totals.second.pcr_error_bases_, totals.second.pcr_bases_),
+				safe_div(totals.second.seq_error_bases_, totals.second.seq_bases_));
+		}
+		OutputStream target_summary_out(njh::files::make_path(setUp.pars_.directoryName_, "target_summary.tsv"));
+		target_summary_tab.outPutContents(target_summary_out, "\t");
+
+		uint64_t pcr_reads_with_errors = 0;
+		uint64_t seq_reads_with_errors = 0;
+		for (const auto & summary : sample_target_summaries) {
+			pcr_reads_with_errors += summary.pcr_reads_with_errors_;
+			seq_reads_with_errors += summary.seq_reads_with_errors_;
+		}
+		table simulation_summary_tab(VecStr{"metric", "value"});
+		simulation_summary_tab.addRow("pcr_efficiency", pcrEfficiency);
+		simulation_summary_tab.addRow("template_switch_rate", templateSwitchRate);
+		simulation_summary_tab.addRow("template_switch_scaling", PCRSimulator::templateSwitchScalingToStr(templateSwitchScaling));
+		simulation_summary_tab.addRow("switch_plateau", switchPlateau);
+		simulation_summary_tab.addRow("target_product_max", targetProductMax);
+		simulation_summary_tab.addRow("switch_exponent", switchExponent);
+		simulation_summary_tab.addRow("sample_targets", all_totals.sample_targets_);
+		simulation_summary_tab.addRow("multi_hap_sample_targets", all_totals.multi_hap_sample_targets_);
+		simulation_summary_tab.addRow("total_reads", all_totals.total_reads_);
+		simulation_summary_tab.addRow("frac_reads_with_pcr_errors", safe_div(pcr_reads_with_errors, all_totals.total_reads_));
+		simulation_summary_tab.addRow("pcr_error_rate_per_base", safe_div(all_totals.pcr_error_bases_, all_totals.pcr_bases_));
+		simulation_summary_tab.addRow("frac_reads_with_seq_errors", safe_div(seq_reads_with_errors, all_totals.total_reads_));
+		simulation_summary_tab.addRow("seq_error_rate_per_base", safe_div(all_totals.seq_error_bases_, all_totals.seq_bases_));
+		simulation_summary_tab.addRow("chimeric_reads", all_totals.chimeric_reads_);
+		simulation_summary_tab.addRow("frac_chimeric_all_reads", safe_div(all_totals.chimeric_reads_, all_totals.total_reads_));
+		simulation_summary_tab.addRow("frac_chimeric_multi_hap_reads", safe_div(all_totals.chimeric_reads_, all_totals.multi_hap_reads_));
+		simulation_summary_tab.addRow("median_sample_target_frac_chimeric_multi_hap", quantile(all_totals.multi_hap_frac_chimeric_, 0.5));
+		simulation_summary_tab.addRow("frac_multi_hap_sample_targets_with_chimeras", safe_div(all_totals.multi_hap_sample_targets_with_chimeras_, all_totals.multi_hap_sample_targets_));
+		simulation_summary_tab.addRow("chimera_seqs", all_totals.chimera_seqs_);
+		simulation_summary_tab.addRow("two_parent_chimera_seqs", two_parent_chimera_seqs);
+		for (const auto & ratios : std::vector<std::pair<std::string, const std::vector<double> *>>{
+			     {"all", &all_ratios},
+			     {njh::pasteAsStr("passing_gt", chimeraSummaryMinReads, "reads_ge", chimeraSummaryMinFrac, "frac"), &passing_ratios},
+			     {"failing", &failing_ratios}}) {
+			const std::string prefix = "weaker_parent_to_chimera_ratio_" + ratios.first + "_";
+			simulation_summary_tab.addRow(prefix + "n", ratios.second->size());
+			for (const auto prob : std::vector<double>{0.05, 0.25, 0.5, 0.75, 0.95}) {
+				simulation_summary_tab.addRow(prefix + "q" + njh::leftPadNumStr<uint32_t>(std::round(prob * 100), 99), quantile(*ratios.second, prob));
+			}
+			for (const auto cutoff : std::vector<double>{2, 8, 16}) {
+				simulation_summary_tab.addRow(prefix + "frac_gt" + njh::pasteAsStr(cutoff), frac_above(*ratios.second, cutoff));
+			}
+		}
+		OutputStream simulation_summary_out(njh::files::make_path(setUp.pars_.directoryName_, "simulation_summary.tsv"));
+		simulation_summary_tab.outPutContents(simulation_summary_out, "\t");
+	}
 
 	return 0;
 }

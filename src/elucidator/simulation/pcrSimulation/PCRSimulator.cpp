@@ -7,6 +7,10 @@
 
 
 #include "PCRSimulator.hpp"
+#include <algorithm>
+#include <cmath>
+#include <random>
+#include <stack>
 
 #include <njhseq/alignment/aligner/aligner.hpp>
 #include <njhseq/readVectorManipulation/readVectorHelpers.h>
@@ -234,6 +238,50 @@ Json::Value ChimeraProfiler::SegmentsForSeqs::toJson() const {
 PCRSimulator::PCRSimulator(uint64_t intErrorRate) : intErrorRate_(intErrorRate) {
 }
 
+std::string PCRSimulator::templateSwitchScalingToStr(const TemplateSwitchScaling scaling) {
+	switch (scaling) {
+		case TemplateSwitchScaling::constant:
+			return "constant";
+		case TemplateSwitchScaling::product:
+			return "product";
+		case TemplateSwitchScaling::power:
+			return "power";
+	}
+	return "constant";
+}
+
+PCRSimulator::TemplateSwitchScaling PCRSimulator::templateSwitchScalingFromStr(const std::string& scaling) {
+	if ("constant" == scaling) {
+		return TemplateSwitchScaling::constant;
+	}
+	if ("product" == scaling) {
+		return TemplateSwitchScaling::product;
+	}
+	if ("power" == scaling) {
+		return TemplateSwitchScaling::power;
+	}
+	std::stringstream ss;
+	ss << __PRETTY_FUNCTION__ << ", error " << "unknown template switch scaling: " << scaling << ", options are constant, product or power" << "\n";
+	throw std::runtime_error{ss.str()};
+}
+
+double PCRSimulator::templateSwitchRateForProduct(const double product) const {
+	if (TemplateSwitchScaling::constant == templateSwitchScaling_ || switchPlateau_ <= 0) {
+		return templateSwitchRate_;
+	}
+	if (TemplateSwitchScaling::power == templateSwitchScaling_) {
+		return std::min(1.0, templateSwitchRate_ * std::pow(product / switchPlateau_, switchExponent_));
+	}
+	return templateSwitchRate_ * std::min(1.0, product / switchPlateau_);
+}
+
+double PCRSimulator::pcrEfficiencyForProduct(const double product) const {
+	if (targetProductMax_ <= 0) {
+		return pcrEfficiency_;
+	}
+	return pcrEfficiency_ * std::max(0.0, 1.0 - product / targetProductMax_);
+}
+
 
 std::unordered_map<uint32_t, uint32_t> PCRSimulator::genMutCounts(
 	std::mt19937_64& gen,
@@ -298,106 +346,80 @@ void PCRSimulator::runPcr(uint32_t numThreads,
                           uint64_t currentStartingTemplate,
                           std::unordered_map<std::string, uint64_t>& currentSeqMap,
                           std::mutex& currentSeqMapLock) const {
-	std::vector<njh::randomGenerator> gens;
-	std::vector<std::unordered_map<char, njh::randObjectGen<char, uint32_t>>> charGens;
-	for (uint32_t t = 0; t < numThreads; ++t) {
-		gens.emplace_back();
-		std::unordered_map<char, njh::randObjectGen<char, uint32_t>> charGen;
-		charGen.emplace(
-			'T', njh::randObjectGen<char, uint32_t>(std::vector<char>{'A', 'C', 'G'}, std::vector<uint32_t>{1, 80, 1}));
-		charGen.emplace(
-			'C', njh::randObjectGen<char, uint32_t>(std::vector<char>{'A', 'T', 'G'}, std::vector<uint32_t>{1, 80, 1}));
-		charGen.emplace(
-			'G', njh::randObjectGen<char, uint32_t>(std::vector<char>{'C', 'A', 'T'}, std::vector<uint32_t>{1, 80, 1}));
-		charGen.emplace(
-			'A', njh::randObjectGen<char, uint32_t>(std::vector<char>{'C', 'G', 'T'}, std::vector<uint32_t>{1, 80, 1}));
-		charGens.emplace_back(charGen);
-	}
+	//numThreads is unused: each round is a few binomial draws plus one draw per mutated copy
+	(void) numThreads;
+	njh::randomGenerator gen;
+	std::unordered_map<char, njh::randObjectGen<char, uint32_t>> charGen;
+	charGen.emplace(
+		'T', njh::randObjectGen<char, uint32_t>(std::vector<char>{'A', 'C', 'G'}, std::vector<uint32_t>{1, 80, 1}));
+	charGen.emplace(
+		'C', njh::randObjectGen<char, uint32_t>(std::vector<char>{'A', 'T', 'G'}, std::vector<uint32_t>{1, 80, 1}));
+	charGen.emplace(
+		'G', njh::randObjectGen<char, uint32_t>(std::vector<char>{'C', 'A', 'T'}, std::vector<uint32_t>{1, 80, 1}));
+	charGen.emplace(
+		'A', njh::randObjectGen<char, uint32_t>(std::vector<char>{'C', 'G', 'T'}, std::vector<uint32_t>{1, 80, 1}));
 
 	std::vector<uint64_t> readPositions(currentSeq.length());
 	njh::iota<uint64_t>(readPositions, 0);
+
+	//each base of a copy is mutated with probability perBaseRate, so the errors in a copy are Binomial(length, perBaseRate);
+	//each round draws how many copies carry any error, Binomial(copies, copyErrorRate), then each of those copies' error count
+	//from the binomial conditioned on at least one error. Mutations are substitutions, so the length is the same for every product
+	const uint64_t seqLen = currentSeq.size();
+	const long double perBaseRate = (static_cast<long double>(intErrorRate_) + 1.0L) /
+	                                (static_cast<long double>(std::numeric_limits<uint64_t>::max()) + 1.0L);
+	const double copyErrorRate = 0 == seqLen ? 0.0 : static_cast<double>(-std::expm1(static_cast<long double>(seqLen) * std::log1p(-perBaseRate)));
+	//cumulative P(errors <= k | errors >= 1) for k = 1, 2, ...
+	std::vector<double> errorCountCumProbs;
+	if (copyErrorRate > 0) {
+		long double pmf = std::exp(static_cast<long double>(seqLen) * std::log1p(-perBaseRate)); //P(0 errors)
+		long double cum = 0;
+		for (uint64_t k = 1; k <= seqLen; ++k) {
+			pmf *= static_cast<long double>(seqLen - k + 1) / k * perBaseRate / (1.0L - perBaseRate);
+			cum += pmf;
+			errorCountCumProbs.emplace_back(static_cast<double>(cum / copyErrorRate));
+			if (cum / copyErrorRate >= 1.0L - 1e-15L) {
+				break;
+			}
+		}
+		errorCountCumProbs.back() = 1.0;
+	}
+
 	std::stack<PCRProduct> pcrProducts;
 	pcrProducts.emplace(currentSeq, pcrRounds, currentStartingTemplate);
 	while (!pcrProducts.empty()) {
 		auto currentPCRProduct = pcrProducts.top();
 		pcrProducts.pop();
 		for (uint32_t round = 1; round <= currentPCRProduct.pcrRoundsLeft_; ++round) {
-			uint32_t duplicatingAmount = 0;
-			for (uint32_t temp = 0; temp < currentPCRProduct.templateAmount_; ++temp) {
-				if (gens.front()() < pcrEfficiency_) {
-					++duplicatingAmount;
+			std::binomial_distribution<uint64_t> duplicatingDist(currentPCRProduct.templateAmount_, pcrEfficiency_);
+			const uint64_t duplicatingAmount = duplicatingDist(gen.mtGen_);
+			uint64_t numberMutated = 0;
+			std::vector<std::string> mutants;
+			std::unordered_map<uint32_t, uint32_t> muts;
+			if (duplicatingAmount > 0 && copyErrorRate > 0) {
+				std::binomial_distribution<uint64_t> mutatedDist(duplicatingAmount, copyErrorRate);
+				numberMutated = mutatedDist(gen.mtGen_);
+				mutants.reserve(numberMutated);
+				for (uint64_t mutant = 0; mutant < numberMutated; ++mutant) {
+					const double draw = gen.unifRand();
+					const uint32_t count = 1 + static_cast<uint32_t>(
+						std::lower_bound(errorCountCumProbs.begin(), errorCountCumProbs.end(), draw) - errorCountCumProbs.begin());
+					++muts[count];
+					mutants.emplace_back(mutateSeq(currentPCRProduct.pcrSeq_, count, readPositions, gen, charGen));
 				}
 			}
-
-			std::unordered_map<uint32_t, uint32_t> muts;
-			std::vector<std::string> mutants;
-			std::mutex mutsLock;
-			uint32_t numberMutated = 0;
-			if (duplicatingAmount > 0) {
-				//generate the number of mutants and the number of bases mutated
-				std::vector<uint64_t> tempAmounts;
-				if (duplicatingAmount > numThreads) {
-					tempAmounts = spreadReadNumAcrossThreads(duplicatingAmount, numThreads);
-				} else {
-					tempAmounts.emplace_back(duplicatingAmount);
-					for (uint32_t t = 1; t < numThreads; ++t) {
-						tempAmounts.emplace_back(0);
-					}
-				}
-				auto mutate = [this, &readPositions,&mutsLock,&muts,&tempAmounts,&currentPCRProduct,&gens,&charGens,&
-							numberMutated,&mutants](uint32_t threadNum) {
-					if (tempAmounts[threadNum] > 0) {
-						std::unordered_map<uint32_t, uint32_t> currentMuts;
-						std::vector<std::string> currentMutSeqs;
-						for (uint32_t read = 0; read < tempAmounts[threadNum]; ++read) {
-							uint32_t count = 0;
-							for (uint32_t base = 0; base < currentPCRProduct.pcrSeq_.size(); ++base) {
-								if (gens[threadNum].mtGen_() <= intErrorRate_) {
-									++count;
-								}
-							}
-							if (count != 0) {
-								++currentMuts[count];
-								currentMutSeqs.emplace_back(mutateSeq(currentPCRProduct.pcrSeq_, count, readPositions, gens[threadNum],
-								                                      charGens[threadNum]));
-							}
-						}
-
-						//auto currentMuts = genMutCounts(gens[threadNum].mtGen_, tempAmounts[threadNum], currentPCRProduct.pcrSeq_.size());
-						{
-							std::lock_guard<std::mutex> lock(mutsLock);
-							for (const auto& mut: currentMuts) {
-								muts[mut.first] += mut.second;
-								numberMutated += mut.second;
-							}
-							addOtherVec(mutants, currentMutSeqs);
-						}
-					}
-				};
-				if (numThreads <= 1) {
-					mutate(0);
-				} else {
-					std::vector<std::thread> threads;
-					for (uint32_t thread = 0; thread < numThreads; ++thread) {
-						threads.emplace_back(std::thread(mutate, thread));
-					}
-					for (auto& t: threads) {
-						t.join();
-					}
-				}
-				if (verbose_) {
-					std::cout << "Round: " << round << std::endl;
-					std::cout << '\t' << "seq: " << currentPCRProduct.pcrSeq_ << std::endl;
-					std::cout << '\t' << "duplicatingAmount: " << duplicatingAmount << std::endl;
-					std::cout << "\t" << "pcrRoundsLeft: " << currentPCRProduct.pcrRoundsLeft_ << std::endl;
-					std::cout << "\t" << "templateAmount: " << currentPCRProduct.templateAmount_ << std::endl;
-					std::cout << "\t" << "numberMutated: " << numberMutated << std::endl;
-					std::cout << "\t" << "mutants.size(): " << mutants.size() << std::endl;
-					std::cout << "\t" << "pcrProducts Left: " << pcrProducts.size() << std::endl;
-					std::cout << "\t" << "muts " << std::endl;
-					for (const auto& mut: muts) {
-						std::cout << "\t\t" << mut.first << "\t" << mut.second << std::endl;
-					}
+			if (verbose_ && duplicatingAmount > 0) {
+				std::cout << "Round: " << round << std::endl;
+				std::cout << '\t' << "seq: " << currentPCRProduct.pcrSeq_ << std::endl;
+				std::cout << '\t' << "duplicatingAmount: " << duplicatingAmount << std::endl;
+				std::cout << "\t" << "pcrRoundsLeft: " << currentPCRProduct.pcrRoundsLeft_ << std::endl;
+				std::cout << "\t" << "templateAmount: " << currentPCRProduct.templateAmount_ << std::endl;
+				std::cout << "\t" << "numberMutated: " << numberMutated << std::endl;
+				std::cout << "\t" << "mutants.size(): " << mutants.size() << std::endl;
+				std::cout << "\t" << "pcrProducts Left: " << pcrProducts.size() << std::endl;
+				std::cout << "\t" << "muts " << std::endl;
+				for (const auto& mut: muts) {
+					std::cout << "\t\t" << mut.first << "\t" << mut.second << std::endl;
 				}
 			}
 			//add on the number of seqs that weren't mutated;
@@ -410,7 +432,6 @@ void PCRSimulator::runPcr(uint32_t numThreads,
 				for (const auto& mutSeq: mutants) {
 					currentSeqMap[mutSeq] += 1;
 				}
-				//exit(1);
 			} else {
 				for (const auto& mutSeq: mutants) {
 					//add on the new mutants to go through the rest of the PCR rounds
@@ -483,6 +504,12 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
                                                     uint32_t initialPcrRounds,
                                                     uint32_t numThreads) {
 	SimHapCounts ret;
+	//wall time per phase, for profiling; lap() adds the time since the last lap to a phase
+	njh::stopWatch phaseWatch;
+	auto lap = [&phaseWatch, &ret](const std::string& phase) {
+		ret.phaseSeconds_[phase] += phaseWatch.timeLap();
+		phaseWatch.startNewLap();
+	};
 	if (initialPcrRounds >= pcrRounds) {
 		std::stringstream ss;
 		ss << "Error in " << __PRETTY_FUNCTION__ << std::endl;
@@ -529,8 +556,10 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 		std::unordered_map<std::string, uint64_t> seqCounts;
 		std::mutex seqMapLock;
 
+		lap("setup");
 		runPcr(numThreads, initialPcrRounds, seq.seqBase_.seq_,
 		       totalTemplateStrandCounts[seq.seqBase_.name_], seqCounts, seqMapLock);
+		lap("initial_pcr");
 
 		//		uint64_t finalPerfectAmount = templateAmountCounts[seq.name_] * std::pow(2, initialPcrRounds);
 
@@ -556,7 +585,9 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 			auto maxLen = readVec::getMaxLength(seqsSampled);
 			ChimeraProfiler chiProf;
 			aligner alignerObj(maxLen, gapScoringParameters(5, 1, 0, 0, 0, 0));
+			lap("setup");
 			chiProf.addSegsForSeqs(seqsSampled, alignerObj, chimeraPad_);
+			lap("chimera_profiling");
 			uint32_t seqsWithSegs = 0;
 			for (const auto& seq: chiProf.segsForSeqs_) {
 				if (!seq.second->sharedSegs_.empty()) {
@@ -586,8 +617,53 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 				//					}
 				//				}
 				njh::randomGenerator rGen;
+				//each round a template is copied with probability efficiency; a copy is a partial strand that can switch to another
+				//template with probability switchRate (templateSwitchRateForProduct for that round), otherwise a finished full-length
+				//product. efficiency is pcrEfficiency_ in the initial rounds and pcrEfficiencyForProduct after them
+				auto splitTemplates = [this, &rGen, &ret](uint64_t templates, uint32_t round, double switchRate, double efficiency, uint64_t& finished, uint64_t& partial) {
+					const uint64_t finishedBefore = finished;
+					const uint64_t partialBefore = partial;
+					if (round > 10) {
+						//templateCap_ limits all copies made in the round, which are then split into finished and partial; with
+						//targetProductMax_ the shared per-target plateau is already in efficiency and templateCap_ isn't used
+						const double copies = targetProductMax_ > 0 ? efficiency * templates : std::min<double>(efficiency * templates, templateCap_);
+						finished += std::round(copies * (1 - switchRate));
+						partial += std::round(copies * switchRate);
+					} else {
+						//partial ~ Binomial(templates, efficiency * switchRate), then finished ~ Binomial(the rest, the chance a
+						//template that wasn't partial was copied in full)
+						const double partialProb = std::min(1.0, efficiency * switchRate);
+						std::binomial_distribution<uint64_t> partialDist(templates, partialProb);
+						const uint64_t partialDraw = partialDist(rGen.mtGen_);
+						const double finishedProb = partialProb >= 1.0 ? 0.0 : std::max(0.0, (efficiency - partialProb) / (1.0 - partialProb));
+						std::binomial_distribution<uint64_t> finishedDist(templates - partialDraw, finishedProb);
+						partial += partialDraw;
+						finished += finishedDist(rGen.mtGen_);
+					}
+					ret.finishedCopies_ += finished - finishedBefore;
+					ret.partialCopies_ += partial - partialBefore;
+				};
 				std::unordered_map<std::string, uint64_t> finishedAmount;
 				std::unordered_map<std::string, uint64_t> partialTotalAmount;
+				//all strands of this target so far, finished and partial, input haplotypes and chimeras
+				auto targetProduct = [&finishedAmount, &partialTotalAmount]() -> double {
+					double product = 0;
+					for (const auto& amount: finishedAmount) {
+						product += amount.second;
+					}
+					for (const auto& amount: partialTotalAmount) {
+						product += amount.second;
+					}
+					return product;
+				};
+				//the switch rate for a round, from the product at the start of the round
+				auto roundSwitchRate = [this, &ret, &targetProduct](uint32_t round) -> double {
+					const double product = targetProduct();
+					if (TemplateSwitchScaling::constant != templateSwitchScaling_ && 0 == ret.switchPlateauRound_ && product >= switchPlateau_) {
+						ret.switchPlateauRound_ = round;
+					}
+					return templateSwitchRateForProduct(product);
+				};
 				uint64_t intialRoundChiTotal = 0;
 				std::unordered_map<std::string, uint64_t> chimeras;
 				std::mutex chimerasMut; {
@@ -600,28 +676,21 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 						partialTotalAmount[seqSampled.seqBase_.name_] = 0;
 					}
 
+					//input sequences re-created by a template switch between identical stretches, added to the sampling pool after the initial rounds
+					std::unordered_map<std::string, uint64_t> recreatedInputAmount;
 					for (auto round: iter::range<uint32_t>(1, initialPcrRounds + 1)) {
 						//						std::cout << "round: " << round << std::endl;
+						//chimeras holds only the products formed this round; they are added to finishedAmount once, below,
+						//and amplified from then on with the other chimera templates
+						chimeras.clear();
+						const double switchRate = roundSwitchRate(round);
 						for (const auto& seqSampled: seqsSampled) {
 							//							std::cout << "seq: " << seqSampled.seqBase_.name_ << std::endl;
 							auto chiStart = chiProf.segsForSeqs_[seqSampled.seqBase_.name_]->minSegmentStart();
 							auto chiStop = chiProf.segsForSeqs_[seqSampled.seqBase_.name_]->maxSegmentEnd();
 							uint64_t finished = 0;
 							uint64_t partial = 0;
-							if (round > 10) {
-								finished += std::min<uint64_t>(std::round(pcrEfficiency_ * finishedAmount[seqSampled.seqBase_.name_]),
-								                               templateCap_);
-								partial += std::min<uint64_t>(
-									std::round((1 - pcrEfficiency_) * finishedAmount[seqSampled.seqBase_.name_]), templateCap_);
-							} else {
-								for (uint64_t temp = 0; temp < finishedAmount[seqSampled.seqBase_.name_]; ++temp) {
-									if (rGen.unifRand() < pcrEfficiency_) {
-										++finished;
-									} else {
-										++partial;
-									}
-								}
-							}
+							splitTemplates(finishedAmount[seqSampled.seqBase_.name_], round, switchRate, pcrEfficiency_, finished, partial);
 							if (partial > 0) {
 								std::vector<uint64_t> partials;
 								if (partial > numThreads) {
@@ -706,19 +775,7 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 							auto chiStop = chiProf.segsForSeqs_[chiSeq.name_]->maxSegmentEnd();
 							uint64_t finished = 0;
 							uint64_t partial = 0;
-							if (round > 10) {
-								finished += std::min<uint64_t>(std::round(pcrEfficiency_ * finishedAmount[chiSeq.name_]), templateCap_);
-								partial += std::min<uint64_t>(std::round((1 - pcrEfficiency_) * finishedAmount[chiSeq.name_]),
-								                              templateCap_);
-							} else {
-								for (uint64_t temp = 0; temp < finishedAmount[chiSeq.name_]; ++temp) {
-									if (rGen.unifRand() < pcrEfficiency_) {
-										++finished;
-									} else {
-										++partial;
-									}
-								}
-							}
+							splitTemplates(finishedAmount[chiSeq.name_], round, switchRate, pcrEfficiency_, finished, partial);
 							if (partial > 0) {
 								std::vector<uint64_t> partials;
 								if (partial > numThreads) {
@@ -803,6 +860,7 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 								if (seqSampled.seqBase_.seq_ == chi.first) {
 									matchesInputSeq = true;
 									finishedAmount[seqSampled.seqBase_.name_] += chi.second;
+									recreatedInputAmount[seqSampled.seqBase_.name_] += chi.second;
 									break;
 								}
 							}
@@ -827,55 +885,25 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 						}
 					}
 					//					roundCountsTab.outPutContentOrganized(std::cout);
-					for (const auto& chi: chimeras) {
-						bool matchesInputSeq = false;
+					lap("initial_round_chimeras");
+					//after the initial rounds, put every chimera into the sampling pool at its amplified amount (finishedAmount,
+					//grown each round since it formed), as the input sequences enter with their amplified counts from runPcr
+					for (const auto& recreated: recreatedInputAmount) {
 						for (const auto& seqSampled: seqsSampled) {
-							if (seqSampled.seqBase_.seq_ == chi.first) {
-								matchesInputSeq = true;
-								finishedAmount[seqSampled.seqBase_.name_] += chi.second;
-								allSeqCounts[seqSampled.seqBase_.name_][seqSampled.seqBase_.seq_] += chi.second;
+							if (seqSampled.seqBase_.name_ == recreated.first) {
+								allSeqCounts[seqSampled.seqBase_.name_][seqSampled.seqBase_.seq_] += recreated.second;
+								barcodedSeqs[seqSampled.seqBase_.name_] = seqSampled.seqBase_.seq_;
 								break;
 							}
 						}
-						bool matchesPreviousChimera = false;
-						if (!matchesInputSeq) {
-							intialRoundChiTotal += chi.second;
-							for (const auto& chimeraSeq: chimeraSeqs) {
-								if (chimeraSeq.seq_ == chi.first) {
-									matchesPreviousChimera = true;
-									finishedAmount[chimeraSeq.name_] += chi.second;
-									allSeqCounts[chimeraSeq.name_][chimeraSeq.seq_] = chi.second;
-									//			templateNonMutated[seq.name_] = {seqCounts[seq.seq_], finalPerfectAmount};
-									barcodedSeqs[chimeraSeq.name_] = chimeraSeq.seq_;
-									break;
-								}
-							}
+					}
+					for (const auto& chimeraSeq: chimeraSeqs) {
+						const uint64_t amplifiedAmount = finishedAmount[chimeraSeq.name_];
+						if (amplifiedAmount > 0) {
+							intialRoundChiTotal += amplifiedAmount;
+							allSeqCounts[chimeraSeq.name_][chimeraSeq.seq_] = amplifiedAmount;
+							barcodedSeqs[chimeraSeq.name_] = chimeraSeq.seq_;
 						}
-						if (!matchesInputSeq && !matchesPreviousChimera) {
-							std::string name = njh::pasteAsStr("Chi.", chimeraSeqs.size(), "[PCRRound=", initialPcrRounds, "]");
-							auto backSeq = chimeraSeqs.emplace_back(seqInfo(name, chi.first));
-							backSeq.cnt_ = chi.second;
-							maxLen = readVec::getMaxLength(chimeraSeqs);
-							alignerObj.parts_.setMaxSize(maxLen);
-							chiProf.addSegsForSeq(backSeq, alignerObj, chimeraPad_);
-							finishedAmount[backSeq.name_] = chi.second;
-							partialTotalAmount[backSeq.name_] = 0;
-							allSeqCounts[backSeq.name_][backSeq.seq_] = chi.second;
-							//			templateNonMutated[seq.name_] = {seqCounts[seq.seq_], finalPerfectAmount};
-							barcodedSeqs[backSeq.name_] = backSeq.seq_;
-						}
-
-						//						if(matchesInputSeq){
-						//							std::cout << njh::bashCT::green << std::endl;
-						//						}else if(matchesPreviousChimera){
-						//							std::cout << njh::bashCT::red << std::endl;
-						//						}
-						//
-						//						std::cout << chi.first << std::endl;
-						//						std::cout << chi.second << std::endl << std::endl;
-						//						if(matchesInputSeq || matchesPreviousChimera){
-						//							std::cout << njh::bashCT::reset << std::endl;
-						//						}
 					}
 					// uint64_t all_finishedAmount = 0;
 					// for (const auto& finised: finishedAmount) {
@@ -893,67 +921,73 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 						"round", "seqName", "total", "fullTemplateFinished", "fullTemplateThisRound", "partialThisRound",
 						"fracPartialThisRound", "partialTotalAmount", "partialTotalAmountFrac"
 					});
-					std::unordered_map<uint32_t, uint64_t> roundPartialCounts;
-
+					//partial strands made in the later rounds, by round, grown since then: a partial strand made in round r is
+					//finished on another template and from round r + 1 on is copied like any other template, as the chimeras of
+					//the initial rounds are
+					std::unordered_map<std::string, std::map<uint32_t, double>> latePartialsByRound;
+					//partials from the initial rounds were already turned into chimeras above and aren't drawn again
+					const std::unordered_map<std::string, uint64_t> initialPartialTotalAmount = partialTotalAmount;
 					for (auto round: iter::range<uint32_t>(initialPcrRounds + 1, pcrRounds + 1)) {
-						uint64_t roundPartials = 0;
-						//						std::cout << "round: " << round << std::endl;
+						const double switchRate = roundSwitchRate(round);
+						//shared per-target plateau (targetProductMax_), from the product at the start of the round, the same for every haplotype
+						const double efficiency = pcrEfficiencyForProduct(targetProduct());
 						for (const auto& seqSampled: seqsSampled) {
-							//							std::cout << "seq: " << seqSampled.seqBase_.name_ << std::endl;
+							const auto& name = seqSampled.seqBase_.name_;
 							uint64_t finished = 0;
 							uint64_t partial = 0;
-							if (round > 10) {
-								finished += std::min<uint64_t>(std::round(pcrEfficiency_ * finishedAmount[seqSampled.seqBase_.name_]),
-								                               templateCap_);
-								partial += std::min<uint64_t>(
-									std::round((1 - pcrEfficiency_) * finishedAmount[seqSampled.seqBase_.name_]), templateCap_);
-							} else {
-								for (uint64_t temp = 0; temp < finishedAmount[seqSampled.seqBase_.name_]; ++temp) {
-									if (rGen.unifRand() < pcrEfficiency_) {
-										++finished;
-									} else {
-										++partial;
-									}
-								}
+							const uint64_t finishedBefore = finishedAmount[name];
+							splitTemplates(finishedBefore, round, switchRate, efficiency, finished, partial);
+							finishedAmount[name] += finished;
+							//earlier partials grow with the template they were finished on
+							const double growth = 0 == finishedBefore ? 1.0 : static_cast<double>(finishedAmount[name]) / finishedBefore;
+							double latePartialAmount = 0;
+							for (auto& roundAmount: latePartialsByRound[name]) {
+								roundAmount.second *= growth;
+								latePartialAmount += roundAmount.second;
 							}
-							roundPartials += partial;
-							partialTotalAmount[seqSampled.seqBase_.name_] += partial;
-							finishedAmount[seqSampled.seqBase_.name_] += finished;
-							roundCountsTab.addRow(round, seqSampled.seqBase_.name_,
-							                      partialTotalAmount[seqSampled.seqBase_.name_] + finishedAmount[seqSampled.seqBase_.
-								                      name_], finishedAmount[seqSampled.seqBase_.name_],
+							latePartialsByRound[name][round] += partial;
+							latePartialAmount += partial;
+							partialTotalAmount[name] = initialPartialTotalAmount.at(name) + std::llround(latePartialAmount);
+							roundCountsTab.addRow(round, name,
+							                      partialTotalAmount[name] + finishedAmount[name], finishedAmount[name],
 							                      finished, partial, static_cast<double>(partial) / (finished + partial),
-							                      partialTotalAmount[seqSampled.seqBase_.name_],
-							                      static_cast<double>(partialTotalAmount[seqSampled.seqBase_.name_]) / (
-								                      partialTotalAmount[seqSampled.seqBase_.name_] + finishedAmount[seqSampled.seqBase_
-									                      .name_]));
+							                      partialTotalAmount[name],
+							                      static_cast<double>(partialTotalAmount[name]) / (partialTotalAmount[name] + finishedAmount[name]));
 						}
-						roundPartialCounts[round] = roundPartials;
 					}
+					ret.finalProduct_ = targetProduct();
+					lap("late_rounds");
 					//					roundCountsTab.outPutContentOrganized(std::cout);
-					uint64_t allFinishedPlusPartial = 0;
+					std::unordered_map<std::string, double> latePartialAmount;
+					std::map<uint32_t, double> roundPartialAmounts;
+					for (const auto& seqSampled: seqsSampled) {
+						for (const auto& roundAmount: latePartialsByRound[seqSampled.seqBase_.name_]) {
+							latePartialAmount[seqSampled.seqBase_.name_] += roundAmount.second;
+							roundPartialAmounts[roundAmount.first] += roundAmount.second;
+						}
+					}
+					double allFinishedPlusPartial = 0;
 					std::unordered_map<std::string, double> percPartial;
 					for (const auto& seqSampled: seqsSampled) {
-						allFinishedPlusPartial += finishedAmount[seqSampled.seqBase_.name_] + partialTotalAmount[seqSampled.seqBase_
-							.name_];
-						percPartial[seqSampled.seqBase_.name_] =
-								static_cast<double>(partialTotalAmount[seqSampled.seqBase_.name_]) / (
-									partialTotalAmount[seqSampled.seqBase_.name_] + finishedAmount[seqSampled.seqBase_.name_]);
+						const auto& name = seqSampled.seqBase_.name_;
+						allFinishedPlusPartial += finishedAmount[name] + latePartialAmount[name];
+						percPartial[name] = 0 == finishedAmount[name] + latePartialAmount[name] ? 0.0 :
+								latePartialAmount[name] / (finishedAmount[name] + latePartialAmount[name]);
 					}
 					VecStr seqNames;
 					std::vector<double> seqPercs;
 					for (const auto& seqSampled: seqsSampled) {
-						double perc = static_cast<double>(finishedAmount[seqSampled.seqBase_.name_] + partialTotalAmount[seqSampled.
-							                                  seqBase_.name_]) / allFinishedPlusPartial;
-						seqPercs.emplace_back(perc);
-						seqNames.emplace_back(seqSampled.seqBase_.name_);
+						const auto& name = seqSampled.seqBase_.name_;
+						seqPercs.emplace_back((finishedAmount[name] + latePartialAmount[name]) / allFinishedPlusPartial);
+						seqNames.emplace_back(name);
 					}
 					njh::randObjectGen rObj(seqNames, seqPercs);
 
 
+					//the round a late chimera formed in, weighted by how much of the final product each round's chimeras make up
 					std::vector<uint32_t> rounds;
-					std::vector<uint64_t> roundsCounts;
-					for (const auto& roundPar: roundPartialCounts) {
+					std::vector<double> roundsCounts;
+					for (const auto& roundPar: roundPartialAmounts) {
 						rounds.emplace_back(roundPar.first);
 						roundsCounts.emplace_back(roundPar.second);
 					}
@@ -961,10 +995,10 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 
 
 					std::unordered_map<std::string, uint64_t> finalPartials;
+					//all_intialFinishedAmount already includes the initial-round chimeras (they are in finishedAmount)
 					for (uint32_t r = 0; r < finalReadAmount - (
 						                     finalReadAmount * (
-							                     static_cast<double>(intialRoundChiTotal) / (
-								                     all_intialFinishedAmount + intialRoundChiTotal))); ++r) {
+							                     static_cast<double>(intialRoundChiTotal) / all_intialFinishedAmount)); ++r) {
 						auto seqSampled = rObj.genObj();
 						if (rGen.unifRand() < percPartial[seqSampled]) {
 							++finalPartials[seqSampled];
@@ -1106,12 +1140,14 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 							}
 						}
 						if (!barcodedSeqsCurrent.empty()) {
+							lap("late_chimera_draws");
 							auto sampleNumberAll = sampleReadsWithoutReplacementFinishPCR(barcodedSeqsCurrent,
 							                                                              currentChiAllSeqCounts,
 							                                                              totalsForRounds[finalChimeraForRound.first],
 							                                                              libOutFile, seqFileLock,
 							                                                              pcrRounds - finalChimeraForRound.first,
-							                                                              numThreads);
+							                                                              numThreads, &ret.phaseSeconds_);
+							phaseWatch.startNewLap();
 							for (const auto& info: sampleNumberAll) {
 								ret.chimerasSampledForSequencing_[info.first].mutated_ += info.second.mutated_;
 								ret.chimerasSampledForSequencing_[info.first].nonMutated_ += info.second.nonMutated_;
@@ -1161,11 +1197,13 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 				totalTemplateStrandCount << std::endl;
 	}
 
+	lap("late_chimera_draws");
 	//now sample the rest of PCR
 	auto sampleNumberAll = sampleReadsWithoutReplacementFinishPCR(barcodedSeqs,
 	                                                              allSeqCounts, finalReadAmount - totalFinalChimeraCount,
 	                                                              libOutFile, seqFileLock,
-	                                                              pcrRounds - initialPcrRounds, numThreads);
+	                                                              pcrRounds - initialPcrRounds, numThreads, &ret.phaseSeconds_);
+	phaseWatch.startNewLap();
 	std::unordered_map<std::string, PCRSimulator::SimHapCounts::MutInfo> sampleNumber;
 	for (const auto& samp: sampleNumberAll) {
 		if (!njh::beginsWith(samp.first, "Chi.")) {
@@ -1178,7 +1216,7 @@ PCRSimulator::SimHapCounts PCRSimulator::simLibFast(const std::vector<SeqGenomeC
 	ret.genomesSampled_ = genomeCounts;
 	ret.sampledForSequencing_ = sampleNumber;
 	ret.chimeraSeqs_ = chimeraSeqs;
-
+	lap("setup");
 	return ret;
 
 	//	if(verbose){
@@ -1240,7 +1278,9 @@ PCRSimulator::sampleReadsWithoutReplacementFinishPCR(
 	std::unordered_map<std::string, std::unordered_map<std::string, uint64_t>>& multipleSeqCounts,
 	uint64_t finalReadAmount, std::ostream& sequenceOutFile,
 	std::mutex& seqFileLock, uint32_t numberOfPCRRoundsLeft,
-	uint32_t numThreads) {
+	uint32_t numThreads,
+	std::map<std::string, double> * phaseSeconds) {
+	njh::stopWatch phaseWatch;
 	std::unordered_map<std::string, PCRSimulator::SimHapCounts::MutInfo> ret;
 	auto seqNames = getVectorOfMapKeys(seqs);
 	auto multipleSeqCountsNames = getVectorOfMapKeys(multipleSeqCounts);
@@ -1304,6 +1344,10 @@ PCRSimulator::sampleReadsWithoutReplacementFinishPCR(
 	}
 	if (verbose_) {
 		std::cout << std::endl;;
+	}
+	if (nullptr != phaseSeconds) {
+		(*phaseSeconds)["read_selection"] += phaseWatch.timeLap();
+		phaseWatch.startNewLap();
 	}
 
 	//	std::cout << "sampled" << std::endl;
@@ -1381,6 +1425,9 @@ PCRSimulator::sampleReadsWithoutReplacementFinishPCR(
 		for (auto& thread: threads) {
 			thread.join();
 		}
+	}
+	if (nullptr != phaseSeconds) {
+		(*phaseSeconds)["read_finish_pcr"] += phaseWatch.timeLap();
 	}
 	return ret;
 }
