@@ -18,6 +18,7 @@ PMOUtilsRunner::PMOUtilsRunner()
         	addFunc("get_overlap_between_panels_in_pmos", get_overlap_between_panels_in_pmos, false),
         	addFunc("add_protein_variant_info_to_pmo", add_protein_variant_info_to_pmo, false),
         	addFunc("count_protein_variant_info_to_pmo", count_protein_variant_info_to_pmo, false),
+        	addFunc("build_pmo_from_allele_table", build_pmo_from_allele_table, false),
 
         },//
         "PMOUtils") {}
