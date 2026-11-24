@@ -1076,6 +1076,8 @@ struct DemuxCounts {
 	uint32_t oneEndConflicting = 0;
 	uint32_t oneEndCutAtInnerAdaptor = 0;
 	uint32_t oneEndNoInsertBeforeInnerAdaptor = 0;
+	//reads assigned on one end whose assigning barcode only passed because its adaptor flanks matched well
+	uint32_t oneEndByFlankGate = 0;
 
 	void add(const DemuxCounts & other){
 		addMapCounts(sampleCounts, other.sampleCounts);
@@ -1095,6 +1097,7 @@ struct DemuxCounts {
 		oneEndConflicting += other.oneEndConflicting;
 		oneEndCutAtInnerAdaptor += other.oneEndCutAtInnerAdaptor;
 		oneEndNoInsertBeforeInnerAdaptor += other.oneEndNoInsertBeforeInnerAdaptor;
+		oneEndByFlankGate += other.oneEndByFlankGate;
 	}
 };
 
@@ -1795,6 +1798,8 @@ struct NanoporeEndHit {
 	BarEndCall call_;
 	//the call is good enough to assign the read by this end alone
 	bool strictCall_ = false;
+	//strictCall_ only because the adaptor flanks matched well enough to accept fewer matching barcode bases
+	bool flankGatedCall_ = false;
 	//position of the adaptor in the read
 	uint32_t adaptorStart_ = 0;
 	uint32_t adaptorEnd_ = 0;
@@ -1814,6 +1819,11 @@ struct OneEndRescuePars {
 	uint32_t barcodeMargin_ = 3;
 	double flankIdentityCutOff_ = .75;
 	uint32_t flankMinMatches_ = 12;
+	//a barcode with fewer matching bases than barcodeMatchFrac_ is still enough when the adaptor's fixed bases around it match this well,
+	//misreads of the barcode come with misreads of its flanks (run 3, 18 of 24 bases: 300 unused kit barcode calls per 1000 ends with flanks below .75, 0.4 with flanks at .95 or more); 0 turns this off
+	//on by default at 18 of 24: run 3 recovered 668 -> 684 haplotypes with false haplotypes 25 -> 16, run 2 590 -> 592, Pool 1 unchanged calls with +0.9% final reads
+	double flankGatedBarcodeMatchFrac_ = .75;
+	double flankGateIdentity_ = .95;
 };
 
 /**@brief get the best adaptor for one end of a read
@@ -1844,9 +1854,15 @@ NanoporeEndHit getNanoporeEndHit(const PrimerAlnInfo & preferred, const PrimerAl
 	if(caller.callable(ret.barcode_)){
 		ret.call_ = caller.call(ret.barcode_, ret.forwardAdaptor_);
 	}
-	ret.strictCall_ = !ret.call_.undetermined() && 1 == ret.call_.samples_.size()
-			&& ret.call_.matches_ >= pars.barcodeMatchFrac_ * ret.call_.barcodeLen_
+	bool singleCall = !ret.call_.undetermined() && 1 == ret.call_.samples_.size()
 			&& ret.call_.matches_ >= ret.call_.nextBestMatches_ + pars.barcodeMargin_;
+	ret.strictCall_ = singleCall && ret.call_.matches_ >= pars.barcodeMatchFrac_ * ret.call_.barcodeLen_;
+	if(singleCall && !ret.strictCall_ && pars.flankGatedBarcodeMatchFrac_ > 0
+			&& ret.flank_.matches_ >= pars.flankMinMatches_ && ret.flank_.identity() >= pars.flankGateIdentity_
+			&& ret.call_.matches_ >= pars.flankGatedBarcodeMatchFrac_ * ret.call_.barcodeLen_){
+		ret.strictCall_ = true;
+		ret.flankGatedCall_ = true;
+	}
 	ret.adaptorStart_ = startOfWindow + getRealPosForAlnPos(best.seqAln_.seq_, best.primerAln_.seq_.find_first_not_of('-'));
 	ret.adaptorEnd_ = startOfWindow + getRealEndForAlnPos(best.seqAln_.seq_, best.primerAln_.seq_.find_last_not_of('-'));
 	return ret;
@@ -1921,6 +1937,10 @@ int seqUtilsExtractRunner::extractByNanoporeBarcodes(const njh::progutils::CmdAr
 			"When assigning on one end's barcode, the other end is only trimmed when the adaptor's fixed bases (not the barcode) match at this identity");
 	setUp.setOption(rescuePars.flankMinMatches_, "--adaptorFlankMinMatches",
 			"When assigning on one end's barcode, the other end is only trimmed when at least this many of the adaptor's fixed bases match");
+	setUp.setOption(rescuePars.flankGatedBarcodeMatchFrac_, "--oneEndFlankGatedBarcodeMatchFrac",
+			"To assign a read on one end's barcode, the fraction of the barcode's bases that have to match when the adaptor's fixed bases around it match at --oneEndFlankGateIdentity (and at least --adaptorFlankMinMatches of them), 0 turns this off");
+	setUp.setOption(rescuePars.flankGateIdentity_, "--oneEndFlankGateIdentity",
+			"Identity the adaptor's fixed bases need for --oneEndFlankGatedBarcodeMatchFrac");
 	setUp.setOption(development, "--development",
 			"Also write the per read barcode info files (info.tab.txt, infoBest.tab.txt, infoPass.tab.txt, oneEndInfo.tab.txt)");
 	InnerAdaptorSplitPars splitPars;
@@ -2185,6 +2205,9 @@ int seqUtilsExtractRunner::extractByNanoporeBarcodes(const njh::progutils::CmdAr
 			++oneEndSampleCounts[sample];
 			++oneEndFromCounts[firstPass];
 			++oneEndUsedCounts[assignedOn];
+			if("both" == assignedOn ? front.flankGatedCall_ && back.flankGatedCall_ : usedEnd.flankGatedCall_){
+				++local.oneEndByFlankGate;
+			}
 			if(unusedBarcodeNames.count(sample)){
 				++oneEndToUnusedBarcode;
 			}else{
@@ -2348,6 +2371,9 @@ int seqUtilsExtractRunner::extractByNanoporeBarcodes(const njh::progutils::CmdAr
 			{"oneEndAssignedOnFront", oneEndUsedCounts["front"]},
 			{"oneEndAssignedOnBack", oneEndUsedCounts["back"]},
 			{"oneEndAssignedOnBoth", oneEndUsedCounts["both"]}};
+		if(rescuePars.flankGatedBarcodeMatchFrac_ > 0){
+			afterPasses.emplace_back("oneEndAssignedByFlankGate", counts.oneEndByFlankGate);
+		}
 		for(const auto & from : oneEndFromCounts){
 			afterPasses.emplace_back(njh::pasteAsStr("oneEndFrom_", from.first), from.second);
 		}
