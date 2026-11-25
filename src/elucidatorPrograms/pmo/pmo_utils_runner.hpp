@@ -22,6 +22,8 @@ public:
 
   static int build_pmo_from_allele_table(const njh::progutils::CmdArgs & inputCommands);
 
+  static int crt_dup_adjusted_freqs_from_pmo(const njh::progutils::CmdArgs & inputCommands);
+
 };
 
 } //  namespace njhseq

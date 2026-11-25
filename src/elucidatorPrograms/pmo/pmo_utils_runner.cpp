@@ -19,6 +19,7 @@ PMOUtilsRunner::PMOUtilsRunner()
         	addFunc("add_protein_variant_info_to_pmo", add_protein_variant_info_to_pmo, false),
         	addFunc("count_protein_variant_info_to_pmo", count_protein_variant_info_to_pmo, false),
         	addFunc("build_pmo_from_allele_table", build_pmo_from_allele_table, false),
+        	addFunc("crt_dup_adjusted_freqs_from_pmo", crt_dup_adjusted_freqs_from_pmo, false),
 
         },//
         "PMOUtils") {}
