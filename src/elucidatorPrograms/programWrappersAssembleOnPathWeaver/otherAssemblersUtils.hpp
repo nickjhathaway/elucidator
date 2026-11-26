@@ -307,7 +307,36 @@ struct MIRAAssembleNameInfo{
 
 };
 
-
+/**@brief The directory for MetaVelvet's output next to Velvet's: Velvet's directory name with Velvet swapped for MetaVelvet
+ *
+ * Only the directory's own name is changed, "Velvet" becomes "MetaVelvet" and failing that "velvet" becomes "metavelvet",
+ * and a name with neither gets "_MetaVelvet" added, so it's always a different directory from Velvet's. A trailing / is kept.
+ *
+ * @param velvetDir Velvet's output directory (setUp.pars_.directoryName_)
+ * @return the MetaVelvet output directory
+ */
+inline bfs::path metaVelvetDirFromVelvetDir(const bfs::path & velvetDir){
+	std::string dirStr = velvetDir.string();
+	const bool trailingSlash = !dirStr.empty() && '/' == dirStr.back();
+	while(dirStr.size() > 1 && '/' == dirStr.back()){
+		dirStr.pop_back();
+	}
+	const bfs::path dir(dirStr);
+	const std::string name = dir.filename().string();
+	std::string metaName;
+	if(std::string::npos != name.find("Velvet")){
+		metaName = njh::replaceString(name, "Velvet", "MetaVelvet");
+	}else if(std::string::npos != name.find("velvet")){
+		metaName = njh::replaceString(name, "velvet", "metavelvet");
+	}else{
+		metaName = name + "_MetaVelvet";
+	}
+	std::string ret = (dir.parent_path() / metaName).string();
+	if(trailingSlash){
+		ret += "/";
+	}
+	return ret;
+}
 
 }  // namespace njhseq
 

@@ -2722,7 +2722,7 @@ int programWrappersAssembleOnPathWeaverRunner::runVelvetOptimizerAndMetaVelvetOn
 	setUp.startARunLog(setUp.pars_.directoryName_);
 	OtherAssemblersUtility utility(inPars);
 
-	bfs::path metaVelvetFinalDir = njh::replaceString(setUp.pars_.directoryName_, "Velvet", "MetaVelvet");
+	bfs::path metaVelvetFinalDir = metaVelvetDirFromVelvetDir(setUp.pars_.directoryName_);
 	njh::files::MkdirPar metaVelvetFinalDirPar(metaVelvetFinalDir, setUp.pars_.overWriteDir_);
 	if (bfs::exists(metaVelvetFinalDir) && setUp.pars_.overWriteDir_) {
 		njh::files::rmDirForce(metaVelvetFinalDir);

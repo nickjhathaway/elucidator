@@ -104,11 +104,15 @@ int programWrapperRunner::runNucmerToBed(const njh::progutils::CmdArgs & inputCo
   bfs::path coords_fnp = njh::files::make_path(prefix + ".coords");
   bfs::path output_bed_fnp = original_prefix.string() + ".bed";
 
-  InputStream coords_in(coords_fnp);
-  std::string line;
-  while(njh::files::crossPlatGetline(coords_in, line)){
-    NucmerShowCoordsRecord record(line);
-    bed_out << record.genBed6().toDelimStrWithExtra() << std::endl;
+  {
+    // scoped so it's closed before the temp directory it's in is removed below, on NFS a file still open when it's
+    // deleted leaves a .nfs placeholder behind and the directory can't be removed
+    InputStream coords_in(coords_fnp);
+    std::string line;
+    while(njh::files::crossPlatGetline(coords_in, line)){
+      NucmerShowCoordsRecord record(line);
+      bed_out << record.genBed6().toDelimStrWithExtra() << std::endl;
+    }
   }
   if (use_temp_location) {
     if (exists(delta_fnp.filename())) {
