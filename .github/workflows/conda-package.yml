@@ -1,0 +1,164 @@
+name: conda-package
+
+# Builds the elucidator conda package for linux-64, osx-arm64 and osx-64, and publishes it to
+# https://prefix.dev/nickjhathaway/elucidator once all three build and pass their tests.
+#   - v* tag: build and publish (tag v1.2.0 -> version 1.2.0)
+#   - Run workflow: build only, unless "publish" is ticked
+# Publishing uses prefix.dev trusted publishing, so no API key is needed.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: Platforms to build
+        type: choice
+        options: [all, linux-64, osx-arm64, osx-64]
+        default: all
+      publish:
+        description: Publish to prefix.dev/nickjhathaway/elucidator after the builds pass
+        type: boolean
+        default: false
+      version:
+        description: Package version (empty = from the tag, or <last v* tag>.post<commits since it>)
+        type: string
+        default: ''
+      build_number:
+        description: Build number (raise it to republish the same version)
+        type: string
+        default: '0'
+
+permissions:
+  contents: read
+
+env:
+  RATTLER_BUILD_VERSION: v0.81.0
+  CHANNEL_URL: https://prefix.dev/nickjhathaway/elucidator
+
+jobs:
+  # work out the version, build number, platforms, and whether to publish
+  setup:
+    runs-on: ubuntu-24.04            # pinned for stability
+    outputs:
+      version: ${{ steps.vars.outputs.version }}
+      build_number: ${{ steps.vars.outputs.build_number }}
+      matrix: ${{ steps.vars.outputs.matrix }}
+      publish: ${{ steps.vars.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Version, platforms, publish
+        id: vars
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_BUILD_NUMBER: ${{ inputs.build_number }}
+          INPUT_PLATFORMS: ${{ inputs.platforms }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_VERSION}" ]; then
+            version="${INPUT_VERSION}"
+          elif [ "${GITHUB_REF_TYPE}" = tag ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            # v1.1.0-950-g82a4f0f -> 1.1.0.post950
+            desc=$(git describe --tags --match 'v*' --long HEAD)
+            commits=$(sed -E 's/^.*-([0-9]+)-g[0-9a-f]+$/\1/' <<<"${desc}")
+            version=$(sed -E 's/^v?(.*)-[0-9]+-g[0-9a-f]+$/\1/' <<<"${desc}")
+            if [ "${commits}" != 0 ]; then version="${version}.post${commits}"; fi
+          fi
+          # conda versions can't contain "-"
+          version="${version//-/}"
+
+          build_number="${INPUT_BUILD_NUMBER:-0}"
+          if ! [[ "${build_number}" =~ ^[0-9]+$ ]]; then
+            echo "::error::build_number must be a non-negative integer, got '${build_number}'"
+            exit 1
+          fi
+
+          all='[{"platform":"linux-64","os":"ubuntu-24.04"},
+                {"platform":"osx-arm64","os":"macos-15"},
+                {"platform":"osx-64","os":"macos-15-intel"}]'
+          platforms="${INPUT_PLATFORMS:-all}"
+          if [ "${platforms}" = all ]; then
+            include=$(jq -c . <<<"${all}")
+          else
+            include=$(jq -c --arg p "${platforms}" 'map(select(.platform == $p))' <<<"${all}")
+          fi
+
+          if [ "${GITHUB_EVENT_NAME}" = push ] || [ "${INPUT_PUBLISH}" = true ]; then
+            publish=true
+          else
+            publish=false
+          fi
+
+          {
+            echo "version=${version}"
+            echo "build_number=${build_number}"
+            echo "matrix={\"include\":${include}}"
+            echo "publish=${publish}"
+          } >> "${GITHUB_OUTPUT}"
+          echo "elucidator ${version} build ${build_number} at ${GITHUB_SHA}, platforms: ${platforms}, publish: ${publish}" >> "${GITHUB_STEP_SUMMARY}"
+
+  # build and test the package on each platform's own runner
+  build:
+    needs: setup
+    name: build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and test with rattler-build
+        uses: prefix-dev/rattler-build-action@v0.2.39
+        env:
+          ELUCIDATOR_VERSION: ${{ needs.setup.outputs.version }}
+          ELUCIDATOR_GIT_REV: ${{ github.sha }}
+          ELUCIDATOR_BUILD_NUMBER: ${{ needs.setup.outputs.build_number }}
+        with:
+          rattler-build-version: ${{ env.RATTLER_BUILD_VERSION }}
+          recipe-path: conda/recipe.yaml
+          build-args: --target-platform ${{ matrix.platform }} -c conda-forge -c bioconda
+          artifact-name: conda-${{ matrix.platform }}
+
+  # upload all built packages to prefix.dev
+  publish:
+    needs: [setup, build]
+    if: needs.setup.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: conda-*
+          path: dist
+          merge-multiple: true
+
+      - name: Install rattler-build
+        uses: prefix-dev/rattler-build-action@v0.2.39
+        with:
+          rattler-build-version: ${{ env.RATTLER_BUILD_VERSION }}
+          setup-only: true
+
+      - name: Publish to prefix.dev
+        run: |
+          set -euo pipefail
+          mapfile -t pkgs < <(find dist -type f -name '*.conda' -not -path '*/broken/*' | sort)
+          if [ "${#pkgs[@]}" -eq 0 ]; then
+            echo "::error::no packages found in the build artifacts"
+            exit 1
+          fi
+          for pkg in "${pkgs[@]}"; do
+            echo "publishing ${pkg}"
+            rattler-build publish "${pkg}" --to "${CHANNEL_URL}"
+            echo "- \`$(basename "${pkg}")\` ($(dirname "${pkg#dist/}"))" >> "${GITHUB_STEP_SUMMARY}"
+          done

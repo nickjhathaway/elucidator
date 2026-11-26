@@ -1,0 +1,80 @@
+# Conda recipe for elucidator (linux-64, osx-arm64, osx-64).
+# setup.py builds elucidator and its bundled dependencies into $PREFIX/share/elucidator.
+#   rattler-build build -r conda/recipe.yaml -c conda-forge -c bioconda
+
+context:
+  name: elucidator
+  # set by .github/workflows/conda-package.yml
+  version: ${{ env.get("ELUCIDATOR_VERSION", default="1.1.0.post950") }}
+  git_rev: ${{ env.get("ELUCIDATOR_GIT_REV", default="82a4f0f860c46466c584278802de18d036188cb8") }}
+  build_num: ${{ env.get("ELUCIDATOR_BUILD_NUMBER", default="1") }}
+
+package:
+  name: ${{ name }}
+  version: ${{ version }}
+
+source:
+  git: https://github.com/nickjhathaway/elucidator.git
+  rev: ${{ git_rev }}
+
+build:
+  number: ${{ build_num | int }}
+  string: g${{ git_rev[:7] }}_${{ build_number }}
+  script:
+    file: build.sh
+    env:
+      GIT_REV: ${{ git_rev }}
+      TARGET_STDLIB_VERSION: ${{ c_stdlib_version }}
+  skip:
+    - win
+    - linux and not x86_64
+  dynamic_linking:
+    missing_dso_allowlist:
+      - "*/libstdc++.so*"
+
+requirements:
+  build:
+    - ${{ compiler('c') }}
+    - ${{ compiler('cxx') }}
+    - ${{ stdlib('c') }}
+    - cmake
+    - make
+    - git
+    - autoconf
+    - automake
+    - libtool
+    - pkg-config
+    - python >=3.8
+  host:
+    - zlib
+  run:
+    - muscle
+    - minimap2
+    - bowtie2
+    - bwa
+    - samtools
+    - bcftools
+    - bedtools
+    - seqkit
+    - hmmer
+    - blast
+    - salmon ==2.8.0
+    - lastz
+    - pigz
+    - adapterremoval >=2.3.2,<3
+
+tests:
+  - script:
+      - elucidator
+      - SeekDeep
+      - PathWeaver
+      - printf '>s1\nACGTACGTTTGACCATGACG\n>s2\nACGTACGTTTGACCATGACGTT\n' > tiny.fasta
+      - test "$(elucidator countSeqs --fasta tiny.fasta)" = "2"
+      - elucidator shearSimIlluminaAlign --help 2>&1 | grep -q "$CONDA_PREFIX/share/elucidator/external/local/elucidator/.*/etc/illumina_profiles"
+      - test -d "$CONDA_PREFIX"/share/elucidator/external/local/elucidator/*/elucidator/etc/illumina_profiles
+
+about:
+  homepage: https://github.com/nickjhathaway/elucidator
+  license: GPL-3.0-or-later
+  license_file: LICENSE
+  summary: Bioinformatics toolkit for amplicon and targeted sequencing analysis
