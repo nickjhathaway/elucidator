@@ -590,7 +590,7 @@ int PMOUtilsRunner::build_pmo_from_allele_table(const njh::progutils::CmdArgs & 
 	bfs::path variantCallsDir;
 	std::string variantCallsSubDir = "variantCalling";
 	std::string variantCallsGenome;
-	std::string programVersion = "1";
+	std::string programVersion = inputCommands.runnerVersion_;
 	OutOptions outOpts(bfs::path(""), ".json.gz");
 	seqSetUp setUp(inputCommands);
 	setUp.description_ = "Build a PMO from an allele table (one row per haplotype per sample per target) and the panel's primers, "
