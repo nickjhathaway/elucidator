@@ -26,7 +26,7 @@ RUN apt-get update
 RUN apt-get -yq dist-upgrade
 RUN apt-get install -yq --no-install-recommends autotools-dev autoconf libtool automake build-essential curl wget file tree\
     git locales libssl-dev libcurl4-gnutls-dev ca-certificates xz-utils zlib1g-dev libbz2-dev liblzma5 liblzma-doc\
-    liblzma-dev openssh-client gcc-10 g++-10 ccache git-lfs libxml2-dev libfontconfig1-dev libcairo2-dev\
+    liblzma-dev openssh-client ccache git-lfs libxml2-dev libfontconfig1-dev libcairo2-dev\
     python3-dev python3-pip python3-nbclient python3-nbconvert python3-ipykernel python3-jupyter-client python3-jupyter-core\
     libharfbuzz-dev libfribidi-dev
 

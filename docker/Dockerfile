@@ -17,7 +17,7 @@ RUN apt-get update && apt-get -yq dist-upgrade && \
       autotools-dev autoconf libtool automake build-essential curl wget file tree \
       git locales libssl-dev libcurl4-gnutls-dev ca-certificates \
       xz-utils zlib1g-dev libbz2-dev liblzma5 liblzma-dev openssh-client \
-      gcc-10 g++-10 ccache libxml2-dev libfontconfig1-dev libcairo2-dev \
+      ccache libxml2-dev libfontconfig1-dev libcairo2-dev \
       python3-dev python3-pip python3-yaml \
       libharfbuzz-dev libfribidi-dev libicu-dev libhdf5-dev \
       pigz lastz cmake tzdata libuv1-dev jq \

@@ -12,12 +12,12 @@ cd elucidator
 ./configure.py
 ```
 
-To configure with specific compilers set the environmental CC and CXX 
+By default gcc/g++ is used on Linux (gcc 13 on Ubuntu 24.04) and clang on macOS. To configure with specific compilers set the environmental CC and CXX 
 
-e.g. for g++-6
+e.g. for g++-13
 
 ```bash
-CC=gcc-6 CXX=g++-6 ./configure.py
+CC=gcc-13 CXX=g++-13 ./configure.py
 ```
 
 To download and compile dependencies 
